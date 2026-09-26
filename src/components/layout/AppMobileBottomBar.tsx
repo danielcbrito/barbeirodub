@@ -179,12 +179,17 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
 
   return (
     <>
-      {/* Máscara de fade inferior suave que se adapta ao fundo claro e escuro */}
+      {/* Máscara de neblina inferior suave — altura contida até o terço superior do dock, com desvanecimento ultra progressivo */}
       <div
         className={cn(
-          "fixed bottom-0 left-0 right-0 h-32 pointer-events-none z-[45] bg-gradient-to-t from-background via-background/80 to-transparent transition-opacity duration-200",
+          "fixed bottom-0 left-0 right-0 pointer-events-none z-[45] transition-opacity duration-300",
           isKeyboardOpen && "opacity-0"
         )}
+        style={{
+          height: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 5.25rem)",
+          background:
+            "linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background) / 0.96) 20%, hsl(var(--background) / 0.85) 38%, hsl(var(--background) / 0.65) 55%, hsl(var(--background) / 0.4) 70%, hsl(var(--background) / 0.18) 82%, hsl(var(--background) / 0.05) 92%, transparent 100%)",
+        }}
         aria-hidden="true"
       />
 
