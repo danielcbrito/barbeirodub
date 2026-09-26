@@ -1,0 +1,46 @@
+VARREDURA — SAQUE RECUSADO AO SACAR O "SALDO TOTAL" (04/09/2026)
+================================================================
+
+SINTOMA
+  Barbeiro recebeu Pix de R$ 30,90. O app mostrava R$ 30,50 disponível.
+  Ao sacar R$ 30,50 -> erro. Ao sacar R$ 30,00 -> sucesso.
+
+CAMADAS
+  Usuário   -> /carteira (CarteiraPage.tsx)
+  Frontend  -> cálculo local: bruto - taxa fixa R$ 0,40
+  Backend   -> woovi-wallet (woovi_get_balance / woovi_withdraw)
+  Externo   -> Woovi /api/v1/subaccount/{chave} (saldo real)
+  Banco     -> woovi_charges (3090 bruto), saques
+
+CAUSA RAIZ (comprovada)
+  woovi_charges: 3090 centavos (bruto).
+  Subconta Woovi do barbeiro: 3040 centavos (real).
+  O app exibia 3050 porque assumia taxa FIXA de R$ 0,40, mas o banco
+  reteve R$ 0,50 nessa transação. Ou seja: a taxa real varia e o saldo
+  estimado localmente ficava alguns centavos ACIMA do saldo verdadeiro.
+  Resultado: o saque do "saldo total" era recusado pelo provedor.
+  Não é problema de um barbeiro só — atinge qualquer barbeiro cuja taxa
+  cobrada seja diferente de R$ 0,40.
+
+CORREÇÃO APLICADA
+  1. Frontend (CarteiraPage.tsx): novo syncProviderBalance().
+     O saldo local continua sendo pintado na hora (velocidade), mas logo
+     em seguida é SOBRESCRITO pelo saldo real da subconta Woovi
+     (action woovi_get_balance, source = "woovi"). O valor mostrado passa
+     a ser exatamente o que existe na conta.
+     Se a Woovi estiver fora, mantém-se a estimativa local (fallback).
+  2. Backend (woovi-wallet): erro de saldo do provedor deixou de cair na
+     mensagem genérica; agora responde "valor maior que o saldo real
+     disponível... nenhum valor foi movimentado".
+
+FLUXO CRÍTICO (Saque) — estado atual
+  1. Abrir /carteira -> saldo local instantâneo -> saldo real da Woovi
+  2. PIN financeiro (janela 15 min) -> anti-duplicidade 30s
+  3. Disponível = saldo real Woovi - bloqueado (corte não finalizado)
+  4. POST /subaccount/{chave}/withdraw -> registro em `saques`
+  5. Falha -> nenhum registro, mensagem clara, nada movimentado
+
+OBSERVAÇÃO
+  PIX_FEE_CENTAVOS = 40 continua servindo apenas como ESTIMATIVA de
+  exibição/extrato quando a Woovi está indisponível. O saldo que autoriza
+  saque não depende mais dessa constante.

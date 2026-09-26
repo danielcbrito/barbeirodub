@@ -1,0 +1,1 @@
+REVOKE SELECT (woovi_pix_key, woovi_pix_key_type, asaas_wallet_id, asaas_account_id, conta_financeira_id) ON public.barbeiros FROM anon;

@@ -1,0 +1,1 @@
+ALTER TABLE public.plano_agendamentos_usos ALTER COLUMN agendamento_id DROP NOT NULL;

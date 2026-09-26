@@ -1,0 +1,112 @@
+═══════════════════════════════════════════════════════════════════
+BLOQUEIO DE SALDO + FLUXO DE REEMBOLSO (CLIENTE ↔ BARBEIRO)
+═══════════════════════════════════════════════════════════════════
+Data: 2026-06-22
+
+OBJETIVO
+─────────
+Garantir que o valor pago pelo cliente fique BLOQUEADO da carteira
+do barbeiro enquanto o corte não for finalizado, permitindo que o
+cliente solicite reembolso a qualquer momento sem risco do barbeiro
+já ter sacado o dinheiro.
+
+═══════════════════════════════════════════════════════════════════
+CAMADAS
+═══════════════════════════════════════════════════════════════════
+
+1) USUÁRIO (Cliente)
+   - Pode cancelar/solicitar reembolso a qualquer momento enquanto
+     o agendamento ainda não foi finalizado (CancelAppointmentModal).
+   - Recebe crédito automático na carteira do app (tabela `creditos`).
+
+2) USUÁRIO (Barbeiro)
+   - Vê três valores na carteira:
+       • Saldo Woovi (total na subconta)
+       • Aguardando finalização do corte (bloqueado)
+       • Disponível para saque (Woovi − bloqueado)
+   - Só pode sacar o valor DISPONÍVEL.
+
+3) FRONTEND
+   - src/components/barber/WooviWalletSheet.tsx
+       · Estado `blockedCentavos` carregado de woovi-get-balance
+       · `availableCentavos = balance − blocked`
+       · Banner amarelo destacando o valor bloqueado
+       · "Sacar tudo" usa apenas o disponível
+   - src/components/CancelAppointmentModal.tsx (já existente)
+       · Insere crédito em `creditos` quando o agendamento é cancelado
+
+4) BACKEND (Edge Functions)
+   - woovi-get-balance
+       · Retorna { balance_centavos, blocked_centavos, available_centavos }
+       · `blocked = RPC woovi_blocked_centavos(barbeiro_id)`
+   - woovi-withdraw
+       · Valida value_centavos ≤ (balance − blocked)
+       · Erro INSUFFICIENT_BALANCE com mensagem detalhada
+       · Mantém idempotência (30s) e sessão de PIN (15min)
+
+5) BANCO (Supabase)
+   - Tabela `woovi_charges`
+       · Coluna nova: `refunded_at timestamptz NULL`
+       · Statuses: PENDING, PAID, REFUNDED
+       · `released_at` marca quando o valor é liberado para o barbeiro
+   - Função `public.woovi_blocked_centavos(p_barbeiro uuid)`
+       SUM(value_centavos) WHERE released_at IS NULL
+                             AND status IN ('PAID','REFUNDED')
+   - Trigger `trg_woovi_sync_release` em agendamentos
+       · status → 'completed'        → released_at = now()  (libera)
+       · status → 'cancelled_by_user'→ status='REFUNDED', refunded_at=now()
+         (mantém bloqueado para sempre, dinheiro fica na conta da
+         plataforma para honrar o crédito do cliente)
+
+6) SERVIÇOS EXTERNOS (Woovi)
+   - Sem dependência adicional. A Woovi continua sendo a fonte de
+     verdade do saldo da subconta; o bloqueio é puramente lógico
+     dentro da nossa base.
+
+═══════════════════════════════════════════════════════════════════
+FLUXOS CRÍTICOS
+═══════════════════════════════════════════════════════════════════
+
+A) PAGAMENTO → CORTE FINALIZADO
+   1. Cliente paga via PIX (woovi-create-charge cria registro
+      PENDING; webhook marca PAID).
+   2. Saldo aparece na Woovi do barbeiro, mas BLOQUEADO no app.
+   3. Barbeiro finaliza o corte (status='completed').
+   4. Trigger seta released_at=now() → valor passa para "Disponível".
+   5. Barbeiro saca normalmente.
+
+B) PAGAMENTO → CLIENTE CANCELA (REEMBOLSO)
+   1. Cliente toca em "Cancelar Agendamento" (= solicitar reembolso).
+   2. Agendamento muda para status='cancelled_by_user'.
+   3. Trigger marca woovi_charge como REFUNDED (released_at continua
+      NULL → segue bloqueado para o barbeiro).
+   4. CancelAppointmentModal insere registro em `creditos` com o
+      valor exato cobrado (sem descontos arbitrários — usa `amount`
+      do agendamento que já reflete preço final).
+   5. Cliente vê o crédito na carteira do app, pode usar em futuro.
+
+C) BARBEIRO TENTA SACAR ANTES DA FINALIZAÇÃO
+   1. UI mostra "Disponível" = Woovi − bloqueado.
+   2. Se ele tentar burlar e mandar valor maior, woovi-withdraw
+      retorna 400 INSUFFICIENT_BALANCE explicando o bloqueio.
+
+═══════════════════════════════════════════════════════════════════
+TRATAMENTO DE ERROS
+═══════════════════════════════════════════════════════════════════
+- woovi-get-balance falha → frontend mostra zero (não trava UI).
+- woovi-withdraw INSUFFICIENT_BALANCE → toast detalhado com valor
+  disponível e valor bloqueado.
+- Trigger usa SECURITY DEFINER + search_path=public (sem brecha).
+- Idempotência de saque mantida (30s).
+- PIN financeiro exigido (15min).
+
+═══════════════════════════════════════════════════════════════════
+PONTOS DE ATENÇÃO FUTUROS
+═══════════════════════════════════════════════════════════════════
+- Após muitos reembolsos, a Woovi terá saldo "fantasma" preso para
+  o barbeiro. Esse saldo, na prática, pertence à plataforma
+  (para honrar os créditos dos clientes). Considerar um job que
+  transfira esses valores REFUNDED para uma conta operacional.
+- Quando integrar reembolso via PIX real para o cliente (em vez
+  de crédito), substituir o INSERT em `creditos` por chamada à
+  API de devolução PIX e marcar refunded_at com sucesso.

@@ -1,0 +1,74 @@
+DIAGNÓSTICO E CORREÇÃO — ERRO AO SACAR NA CARTEIRA WOOVI
+Data: 01/08/2026 (UTC)
+
+────────────────────────────────────────────────────────
+1. CAMADAS ENVOLVIDAS
+────────────────────────────────────────────────────────
+Usuário (barbeiro)
+  -> Frontend: src/components/barber/CarteiraPage.tsx (tela /carteira, saque + PIN)
+  -> Backend Supabase: Edge Function de carteira (antes: store-api, agora: woovi-wallet)
+  -> Externo: API Woovi (https://api.woovi.com) — subconta e saque
+  -> Banco: woovi_charges (entradas PIX), saques (saídas), financeiro_auth_sessions (PIN)
+
+────────────────────────────────────────────────────────
+2. CAUSA RAIZ (comprovada em teste direto)
+────────────────────────────────────────────────────────
+Foi executado um probe direto contra a API Woovi usando o secret atual:
+
+  GET /api/v1/charge?limit=1                  -> 401 {"errors":[{"message":"appID inválido"}]}
+  GET /api/v1/subaccount?limit=1              -> 401 {"errors":[{"message":"appID inválido"}]}
+  GET /api/v1/subaccount/+5511959637439       -> 401 {"errors":[{"message":"appID inválido"}]}
+
+O WOOVI_APP_ID configurado tem 46 caracteres, sem espaços em branco, e é recusado em
+TODOS os endpoints (não é falta de permissão de Subconta: a credencial inteira é inválida).
+AppIDs válidos da Woovi são strings base64 bem mais longas.
+
+CONCLUSÃO: a credencial foi revogada/rotacionada ou está incompleta. Enquanto ela não for
+substituída, nenhum saque real pode ser concluído — é uma pendência externa.
+
+────────────────────────────────────────────────────────
+3. SEGUNDO PROBLEMA ENCONTRADO (bloqueador silencioso)
+────────────────────────────────────────────────────────
+A Edge Function "store-api" parou de aceitar novas versões: os deploys retornavam sucesso,
+mas o código servido continuava na versão antiga (v38). Isso explica por que as correções
+anteriores de saque "não faziam efeito" em produção.
+
+Solução: as ações da carteira foram movidas para uma função nova e limpa:
+  supabase/functions/woovi-wallet/index.ts
+Actions: woovi_get_balance | woovi_history | woovi_withdraw
+O frontend (CarteiraPage.tsx) agora chama "woovi-wallet".
+Também foram removidas funções Efí obsoletas (efi-create-pix-charge, efi-webhook) para
+liberar slots de Edge Functions do projeto.
+
+────────────────────────────────────────────────────────
+4. CORREÇÕES DE CÓDIGO APLICADAS
+────────────────────────────────────────────────────────
+a) Body duplamente serializado no saque:
+   antes: body: JSON.stringify({ value })  +  wooviFetch já fazia JSON.stringify
+   agora: body: { value: valueCentavos }
+b) WOOVI_APP_ID agora é sanitizado com .trim() em _shared/woovi-client.ts.
+c) A checagem de saldo não derruba mais o saque: se a Woovi recusar/estiver fora,
+   usa-se o saldo local segregado por barbeiro (woovi_charges - saques).
+d) Mensagens de erro deixaram de ser genéricas: falha de credencial agora informa
+   explicitamente "o provedor recusou a credencial da carteira (AppID inválido).
+   Nenhum valor foi movimentado."
+e) Nenhum caminho de erro retorna 5xx: a UI recebe HTTP 200 com success=false
+   (sem tela branca, sem FunctionsHttpError).
+
+────────────────────────────────────────────────────────
+5. FLUXO DE SAQUE (estado atual)
+────────────────────────────────────────────────────────
+1. Barbeiro digita o valor em /carteira -> tela cheia de saque
+2. PIN financeiro validado (financeiro_auth_sessions, janela de 15 min)
+3. Bloqueio anti-duplicidade: nenhum saque nos últimos 30s
+4. Saldo disponível = pagos - saques - bloqueados (aguardando finalização do corte)
+5. POST /api/v1/subaccount/{chave-pix}/withdraw na Woovi
+6. Sucesso -> insere registro em "saques" com status "processando"
+7. Falha -> nenhum registro criado, mensagem clara, nenhum valor movimentado
+
+────────────────────────────────────────────────────────
+6. PENDÊNCIA PARA O SAQUE VOLTAR A FUNCIONAR
+────────────────────────────────────────────────────────
+Substituir o secret WOOVI_APP_ID por um AppID válido, gerado no painel da Woovi em
+API/Plugins, com a funcionalidade "Subconta" habilitada. Assim que o secret for atualizado,
+o saque volta a funcionar sem novas mudanças de código.

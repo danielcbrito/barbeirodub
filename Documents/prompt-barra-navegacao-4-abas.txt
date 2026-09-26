@@ -1,0 +1,188 @@
+===============================================================
+BARRA DE NAVEGAÇÃO INFERIOR — PADRÃO "APP NATIVO" (4 ABAS)
+Prompt pronto para colar na IA do outro projeto
+===============================================================
+
+--------------------------------------------------------------
+1. CONTEXTO / ESTRATÉGIA
+--------------------------------------------------------------
+Objetivo: barra de navegação inferior com sensação de APP NATIVO
+(estilo Instagram/Facebook), não de site responsivo.
+
+Decisões de design (não negociáveis):
+- EXATAMENTE 4 abas. Nunca 5. Sem botão central "FAB" na barra.
+- Altura fixa de 64px (h-16) + padding de safe-area do iOS/Android.
+- Fundo semi-transparente com blur: bg-background/95 + backdrop-blur-md.
+  (Se houver bug de scroll no iOS, trocar por bg-background sólido.)
+- Borda superior sutil: border-t border-border/30.
+- Ícones OUTLINE de 26px, nunca preenchidos por padrão.
+- Cor do ícone/label INATIVO: text-foreground (PRETO real, não cinza).
+  Cinza (muted-foreground) deixa a barra apagada e "template de admin".
+- Cor do ícone/label ATIVO: text-primary + strokeWidth 2.2
+  (inativo 1.8) e label font-medium. Sem pílula de fundo, sem
+  indicador de linha, sem layoutId — a mudança é só de cor/peso (200ms).
+- ESPAÇAMENTO ícone→label: gap-2 (8px). Não reduzir para gap-1.
+- Label: text-[10px], leading-none, tracking-wide.
+- Feedback tátil obrigatório: whileTap={{ scale: 0.94 }} (Framer Motion).
+- Cada item ocupa flex-1, conteúdo alinhado ao topo (justify-start)
+  com pt-2 pb-2 — evita "dança" vertical entre abas.
+- Badge numérico opcional no ícone: bolinha primary, 18px,
+  ring-2 ring-background, "99+" no limite.
+- z-index 60 — a barra fica acima de conteúdo e de bolhas flutuantes.
+- Tokens semânticos SEMPRE. Proibido text-white / bg-black / bg-gray-* / hex.
+
+Regras de layout que acompanham a barra:
+- O container raiz da rota adiciona
+  paddingBottom: calc(4rem + env(safe-area-inset-bottom, 0px))
+  quando a barra está visível — nunca deixar conteúdo por baixo.
+- Fluxos imersivos (agendamento/checkout/pagamento) ESCONDEM a barra.
+- Qualquer botão flutuante (suporte/FAB) sobe acima da barra:
+  bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.875rem)
+
+--------------------------------------------------------------
+2. DEPENDÊNCIAS
+--------------------------------------------------------------
+npm i framer-motion lucide-react react-router-dom
+Tailwind com tokens semânticos (--background, --foreground, --primary,
+--primary-foreground, --border) definidos em HSL no index.css.
+
+--------------------------------------------------------------
+3. CÓDIGO — src/components/BottomNavigation.tsx
+--------------------------------------------------------------
+import { CalendarDays, Send, User } from "lucide-react";
+import { motion } from "framer-motion";
+import { useLocation, useNavigate } from "react-router-dom";
+import type { SVGProps, ElementType } from "react";
+
+/** Ícone de casa outline (estilo Facebook) — mesma forma em todos os estados. */
+function HomeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5.5 9.5V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.5" />
+    </svg>
+  );
+}
+
+interface NavItemProps {
+  icon: ElementType;
+  label: string;
+  isActive?: boolean;
+  onClick: () => void;
+  badge?: number;
+}
+
+function NavItem({ icon: Icon, label, isActive, onClick, badge }: NavItemProps) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileTap={{ scale: 0.94 }}
+      aria-current={isActive ? "page" : undefined}
+      className="flex flex-1 flex-col items-center justify-start gap-2 pt-2 pb-2 transition-colors duration-200"
+    >
+      <span className="relative">
+        <Icon
+          width={26}
+          height={26}
+          strokeWidth={isActive ? 2.2 : 1.8}
+          className={isActive ? "text-primary" : "text-foreground"}
+        />
+        {typeof badge === "number" && badge > 0 && (
+          <span className="absolute -top-1.5 -right-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground ring-2 ring-background">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
+      </span>
+      <span
+        className={`text-[10px] leading-none tracking-wide ${
+          isActive ? "text-primary font-medium" : "text-foreground"
+        }`}
+      >
+        {label}
+      </span>
+    </motion.button>
+  );
+}
+
+/** Barra de navegação inferior fixa com 4 abas. */
+export function BottomNavigation() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isActive = (path: string) => location.pathname === path;
+
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-[60] border-t border-border/30 bg-background/95 backdrop-blur-md"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      aria-label="Navegação principal"
+    >
+      <div className="flex h-16 items-stretch">
+        <NavItem icon={HomeIcon}     label="Início"  isActive={isActive("/")}        onClick={() => navigate("/")} />
+        <NavItem icon={CalendarDays} label="Agenda"  isActive={isActive("/agenda")}  onClick={() => navigate("/agenda")} />
+        <NavItem icon={Send}         label="Disparo" isActive={isActive("/disparo")} onClick={() => navigate("/disparo")} />
+        <NavItem icon={User}         label="Perfil"  isActive={isActive("/perfil")}  onClick={() => navigate("/perfil")} />
+      </div>
+    </nav>
+  );
+}
+
+--------------------------------------------------------------
+4. CÓDIGO — layout raiz (src/routes/RootLayout.tsx)
+--------------------------------------------------------------
+import { Outlet, useLocation } from "react-router-dom";
+import { BottomNavigation } from "@/components/BottomNavigation";
+
+export function RootLayout() {
+  const { pathname } = useLocation();
+
+  // Fluxos imersivos escondem a barra (ajuste às rotas do projeto)
+  const hideNavPatterns = ["/disparo/novo", "/agenda/novo", "/checkout"];
+  const shouldShowNav = !hideNavPatterns.some((p) => pathname.startsWith(p));
+
+  return (
+    <div
+      className="min-h-screen bg-background"
+      style={{
+        paddingBottom: shouldShowNav
+          ? "calc(4rem + env(safe-area-inset-bottom, 0px))"
+          : undefined,
+      }}
+    >
+      <Outlet />
+      {shouldShowNav && <BottomNavigation />}
+    </div>
+  );
+}
+
+--------------------------------------------------------------
+5. REQUISITOS DE HTML/CSS GLOBAIS
+--------------------------------------------------------------
+index.html:
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover" />
+(o viewport-fit=cover é OBRIGATÓRIO, senão env(safe-area-inset-bottom) = 0)
+
+tailwind.config.ts (extend):
+height:    { screen: "100dvh" },
+minHeight: { screen: "100dvh" },
+
+--------------------------------------------------------------
+6. CHECKLIST DE ACEITE
+--------------------------------------------------------------
+[ ] 4 abas, larguras iguais, altura 64px + safe area.
+[ ] Ícone 26px outline; inativo PRETO (text-foreground), ativo primary.
+[ ] gap-2 entre ícone e label; label 10px tracking-wide.
+[ ] whileTap scale 0.94 em todos os itens.
+[ ] Fundo bg-background/95 + backdrop-blur-md, borda border-border/30.
+[ ] Conteúdo das páginas nunca fica escondido atrás da barra.
+[ ] Botões flutuantes posicionados acima da barra.
+[ ] Zero cor hardcoded (sem text-white / bg-gray-* / hex).
+===============================================================

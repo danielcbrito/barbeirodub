@@ -1,0 +1,1 @@
+ALTER TABLE public.planos ALTER COLUMN servico_id DROP NOT NULL;

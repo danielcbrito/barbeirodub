@@ -1,0 +1,39 @@
+LOJA DA BARBEARIA — ESTRUTURA COMPLETA (2026-08-26)
+
+1. CAMADA USUÁRIO
+- Dono da barbearia / admin de unidade: Perfil > Loja (ou menu lateral "Loja").
+- Barbeiro comum: acesso somente leitura (produtos ativos e pedidos).
+- Cliente: app do cliente (projeto separado, mesmo banco) — aba "Loja".
+
+2. FRONTEND (src/components/admin/loja)
+- AdminLoja.tsx — raiz, KPIs + 4 abas: Produtos | Pedidos | Cupons | Vendas.
+- AdminLojaStats.tsx — KPIs: produtos ativos, estoque baixo, pedidos hoje, receita hoje.
+- ProdutoGrid/ProdutoCard/ProdutoFormModal — CRUD de produtos (nome, preço, preço original,
+  estoque, estoque mínimo, categoria, imagens, destaque, ativo).
+- PedidosAdmin/PedidoCard/PedidoDetalheSheet — fluxo de pedidos e status.
+- LojaCupons.tsx + CupomFormModal.tsx — cupons por produto ou para toda a loja.
+- LojaVendas.tsx — receita, pedidos pagos, ticket médio, descontos e top 5 produtos (7/30/90 dias).
+- AdminLojaGlobal.tsx — visão do super admin com drill-down por barbearia.
+
+3. BACKEND / BANCO (Supabase)
+- produtos (tenant_id) — catálogo por barbearia.
+- pedidos / pedido_itens (tenant_id) — vendas e itens.
+- loja_cupons (NOVA): tenant_id, produto_id (null = toda a loja), codigo (único por tenant),
+  tipo_desconto (percentual|valor), valor_desconto, valor_minimo, max_usos_total,
+  max_usos_por_cliente, usos_count, valido_de/ate, ativo.
+  RLS: leitura de cupons ativos para clientes; gestão apenas pelo dono do tenant ou admin.
+
+4. FLUXOS CRÍTICOS
+- Cadastro de produto: form -> validação -> upload de imagem -> insert em produtos (tenant_id atual)
+  -> invalidação de cache -> aparece na vitrine do cliente (produtos ativos do tenant).
+- Cupom: criação com código único por barbearia -> cliente aplica no checkout -> desconto no pedido.
+- Pedido: cliente cria -> status pending_payment/paid/preparing -> badge de pendentes no admin.
+
+5. MULTI-TENANT
+- Todo acesso é filtrado por tenant_id do contexto autenticado; sem IDs pessoais fixos.
+- Cada barbearia gerencia exclusivamente sua própria loja, produtos, cupons e métricas.
+
+6. ERROS TRATADOS
+- Código de cupom duplicado -> mensagem "Já existe um cupom com esse código".
+- Percentual > 100 e desconto <= 0 -> bloqueados no cliente.
+- Falhas de rede/permissão -> toast de erro e cache preservado.

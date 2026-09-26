@@ -1,0 +1,80 @@
+AGENTE IA — ROTEAMENTO DOS LEMBRETES DE AGENDAMENTO
+Data: 2026-09-04
+
+1) BANCO (Supabase)
+Tabela public.agente_config
+ - id uuid PK
+ - barbeiro_id uuid FK barbeiros(id) ON DELETE CASCADE, UNIQUE
+ - tenant_id uuid FK tenants(id) ON DELETE CASCADE
+ - ativo boolean default false
+ - webhook_agente text default 'https://n8n-n8n.xcyr4f.easypanel.host/webhook/whatsapp-barbearia'
+ - criado_em / atualizado_em timestamptz
+Índices: barbeiro_id, tenant_id
+Grants: authenticated (CRUD), service_role (ALL)
+RLS: habilitada
+ - service_role_all: FOR ALL TO service_role
+ - barbeiro_own: FOR ALL TO authenticated — dono do barbeiro (barbeiros.user_id = auth.uid()),
+   dono do tenant (tenants.owner_user_id = auth.uid()) ou admin (has_role).
+   Obs.: a política do enunciado usava barbeiro_id = auth.uid(), o que nunca casaria,
+   pois barbeiro_id referencia barbeiros.id e não o usuário autenticado.
+
+2) BACKEND — supabase/functions/send-appointment-reminders/index.ts
+Para cada agendamento na janela de 2h:
+ - resolve instância WhatsApp do barbeiro/tenant (inalterado)
+ - consulta agente_config por barbeiro_id (cache em memória por execução)
+ - ativo = true e webhook_agente presente -> POST no webhook do agente
+ - ativo = false / sem registro -> POST no webhook padrão (webhook_config.lembrete_webhook_url)
+ - agendamento_lembretes_log.details.rota = 'agente_ia' | 'padrao'
+
+Payload enviado ao agente:
+{
+  "evento": "lembrete_agendamento",
+  "agendamento_id": "...",
+  "cliente_nome": "...",
+  "cliente_telefone": "5511999999999",
+  "barbeiro_id": "...",
+  "barbeiro_nome": "...",
+  "servico_nome": "...",
+  "data": "2026-09-04",
+  "hora": "15:30",
+  "instance_name": "...",
+  "api_key": "..."
+}
+
+3) FRONTEND — src/components/ai/AiAgentPage.tsx
+Toggle "Ativar a Bia" (Perfil do barbeiro / Unidade > Agente de IA):
+ - ativa/desativa webhook na Evolution via whatsapp-proxy (comportamento existente)
+ - faz upsert em agente_config (barbeiro_id, tenant_id, ativo, atualizado_em)
+ - status exibido considera whatsapp-proxy e agente_config
+Válido para todos os barbeiros/tenants — nada é hardcoded por pessoa.
+
+4) WEBHOOK GLOBAL DO AGENTE (2026-09-08)
+Tabela public.agente_webhook_global (linha única id=true, webhook_url).
+ - Grants: authenticated (select/insert/update), service_role (ALL). RLS on.
+ - Leitura: qualquer authenticated. Escrita: dono/barbeiro do tenant cujo nome casa '%dub%' ou admin.
+Padrão inicial: https://n8n-n8n.xcyr4f.easypanel.host/webhook/whatsapp-barbearia (produção).
+whatsapp-proxy (agent_enable): usa agente_webhook_global.webhook_url; fallback = URL de produção.
+send-appointment-reminders: quando o agente está ativo, o webhook global sobrescreve agente_config.webhook_agente.
+Frontend AiAgentPage.tsx: card "Webhook do fluxo" visível somente na barbearia DUB; salva a URL para todas.
+
+5) RESSINCRONIZAÇÃO DO WEBHOOK (2026-09-08)
+Problema: mudar a URL no app não altera o webhook já gravado na Evolution para instâncias
+com agente ativo (ex.: barbearia_dub_tulio_santos, ativo desde 2026-08-28 apontando para
+/webhook-test). Sem re-aplicar, o n8n nunca recebe MESSAGES_UPSERT.
+Solução: nova action `agent_resync` em whatsapp-proxy.
+ - Valida permissão tentando UPDATE em agente_webhook_global (RLS = DUB/admin).
+ - Com service_role, percorre ai_agents(active=true), resolve instance_name e faz
+   POST {EVOLUTION_API_URL}/webhook/set/{instance} (v2 e fallback v1) com a URL global.
+ - Retorna results[] por instância (ok/status/detail) e grava evolution_instance.
+Frontend: "Salvar webhook" salva e chama agent_resync, informando quantos WhatsApp foram atualizados.
+agent_status agora também consulta /webhook/find e devolve evolution_webhook + enabled,
+exibidos no card ("Em uso agora neste WhatsApp: ...").
+
+6) EXCLUSIVIDADE DO AGENTE POR BARBEARIA (2026-09-08)
+agent_resync agora tem duas fases:
+ - aplica o webhook global nas instâncias com ai_agents.active = true;
+ - percorre TODAS as instâncias em whatsapp_instances e envia
+   POST /webhook/set/{instance} { webhook: { enabled:false, url:"", events:[] } }
+   para toda instância sem agente ativo (ex.: Pedro Siqueira, Junior cortes).
+Resposta inclui results[] (ativados) e disabled[] (desligados).
+Efeito: apenas barbearias com o toggle ligado (hoje só DUB) enviam MESSAGES_UPSERT ao n8n.

@@ -1,0 +1,36 @@
+CORREÇÃO URGENTE — EXTRATO / MOVIMENTO DA CARTEIRA WOOVI
+
+Diagnóstico
+- O banco já tinha cobranças PIX pagas para o barbeiro Túlio.
+- Exemplo real encontrado: duas cobranças PAID, ainda com released_at vazio, totalizando R$ 8,80 bloqueados.
+- O problema visual acontecia porque a tela dependia das Edge Functions woovi-history e woovi-get-balance.
+- Essas funções retornaram 404 no teste direto, ou seja, não estavam disponíveis no ambiente publicado/preview.
+- Por isso o app não mostrava nada: o dinheiro existia no banco, mas o frontend não tinha fallback quando a função falhava.
+
+Correção implementada
+- A carteira agora tenta usar as Edge Functions normalmente.
+- Se a função falhar, retornar 404 ou vier vazia, a tela busca diretamente as tabelas locais do Supabase:
+  - woovi_charges para entradas PIX, valores bloqueados, liberados e estornos.
+  - saques para saídas da carteira.
+- O Movimento agora mostra PIX pago mesmo quando ainda está bloqueado.
+- PIX pago e ainda não liberado aparece como:
+  - descrição: Pix recebido · aguardando confirmação
+  - status visual: Em espera
+  - valor amarelo
+- PIX estornado aparece como:
+  - Cancelamento — estornado ao cliente
+  - saída no extrato
+
+Regra financeira preservada
+- Status PAID/COMPLETED/ACTIVE_PAID com released_at vazio = bloqueado.
+- Status PAID/COMPLETED/ACTIVE_PAID com released_at preenchido = disponível/concluído.
+- Status REFUNDED = estornado ao cliente, não entra como disponível ao barbeiro.
+
+Resultado esperado para Túlio
+- Saldo disponível: R$ 0,00 se todos os PIX pagos ainda estiverem sem finalização do corte.
+- Aguardando finalização do corte: R$ 8,80 com os dados atuais encontrados no banco.
+- Aba Movimento/Extrato: deve listar as entradas PIX pagas como valores em espera.
+
+Observação operacional
+- Também foi tentado deploy imediato das Edge Functions de carteira, mas o Supabase retornou limite máximo de funções do projeto.
+- Por isso a correção principal foi feita no frontend com fallback local, removendo a dependência obrigatória da função para a tela voltar a mostrar resultado imediatamente.

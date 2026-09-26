@@ -1,0 +1,77 @@
+AGENTE DE IA (BIA) — ATIVAÇÃO POR BARBEARIA
+===========================================
+Data: 2026-08-26
+Escopo: TODAS as barbearias/unidades e TODOS os barbeiros (sem exceção).
+
+OBJETIVO
+--------
+Cada barbearia tem seu próprio WhatsApp e, portanto, seu próprio agente de IA.
+O barbeiro/dono ativa a Bia dentro da barbearia selecionada; ao ativar, o webhook
+da instância na Evolution passa a enviar as mensagens para o fluxo n8n.
+
+CAMADA USUÁRIO
+--------------
+Perfil → Barbearia (unidade) → "Agente de IA".
+Tela mostra: avatar do agente, status Ativo/Inativo, toggle, número do WhatsApp
+conectado, texto de orientação e a lista "O que a Bia faz".
+Sem WhatsApp conectado: card âmbar com botão "Conectar WhatsApp" (leva à aba WhatsApp)
+e o toggle fica desabilitado.
+
+Texto oficial exibido:
+"Quando ativado, a Bia vai responder automaticamente seus clientes no WhatsApp.
+Você pode assumir a conversa a qualquer momento — é só responder direto pelo
+WhatsApp e a Bia pausa automaticamente por 30 minutos."
+
+CAMADA FRONTEND
+---------------
+src/components/ai/AiAgentPage.tsx
+  - Resolve o barbeiro por prop `barbeiroId` ou pelo usuário autenticado
+    (resolvePrimaryBarberForUser) — nunca por ID fixo.
+  - action "agent_status" ao abrir; toggle otimista com rollback em erro.
+  - Toasts de sucesso/erro; refresh após cada mudança.
+src/components/admin/unidades/UnidadeDetailScreen.tsx
+  - Nova seção "agente" no hub da barbearia (mesmo padrão de Loja/WhatsApp).
+
+CAMADA BACKEND — supabase/functions/whatsapp-proxy/index.ts
+-----------------------------------------------------------
+Ações adicionadas (mesma função, mesmo padrão de auth por JWT do usuário):
+  agent_status  → devolve active, name, whatsapp_connected, instance_name, phone_number.
+  agent_enable  → exige status=connected em whatsapp_instances;
+                  POST {EVOLUTION_API_URL}/webhook/set/{instance_name}
+                  body: { url: n8n /webhook/whatsapp-barbearia, webhook_by_events: false,
+                          webhook_base64: false, events: ["MESSAGES_UPSERT"] };
+                  upsert em ai_agents (onConflict barbershop_id) com active=true.
+  agent_disable → DELETE {EVOLUTION_API_URL}/webhook/set/{instance_name} (falha ignorada)
+                  e ai_agents.active=false.
+Erros: WHATSAPP_NOT_CONNECTED (400), WEBHOOK_FAILED (502), DB_ERROR (500), NO_AUTH (401).
+Credenciais EVOLUTION_API_URL / EVOLUTION_API_TOKEN ficam só na Edge Function.
+
+CAMADA BANCO — public.ai_agents
+-------------------------------
+barbershop_id → FK para public.barbeiros(id) (antes apontava para a tabela legada
+barbershops), UNIQUE (um agente por barbearia), evolution_instance, active,
+name ('Bia'), model, temperature, human_mode, created_at/updated_at.
+Grants: authenticated (CRUD) e service_role (ALL).
+RLS: barbeiro gerencia o agente da própria barbearia; dono do tenant gerencia os
+agentes das suas barbearias; admin/ti gerenciam tudo. A Edge Function usa o JWT do
+usuário, então a RLS é a barreira de permissão real.
+
+SERVIÇOS EXTERNOS
+-----------------
+Evolution API: {EVOLUTION_API_URL}/webhook/set/{instance}
+n8n: https://n8n-n8n.xcyr4f.easypanel.host/webhook/whatsapp-barbearia (evento MESSAGES_UPSERT).
+
+FLUXOS CRÍTICOS
+---------------
+Ativar sem WhatsApp   → bloqueado no frontend e no backend, com orientação de conectar.
+Ativar com WhatsApp   → webhook criado + linha em ai_agents (active=true).
+Desativar             → webhook removido + active=false; a instância do WhatsApp NÃO é
+                        tocada (continua conectada).
+Reconexão do WhatsApp → o instance_name é preservado (ver whatsapp-instance-lifecycle),
+                        então o agente continua apontando para a mesma instância.
+Erro na Evolution     → nada é salvo como ativo; usuário vê mensagem amigável.
+
+MULTI-TENANT / PARIDADE GLOBAL
+------------------------------
+Nenhum ID, nome ou fallback fixo. A tela é a mesma para dono, admin de unidade e
+barbeiro, e o agente sempre pertence ao barbeiro/barbearia resolvido pela sessão.

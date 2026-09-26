@@ -1,0 +1,1 @@
+CREATE POLICY "Tenant admins can read webhook config" ON public.webhook_config FOR SELECT TO authenticated USING (has_role(auth.uid(), 'tenant_admin'::app_role));

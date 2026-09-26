@@ -1,0 +1,64 @@
+CONEXÃO DO WHATSAPP POR CÓDIGO DE PAREAMENTO
+============================================
+Data: 2026-08-26
+
+OBJETIVO
+--------
+Tornar o código de pareamento (pairing code) o método PADRÃO de conexão do WhatsApp,
+mantendo o QR Code como alternativa secundária. Instâncias isoladas por barbeiro/barbearia.
+
+CAMADAS
+-------
+1) USUÁRIO (barbeiro)
+   - Informa o número completo do WhatsApp (+55 + DDD + número).
+   - Recebe um código de 8 caracteres, copia e digita no WhatsApp do celular.
+   - Confirmação automática, sem recarregar a tela.
+
+2) FRONTEND — src/components/whatsapp/WhatsAppConnectionPage.tsx
+   - Estado padrão: formulário de número (máscara (11) 99999-9999, validação 10/11 dígitos).
+   - Ação "pair" → exibe código formatado ABCD-1234, contagem regressiva de 3 minutos,
+     botão copiar (feedback "Código copiado!"), passo a passo de 6 etapas.
+   - Polling de status a cada 4s (useInterval) enquanto status = connecting.
+   - Código expirado → botão "Gerar novo código".
+   - Alternativa: "Usar QR Code" (ação "create" + "qrcode" com refresh manual).
+   - Estado conectado: número conectado, data, ações Testar conexão / Reconectar / Desconectar
+     (com confirmação).
+   - Mensagens amigáveis: número inválido, serviço indisponível, código não gerado, QR indisponível.
+
+3) BACKEND — supabase/functions/whatsapp-proxy/index.ts (segredos nunca vão ao browser)
+   - Helpers novos:
+       resolveInstanceName(supabase, barbeiro_id) → "<barbearia>_<barbeiro>" (isolamento).
+       deleteInstance()  → logout + delete na Evolution, tolerante a falhas.
+       fetchOwnerNumber() → lê ownerJid via /instance/fetchInstances.
+   - Ação "pair":
+       valida/normaliza telefone (adiciona DDI 55 quando necessário; 12–15 dígitos),
+       resolve nome canônico, recria a instância limpa,
+       POST /instance/create { number, qrcode: true } → pairingCode,
+       fallback: GET /instance/connect/{instance}?number=... (até 3 tentativas, 1,5s),
+       persiste em whatsapp_instances (status connecting, pairing_code, expiração 3 min).
+   - Ação "status": ao detectar state === "open", grava connected, limpa código/QR e salva o
+     número conectado (phone_number).
+   - Ações preservadas: create, qrcode, disconnect.
+
+4) BANCO — public.whatsapp_instances (colunas novas)
+   phone_number, pairing_code, pairing_expires_at, connection_method.
+   Registro único por barbeiro (onConflict: barbeiro_id).
+
+5) SERVIÇOS EXTERNOS — Evolution API
+   Credenciais EVOLUTION_API_URL / EVOLUTION_API_TOKEN somente no Edge Function.
+
+FLUXOS CRÍTICOS
+---------------
+Conexão feliz: número → pair → código → usuário digita no WhatsApp → polling detecta "open"
+   → status connected + phone_number salvo → toast de sucesso.
+Código expirado: contador chega a 0 → UI bloqueia cópia e oferece "Gerar novo código".
+Falha Evolution: códigos EVOLUTION_UNAVAILABLE / CREATE_FAILED / PAIRING_CODE_FAILED →
+   mensagem amigável, nenhum dado técnico exposto.
+Número inválido: INVALID_PHONE → "Verifique o número informado e tente novamente."
+Queda de sessão: "Testar conexão" volta o estado para connecting e orienta reconectar.
+Desconexão: confirmação explícita → logout/delete na Evolution + limpeza do registro.
+
+MULTI-TENANT
+------------
+Cada barbeiro possui uma linha em whatsapp_instances e um nome de instância derivado do
+tenant + nome do barbeiro; nunca há fallback para instância de outra barbearia.

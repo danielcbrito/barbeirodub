@@ -1,0 +1,212 @@
+═══════════════════════════════════════════════════════════════════
+PROMPT DE PERFORMANCE — APP DO CLIENTE (DUB BARBER)
+Estratégia completa de otimização "carregamento instantâneo"
+Baseada na refatoração já aplicada com sucesso no app do Barbeiro
+═══════════════════════════════════════════════════════════════════
+
+COMO USAR: copie TODO o conteúdo abaixo da linha ">>> INÍCIO DO PROMPT"
+e cole no chat da IA do projeto do app do cliente.
+
+───────────────────────────────────────────────────────────────────
+>>> INÍCIO DO PROMPT
+───────────────────────────────────────────────────────────────────
+
+# OBJETIVO
+
+O aplicativo está lento: toda tela mostra skeleton/loading ao abrir,
+há "flash" de tela branca e a navegação entre abas re-carrega dados
+que já foram buscados. Quero que você implemente uma arquitetura de
+carregamento INSTANTÂNEO (renderização em ~0ms com dados em cache e
+revalidação em segundo plano), aplicando as 6 camadas descritas
+abaixo. Não mude o design visual — só a forma como os dados chegam
+na tela.
+
+Regra de ouro: **nenhuma tela pode ficar em branco ou em skeleton
+quando o usuário já abriu o app antes.**
+
+═══════════════════════════════════════════════════════════════════
+CAMADA 1 — DIAGNÓSTICO (faça antes de codar)
+═══════════════════════════════════════════════════════════════════
+
+Mapeie e me devolva um relatório com:
+
+1. **Cascata de requisições**: liste, para cada tela principal
+   (Início, Meus Agendamentos, Agendar, Planos, Perfil), TODAS as
+   queries ao Supabase disparadas no mount, na ordem em que ocorrem.
+   Marque quais são sequenciais (uma espera a outra) — essas são o
+   maior vilão.
+2. **Queries duplicadas**: dados iguais buscados por hooks diferentes
+   em componentes diferentes.
+3. **Waterfall de auth**: quantas telas esperam `getSession()` /
+   `onAuthStateChange` antes de renderizar qualquer coisa.
+4. **Código morto**: componentes, hooks e páginas não importados
+   por ninguém.
+5. **Imagens**: fotos de barbeiros, logos e banners sem lazy-load,
+   sem dimensões fixas ou servidas em tamanho original.
+
+═══════════════════════════════════════════════════════════════════
+CAMADA 2 — AUTH SÍNCRONA ("Instant Start")
+═══════════════════════════════════════════════════════════════════
+
+Problema: o app espera a resposta assíncrona do Supabase Auth antes
+de renderizar, causando splash/tela branca de 300–1500ms.
+
+Faça:
+- Ler a sessão do `localStorage` de forma SÍNCRONA no boot
+  (chave `sb-<project-ref>-auth-token`) e usar esse `user.id`
+  imediatamente para renderizar a UI e disparar as queries.
+- Validar a sessão de verdade em segundo plano; só deslogar se o
+  Supabase retornar erro DEFINITIVO de sessão inválida.
+- **Cache Guard**: erros transitórios (rede, timeout, 5xx) NUNCA
+  podem deslogar o usuário nem limpar o cache. Só limpe cache em
+  logout explícito ou em `refresh_token_not_found`.
+
+Resultado esperado: primeiro paint com conteúdo, sem splash.
+
+═══════════════════════════════════════════════════════════════════
+CAMADA 3 — "SINGLE-PIPE BOOT" (1 RPC por tela, não 8 queries)
+═══════════════════════════════════════════════════════════════════
+
+Substitua o conjunto de queries de cada tela por UMA função RPC
+agregada no Postgres (SECURITY DEFINER, `set search_path = public`,
+com checagem interna de `auth.uid()`), que devolve um JSON único.
+
+Crie no mínimo:
+
+`get_client_boot_bundle()` → devolve em uma chamada:
+  - perfil do cliente (nome, avatar, telefone)
+  - próximo(s) agendamento(s) + serviço + barbeiro + barbearia
+  - status de assinatura/plano ativo (com uso: X de Y cortes)
+  - pontos de fidelidade
+  - notificações não lidas (contagem)
+  - tenant do cliente (nome, logo, cores)
+  - flags de manutenção / atualização obrigatória
+
+`get_client_booking_bundle(p_tenant_id)` → para a tela de agendar:
+  - serviços ativos, barbeiros ativos, horários de funcionamento,
+    intervalo de slots e cupons disponíveis — tudo junto.
+
+`get_client_history_bundle()` → histórico paginado + avaliações
+  pendentes em uma chamada.
+
+IMPORTANTE em cada RPC:
+- filtre sempre por `auth.uid()` dentro da função (nunca confie em
+  id vindo do cliente);
+- `GRANT EXECUTE ... TO authenticated;`
+- retorne `jsonb`, nunca múltiplos result sets.
+
+═══════════════════════════════════════════════════════════════════
+CAMADA 4 — CACHE EM 3 NÍVEIS
+═══════════════════════════════════════════════════════════════════
+
+**Nível 1 — Cache síncrono em localStorage (`initialData`)**
+
+Crie `src/lib/syncQueryCache.ts` com `readSyncCache` / `writeSyncCache`
+guardando `{ t: timestamp, d: dados }` sob prefixo `dub:qc:v1:`.
+Use o retorno como `initialData` do `useQuery` → a tela renderiza
+com dados antigos em ~0ms e revalida atrás.
+Segurança: só leia o cache se existir sessão Supabase armazenada
+(evita vazar dados entre contas no mesmo aparelho); limpe tudo no
+logout.
+
+**Nível 2 — TanStack Query com staleTime generoso**
+
+Centralize em `src/lib/queryConstants.ts`:
+```
+AGENDAMENTOS_CLIENTE: 5 min
+HISTORICO:            10 min
+SERVICOS / BARBEIROS: 30 min
+HORARIOS:             30 min
+PERFIL:                15 min
+PLANO / FIDELIDADE:     5 min
+TENANT:                30 min
+```
+Defaults do QueryClient: `refetchOnWindowFocus: false`,
+`refetchOnMount: false`, `retry: 1`, `gcTime: 10 min`.
+
+**Nível 3 — Persistência entre sessões**
+
+Instale `@tanstack/react-query-persist-client` +
+`@tanstack/query-sync-storage-persister` e envolva o app no
+`PersistQueryClientProvider` com `maxAge: 24h` e uma `buster`
+com a versão do app (invalida cache em deploy novo).
+
+═══════════════════════════════════════════════════════════════════
+CAMADA 5 — PREFETCH E ROTAS
+═══════════════════════════════════════════════════════════════════
+
+1. **Prefetch no boot**: assim que o `user.id` estiver disponível,
+   dispare `get_client_boot_bundle()` e escreva o resultado no
+   `queryClient.setQueryData` + `writeSyncCache` de TODAS as chaves
+   que ele alimenta. As telas passam a ser puro "read from cache".
+2. **Prefetch por intenção**: no `onMouseEnter`/`onTouchStart` dos
+   itens da bottom nav e dos cards, chame
+   `queryClient.prefetchQuery` da tela de destino.
+3. **Code splitting**: `React.lazy` + `Suspense` para rotas pesadas
+   (agendar, pagamento/PIX, loja, chat de suporte). Mantenha
+   Início e Meus Agendamentos no bundle principal.
+4. **Nunca desmontar o que é caro**: mantenha as abas montadas
+   (esconda com CSS) ou garanta `gcTime` alto para não refazer
+   fetch ao alternar abas.
+5. **Realtime em vez de polling**: assine `agendamentos` e
+   `assinaturas` filtrados por `user_id` e faça
+   `invalidateQueries` pontual. Zero `refetchInterval`.
+
+═══════════════════════════════════════════════════════════════════
+CAMADA 6 — BANCO, UI E ASSETS
+═══════════════════════════════════════════════════════════════════
+
+**Banco**
+- Índices compostos para os filtros reais das telas, ex.:
+  `(cliente_id, data_agendamento DESC)` em `agendamentos`,
+  `(user_id, status)` em `assinaturas`,
+  `(tenant_id, ativo)` em `servicos` e `barbeiros`.
+- Se algum agregado continuar lento, crie tabela de **snapshot
+  pré-computado** (`client_home_snapshot`) atualizada por trigger
+  nas tabelas de origem + job `pg_cron` de reconciliação. A tela
+  lê 1 linha por PK.
+- Rode o linter/`EXPLAIN ANALYZE` nas 5 queries mais lentas e me
+  mostre o antes/depois.
+
+**UI**
+- Zero tela branca: enquanto não há cache, mostre skeleton com o
+  MESMO layout final (mesmas alturas), nunca spinner solto.
+- Reserve altura fixa para imagens (evita layout shift).
+- `content-visibility: auto` em listas longas de histórico.
+
+**Assets**
+- Imagens em WebP/AVIF, `loading="lazy"` em tudo abaixo da dobra,
+  `fetchpriority="high"` só no banner principal.
+- Avatares e logos servidos redimensionados (não a original).
+- Remova todo o código morto encontrado na Camada 1.
+
+═══════════════════════════════════════════════════════════════════
+ORDEM DE EXECUÇÃO (não inverta)
+═══════════════════════════════════════════════════════════════════
+
+1. Diagnóstico + remoção de código morto
+2. Índices no banco
+3. RPCs agregadas (boot / booking / history)
+4. Auth síncrona + Cache Guard
+5. syncQueryCache + staleTime + persistência
+6. Prefetch, realtime e code splitting
+7. Skeletons e imagens
+
+Depois de cada etapa, me diga o que mudou e qual o ganho medido
+(tempo até o primeiro conteúdo em cada tela, em ms).
+
+═══════════════════════════════════════════════════════════════════
+CRITÉRIO DE ACEITE
+═══════════════════════════════════════════════════════════════════
+
+- Abrir o app com sessão existente: conteúdo visível em < 300ms,
+  sem splash e sem skeleton.
+- Trocar de aba: 0ms de loading (dados já em cache).
+- Tela de agendar: lista de serviços/horários aparece em uma única
+  ida ao banco.
+- Nenhum logout causado por erro de rede.
+- Nenhuma tela branca em nenhum momento, inclusive offline.
+
+───────────────────────────────────────────────────────────────────
+>>> FIM DO PROMPT
+───────────────────────────────────────────────────────────────────

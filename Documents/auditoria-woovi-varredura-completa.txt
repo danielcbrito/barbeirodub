@@ -1,0 +1,102 @@
+VARREDURA COMPLETA — PIX / SUBCONTAS WOOVI (Barbearia DUB e demais tenants)
+Data: 01/08/2026
+
+═══════════════════════════════════════════════════════════════
+1) PERGUNTA 1 — "O Túlio já sacou. Os números bateram?"
+═══════════════════════════════════════════════════════════════
+SIM, ele sacou. Estavam 2 saques travados no banco em "processando":
+  24/06/2026 .... R$  50,40
+  23/07/2026 .... R$ 207,00
+  TOTAL ......... R$ 257,40   (ambos para +5511952263002 = chave do Túlio)
+
+Como esses saques nunca foram marcados como concluídos, e como a API da
+Woovi está respondendo 401 (credencial WOOVI_APP_ID inválida), o app caiu
+no cálculo LOCAL de saldo — e esse cálculo somava só as cobranças pagas,
+SEM subtrair os saques. Daí o valor "fantasma" de R$ 296,30.
+
+CONTA CORRETA:
+  Recebido e liberado ......... R$ 296,30
+  (-) Saques já efetuados ..... R$ 257,40
+  = Saldo real aproximado ..... R$  38,90
+
+Ou seja: NÃO faltou dinheiro e NÃO sobrou dinheiro de ninguém. O número
+exibido é que estava errado.
+
+AÇÕES APLICADAS:
+  a) Os 2 saques foram marcados como "concluido" no banco (com a data de
+     origem preservada).
+  b) O cálculo de fallback do saldo em src/components/barber/
+     WooviWalletSheet.tsx agora SUBTRAI os saques (todos, exceto os com
+     status falhou / cancelado / estornado / recusado).
+
+═══════════════════════════════════════════════════════════════
+2) PERGUNTA 2 — "O Pix está sendo gerado na subconta do barbeiro
+   certo, ou está caindo tudo no Túlio?"
+═══════════════════════════════════════════════════════════════
+VERIFICADO EM 3 CAMADAS. RESULTADO: ESTÁ CORRETO. ZERO DESVIOS.
+
+CAMADA A — Código (supabase/functions/woovi-create-charge/index.ts)
+  A chave Pix do split é buscada por:
+      select woovi_pix_key from barbeiros where id = agendamento.barbeiro_id
+  Ou seja, sempre o barbeiro DO AGENDAMENTO — nunca o usuário logado,
+  nunca o dono da barbearia. Só existe UM ponto no sistema inteiro que
+  cria split (SPLIT_SUB_ACCOUNT); não há caminho alternativo.
+
+CAMADA B — Dados (23 cobranças auditadas)
+  cobranca.barbeiro_id  <>  agendamento.barbeiro_id  →  0 casos
+  Todas as cobranças foram gravadas no barbeiro correto.
+
+CAMADA C — Chave Pix realmente enviada à Woovi (raw_response)
+  +5511952263002  → Tulio           16 cobranças   R$ 734,40
+  +5511959637439  → Pedro Santos     1 cobrança    R$  45,90 (PAGA, foi p/ ele)
+  josejuniorjjj…  → Jose Junior      1 cobrança    R$  45,90 (pendente)
+  +5511983916423  → Tulio (chave ANTIGA)  5 cobranças  R$ 287,60
+                    → todas PENDING ou REFUNDED, nenhuma paga.
+
+  Nenhuma chave Pix é compartilhada entre barbeiros. Nenhum barbeiro de
+  outra barbearia (outro tenant) teve cobrança roteada para a DUB.
+
+CONCLUSÃO: não há risco de dinheiro de um barbeiro cair na conta de outro.
+
+═══════════════════════════════════════════════════════════════
+3) OS R$ 81 NA CONTA CENTRAL
+═══════════════════════════════════════════════════════════════
+O split é criado com value = valor TOTAL da cobrança, ou seja, 100% vai
+para a subconta do barbeiro e 0% fica na conta central. Portanto os R$ 81
+NÃO são retenção de corte de barbeiro. As origens possíveis são:
+  - cobranças geradas antes da subconta existir (sem split);
+  - créditos/estornos e taxas da própria Woovi;
+  - depósitos manuais feitos na conta principal.
+Não é possível confirmar a origem exata enquanto a credencial estiver
+inválida (a API não deixa ler o extrato). Assim que o WOOVI_APP_ID for
+atualizado, dá para bater o extrato central linha a linha.
+
+═══════════════════════════════════════════════════════════════
+4) PONTOS QUE AINDA PRECISAM DE AÇÃO (risco operacional)
+═══════════════════════════════════════════════════════════════
+P1 (CRÍTICO) — WOOVI_APP_ID inválido (401 "appID inválido").
+   Enquanto não for atualizado, o app NUNCA lê o saldo real e sempre
+   depende do cálculo local. Todo saldo exibido é estimativa.
+
+P2 — 5 cobranças apontam para a chave antiga do Túlio (+5511983916423).
+   Nenhuma foi paga, mas se alguém pagar, o dinheiro cai numa subconta
+   que ele não acompanha mais. Devem ser canceladas.
+
+P3 — 13 cobranças PENDING antigas (R$ 722,80), algumas de junho, nunca
+   expiraram. Poluem o extrato e podem gerar pagamento fora de hora.
+   Recomenda-se expiração automática (ex.: 30 min).
+
+P4 — Saques ficam eternamente em "processando". Não há webhook/rotina
+   que confirme a conclusão do saque na Woovi. Recomenda-se tratar o
+   evento de withdraw no woovi-webhook e atualizar o status.
+
+═══════════════════════════════════════════════════════════════
+5) RESUMO EXECUTIVO (para responder ao barbeiro)
+═══════════════════════════════════════════════════════════════
+- O dinheiro é do Túlio, sim; e ele já sacou R$ 257,40.
+- O que sobrou de verdade é aproximadamente R$ 38,90.
+- O saldo de R$ 296,30 era um erro de EXIBIÇÃO (não descontava saques),
+  não um erro de dinheiro.
+- Nenhum centavo de outro barbeiro (da DUB ou de outra barbearia) entrou
+  na conta dele. Confirmado em código, em dados e nas chaves enviadas
+  para a Woovi.

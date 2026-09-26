@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR" translate="no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover, interactive-widget=resizes-content" />
+
+    <!-- Prevent automatic translation by browsers -->
+    <meta name="google" content="notranslate" />
+    <meta http-equiv="Content-Language" content="pt-BR" />
+
+    <title>Agendadub</title>
+    <meta name="description" content="Sistema de agendamento premium da Barbearia DUB. Agende seu corte, acompanhe pontos e aproveite benefícios exclusivos.">
+    <meta name="author" content="Barbearia DUB" />
+
+    <!-- Brand / status-bar color -->
+    <meta name="theme-color" content="#F4F5F7" />
+    <meta name="msapplication-navbutton-color" content="#F4F5F7" />
+    <meta name="msapplication-TileColor" content="#F4F5F7" />
+
+
+    <!-- PWA iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Barbeiros" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Manifest & icons -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/app-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    
+    
+    
+    
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,700;0,900;1,700;1,900&display=swap" rel="stylesheet">
+
+    <!-- Keep browser/status-bar background equal to the app background before hydration -->
+    <script>
+      (function () {
+        window.__DUB_APP_READY__ = false;
+        var theme = 'light';
+        try {
+          // Limpa qualquer tema escuro forçado/salvo nas versões antigas.
+          // A partir daqui o app sempre nasce claro; só respeita escolha manual nova.
+          localStorage.removeItem('dub-theme-forced-dark-v1');
+          localStorage.removeItem('dub-theme-v1');
+          localStorage.removeItem('dub-theme-v2');
+          localStorage.removeItem('theme');
+          var stored = localStorage.getItem('dub-theme-v3');
+          if (stored === 'light' || stored === 'dark') {
+            theme = stored;
+          } else {
+            theme = 'light';
+          }
+        } catch (e) {
+          theme = 'light';
+        }
+        var brand = theme === 'dark' ? '#0c1014' : '#F4F5F7';
+        document.documentElement.style.backgroundColor = brand;
+        var metas = [
+          'theme-color',
+          'msapplication-navbutton-color',
+          'msapplication-TileColor'
+        ];
+        metas.forEach(function (name) {
+          var meta = document.querySelector('meta[name="' + name + '"]');
+          if (meta) meta.setAttribute('content', brand);
+        });
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.add('light');
+        if (document.body) document.body.style.backgroundColor = brand;
+        else document.addEventListener('DOMContentLoaded', function () {
+          document.body.style.backgroundColor = brand;
+        });
+      })();
+    </script>
+
+    
+  
+  
+  
+  <meta property="og:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/57141720-4b0e-4a05-9c8f-5252cc75c8c5/id-preview-2f9074d1--bda81f72-2e70-45e3-8834-040d51d51390.lovable.app-1784682668663.png">
+  <meta name="twitter:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/57141720-4b0e-4a05-9c8f-5252cc75c8c5/id-preview-2f9074d1--bda81f72-2e70-45e3-8834-040d51d51390.lovable.app-1784682668663.png">
+  
+  
+  
+  
+  <meta property="og:title" content="Agendadub">
+  <meta name="twitter:title" content="Agendadub">
+  <meta property="og:description" content="Sistema de agendamento premium da Barbearia DUB. Agende seu corte, acompanhe pontos e aproveite benefícios exclusivos.">
+  <meta name="twitter:description" content="Sistema de agendamento premium da Barbearia DUB. Agende seu corte, acompanhe pontos e aproveite benefícios exclusivos.">
+</head>
+
+  <body class="notranslate">
+    <div id="root">
+      <div id="dub-boot-splash" style="min-height:100svh;display:flex;align-items:center;justify-content:center;padding:24px;background:#FFFFFF;color:#0D0D0D;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;text-align:center;">
+        <div style="max-width:300px;width:100%;">
+          <div style="width:52px;height:52px;border-radius:18px;background:#b91c1c;margin:0 auto 18px;box-shadow:0 14px 40px rgba(185,28,28,.25);"></div>
+          <div style="font-size:18px;font-weight:800;margin-bottom:8px;">Carregando app...</div>
+          <div style="font-size:13px;line-height:1.5;color:rgba(13,13,13,.6);">Se este celular estiver com cache antigo, o app vai mostrar a correção automática.</div>
+        </div>
+      </div>
+
+    </div>
+    <script>
+      (function () {
+        window.setTimeout(function () {
+          var root = document.getElementById('root');
+          if (!root || window.__DUB_APP_READY__ === true) return;
+
+          var reset = function () {
+            Promise.resolve()
+              .then(function () {
+                if ('serviceWorker' in navigator) {
+                  return navigator.serviceWorker.getRegistrations().then(function (regs) {
+                    return Promise.allSettled(regs.map(function (reg) { return reg.unregister(); }));
+                  });
+                }
+              })
+              .then(function () {
+                if ('caches' in window) {
+                  return caches.keys().then(function (keys) {
+                    return Promise.allSettled(keys.map(function (key) { return caches.delete(key); }));
+                  });
+                }
+              })
+              .finally(function () {
+                window.location.href = '/?cache-reset=' + Date.now();
+              });
+          };
+
+          root.innerHTML = '' +
+            '<div style="min-height:100svh;display:flex;align-items:center;justify-content:center;padding:24px;background:#FFFFFF;color:#0D0D0D;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;text-align:center;">' +
+              '<div style="max-width:320px;width:100%;">' +
+                '<div style="width:52px;height:52px;border-radius:18px;background:#b91c1c;margin:0 auto 18px;box-shadow:0 14px 40px rgba(185,28,28,.25);"></div>' +
+                '<h1 style="font-size:20px;line-height:1.2;margin:0 0 10px;font-weight:800;">Atualização necessária</h1>' +
+                '<p style="font-size:14px;line-height:1.5;margin:0 0 20px;color:rgba(13,13,13,.62);">Este celular ficou preso numa versão antiga do app. Toque abaixo para limpar o cache e abrir de novo.</p>' +
+                '<button id="dub-reset-app" style="width:100%;height:50px;border:0;border-radius:14px;background:#b91c1c;color:#fff;font-weight:800;font-size:15px;">Corrigir neste celular</button>' +
+              '</div>' +
+            '</div>';
+
+          var btn = document.getElementById('dub-reset-app');
+          if (btn) btn.addEventListener('click', reset);
+        }, 7000);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

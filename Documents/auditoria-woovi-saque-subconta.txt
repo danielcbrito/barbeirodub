@@ -1,0 +1,207 @@
+================================================================
+  AUDITORIA COMPLETA — FLUXO WOOVI (SUBCONTA, COBRANÇA, SAQUE)
+  Projeto: DUB Admin  |  Data: 2026-06-22
+================================================================
+
+ESCOPO
+------
+Varredura ponta-a-ponta do fluxo financeiro Woovi do barbeiro:
+1) Criação de subconta
+2) Recebimento de cobrança Pix (cliente → barbeiro)
+3) Webhook de confirmação
+4) Consulta de saldo / histórico
+5) Saque manual com PIN
+6) Saque automático semanal (cron)
+7) Segurança contra fraude, replay, escalada de privilégio
+
+================================================================
+1. ARQUITETURA EM CAMADAS
+================================================================
+
+┌─ FRONTEND (React) ────────────────────────────────────────────┐
+│  • WooviWalletSheet.tsx        → UI da carteira do barbeiro   │
+│  • WooviPixSheet.tsx           → QR Code Pix para cliente     │
+│  • ClienteAgendar.tsx          → trigger de cobrança          │
+└────────────────────────────────────────────────────────────────┘
+                    │ supabase.functions.invoke
+                    ▼
+┌─ EDGE FUNCTIONS (Deno) ───────────────────────────────────────┐
+│  woovi-create-subaccount  woovi-create-charge                 │
+│  woovi-get-balance        woovi-history                       │
+│  woovi-withdraw           woovi-update-settings               │
+│  woovi-auto-withdraw-cron woovi-webhook  (público)            │
+└────────────────────────────────────────────────────────────────┘
+        │                                       ▲
+        │ wooviFetch (Bearer WOOVI_APP_ID)      │ POST webhook
+        ▼                                       │
+┌─ WOOVI / OpenPIX API ─────────────────────────────────────────┐
+│  /api/v1/subaccount    /api/v1/charge                         │
+│  /api/v1/subaccount/{pixKey}/withdraw                         │
+└────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─ SUPABASE (Postgres) ─────────────────────────────────────────┐
+│  barbeiros (woovi_pix_key, woovi_subaccount_name, ...)        │
+│  woovi_charges    saques    financeiro_auth_sessions          │
+│  pin_financeiro                                               │
+└────────────────────────────────────────────────────────────────┘
+
+================================================================
+2. BUGS CRÍTICOS ENCONTRADOS E CORRIGIDOS NESTE COMMIT
+================================================================
+
+🔴 [C1] saques.INSERT quebrado em woovi-withdraw e cron
+   Sintoma: insert silenciosamente falhava porque o schema exige
+            user_id, chave_pix_valor, chave_pix_tipo NOT NULL e
+            NÃO existe coluna `metodo` nem `observacoes`.
+   Impacto: dinheiro saía da subconta Woovi mas NUNCA aparecia no
+            histórico local → impossível auditar saques.
+   Correção: insert agora passa todos os campos obrigatórios.
+
+🔴 [C2] woovi-create-subaccount sem checagem de ownership
+   Sintoma: qualquer usuário autenticado podia enviar
+            { barbeiro_id: <id de outro>, pix_key: "minha-chave" }
+            e SOBRESCREVER a woovi_pix_key de QUALQUER barbeiro.
+   Impacto: ESCALADA DE PRIVILÉGIO + redirecionamento de fundos.
+            Próximo Pix recebido iria para a chave do atacante.
+   Correção: valida barbeiros.user_id === auth.uid() antes do upsert.
+
+🔴 [C3] woovi-history lia coluna inexistente
+   Sintoma: `select valor_centavos` (correto: `value_centavos`) e
+            filtro `metodo=pix_woovi` (coluna não existe).
+   Impacto: histórico do barbeiro vinha SEMPRE vazio.
+   Correção: nomes corrigidos e filtro removido.
+
+🟠 [C4] Sem idempotência no saque manual
+   Sintoma: clique duplo → 2 chamadas /withdraw → 2 débitos reais
+            da subconta Woovi.
+   Correção: bloqueio de 30s por barbeiro_id antes de chamar Woovi.
+
+🟠 [C5] Sem validação local de saldo antes do withdraw
+   Sintoma: dependia somente da resposta da Woovi; em race condition
+            entre balance e withdraw, o erro só vinha por exceção
+            (sem mensagem amigável).
+   Correção: consulta /subaccount/{key} ANTES e devolve
+            INSUFFICIENT_BALANCE com valor exato.
+
+🟠 [C6] Cron público de saque sem autenticação
+   Sintoma: woovi-auto-withdraw-cron tinha Deno.serve aberto.
+            Qualquer um podia POSTar e disparar saque em massa
+            (atacante não recebe nada — vai pra chave do próprio
+            barbeiro — mas drena rate-limit Woovi e custa taxa).
+   Correção: exige header `x-cron-secret` igual a CRON_SECRET.
+            ⚠ AÇÃO PENDENTE: cadastrar segredo CRON_SECRET e
+              atualizar o agendador (pg_cron / GitHub Action) para
+              enviar o header.
+
+================================================================
+3. RISCOS REMANESCENTES (RECOMENDAÇÕES)
+================================================================
+
+🟡 [R1] woovi-webhook sem validação de assinatura HMAC
+   Hoje o endpoint aceita QUALQUER POST com event=OPENPIX:CHARGE_COMPLETED
+   e correlationID válido → marca a cobrança como paga e libera o
+   agendamento sem o cliente ter pago.
+   Mitigação atual: precisa adivinhar o correlationID (`ag-<uuid>`)
+   — não é trivial, mas é ENUMERÁVEL via tabela agendamentos.
+   AÇÃO: implementar validação do header `x-webhook-signature` da
+   Woovi (HMAC-SHA256 do raw body com o secret do webhook).
+   Doc: https://developers.woovi.com/docs/webhook/authenticity
+
+🟡 [R2] Sessão de PIN financeiro reaproveitável por 15 min
+   `financeiro_auth_sessions` não tem `used_at`. Após digitar o PIN
+   uma vez o usuário pode disparar N saques em 15 min sem reconfirmar.
+   AÇÃO: adicionar coluna used_at + invalidar a sessão após o saque.
+
+🟡 [R3] Não há limite de valor por saque / por dia
+   Atacante com acesso à conta poderia drenar saldo inteiro.
+   AÇÃO: configurar teto (ex.: R$ 5.000 / saque, R$ 20.000 / dia)
+   e rejeitar em woovi-withdraw.
+
+🟡 [R4] Não há reconciliação automática de saques
+   Status "processando" nunca avança para "concluido" — Woovi não
+   manda webhook de WITHDRAW_COMPLETED nesta integração.
+   AÇÃO: job diário consultando /api/v1/transaction filtrado por
+   subAccount e atualizando saques.status + processado_em.
+
+🟡 [R5] woovi_charges sem coluna user_id populada para split
+   O fallback no app cliente (correlation_id `ag-<id>` vs `ag_<id>`)
+   pode divergir do webhook do painel admin → cobrança fica órfã.
+   AÇÃO: padronizar separador em UM ÚNICO formato nos dois apps.
+
+🟡 [R6] Frontend (WooviWalletSheet) confia em woovi_pix_key vinda
+   do banco para exibir saldo. Se um admin tenant trocar a chave
+   pela linha RLS "Tenant admin can update own tenant barbeiros",
+   o saldo mostrado pertence à NOVA chave (que pode ser dele).
+   AÇÃO: restringir UPDATE em colunas woovi_* somente ao próprio
+   barbeiro (column-level grant ou trigger BEFORE UPDATE).
+
+================================================================
+4. CHECKLIST OPERACIONAL (PÓS-DEPLOY)
+================================================================
+
+[ ] Adicionar segredo CRON_SECRET no Supabase
+[ ] Atualizar agendador do cron para enviar header x-cron-secret
+[ ] Implementar HMAC no woovi-webhook (R1)
+[ ] Criar migração: ALTER TABLE financeiro_auth_sessions
+                    ADD COLUMN used_at timestamptz;  (R2)
+[ ] Adicionar tetos diários de saque (R3)
+[ ] Criar cron diário de reconciliação de saques (R4)
+[ ] Auditar e revogar UPDATE de colunas woovi_* por terceiros (R6)
+[ ] Teste E2E: cliente paga → webhook confirma → saldo aparece
+             → barbeiro saca → saques.status registra
+
+================================================================
+5. FLUXOS CRÍTICOS REVISADOS (resumo)
+================================================================
+
+[A] CRIAÇÃO DE SUBCONTA
+    UI WooviWalletSheet → invoke('woovi-create-subaccount',
+      { barbeiro_id, pix_key, name })
+    → checa ownership (✅ corrigido)
+    → POST Woovi /api/v1/subaccount (idempotente por pixKey)
+    → UPDATE barbeiros.woovi_pix_key + woovi_subaccount_name
+    ✅ STATUS: SEGURO após [C2].
+
+[B] COBRANÇA PIX
+    Cliente confirma agendamento → invoke('woovi-create-charge')
+    → busca barbeiros.woovi_pix_key
+    → POST Woovi /api/v1/charge com splits SPLIT_SUB_ACCOUNT
+    → grava woovi_charges (idempotente por correlation_id)
+    ✅ STATUS: OK. Pendência: padronização de correlation_id.
+
+[C] WEBHOOK
+    Woovi POST → woovi-webhook (público) → UPDATE woovi_charges
+    + UPDATE agendamentos.status=confirmado
+    ⚠ STATUS: FUNCIONA mas SEM HMAC — risco [R1].
+
+[D] SALDO / HISTÓRICO
+    woovi-get-balance → Woovi GET /subaccount/{key}
+    woovi-history → woovi_charges + saques (✅ corrigido C3)
+    ✅ STATUS: OK.
+
+[E] SAQUE MANUAL
+    UI → PIN financeiro → invoke('woovi-withdraw', { value_centavos })
+    → valida ownership, sessão PIN, idempotência 30s, saldo real
+    → POST Woovi /subaccount/{key}/withdraw
+    → INSERT saques (✅ campos obrigatórios corrigidos C1)
+    ✅ STATUS: SEGURO após C1, C4, C5.
+
+[F] SAQUE AUTOMÁTICO (CRON QUARTA)
+    Agendador → POST com x-cron-secret → woovi-auto-withdraw-cron
+    → para cada barbeiro com auto_withdraw_enabled:
+       balance > 0 → withdraw → INSERT saques
+    ✅ STATUS: SEGURO após C1, C6.
+       ⚠ PRECISA: cadastrar CRON_SECRET e ajustar agendador.
+
+================================================================
+6. ARQUIVOS ALTERADOS NESTE COMMIT
+================================================================
+- supabase/functions/woovi-create-subaccount/index.ts  (C2)
+- supabase/functions/woovi-withdraw/index.ts           (C1, C4, C5)
+- supabase/functions/woovi-history/index.ts            (C3)
+- supabase/functions/woovi-auto-withdraw-cron/index.ts (C1, C6)
+
+================================================================
+FIM DO RELATÓRIO
+================================================================

@@ -1,0 +1,45 @@
+DIAGNÓSTICO — ERRO AO CRIAR SUBCONTA WOOVI
+Data: 22/06/2026
+
+1) Sintoma visto pelo barbeiro
+- Ao preencher nome, tipo de chave Pix e chave Pix, o botão "Criar carteira" mostrava o erro genérico:
+  "Failed to send a request to the Edge Function".
+
+2) Causa raiz encontrada
+- A Edge Function `woovi-create-subaccount` existia no código, mas não estava publicada no Supabase.
+- A chamada direta retornava HTTP 404: `Requested function was not found`.
+- Isso faz o navegador/supabase-js mostrar erro genérico de falha ao enviar requisição para Edge Function.
+
+3) Correções aplicadas
+- Publiquei a função `woovi-create-subaccount` no Supabase.
+- Adicionei a configuração explícita da função no `supabase/config.toml` com `verify_jwt = false`, mantendo a validação de JWT dentro do próprio código.
+- Reforcei CORS no helper compartilhado para aceitar métodos OPTIONS/POST e headers usados por Supabase, cron e webhooks.
+- Removi a persistência duplicada feita pelo frontend: agora a Edge Function cria a subconta e salva `woovi_pix_key`, `woovi_subaccount_name` e `woovi_pix_key_type` de forma centralizada.
+- Adicionei validação backend para tipo de chave Pix e normalização de CPF, CNPJ, telefone, e-mail e chave aleatória.
+- Adicionei tratamento de erro mais claro para respostas vindas da Woovi/OpenPix.
+
+4) Validações realizadas
+- Antes da correção: chamada para `woovi-create-subaccount` retornava 404.
+- Depois da publicação: chamada sem token retorna 401 `Token ausente`, que é o comportamento correto para função protegida.
+- Preflight CORS via OPTIONS retorna 200 com:
+  - `access-control-allow-origin: *`
+  - `access-control-allow-methods: GET, POST, PUT, PATCH, DELETE, OPTIONS`
+  - headers Supabase e customizados liberados.
+- As tabelas críticas `barbeiros`, `saques` e `woovi_charges` estão com RLS ativo.
+- A tabela `barbeiros` possui as colunas necessárias para Woovi:
+  - `woovi_pix_key`
+  - `woovi_subaccount_name`
+  - `woovi_pix_key_type`
+  - `woovi_auto_withdraw_enabled`
+  - `woovi_auto_withdraw_min_centavos`
+  - `woovi_last_auto_withdraw_at`
+
+5) Observação importante
+- Ao tentar publicar todas as funções Woovi de uma vez, o Supabase retornou limite de quantidade de Edge Functions (`SUPABASE_MAX_FUNCTIONS_REACHED`).
+- Para resolver o erro atual, publiquei individualmente a função necessária: `woovi-create-subaccount`.
+- Se futuramente outras funções Woovi precisarem ser republicadas, pode ser necessário remover funções antigas/não usadas ou ajustar o plano/limite do Supabase.
+
+6) Estado final
+- O erro de função inexistente foi corrigido.
+- A função agora está disponível, protegida por autenticação e com CORS funcionando.
+- O fluxo de criação de subconta ficou mais seguro porque o frontend não grava mais campos financeiros diretamente após a criação.

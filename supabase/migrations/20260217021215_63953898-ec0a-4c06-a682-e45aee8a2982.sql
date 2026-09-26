@@ -1,0 +1,1 @@
+UPDATE contas_bancarias SET titular_cpf_cnpj = '48737284000120', barbeiro_id = '767c51a7-7323-4933-8fc5-9a666f6baa7c' WHERE id = '370f10df-c7fa-4dcb-ba50-ef4a615000a7';

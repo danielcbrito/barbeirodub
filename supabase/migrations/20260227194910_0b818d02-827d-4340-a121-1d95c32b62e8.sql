@@ -1,0 +1,1 @@
+UPDATE agendamentos SET status = 'cancelled_by_admin', cancelado_em = now(), visivel_para_usuario = false, observacoes = 'Removido manualmente via solicitação' WHERE id = '600a8d07-9b19-49ad-ba50-c514913caaab';

@@ -1,0 +1,62 @@
+AUDITORIA — SALDO DE R$ 296,30 (TÚLIO / BARBEARIA DUB)
+Data: 31/07/2026
+
+1) IDENTIFICAÇÃO
+- Barbeiro auditado: id 767c51a7-7323-4933-8fc5-9a666f6baa7c
+  apelido "Tulio", conta do dono (perfil "Barbearia DUB"), tenant Barbearia DUB.
+  Chave Pix da subconta Woovi: +5511952263002 (telefone).
+- Outros barbeiros com subconta: Pedro Santos (+5511959637439),
+  Barbeiro Teste DUB (CPF 574...), Jose Junior / Junior cortes (e-mail).
+  Nenhuma chave Pix é compartilhada entre barbeiros.
+
+2) ORIGEM EXATA DOS R$ 296,30
+7 cobranças Pix PAGAS e liberadas, todas de agendamentos do próprio Túlio:
+  24/06  Priscilo ......................... R$  50,90
+  30/06  adenicio maciel .................. R$  30,90
+  06/07  Cristiane Jesus .................. R$  60,90
+  08/07  Taina Santos ..................... R$  30,90
+  09/07  Pedro Henrique Silva Santos ...... R$  35,90
+  16/07  Priscilo ......................... R$  50,90
+  24/07  Pedro Henrique Silva Santos ...... R$  35,90
+  TOTAL ............................. R$ 296,30
+Em todas: agendamento.barbeiro_id = cobrança.barbeiro_id = Túlio,
+e a subconta usada na Woovi foi {"name":"Tulio","pixKey":"+5511952263002"}.
+
+CONCLUSÃO: o dinheiro É do Túlio. Não há um centavo de outro barbeiro da
+Barbearia DUB nem de outra barbearia. Pedro Santos tem apenas 1 cobrança paga
+(R$ 45,90) e ela foi para a subconta dele. Junior cortes tem 1 pendente.
+
+3) POR QUE ELE NÃO SE "LEMBRA" DESSE DINHEIRO — FALHAS ENCONTRADAS
+
+FALHA 1 (crítica) — Credencial Woovi inválida
+  A API Woovi está respondendo 401 "appID inválido" para
+  GET /api/v1/subaccount/+5511952263002. Ou seja: o app NÃO está lendo o saldo
+  real da Woovi. A tela cai no cálculo local (soma das cobranças pagas), que
+  ignora saques. Por isso aparece 296,30 "parado" mesmo com saques feitos.
+  → Ação: atualizar o secret WOOVI_APP_ID com o AppID válido da conta Woovi.
+
+FALHA 2 — Saques em "processando" não descontam do valor exibido
+  Há 2 saques do Túlio travados: R$ 50,40 (24/06) e R$ 207,00 (23/07),
+  total R$ 257,40, ambos para +5511952263002 e ainda em "processando"
+  (provavelmente travados pela mesma credencial inválida).
+  No fallback local esses saques não são subtraídos → saldo exibido inflado.
+
+FALHA 3 — Troca de chave Pix deixou cobranças órfãs
+  5 cobranças criadas em 22/06 (R$ 45,00 + 79,90 x3 + 1 estornada) apontam para
+  a subconta antiga +5511983916423 (telefone pessoal do perfil). Depois a chave
+  virou +5511952263002. Se alguma dessas for paga, o valor cai na subconta
+  antiga e não aparece no saldo atual.
+
+FALHA 4 — Cobranças pendentes antigas nunca expiradas
+  13 cobranças PENDING (R$ 722,80) continuam abertas, algumas de junho.
+  Deveriam ser expiradas/limpas para não poluir o extrato.
+
+4) CORREÇÃO JÁ APLICADA NO CÓDIGO
+- store-api / woovi_get_balance: erro 401/403 da Woovi não derruba mais a tela
+  (retorna erro tratado e o app usa o fallback), evitando a tela branca.
+
+5) PRÓXIMOS PASSOS RECOMENDADOS
+a) Atualizar WOOVI_APP_ID (obrigatório para o saldo real voltar).
+b) Reprocessar/cancelar os 2 saques em "processando".
+c) Descontar saques pendentes no cálculo de fallback do saldo.
+d) Cancelar cobranças PENDING antigas e as apontando para a chave antiga.

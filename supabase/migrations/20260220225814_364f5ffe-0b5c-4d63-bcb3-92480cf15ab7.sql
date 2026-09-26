@@ -1,0 +1,1 @@
+UPDATE webhook_config SET manutencao_ativa = false, manutencao_aviso_ativo = false, updated_at = now() WHERE id = 'ad72a024-fac7-44f4-b476-03f278ed3a3e';

@@ -1,0 +1,1 @@
+UPDATE webhook_config SET manutencao_ativa = false, manutencao_aviso_ativo = false, loja_manutencao_ativa = false, loja_manutencao_aviso_ativo = false;

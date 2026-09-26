@@ -1,0 +1,33 @@
+DIAGNÓSTICO — ERRO 500 NA CARTEIRA WOOVI
+Data: 01/08/2026 (UTC)
+
+CAUSA RAIZ
+Os logs da Edge Function store-api confirmaram resposta HTTP 401 da Woovi com a mensagem
+"appID inválido". A credencial WOOVI_APP_ID configurada no ambiente não é aceita pela Woovi.
+
+FLUXO DO ERRO
+Usuário -> Frontend -> store-api (woovi_get_balance) -> API Woovi -> 401
+Antes, a falha era devolvida como resposta de erro e podia provocar FunctionsHttpError e tela branca.
+
+CORREÇÃO APLICADA
+1. O carregamento inicial da carteira usa os registros locais segregados por barbeiro.
+2. A API Woovi foi retirada do caminho de renderização enquanto o AppID estiver inválido.
+3. O cálculo considera somente cobranças pagas daquele barbeiro.
+4. Saques não cancelados/falhos são descontados.
+5. Valores ainda bloqueados são preservados.
+6. A resposta passa a ser HTTP 200 com success=true, impedindo a tela branca.
+7. Se Woovi e banco falharem ao mesmo tempo, é retornado um estado vazio seguro.
+8. O fluxo de saque também não devolve mais HTTP 500 quando a Woovi recusa a credencial.
+9. Em falha de autenticação ou indisponibilidade, o saque retorna HTTP 200 com success=false,
+   informa que nenhum valor foi movimentado e mantém a tela aberta.
+10. Saldo e extrato abrem sem depender da disponibilidade do provedor externo, eliminando a
+    repetição do erro e da tela branca.
+
+SEGREGAÇÃO
+Todas as cobranças e saques do fallback são filtrados pelo barbeiro_id autenticado; não há
+mistura de saldo entre barbeiros.
+
+PENDÊNCIA EXTERNA
+Para voltar a exibir o saldo em tempo real diretamente da Woovi, o secret WOOVI_APP_ID deve
+ser substituído por um AppID válido emitido pela Woovi. A correção atual mantém a carteira
+operante e evita a tela branca enquanto essa credencial estiver inválida.

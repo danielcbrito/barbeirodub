@@ -1,0 +1,61 @@
+# Diagnóstico — Loop após finalizar onboarding do dono
+
+## Problema
+Ao finalizar o fluxo de criação da barbearia, alguns usuários ficavam presos em um loop entre `/tenant/admin` e `/onboarding` ou em tela de carregamento.
+
+## Causa raiz
+O app marcava `tenants.onboarding_completed = true` antes de garantir que existiam todos os vínculos obrigatórios do dono:
+
+- `profiles.id = tenants.owner_user_id`
+- `user_roles.role = tenant_admin`
+- `barbeiros.user_id = tenants.owner_user_id`
+- `barbeiros.tenant_id = tenants.id`
+
+Quando `/tenant/admin` carregava, ele precisava do `barbeiroId` do dono. Se esse registro não existia ou ainda não estava visível, o painel falhava e redirecionava para onboarding, causando loop.
+
+## Correção no banco Supabase
+Foi aplicada uma migration que:
+
+1. Reescreve `public.ensure_tenant_barber(p_user_id, p_apelido)` para:
+   - validar que o usuário existe em `auth.users`;
+   - usar o tenant mais antigo do dono como fonte de verdade;
+   - garantir `profiles`;
+   - remover papel `cliente` do dono;
+   - garantir papel `tenant_admin`;
+   - reativar ou criar o barbeiro do dono vinculado ao tenant;
+   - impedir que um usuário autenticado prepare o perfil de outro usuário, exceto admin global.
+
+2. Repara dados antigos:
+   - tenants concluídos de usuários reais sem profile/barbeiro/papel foram corrigidos automaticamente.
+
+## Correção no frontend
+### `src/pages/Onboarding.tsx`
+Antes de marcar o onboarding como concluído, o app agora chama `ensure_tenant_barber` e só continua se receber um `barbeiroId` válido.
+
+### `src/pages/TenantAdmin.tsx`
+O painel agora:
+- tenta resolver/criar o barbeiro com retry curto;
+- não redireciona automaticamente para onboarding em falha de preparação;
+- mostra uma tela de recuperação com “Tentar novamente” e “Voltar para o início”, evitando loop infinito.
+
+## Validação no banco
+Consulta pós-correção retornou:
+
+- `completed_existing_users_without_owner_barber = 0`
+- `completed_existing_users_without_profile = 0`
+- `completed_existing_users_without_tenant_admin_role = 0`
+
+Isso confirma que tenants concluídos de usuários reais não estão mais faltando os vínculos obrigatórios.
+
+## Fluxos críticos
+### Auth / Signup
+Novo dono cria conta → recebe papel `tenant_admin` → vai para onboarding.
+
+### Onboarding
+Dono informa/pula dados → ao concluir, app garante profile + role + barbeiro → só então marca tenant como concluído.
+
+### Entrada no painel
+`/tenant/admin` busca tenant concluído → resolve barbeiro do dono → monta `adminContext`. Se falhar, mostra recuperação sem loop.
+
+## Observação
+Há tenants antigos cujo `owner_user_id` não existe mais em `auth.users`; esses registros não podem ter barbeiro recriado com segurança porque o usuário real não existe mais.

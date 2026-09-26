@@ -1,0 +1,1 @@
+ALTER TABLE public.tenant_unidades ADD COLUMN IF NOT EXISTS slogan TEXT;

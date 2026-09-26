@@ -1,0 +1,48 @@
+ATIVAÇÃO DAS CAMPANHAS (Convide e Ganhe / Fidelidade / Cliente do Mês)
+======================================================================
+Data: 2026-08-22
+
+1) CAMADA USUÁRIO
+-----------------
+- Dono/Admin: Perfil -> Promoções -> hub real de campanhas (AdminCampanhas).
+  A tela "Estamos preparando esse ambiente" foi removida das rotas.
+- Barbeiro funcionário: vê estado vazio (BarberCampanhaEmpty) — só o dono cria campanhas.
+- Cliente: Perfil -> "Campanhas e convites" + card na aba Início quando houver campanha ativa.
+
+2) CAMADA FRONTEND
+------------------
+- src/pages/{Admin,TenantAdmin,Barbeiro}.tsx  -> rota /promocoes aponta para AdminCampanhas.
+- src/components/admin/CampaignPromoBanners.tsx, mobile/AdminMobileDrawer.tsx -> links para /promocoes.
+- src/hooks/useClientCampaigns.ts             -> RPC get_client_campaigns.
+- src/components/client/ClientCampaignsSheet.tsx -> link de convite, progresso, créditos, ranking.
+- src/lib/referral.ts                         -> captura ?ref= (App.tsx) e vínculo no login (Cliente.tsx).
+- src/pages/Cliente.tsx                       -> card de campanha na Início + item de menu + resgate do ref.
+
+3) CAMADA BACKEND (Supabase)
+----------------------------
+- criar_ciclo_indicacao / apurar_ciclo_indicacao: agora escopados por tenant
+  (cada barbearia tem seu próprio ciclo e ranking mensal).
+- get_client_campaigns(p_tenant_id): snapshot do cliente
+  { referralCode, tenantSlug, creditosDisponiveis, convide{ativo,necessarias,validados,pendentes,faltam},
+    clienteMes{ativo,ciclo,meuTotal,ranking} }.
+  Gera referral_code na hora se o perfil não tiver.
+  Correção aplicada: tenant_clientes usa created_at (não criado_em).
+- registrar_click_indicacao(p_codigo, p_session_id) — anon permitido (visitante do link).
+- registrar_indicacao(p_indicado_id, p_codigo, p_session_id) — vínculo no cadastro/login.
+- Triggers já existentes: award_referral_credit_on_liberado, consumir_credito_indicacao.
+
+4) FLUXO CRÍTICO — CONVIDE E GANHE
+----------------------------------
+Cliente copia link (/slug?ref=CODE)
+  -> visitante abre: captureReferralFromUrl grava code + registra clique
+  -> visitante cria conta / entra: redeemPendingReferral -> indicacoes(status=pendente)
+  -> visitante conclui 1º corte: trigger libera (status=liberado)
+  -> a cada N liberadas (config do dono): crédito em creditos_indicacao (status=disponivel)
+  -> crédito consumido no agendamento pela trigger consumir_credito_indicacao.
+
+5) ERROS / BORDAS
+-----------------
+- Cliente sem barbearia preferida: fallback para tenant_clientes; sem tenant -> campanhas inativas.
+- RPC falhando ou campanhas desativadas: sheet mostra estado vazio, sem quebrar a Início.
+- Captura de ?ref= é idempotente (localStorage: dub:referral-code / -session / -redeemed).
+- Ciclo antigo com tenant_id nulo permanece no banco, mas é ignorado por tenants novos.

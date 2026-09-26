@@ -1,0 +1,87 @@
+CICLO DE VIDA DA CONEXÃO WHATSAPP (SINCRONIZAÇÃO BIDIRECIONAL)
+==============================================================
+Data: 2026-08-26
+Escopo: TODOS os barbeiros e TODAS as barbearias (sem exceção por pessoa/tenant).
+
+OBJETIVO
+--------
+1) Se alguém desconectar direto na Evolution, o app mostra "Desconectado" automaticamente.
+2) Se o barbeiro desconectar no app, a sessão cai também na Evolution.
+3) A instância NUNCA é apagada em desconexões: reconectar reutiliza a MESMA instância
+   e o MESMO número, evitando excesso de conexões na Evolution.
+
+CAMADAS
+-------
+USUÁRIO
+  - Conectado: número, data, ações Testar conexão / Reconectar / Desconectar.
+  - Desconectado com número guardado: tela dedicada "WhatsApp desconectado" com selo âmbar,
+    número salvo e botão "Reconectar WhatsApp" (ou "Conectar outro número").
+  - Conectando: código de pareamento com contagem de 3 minutos (QR como alternativa).
+
+FRONTEND — src/components/whatsapp/WhatsAppConnectionPage.tsx
+  - Polling contínuo (useInterval): 4s conectando, 12s conectado, 20s desconectado.
+  - Verificação imediata ao abrir a tela.
+  - connected=false enquanto o estado local era "connected" → muda para desconectado + aviso.
+  - handleReconnect chama a ação "reconnect" sem pedir número (usa o salvo).
+  - Desconexão local preserva instance_name e phone_number para reconexão rápida.
+
+BACKEND — supabase/functions/whatsapp-proxy/index.ts
+  - getInstanceState(): retorna estado da Evolution; null = instância inexistente.
+  - action "status": fonte da verdade é a Evolution.
+      open  → grava connected + phone_number (ownerJid).
+      outro → grava disconnected (salvo se houver pairing válido em andamento),
+              limpando QR/código mas preservando instance_name e phone_number.
+  - action "pair" / "reconnect" (mesma rota):
+      já conectado           → sincroniza banco e retorna already_connected.
+      instância existe       → apenas /instance/logout e novo /instance/connect?number=
+                               (REUTILIZA a instância; não recria).
+      instância inexistente  → cria com o mesmo nome canônico e o número salvo.
+      "reconnect" usa o phone_number persistido; "pair" aceita número novo.
+  - action "disconnect": somente /instance/logout (SEM /instance/delete) e grava
+    status=disconnected mantendo instance_name/phone_number.
+
+BANCO — public.whatsapp_instances
+  Um registro por barbeiro (onConflict barbeiro_id): instance_name, api_key, status,
+  phone_number, pairing_code, pairing_expires_at, connection_method, connected_at.
+
+SERVIÇOS EXTERNOS — Evolution API
+  EVOLUTION_API_URL / EVOLUTION_API_TOKEN somente na Edge Function; nunca no browser.
+
+FLUXOS CRÍTICOS
+---------------
+Desconexão externa: alguém encerra a sessão na Evolution → polling detecta state != open →
+  banco vira disconnected → UI mostra card de reconexão com o número salvo.
+Desconexão no app: logout na Evolution + status disconnected → instância preservada →
+  "Reconectar" gera novo código para o MESMO número/instância.
+Instância removida na Evolution: status retorna instance_missing → reconectar recria com o
+  mesmo nome canônico, sem duplicar instâncias.
+Erros: EVOLUTION_UNAVAILABLE / CREATE_FAILED / PAIRING_CODE_FAILED / INVALID_PHONE →
+  mensagens amigáveis; falhas de polling são silenciosas e reavaliadas no ciclo seguinte.
+
+MULTI-TENANT
+------------
+O nome da instância é derivado do tenant + barbeiro (resolveInstanceName) e todas as ações
+usam barbeiro_id do usuário autenticado. Nunca há fallback para instância de outra barbearia.
+
+ATUALIZAÇÃO 2026-08-26 — TEMPO REAL GLOBAL
+------------------------------------------
+COBERTURA (todos os usuários)
+  O MESMO componente WhatsAppConnectionPage atende: /admin/whatsapp, /barbeiro/whatsapp,
+  TenantAdmin (owner e unit admin) e a aba WhatsApp dentro de UnidadeDetailScreen.
+  Nenhuma rota usa lógica alternativa; o barbeiro é sempre resolvido pelo usuário autenticado.
+
+BANCO
+  public.whatsapp_instances: REPLICA IDENTITY FULL + incluída na publication supabase_realtime.
+  Assim qualquer UPDATE de status propaga por WebSocket para as telas abertas.
+
+FRONTEND
+  - Canal realtime por barbeiro (filter barbeiro_id=eq.<id>) reage a INSERT/UPDATE:
+    connected → tela conectada + toast; disconnected → tela de reconexão + aviso.
+  - Polling reduzido: 3s conectando, 5s conectado, 8s desconectado (rede de segurança).
+  - Revalidação imediata em focus, visibilitychange e online (voltar ao app já mostra o estado real).
+  - Cleanup com supabase.removeChannel para evitar assinaturas duplicadas.
+
+FLUXO
+  Desconexão feita na Evolution → primeiro poll (≤5s) grava disconnected no banco →
+  o evento realtime atualiza instantaneamente todas as telas abertas do mesmo barbeiro,
+  sem recarregar a página. O inverso (reconexão) segue o mesmo caminho.

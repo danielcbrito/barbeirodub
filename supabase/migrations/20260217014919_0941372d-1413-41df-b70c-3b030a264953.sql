@@ -1,0 +1,1 @@
+UPDATE saques SET status = 'falhou', motivo_cancelamento = 'Estorno manual — saque revertido pelo admin' WHERE id = '4847c7cc-3b8f-4806-9c0d-b57e1274d262';

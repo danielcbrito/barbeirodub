@@ -1,0 +1,1 @@
+UPDATE saques SET status = 'falhou', motivo_cancelamento = 'Autorização externa recusada pelo Asaas' WHERE id IN ('2dabc50b-d418-4aef-b4a3-08438e975c1d', '0fcee349-82f0-4aac-935f-bbbd88955b40', 'fbe08a50-bd3e-470c-be46-4ba5b80d2c7e')

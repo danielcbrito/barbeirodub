@@ -1,0 +1,42 @@
+CORREÇÃO — "AppID inválido" no saque da carteira (global, todos os barbeiros)
+============================================================================
+
+SINTOMA
+  Ao confirmar o saque: "O provedor recusou a credencial da carteira
+  (AppID inválido). Nenhum valor foi movimentado." — HTTP 401 da Woovi.
+
+CAMADAS
+  Usuário        -> tela Sacar via Pix (CarteiraPage.tsx)
+  Frontend       -> supabase.functions.invoke('woovi-wallet', {action:'woovi_withdraw'})
+  Backend        -> supabase/functions/woovi-wallet + _shared/woovi-client.ts
+  Externo        -> https://api.woovi.com (header Authorization: <AppID>)
+  Banco          -> saques, woovi_charges, financeiro_auth_sessions (PIN)
+
+DIAGNÓSTICO
+  Função temporária woovi-diag testou 3 endpoints x 3 formatos de header:
+   - Antes: WOOVI_APP_ID com 140? não — tinha 46 caracteres, não era Base64.
+     Todos os 9 testes -> 401 "appID inválido".
+   - Depois de atualizar o segredo: 140 caracteres, Base64 decodificando para
+     "Client_Id_4625..." -> /api/v1/account, /api/v1/charge e /api/v1/customer
+     retornaram HTTP 200 com o header Authorization.
+
+CAUSA RAIZ
+  O segredo WOOVI_APP_ID guardado no projeto não era um AppID Woovi válido
+  (valor truncado/errado). Não havia bug de código: o header correto sempre
+  foi "Authorization: <AppID>" (os formatos AppID: e Bearer são recusados
+  pela Woovi).
+
+CORREÇÃO APLICADA
+  1. WOOVI_APP_ID atualizado com o AppID correto (Base64, 140 chars).
+  2. Edge function woovi-wallet redeployada para carregar o novo segredo.
+  3. Função de diagnóstico woovi-diag removida do projeto e do Supabase.
+  Efeito é global: a credencial é única do projeto, então saldo, extrato e
+  saque passam a funcionar para TODOS os barbeiros.
+
+FLUXO DE SAQUE (após correção)
+  PIN válido (<15 min) -> anti-duplicidade 30s -> saldo Woovi (fallback local)
+  -> POST Woovi de transferência -> registro em `saques` -> UI atualiza.
+
+TRATAMENTO DE ERRO
+  401 da Woovi -> mensagem clara na UI e nenhum valor movimentado (nada é
+  gravado em `saques` antes da confirmação do provedor).

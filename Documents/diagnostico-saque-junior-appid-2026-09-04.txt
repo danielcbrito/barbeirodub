@@ -1,0 +1,44 @@
+DIAGNÓSTICO — "AppID inválido" no saque (barbeiro Junior) — 04/09/2026
+======================================================================
+
+SINTOMA
+  Barbeiro Jose Jailson Moreira Dos Santos Junior, tela "Sacar via Pix":
+  "O provedor recusou a credencial da carteira (AppID inválido). Nenhum
+  valor foi movimentado." Saldo exibido R$ 30,50.
+
+CAMADAS
+  Usuário    -> /carteira (CarteiraPage.tsx) -> tela de saque
+  Frontend   -> supabase.functions.invoke('woovi-wallet', action woovi_withdraw)
+  Backend    -> supabase/functions/woovi-wallet + _shared/woovi-client.ts
+  Externo    -> https://api.woovi.com (header Authorization: <AppID>)
+  Banco      -> woovi_charges, saques, financeiro_auth_sessions
+
+EVIDÊNCIA (logs da edge function, 04/09 18:55 UTC)
+  WooviError HTTP 401 { errors: [{ message: "appID inválido" }] }
+  em /api/v1/subaccount/{chave}/withdraw e também na leitura de saldo.
+
+CAUSA RAIZ
+  O segredo WOOVI_APP_ID do projeto estava revogado/rotacionado novamente.
+  É credencial GLOBAL — não era problema do barbeiro Junior: qualquer saque
+  de qualquer barbeiro falharia igual. Nenhum bug de código.
+
+CORREÇÃO APLICADA
+  1. WOOVI_APP_ID atualizado com o AppID válido (formulário seguro).
+  2. Edge function woovi-wallet redeployada para carregar o novo segredo.
+  3. Nova action de diagnóstico "credential_check" em woovi-wallet:
+     valida a credencial contra /api/v1/account sem expor dados sensíveis.
+
+VALIDAÇÃO
+  credential_check -> { credential: "valid" }
+  Subconta do Junior (chave josejuniorjjj1997@gmail.com):
+    name ok, withdrawBlocked=false, balance 3040 centavos (R$ 30,40).
+  Portanto o saque volta a funcionar para todos os barbeiros.
+
+PREVENÇÃO / COMO CHECAR RÁPIDO NO FUTURO
+  POST /functions/v1/woovi-wallet  body {"action":"credential_check"}
+  - credential: "valid"   -> credencial ok, investigar subconta/saldo
+  - credential: "invalid" -> atualizar o segredo WOOVI_APP_ID e redeployar
+
+TRATAMENTO DE ERRO (inalterado)
+  Falha 401/403 do provedor -> HTTP 200 com success=false, mensagem clara
+  na UI e nenhum registro em `saques` (nenhum valor movimentado).

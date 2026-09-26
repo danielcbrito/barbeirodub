@@ -1,0 +1,34 @@
+TAXA FIXA DE R$ 0,40 POR PIX RECEBIDO — CARTEIRA E EXTRATO
+
+Problema relatado
+- O app mostrava o valor bruto da cobrança (ex.: R$ 45,90), mas na conta caía R$ 45,40.
+- Diferença = taxa fixa de R$ 0,40 cobrada pelo banco/gateway em cada Pix recebido.
+
+Regra aplicada agora
+- Todo Pix recebido é contabilizado pelo valor LÍQUIDO: valor_bruto - R$ 0,40.
+- Nunca fica negativo (piso em R$ 0,00).
+- Estorno/reembolso continua com o valor CHEIO (o cliente recebe o valor pago de volta).
+- Saques e depósitos não sofrem alteração.
+
+Camadas alteradas
+1) Backend (Edge Function) — supabase/functions/woovi-wallet/index.ts
+   - PIX_FEE_CENTAVOS = 40 e helper netCentavos().
+   - Saldo local (fallback): soma de pagos e de bloqueados agora usa o líquido.
+   - Extrato (woovi_history): value_centavos = líquido; campos extras gross_centavos e fee_centavos.
+   - Descrição do lançamento indica "taxa R$ 0,40".
+
+2) Frontend carteira — src/components/barber/CarteiraPage.tsx
+   - Mesma constante e helper.
+   - Saldo disponível, saldo em espera e cada lançamento do Movimento usam o líquido.
+
+3) Extrato financeiro — src/hooks/useFinancialExtrato.ts
+   - Lançamentos Pix da woovi_charges exibem o valor líquido; estorno mantém o bruto.
+
+Fluxo crítico (Pagamento Pix)
+Cliente paga R$ 45,90 -> woovi_charges guarda 4590 (bruto)
+-> app calcula 4590 - 40 = 4550? (não: 4590 - 40 = 4550) => R$ 45,50
+Observação: o desconto é sempre R$ 0,40 sobre o bruto registrado na cobrança.
+Se o banco aplicar outra taxa no futuro, basta alterar PIX_FEE_CENTAVOS nos 3 arquivos acima.
+
+Tratamento de erro
+- Se a Woovi estiver indisponível, o fallback local já aplica a mesma taxa, evitando divergência entre origens.

@@ -1,0 +1,1 @@
+UPDATE barbeiros SET ativo = false WHERE id = 'ee238642-bc38-4de6-ba86-9eed40262fc7';

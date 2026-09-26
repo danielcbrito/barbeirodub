@@ -1,0 +1,74 @@
+AUDITORIA GLOBAL — ALTERAÇÕES PARA TODOS OS BARBEIROS
+=====================================================
+Data: 2026-08-26
+
+OBJETIVO
+--------
+Eliminar regras específicas do barbeiro Túlio e garantir que as experiências recentes sejam
+determinadas pelo usuário autenticado, barbeiro e tenant atuais.
+
+DIAGNÓSTICO
+-----------
+1) FRONTEND / CARTEIRA
+   - CarteiraPage e WooviWalletSheet reconheciam a conta principal comparando literalmente o
+     nome normalizado com "tulio santos".
+   - Isso criava comportamento diferente por nome e impedia uma regra realmente multi-tenant.
+
+2) BACKEND / WHATSAPP
+   - whatsapp-verification consultava primeiro o UUID fixo do barbeiro Túlio.
+   - Se não encontrasse, escolhia a instância conectada mais recente de qualquer barbearia.
+   - Esse fallback podia misturar tenants e fazer mensagens de outros usuários saírem pela
+     instância da Barbearia DUB.
+
+3) BACKEND / ASAAS
+   - A função de extrato ainda citava Túlio como exemplo e permitia que tenant_admin informasse
+     um barbeiro fora dos tenants de sua propriedade.
+
+CORREÇÕES APLICADAS
+-------------------
+1) Carteira
+   - Removida toda comparação por nome de barbeiro.
+   - A disponibilidade e o status da conta agora dependem somente da configuração real da
+     chave/subconta Woovi vinculada ao barbeiro atual.
+   - O mesmo componente e a mesma regra atendem todos os barbeiros.
+
+2) WhatsApp
+   - Removido o UUID fixo do Túlio.
+   - A instância agora é resolvida pelo usuário e pelo tenant correspondentes.
+   - Prioridade: instância conectada do proprietário do tenant; depois, outra instância
+     conectada do mesmo tenant.
+   - Nunca existe fallback para instância de outra barbearia.
+   - Durante cadastro novo, quando ainda não existe tenant, o webhook segue sem instância
+     vinculada em vez de usar indevidamente uma barbearia existente.
+
+3) Asaas
+   - Removida a referência pessoal do código genérico.
+   - tenant_admin agora só consulta barbeiros pertencentes às próprias barbearias.
+   - admin/ti mantêm o escopo global; barbeiros continuam limitados ao próprio cadastro.
+
+4) Testes
+   - Removidos UUIDs reais de barbeiros do teste de intervalo de horários.
+   - O teste recebe os IDs por variável de ambiente, sem depender de pessoas específicas.
+
+CAMADAS
+-------
+USUÁRIO
+  Todos os barbeiros veem a mesma carteira e os mesmos estados baseados na configuração real.
+
+FRONTEND
+  CarteiraPage e WooviWalletSheet não possuem exceção por nome, ID ou barbearia.
+
+BACKEND / N8N
+  O payload de verificação recebe somente a instância do tenant correspondente, quando houver.
+
+BANCO SUPABASE
+  A resolução usa relacionamentos existentes entre barbeiros, tenants, tenant_clientes e
+  whatsapp_instances; nenhuma cópia de dados por barbeiro foi criada.
+
+SERVIÇOS EXTERNOS
+  Woovi e Evolution continuam protegidos pelas Edge Functions; nenhuma credencial vai ao browser.
+
+FLUXO DE ERRO
+-------------
+Usuário sem tenant ou tenant sem WhatsApp conectado → whatsapp_instance = null → nunca usa uma
+instância externa ao tenant. Erros de resolução são registrados no backend sem expor dados ao usuário.

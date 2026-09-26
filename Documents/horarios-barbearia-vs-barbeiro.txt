@@ -1,0 +1,83 @@
+# Horários: barbearia (unidade) x barbeiro — correção 2026-09-08
+
+## Problema relatado
+Ao escolher "Horário de funcionamento" → escopo "barbearia", a alteração
+era gravada no horário PESSOAL de todos os barbeiros da unidade
+(inclusive o próprio admin, ex.: Túlio). Ao voltar em "somente eu", o
+horário aparecia alterado.
+
+Efeito colateral no app do cliente: o dia aparecia disponível para um
+barbeiro (ex.: Pedro abre domingo) mas sem nenhum horário, pois a
+resolução de horários misturava configuração da loja com a do barbeiro.
+
+## Camadas
+
+### Usuário
+- Perfil → Horário de funcionamento → escolhe "Somente eu" ou "Barbearias".
+
+### Frontend (app do barbeiro)
+- `src/components/admin/mobile/AdminMobileProfile.tsx` — envia
+  `?scope=self` ou `?scope=units&unit_ids=...`.
+- `src/components/admin/mobile/AdminMobileHorarios.tsx`
+  - `scope=self`  → lê/grava `configuracoes_horario_barbeiro` (só o barbeiro).
+  - `scope=units` → lê/grava `configuracoes_horario_unidade` (só a loja).
+    NÃO toca em nenhum barbeiro.
+  - `companyMode` legado → `configuracoes_horario` (global antigo).
+- `src/hooks/useBusinessHours.ts` — fallback: barbeiro → unidade → global.
+
+### Banco (Supabase)
+Nova tabela `public.configuracoes_horario_unidade`:
+- `tenant_id` (obrigatório), `unidade_id` (nulo = padrão do tenant),
+  `dia_semana`, `aberto`, `hora_abertura`, `hora_fechamento`,
+  `hora_almoco_inicio`, `hora_almoco_fim`, `delay_entre_servicos`,
+  `slot_interval_minutes`.
+- Índices únicos parciais por (unidade_id, dia_semana) e (tenant_id, dia_semana).
+- GRANTs: select p/ anon, CRUD p/ authenticated, all p/ service_role.
+- RLS: leitura pública; escrita para admin, dono do tenant ou barbeiro do tenant.
+
+### Backend (Edge Functions)
+`supabase/functions/_shared/business-hours.ts` — nova ordem de prioridade:
+1. Exceção do barbeiro (data específica)
+2. Exceção da unidade / do tenant (data específica)
+3. Config semanal do BARBEIRO (`configuracoes_horario_barbeiro`)
+4. Config semanal da UNIDADE (`configuracoes_horario_unidade`)  ← NOVO
+5. Config global legada (`configuracoes_horario`)
+6. Fallback
+
+Funções redeployadas: `check-availability`, `validate-appointment`,
+`create-payment`.
+
+## Regra de negócio resultante
+- A loja pode estar ABERTA no domingo sem abrir a agenda de ninguém.
+- Cada barbeiro decide o próprio domingo em "Somente eu".
+- Alterar o horário da barbearia nunca sobrescreve horário de barbeiro.
+
+## Fluxo crítico — agendamento
+Cliente escolhe barbeiro → `check-availability` resolve o horário pela
+prioridade acima → gera slots → `validate-appointment` confirma.
+Como a config do barbeiro tem prioridade sobre a da loja, um barbeiro
+aberto no domingo gera slots mesmo que outro esteja fechado.
+
+## Tratamento de erro
+- Sem linha de unidade → cai na config global/fallback (nunca quebra).
+- Falha de permissão no save → toast com mensagem explícita.
+
+## Prompt para o PROJETO DO CLIENTE (app do cliente)
+> O calendário de agendamento deve montar os dias disponíveis a partir do
+> BARBEIRO selecionado, não do horário global da barbearia.
+> Ordem de resolução por dia da semana:
+> 1. `horarios_excepcionais_barbeiro` (data)
+> 2. `horarios_excepcionais` (data, por unidade/tenant)
+> 3. `configuracoes_horario_barbeiro` (barbeiro_id + dia_semana)
+> 4. `configuracoes_horario_unidade` (unidade_id ou tenant_id + dia_semana)
+> 5. `configuracoes_horario` (legado)
+> Se o resultado for `aberto = false`, o dia deve aparecer DESABILITADO no
+> calendário daquele barbeiro. Nunca marcar um dia como disponível sem
+> antes confirmar com a Edge Function `check-availability`
+> (body: { date, duration, barbeiro_id }) — se ela retornar `slots` vazio,
+> o dia deve ser exibido como indisponível.
+
+## Observação
+As alterações antigas que já foram gravadas por engano no horário pessoal
+dos barbeiros permanecem como estão; cada barbeiro deve revisar seu
+horário em "Somente eu" uma vez.

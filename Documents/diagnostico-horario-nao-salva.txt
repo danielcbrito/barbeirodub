@@ -1,0 +1,44 @@
+# Diagnóstico – Horário/almoço não persistia (tenant_admin)
+
+## Usuário reportado
+- auth user_id: a99cb77d-2edb-451d-a196-861e27a0edf8
+- barbeiros.id:  0ee2c3be-9ef4-4933-83c7-bded1141e5c5
+- papel: tenant_admin
+
+## Causa raiz
+1. A rota `/admin/horarios` renderizava `<AdminMobileHorarios />` sem `barbeiroId`.
+2. Sem `barbeiroId`, o componente lê/escreve na tabela GLOBAL
+   `configuracoes_horario` (sem `tenant_id`), cujo RLS só permite
+   `has_role(auth.uid(), 'admin')`. `tenant_admin` é bloqueado → UPDATE
+   retorna 0 linhas → dado nunca persiste.
+3. O perfil admin já emite `?scope=self` / `?scope=units&unit_ids=...`,
+   mas `AdminMobileHorarios` ignorava esses parâmetros, então nem quando
+   o barbeiroId estava presente o escopo por unidades era aplicado.
+
+Comprovação (SQL):
+- `configuracoes_horario_barbeiro` do próprio barbeiro tem valores
+  variados (03:25, 08:00, 21:40…) → o fluxo per-barbeiro (TenantAdmin)
+  funciona.
+- `configuracoes_horario` global tem `updated_at = 2026-06-10` para
+  todos os dias, ou seja, nenhum `tenant_admin` conseguiu editar.
+
+## Correção aplicada
+- `src/pages/Admin.tsx` (linha 352): passa
+  `barbeiroId={adminContext?.barbeiroId}` ao `<AdminMobileHorarios />`.
+- `src/components/admin/mobile/AdminMobileHorarios.tsx`:
+  - Lê `scope` e `unit_ids` da URL.
+  - Enquanto `barbeiroId` estiver definido e não estiver em `companyMode`,
+    sempre usa `configuracoes_horario_barbeiro` (RLS respeita
+    `tenant_admin` e é isolada por barbeiro).
+  - `scope=self` (padrão): grava só no próprio barbeiroId.
+  - `scope=units`: resolve todos os `barbeiro_unidades` das unidades
+    escolhidas e replica o payload em cada um; se ainda não houver linha
+    para um barbeiro, chama `initialize_barber_hours` antes do UPDATE.
+  - Inicializa automaticamente linhas via
+    `rpc('initialize_barber_hours')` caso o load venha vazio.
+
+## Impactos
+- Fluxo antigo do "Modo empresa" (`?empresa=1`) continua usando a
+  tabela global — RLS dela ainda só aceita `admin`, mas isso já era o
+  comportamento existente e foge do escopo deste bug.
+- Nenhuma migration necessária.
