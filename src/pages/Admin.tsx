@@ -370,10 +370,17 @@ const Admin = () => {
         />
 
         {/* Conteúdo Principal - padding otimizado para mobile */}
-        <main className={cn(
-          "relative min-h-[calc(var(--app-height,100svh)-56px)]",
-          isImmersiveRoute ? "pb-0 overflow-hidden" : "pb-24"
-        )}>
+        <main
+          className={cn(
+            "relative min-h-[calc(100dvh-56px)]",
+            isImmersiveRoute ? "pb-0 overflow-hidden" : "pb-32"
+          )}
+          style={
+            isImmersiveRoute
+              ? undefined
+              : { paddingBottom: "calc(5.5rem + max(var(--app-safe-bottom, 0px), env(safe-area-inset-bottom, 0px)))" }
+          }
+        >
           <div
             className={cn("px-4 py-4 lg:px-8", isImmersiveRoute && "h-full p-0", isUnidadesRoute && "h-full p-0", location.pathname.includes("/whatsapp") && "p-0", location.pathname.includes("/promocoes") && "p-0")}
             style={

@@ -705,10 +705,17 @@ const Barbeiro = () => {
         <GracePeriodBanner />
 
         {/* Conteúdo Principal */}
-        <main className={cn(
-          "flex-1 min-h-0 bg-background",
-          location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") ? "pb-0" : "pb-24"
-        )}>
+        <main
+          className={cn(
+            "flex-1 min-h-0 bg-background",
+            location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") ? "pb-0" : "pb-32"
+          )}
+          style={
+            location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo")
+              ? undefined
+              : { paddingBottom: "calc(5.5rem + max(var(--app-safe-bottom, 0px), env(safe-area-inset-bottom, 0px)))" }
+          }
+        >
           <div
             className={cn(
               location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp")
