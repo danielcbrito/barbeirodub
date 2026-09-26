@@ -179,10 +179,10 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
 
   return (
     <>
-      {/* Máscara de fade e desfoque inferior suave para o conteúdo da tela passar por baixo com elegância */}
+      {/* Máscara de fade inferior suave que se adapta ao fundo claro e escuro */}
       <div
         className={cn(
-          "fixed bottom-0 left-0 right-0 h-32 pointer-events-none z-[45] bg-gradient-to-t from-background/95 via-background/70 to-transparent backdrop-blur-[3px] transition-opacity duration-200",
+          "fixed bottom-0 left-0 right-0 h-32 pointer-events-none z-[45] bg-gradient-to-t from-background via-background/80 to-transparent transition-opacity duration-200",
           isKeyboardOpen && "opacity-0"
         )}
         aria-hidden="true"
