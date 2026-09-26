@@ -178,27 +178,29 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
   };
 
   return (
-    <div
-      className={cn(
-        "fixed bottom-0 left-0 right-0 z-[60] w-full transition-transform duration-200 pointer-events-none",
-        isKeyboardOpen ? "translate-y-full opacity-0" : "translate-y-0 opacity-100"
-      )}
-    >
-      <nav
-        aria-label="Navegação do aplicativo"
-        className="pointer-events-auto relative w-full bg-background/95 backdrop-blur-xl border-t border-border/60 dark:border-white/[0.08] shadow-[0_-4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)]"
+    <>
+      {/* Máscara de fade inferior suave que se adapta ao fundo claro e escuro */}
+      <div
+        className={cn(
+          "fixed bottom-0 left-0 right-0 h-32 pointer-events-none z-[45] bg-gradient-to-t from-background via-background/80 to-transparent transition-opacity duration-200",
+          isKeyboardOpen && "opacity-0"
+        )}
+        aria-hidden="true"
+      />
+
+      <div
+        className={cn(
+          "fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none flex justify-center items-center w-full px-3 transition-all duration-200",
+          isKeyboardOpen ? "opacity-0 translate-y-16 pointer-events-none" : "opacity-100 translate-y-0"
+        )}
         style={{
-          paddingBottom: "max(var(--app-safe-bottom, 0px), env(safe-area-inset-bottom, 0px))",
+          bottom: "calc(1rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))",
         }}
       >
-        {/* Bleed inferior para evitar fresta branca durante bounce scroll no iOS */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full bg-background"
-          style={{ height: "40px" }}
-        />
-
-        <div className="flex items-center justify-around px-2 sm:px-4 h-[64px] max-w-lg mx-auto">
+        <nav
+          aria-label="Navegação do aplicativo"
+          className="pointer-events-auto flex items-center justify-between p-1.5 h-[62px] bg-[#121820]/95 backdrop-blur-xl border border-white/[0.08] rounded-full shadow-[0_16px_40px_rgba(0,0,0,0.55)] w-[calc(100%-1.25rem)] max-w-[440px] transition-all duration-300"
+        >
           {items.map(({ key, label, path, end, Icon, countKey }) => {
             const to = `${basePath}${path}`;
             const cleanCurrent = location.pathname.replace(/\/$/, "");
@@ -237,28 +239,24 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
                       className={cn(
                         "relative flex items-center justify-center transition-all duration-300 active:scale-95 shrink-0",
                         active
-                          ? "h-[50px] px-4 bg-foreground text-background dark:bg-white/10 dark:text-white dark:border dark:border-white/15 rounded-full shadow-sm gap-2"
-                          : "w-[50px] sm:w-[56px] h-[50px] rounded-full text-muted-foreground hover:text-foreground"
+                          ? "h-[48px] px-3.5 bg-white/10 hover:bg-white/[0.14] border border-white/15 text-white rounded-full shadow-xs gap-2"
+                          : "w-[48px] sm:w-[54px] h-[48px] rounded-full text-white/50 hover:text-white/80"
                       )}
                     >
                       <div className="relative flex items-center justify-center shrink-0">
                         <Icon
                           active={active}
                           className={cn(
-                            "w-[24px] h-[24px] shrink-0 block",
-                            active
-                              ? "text-background dark:text-white"
-                              : "text-foreground/70 dark:text-white/60"
+                            "w-[22px] h-[22px] shrink-0 block",
+                            active ? "text-white" : "text-white/60"
                           )}
                           aria-hidden="true"
                         />
                         {hasBadge && (
                           <span
                             className={cn(
-                              "absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 rounded-full text-[9.5px] font-bold flex items-center justify-center leading-none shadow-sm bg-red-500 text-white",
-                              active
-                                ? "ring-2 ring-foreground dark:ring-white/20"
-                                : "ring-2 ring-background"
+                              "absolute -top-1 -right-2 min-w-[16px] h-[16px] px-1 rounded-full text-[9.5px] font-bold flex items-center justify-center leading-none shadow-sm bg-red-500 text-white",
+                              active ? "ring-2 ring-white/20" : "ring-2 ring-[#121820]"
                             )}
                             aria-label={`${count} pendências`}
                           >
@@ -267,7 +265,7 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
                         )}
                       </div>
                       {active && (
-                        <span className="text-[13px] font-bold tracking-tight leading-none whitespace-nowrap">
+                        <span className="text-[12.5px] font-semibold text-white tracking-tight leading-none whitespace-nowrap">
                           {label}
                         </span>
                       )}
@@ -277,8 +275,8 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
               </NavLink>
             );
           })}
-        </div>
-      </nav>
-    </div>
+        </nav>
+      </div>
+    </>
   );
 }

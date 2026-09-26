@@ -89,8 +89,8 @@ const syncViewportVars = () => {
   // --app-safe-bottom = espaço de safe-area nativo para controles inferiores
   let safeBottom: string;
   if (isIOS && isStandalone) {
-    // iPhone Adicionado na Tela de Início (PWA): respeita a área física nativa do home indicator (34px)
-    safeBottom = "env(safe-area-inset-bottom, 34px)";
+    // iPhone Adicionado na Tela de Início (PWA): altura original exata de 1rem da base
+    safeBottom = "0px";
   } else if (isIOS) {
     // iPhone Safari: respiro para navegar confortavelmente acima da barra do Safari
     safeBottom = "max(env(safe-area-inset-bottom, 0px), 12px)";
