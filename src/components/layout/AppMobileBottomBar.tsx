@@ -186,7 +186,7 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
           isKeyboardOpen && "opacity-0"
         )}
         style={{
-          height: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 5.25rem)",
+          height: "calc(var(--app-safe-bottom, 8px) + 5.25rem)",
           background:
             "linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background) / 0.96) 20%, hsl(var(--background) / 0.85) 38%, hsl(var(--background) / 0.65) 55%, hsl(var(--background) / 0.4) 70%, hsl(var(--background) / 0.18) 82%, hsl(var(--background) / 0.05) 92%, transparent 100%)",
         }}
@@ -199,7 +199,7 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
           isKeyboardOpen ? "opacity-0 translate-y-16 pointer-events-none" : "opacity-100 translate-y-0"
         )}
         style={{
-          bottom: "calc(0.75rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))",
+          bottom: "calc(0.75rem + var(--app-safe-bottom, 8px))",
         }}
       >
         <nav

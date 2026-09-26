@@ -378,7 +378,7 @@ const Admin = () => {
           style={
             isImmersiveRoute
               ? undefined
-              : { paddingBottom: "calc(5.5rem + max(var(--app-safe-bottom, 0px), env(safe-area-inset-bottom, 0px)))" }
+              : { paddingBottom: "calc(5.5rem + var(--app-safe-bottom, 8px))" }
           }
         >
           <div

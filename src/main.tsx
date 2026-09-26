@@ -86,22 +86,20 @@ const syncViewportVars = () => {
   root.style.setProperty("--app-bottom-nav-bleed", "0px");
   root.style.setProperty("--app-bottom-nav-offset", "0px");
 
-  // --app-safe-bottom = espaço de safe-area nativo para controles inferiores
+  // --app-safe-bottom = espaço para controles inferiores
+  // No iPhone agora usamos a mesma altura compacta e elegante do Android (8px),
+  // eliminando o vão excessivo de 34px que empurrava e espremia o app para cima no iOS.
   let safeBottom: string;
   if (isIOS && isStandalone) {
-    // iPhone Adicionado na Tela de Início (PWA): safe-area nativa do home indicator
-    safeBottom = "env(safe-area-inset-bottom, 0px)";
+    safeBottom = "8px";
   } else if (isIOS) {
-    // iPhone Safari: respiro para navegar confortavelmente acima da barra do Safari
-    safeBottom = "max(env(safe-area-inset-bottom, 0px), 12px)";
+    safeBottom = "8px";
   } else if (isAndroid && isStandalone) {
-    // Android Adicionado na Tela de Início: respeita a barra de gestos nativa
     safeBottom = "max(env(safe-area-inset-bottom, 0px), 8px)";
   } else if (isAndroid) {
-    // Android Chrome: respiro seguro
     safeBottom = "max(env(safe-area-inset-bottom, 0px), 8px)";
   } else {
-    safeBottom = "env(safe-area-inset-bottom, 0px)";
+    safeBottom = "8px";
   }
   root.style.setProperty("--app-safe-bottom", safeBottom);
 

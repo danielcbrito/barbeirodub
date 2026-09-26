@@ -713,7 +713,7 @@ const Barbeiro = () => {
           style={
             location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo")
               ? undefined
-              : { paddingBottom: "calc(5.5rem + max(var(--app-safe-bottom, 0px), env(safe-area-inset-bottom, 0px)))" }
+              : { paddingBottom: "calc(5.5rem + var(--app-safe-bottom, 8px))" }
           }
         >
           <div
