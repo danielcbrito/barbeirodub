@@ -178,27 +178,29 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
   };
 
   return (
-    <div
-      className={cn(
-        "fixed bottom-0 left-0 right-0 z-[60] w-full transition-transform duration-200 pointer-events-none",
-        isKeyboardOpen ? "translate-y-full opacity-0" : "translate-y-0 opacity-100"
-      )}
-    >
-      <nav
-        aria-label="Navegação do aplicativo"
-        className="pointer-events-auto relative w-full bg-[#202126] border-t border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.25)] transition-all duration-300 dark:bg-[#121820]/95 dark:backdrop-blur-xl dark:border-white/[0.08] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.55)]"
+    <>
+      {/* Máscara de fade e desfoque inferior suave para o conteúdo da tela passar por baixo com elegância */}
+      <div
+        className={cn(
+          "fixed bottom-0 left-0 right-0 h-32 pointer-events-none z-[45] bg-gradient-to-t from-background/95 via-background/70 to-transparent backdrop-blur-[3px] transition-opacity duration-200",
+          isKeyboardOpen && "opacity-0"
+        )}
+        aria-hidden="true"
+      />
+
+      <div
+        className={cn(
+          "fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none flex justify-center items-center w-full px-3 transition-all duration-200",
+          isKeyboardOpen ? "opacity-0 translate-y-16 pointer-events-none" : "opacity-100 translate-y-0"
+        )}
         style={{
-          paddingBottom: "max(var(--app-safe-bottom, 0px), env(safe-area-inset-bottom, 0px))",
+          bottom: "calc(0.75rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))",
         }}
       >
-        {/* Bleed inferior para garantir cobertura total atrás do home indicator e em bounce scroll no iOS */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full bg-[#202126] dark:bg-[#121820]"
-          style={{ height: "60px" }}
-        />
-
-        <div className="flex items-center justify-around px-2 sm:px-4 h-[68px] max-w-lg mx-auto">
+        <nav
+          aria-label="Navegação do aplicativo"
+          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] bg-[#202126] border border-white/10 rounded-full shadow-[0_16px_40px_rgba(0,0,0,0.5)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300 dark:bg-[#121820]/95 dark:backdrop-blur-xl dark:border-white/[0.08] dark:shadow-[0_16px_40px_rgba(0,0,0,0.55)]"
+        >
           {items.map(({ key, label, path, end, Icon, countKey }) => {
             const to = `${basePath}${path}`;
             const cleanCurrent = location.pathname.replace(/\/$/, "");
@@ -237,8 +239,8 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
                       className={cn(
                         "relative flex items-center justify-center transition-all duration-300 active:scale-95 shrink-0",
                         active
-                          ? "h-[54px] px-4 sm:px-4.5 bg-white text-[#09090b] rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.22)] gap-2.5 dark:bg-white/10 dark:hover:bg-white/[0.14] dark:border dark:border-white/15 dark:text-white dark:shadow-xs"
-                          : "w-[52px] sm:w-[56px] h-[52px] rounded-full text-white/95 hover:text-white dark:text-white/50 dark:hover:text-white/80"
+                          ? "h-[56px] px-4 sm:px-4.5 bg-white text-[#09090b] rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.22)] gap-2.5 dark:bg-white/10 dark:hover:bg-white/[0.14] dark:border dark:border-white/15 dark:text-white dark:shadow-xs"
+                          : "w-[54px] sm:w-[58px] h-[56px] rounded-full text-white/95 hover:text-white dark:text-white/50 dark:hover:text-white/80"
                       )}
                     >
                       <div className="relative flex items-center justify-center shrink-0">
@@ -273,8 +275,8 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
               </NavLink>
             );
           })}
-        </div>
-      </nav>
-    </div>
+        </nav>
+      </div>
+    </>
   );
 }
