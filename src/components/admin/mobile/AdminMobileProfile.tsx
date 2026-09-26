@@ -290,7 +290,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
 
   return (
     <>
-      <div className="min-h-[var(--app-height,100dvh)] bg-background pb-40">
+      <div className="min-h-[var(--app-height,100dvh)] bg-background pb-8">
         {/* ═══ BANNER FINO NO TOPO (edge-to-edge, sob a status bar) ═══ */}
         <div className="relative isolate bg-background">
           <div

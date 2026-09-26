@@ -707,7 +707,7 @@ const Barbeiro = () => {
         {/* Conteúdo Principal */}
         <main className={cn(
           "flex-1 min-h-0 bg-background",
-          location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") ? "pb-0" : "pb-32"
+          location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") ? "pb-0" : "pb-24"
         )}>
           <div
             className={cn(

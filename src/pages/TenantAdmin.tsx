@@ -544,7 +544,7 @@ const TenantAdmin = () => {
         ) : (
           <main className={cn(
             "relative min-h-[calc(var(--app-height,100dvh)-56px)] bg-background",
-            location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo") ? "pb-0 overflow-hidden" : "pb-32"
+            location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo") ? "pb-0 overflow-hidden" : "pb-24"
           )}>
             <div
               className={cn("px-4 py-4 lg:px-8", location.pathname.includes("/promocoes") && "p-0", location.pathname.includes("/perfil") && "p-0", location.pathname.includes("/config-barbearia") && "p-0", location.pathname.includes("/unidades") && "h-full p-0", location.pathname.includes("/whatsapp") && "p-0", location.pathname.includes("/disparo") && "p-0")}
