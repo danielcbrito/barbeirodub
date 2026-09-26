@@ -1300,14 +1300,15 @@ button, a, [role="button"] {
   padding-bottom: calc(24px + var(--app-safe-bottom, var(--safe-bottom, 0px)));
 }
 
-/* App viewport utilities: use the stable JS-backed height instead of raw 100dvh.
-   This prevents iOS Safari/PWA from shrinking the whole app when chrome/keyboard changes. */
+/* App viewport utilities */
 .min-h-app {
-  min-height: var(--app-height, 100svh);
+  min-height: 100%;
+  min-height: 100dvh;
 }
 
 .h-app {
-  height: var(--app-height, 100svh);
+  min-height: 100%;
+  min-height: 100dvh;
 }
 
 .pt-safe-app {
@@ -1324,36 +1325,46 @@ button, a, [role="button"] {
 }
 
 /* ============================================================
-   Bottom nav — comportamento por plataforma
-   4 contextos: iPhone PWA, iPhone Safari, Android PWA, Android browser
+   Viewport & Bottom Nav — Comportamento Nativo Multiplataforma
+   (iPhone PWA / Tela de Início, Safari iOS, Android PWA / Tela de Início, Chrome Android)
    ============================================================ */
 
-/* iPhone instalado (PWA): a nav recebe um overdraw via --app-bottom-nav-bleed
-   para o fundo preto cobrir a área nativa do home indicator sem levantar ícones. */
-html.platform-ios-pwa nav[class*="fixed"][class*="bottom-0"] {
-  bottom: 0 !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  background-color: hsl(var(--background)) !important;
+/* Garantir que em TODAS as plataformas o fundo cubra 100% da tela física,
+   inclusive atrás do notch / Dynamic Island e atrás da barra de gestos / home indicator,
+   sem cortes, sem travar o scroll e sem bordas brancas expostas. */
+html {
+  min-height: 100%;
+  min-height: -webkit-fill-available;
+  background-color: hsl(var(--background));
 }
 
-html.platform-ios-pwa,
+body {
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  background-color: hsl(var(--background));
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  background-color: hsl(var(--background));
+  display: flex;
+  flex-direction: column;
+}
+
+/* Permitir scroll nativo fluído em todas as plataformas móveis */
 html.platform-ios-pwa body,
-html.platform-ios-pwa #root {
-  height: var(--app-height, 100svh);
-  min-height: var(--app-height, 100svh);
-  max-height: var(--app-height, 100svh);
+html.platform-ios-browser body,
+html.platform-android-pwa body,
+html.platform-android-browser body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background-color: hsl(var(--background)) !important;
 }
-
-html.platform-ios-pwa body {
-  overflow: hidden;
-}
-
-/* iPhone Safari (navegador): respiro extra pra não ficar atrás da UI do Safari */
-html.platform-ios-browser nav[class*="fixed"][class*="bottom-0"] {
-  padding-bottom: calc(var(--app-safe-bottom, 0px) + 4px) !important;
-}
-
-/* Android PWA e Android browser: manter comportamento atual, sem override */
 

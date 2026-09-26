@@ -83,27 +83,25 @@ const syncViewportVars = () => {
   root.style.setProperty("--app-safe-top", "var(--sat)");
   root.style.setProperty("--app-safe-right", "var(--sar)");
   root.style.setProperty("--app-safe-left", "var(--sal)");
-  // iPhone PWA instalado: o iOS cria a área física do home indicator.
-  // Se essa área entrar como padding normal, a bottom nav fica alta e parece
-  // haver uma “barra cinza” abaixo do app. A correção é separar:
-  // - --app-safe-bottom: espaço de layout/conteúdo (0px no PWA instalado)
-  // - --app-bottom-nav-bleed: fundo extra da nav que sangra para baixo
-  // - --app-bottom-nav-offset: desloca só esse fundo extra para fora do layout
-  const iosStandaloneBottomBleed = "env(safe-area-inset-bottom, 0px)";
-  root.style.setProperty("--app-bottom-nav-bleed", isIOS && isStandalone ? iosStandaloneBottomBleed : "0px");
+  root.style.setProperty("--app-bottom-nav-bleed", "0px");
   root.style.setProperty("--app-bottom-nav-offset", "0px");
 
-  // --app-safe-bottom = espaço de layout que sobe conteúdo/controles.
-  // No iPhone PWA ele precisa ser 0px para a navegação não nascer acima da
-  // área nativa; a cobertura visual da área inferior fica por conta do bleed.
+  // --app-safe-bottom = espaço de safe-area nativo para controles inferiores
   let safeBottom: string;
   if (isIOS && isStandalone) {
-    safeBottom = "0px";
+    // iPhone Adicionado na Tela de Início (PWA): respeita a área física nativa do home indicator (34px)
+    safeBottom = "env(safe-area-inset-bottom, 34px)";
   } else if (isIOS) {
-    // iPhone Safari: respiro extra pra não colidir com a barra do navegador
-    safeBottom = `max(env(safe-area-inset-bottom, 0px), 12px)`;
+    // iPhone Safari: respiro para navegar confortavelmente acima da barra do Safari
+    safeBottom = "max(env(safe-area-inset-bottom, 0px), 12px)";
+  } else if (isAndroid && isStandalone) {
+    // Android Adicionado na Tela de Início: respeita a barra de gestos nativa
+    safeBottom = "max(env(safe-area-inset-bottom, 0px), 8px)";
+  } else if (isAndroid) {
+    // Android Chrome: respiro seguro
+    safeBottom = "max(env(safe-area-inset-bottom, 0px), 8px)";
   } else {
-    safeBottom = `env(safe-area-inset-bottom, 0px)`;
+    safeBottom = "env(safe-area-inset-bottom, 0px)";
   }
   root.style.setProperty("--app-safe-bottom", safeBottom);
 
