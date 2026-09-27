@@ -431,7 +431,7 @@ export function BarberDashboard({
 
   /* ─── Renderização Principal ─── */
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-4 pb-32 pt-2 animate-fade-in">
+    <div className="w-full max-w-5xl mx-auto space-y-4 pb-6 pt-2 animate-fade-in">
       <HeaderTripGlide />
 
       <SearchFilterRow />

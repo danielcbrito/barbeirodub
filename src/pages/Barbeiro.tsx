@@ -708,12 +708,12 @@ const Barbeiro = () => {
         <main
           className={cn(
             "flex-1 min-h-0 bg-background",
-            location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") ? "pb-0" : "pb-32"
+            (location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo")) && "pb-0"
           )}
           style={
             location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo")
               ? undefined
-              : { paddingBottom: "calc(5.5rem + var(--app-safe-bottom, 8px))" }
+              : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
           }
         >
           <div

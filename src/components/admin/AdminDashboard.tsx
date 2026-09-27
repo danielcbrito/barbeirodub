@@ -578,7 +578,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
   // ═══════════════════════════════════════
   if (isMobile) {
     return (
-      <div className="w-full max-w-lg mx-auto space-y-4 pb-32 pt-1 animate-fade-in">
+      <div className="w-full max-w-lg mx-auto space-y-4 pb-6 pt-1 animate-fade-in">
         {/* 1. Header (Hello + Localização / Sino + Avatar) */}
         <div className="flex items-center justify-between gap-3 pt-1">
           <div className="min-w-0">
