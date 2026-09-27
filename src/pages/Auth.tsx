@@ -185,6 +185,13 @@ const FloatingInput = ({
   const [focused, setFocused] = useState(false);
   const active = focused || value.length > 0;
 
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    setFocused(true);
+    setTimeout(() => {
+      e.target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+  };
+
   return (
     <div
       className={`relative rounded-2xl transition-colors ${
@@ -217,7 +224,7 @@ const FloatingInput = ({
         maxLength={maxLength}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
+        onFocus={handleFocus}
         onBlur={() => setFocused(false)}
         className={`peer h-[68px] w-full rounded-2xl bg-transparent px-5 pt-5 pb-1 ${
           rightSlot ? "pr-12" : ""
@@ -328,41 +335,6 @@ const Auth = () => {
 
   // Modo global
   const [mode, setMode] = useState<"login" | "signup">(initialSignup ? "signup" : "login");
-
-  // Keyboard height (iOS/Android) — usado para fazer o CTA subir junto do teclado suavemente e sem travar
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const vv = window.visualViewport;
-
-    const updateKeyboard = () => {
-      if (!vv) {
-        setKeyboardHeight(0);
-        return;
-      }
-      const diff = window.innerHeight - vv.height - (vv.offsetTop || 0);
-      setKeyboardHeight(diff > 60 ? Math.round(diff) : 0);
-    };
-
-    updateKeyboard();
-
-    if (vv) {
-      vv.addEventListener("resize", updateKeyboard);
-      vv.addEventListener("scroll", updateKeyboard);
-    }
-    window.addEventListener("resize", updateKeyboard);
-    window.addEventListener("orientationchange", updateKeyboard);
-
-    return () => {
-      if (vv) {
-        vv.removeEventListener("resize", updateKeyboard);
-        vv.removeEventListener("scroll", updateKeyboard);
-      }
-      window.removeEventListener("resize", updateKeyboard);
-      window.removeEventListener("orientationchange", updateKeyboard);
-    };
-  }, []);
 
   // Login state
   const [email, setEmail] = useState("");
@@ -820,20 +792,14 @@ const Auth = () => {
 
   return (
     <div
-      className="fixed inset-0 flex flex-col justify-between overflow-hidden"
+      className="min-h-full min-h-[100dvh] w-full flex flex-col justify-between bg-background text-foreground overflow-y-auto overscroll-y-contain"
       style={{
-        background: "hsl(var(--background))",
-        color: "hsl(var(--foreground))",
+        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
+        paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 20px)",
       }}
     >
       {/* ─── Header ───────────────────────────────────────────────── */}
-      <header
-        className="relative flex items-center justify-center px-4 shrink-0"
-        style={{
-          paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
-          paddingBottom: 12,
-        }}
-      >
+      <header className="relative flex items-center justify-center px-4 shrink-0 pb-2">
         <button
           type="button"
           onClick={onBackClick}
@@ -848,7 +814,7 @@ const Auth = () => {
 
       {/* Progress bar (signup) */}
       {mode === "signup" && (
-        <div className="px-6 pb-1 shrink-0 max-w-md mx-auto w-full">
+        <div className="px-6 pb-2 shrink-0 max-w-md mx-auto w-full">
           <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
@@ -861,13 +827,7 @@ const Auth = () => {
       )}
 
       {/* ─── Content ──────────────────────────────────────────────── */}
-      <main
-        className="flex-1 w-full max-w-md mx-auto px-6 overflow-y-auto overscroll-contain"
-        style={{
-          paddingBottom: keyboardHeight > 0 ? `${keyboardHeight + 110}px` : "24px",
-          transition: "padding-bottom 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
+      <main className="flex-1 flex flex-col justify-between w-full max-w-md mx-auto px-6">
         <AnimatePresence mode="wait">
           <motion.div
             key={mode === "login" ? "login" : `signup-${step}`}
@@ -875,7 +835,7 @@ const Auth = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
             transition={{ duration: 0.24, ease: "easeOut" }}
-            className="w-full pt-4 sm:pt-6"
+            className="w-full pt-3 sm:pt-5"
           >
             {mode === "login" ? (
               <>
@@ -980,52 +940,42 @@ const Auth = () => {
             )}
           </motion.div>
         </AnimatePresence>
+
+        {/* ─── CTA + Links (no final do fluxo com mt-auto para empurrar pro rodapé naturalmente) ─── */}
+        <div className="mt-auto pt-8 pb-3 w-full">
+          <button
+            type="button"
+            onClick={onCtaClick}
+            disabled={!canGoCta || isLoading}
+            className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[15.5px] sm:text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+            style={{ touchAction: "manipulation" }}
+          >
+            {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+            {ctaLabel}
+          </button>
+
+          {step !== "otp" && (
+            <p className="mt-3 text-center text-[13.5px] text-foreground/60">
+              {mode === "signup" ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  if (mode === "login") {
+                    setMode("signup");
+                    setStep("name");
+                  } else {
+                    setMode("login");
+                  }
+                }}
+                className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
+                style={{ touchAction: "manipulation" }}
+              >
+                {mode === "signup" ? "Entrar" : "Criar conta"}
+              </button>
+            </p>
+          )}
+        </div>
       </main>
-
-      {/* ─── Footer / CTA — Sempre embaixo, sobe junto do teclado sem travar ──── */}
-      <footer
-        className="relative w-full max-w-md mx-auto px-6 pt-3 shrink-0 bg-background z-40 after:content-[''] after:absolute after:top-full after:left-0 after:right-0 after:h-[100vh] after:bg-background"
-        style={{
-          paddingBottom: keyboardHeight > 0
-            ? "12px"
-            : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
-          transform: keyboardHeight > 0 ? `translate3d(0, -${keyboardHeight}px, 0)` : "translate3d(0, 0, 0)",
-          transition: "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), padding-bottom 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-          willChange: "transform",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onCtaClick}
-          disabled={!canGoCta || isLoading}
-          className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[15.5px] sm:text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-          style={{ touchAction: "manipulation" }}
-        >
-          {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-          {ctaLabel}
-        </button>
-
-        {step !== "otp" && (
-          <p className="mt-3 text-center text-[13.5px] text-foreground/60">
-            {mode === "signup" ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
-            <button
-              type="button"
-              onClick={() => {
-                if (mode === "login") {
-                  setMode("signup");
-                  setStep("name");
-                } else {
-                  setMode("login");
-                }
-              }}
-              className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-              style={{ touchAction: "manipulation" }}
-            >
-              {mode === "signup" ? "Entrar" : "Criar conta"}
-            </button>
-          </p>
-        )}
-      </footer>
     </div>
   );
 };
