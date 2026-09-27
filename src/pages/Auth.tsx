@@ -865,19 +865,16 @@ const Auth = () => {
         maxHeight: "100dvh",
       }}
     >
-      {/* ─── Header — collapses smoothly when keyboard opens (like Instagram/iFood) ─── */}
-      <div
-        className="shrink-0 overflow-hidden transition-all duration-300 ease-out"
-        style={{
-          maxHeight: isKeyboardOpen ? 0 : 80,
-          opacity: isKeyboardOpen ? 0 : 1,
-          paddingTop: isKeyboardOpen
-            ? 0
-            : "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
-          paddingBottom: isKeyboardOpen ? 0 : 10,
-        }}
-      >
-        <header className="relative flex items-center justify-center px-4">
+      {/* ─── Scrollable area: header + title + form — tudo visível, rola naturalmente ─── */}
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        {/* Header — sempre visível */}
+        <header
+          className="relative flex items-center justify-center px-4 shrink-0"
+          style={{
+            paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
+            paddingBottom: "10px",
+          }}
+        >
           <button
             type="button"
             onClick={onBackClick}
@@ -889,17 +886,9 @@ const Auth = () => {
           </button>
           <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground/90">{title}</h2>
         </header>
-      </div>
 
-      {/* Progress bar (signup) */}
-      {mode === "signup" && (
-        <div
-          className="shrink-0 overflow-hidden transition-all duration-300 ease-out"
-          style={{
-            maxHeight: isKeyboardOpen ? 0 : 20,
-            opacity: isKeyboardOpen ? 0 : 1,
-          }}
-        >
+        {/* Progress bar (signup) */}
+        {mode === "signup" && (
           <div className="px-6 pb-1 max-w-md mx-auto w-full">
             <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
               <div
@@ -910,160 +899,143 @@ const Auth = () => {
               />
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ─── Content ──────────────────────────────────────────────── */}
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-1 w-full max-w-md mx-auto">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={mode === "login" ? "login" : `signup-${step}`}
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -16 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-full"
-          >
-            {mode === "login" ? (
-              <>
-                {/* Title + subtitle — collapses when keyboard opens */}
-                <div
-                  className="overflow-hidden transition-all duration-300 ease-out"
-                  style={{
-                    maxHeight: isKeyboardOpen ? 0 : 120,
-                    opacity: isKeyboardOpen ? 0 : 1,
-                    marginBottom: isKeyboardOpen ? 0 : 24,
-                    paddingTop: isKeyboardOpen ? 0 : 4,
-                  }}
-                >
+        {/* Content */}
+        <div className="px-6 w-full max-w-md mx-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={mode === "login" ? "login" : `signup-${step}`}
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="w-full pt-2"
+            >
+              {mode === "login" ? (
+                <>
+                  {/* Título e subtítulo — sempre visíveis */}
                   <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
                     Entrar na sua conta
                   </h1>
                   <p className="text-[13.5px] text-foreground/60 mt-1">
                     Informe suas credenciais para acessar o aplicativo
                   </p>
-                </div>
 
-                <form
-                  id="auth-login-form"
-                  onSubmit={handleLoginSubmit}
-                  className="space-y-3"
-                  noValidate
-                >
-                  <FloatingInput
-                    id="email-input"
-                    label="E-mail"
-                    value={email}
-                    onChange={setEmail}
-                    type="email"
-                    inputMode="email"
-                    autoComplete="username"
-                    enterKeyHint="next"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                  />
-                  <FloatingInput
-                    id="senha-input"
-                    label="Senha"
-                    value={senha}
-                    onChange={setSenha}
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    enterKeyHint="done"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    rightSlot={
+                  <form
+                    id="auth-login-form"
+                    onSubmit={handleLoginSubmit}
+                    className="space-y-3 mt-6"
+                    noValidate
+                  >
+                    <FloatingInput
+                      id="email-input"
+                      label="E-mail"
+                      value={email}
+                      onChange={setEmail}
+                      type="email"
+                      inputMode="email"
+                      autoComplete="username"
+                      enterKeyHint="next"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                    <FloatingInput
+                      id="senha-input"
+                      label="Senha"
+                      value={senha}
+                      onChange={setSenha}
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      enterKeyHint="done"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      rightSlot={
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                          className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/60 hover:text-foreground active:scale-95 transition-all"
+                          style={{ touchAction: "manipulation" }}
+                        >
+                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      }
+                    />
+                    <div className="pt-0.5">
                       <button
                         type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                        className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/60 hover:text-foreground active:scale-95 transition-all"
+                        onClick={() => navigate("/esqueci-senha")}
+                        className="text-[13px] font-semibold text-primary hover:underline underline-offset-4 active:opacity-70 transition-opacity"
                         style={{ touchAction: "manipulation" }}
                       >
-                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        Esqueci minha senha
                       </button>
-                    }
-                  />
-                  <div className="pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => navigate("/esqueci-senha")}
-                      className="text-[13px] font-semibold text-primary hover:underline underline-offset-4 active:opacity-70 transition-opacity"
-                      style={{ touchAction: "manipulation" }}
-                    >
-                      Esqueci minha senha
+                    </div>
+                    <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
+                      Continuar
                     </button>
-                  </div>
-                  <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
-                    Continuar
-                  </button>
-                </form>
-              </>
-            ) : (
-              <>
-                {/* Signup title + subtitle — collapses when keyboard opens */}
-                <div
-                  className="overflow-hidden transition-all duration-300 ease-out"
-                  style={{
-                    maxHeight: isKeyboardOpen ? 0 : 120,
-                    opacity: isKeyboardOpen ? 0 : 1,
-                    marginBottom: isKeyboardOpen ? 0 : 24,
-                    paddingTop: isKeyboardOpen ? 0 : 4,
-                  }}
-                >
+                  </form>
+                </>
+              ) : (
+                <>
+                  {/* Signup título e subtítulo — sempre visíveis */}
                   <h1 className="text-[24px] font-extrabold tracking-tight text-foreground leading-tight">
                     {signupContent!.heading}
                   </h1>
                   <p className="text-[13.5px] text-foreground/60 mt-1.5">
                     {signupContent!.hint}
                   </p>
-                </div>
 
-                <form
-                  id="auth-signup-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSignupNext();
-                  }}
-                  className="space-y-3"
-                  noValidate
-                >
-                  {signupContent!.input}
-                  <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
-                    Continuar
-                  </button>
-                </form>
-
-                {step === "cpf" && sCpfError && (
-                  <p className="mt-2 text-[13px] font-medium text-destructive">{sCpfError}</p>
-                )}
-
-                {step === "otp" && (
-                  <div className="pt-3">
-                    <button
-                      type="button"
-                      onClick={handleResendCode}
-                      disabled={sResendCooldown > 0 || isLoading}
-                      className="text-[13px] font-semibold text-primary underline underline-offset-4 active:opacity-70 disabled:opacity-40 disabled:no-underline"
-                      style={{ touchAction: "manipulation" }}
-                    >
-                      {sResendCooldown > 0
-                        ? `Reenviar em ${sResendCooldown}s`
-                        : "Reenviar código"}
+                  <form
+                    id="auth-signup-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSignupNext();
+                    }}
+                    className="space-y-3 mt-6"
+                    noValidate
+                  >
+                    {signupContent!.input}
+                    <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
+                      Continuar
                     </button>
-                  </div>
-                )}
-              </>
-            )}
-          </motion.div>
-        </AnimatePresence>
+                  </form>
+
+                  {step === "cpf" && sCpfError && (
+                    <p className="mt-2 text-[13px] font-medium text-destructive">{sCpfError}</p>
+                  )}
+
+                  {step === "otp" && (
+                    <div className="pt-3">
+                      <button
+                        type="button"
+                        onClick={handleResendCode}
+                        disabled={sResendCooldown > 0 || isLoading}
+                        className="text-[13px] font-semibold text-primary underline underline-offset-4 active:opacity-70 disabled:opacity-40 disabled:no-underline"
+                        style={{ touchAction: "manipulation" }}
+                      >
+                        {sResendCooldown > 0
+                          ? `Reenviar em ${sResendCooldown}s`
+                          : "Reenviar código"}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Espaçamento extra no final para garantir scroll confortável */}
+          <div className="h-4" />
+        </div>
       </main>
 
-      {/* ─── Footer / CTA — Sobe junto do teclado ──── */}
+      {/* ─── Footer / CTA — sempre fixo na base, sobe com teclado ──── */}
       <footer
-        className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20 transition-all"
+        className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20"
         style={{
           paddingTop: 8,
           paddingBottom: isKeyboardOpen

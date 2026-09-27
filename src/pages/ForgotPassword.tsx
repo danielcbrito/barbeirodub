@@ -185,19 +185,16 @@ const ForgotPassword = () => {
         maxHeight: "100dvh",
       }}
     >
-      {/* Header — collapses smoothly when keyboard opens */}
-      <div
-        className="shrink-0 overflow-hidden transition-all duration-300 ease-out"
-        style={{
-          maxHeight: isKeyboardOpen ? 0 : 80,
-          opacity: isKeyboardOpen ? 0 : 1,
-          paddingTop: isKeyboardOpen
-            ? 0
-            : "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 10px)",
-          paddingBottom: isKeyboardOpen ? 0 : 10,
-        }}
-      >
-        <div className="relative flex items-center justify-center px-4">
+      {/* Scrollable area: header + title + form — tudo visível */}
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        {/* Header — sempre visível */}
+        <div
+          className="relative flex items-center justify-center px-4 shrink-0"
+          style={{
+            paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 10px)",
+            paddingBottom: "10px",
+          }}
+        >
           <button
             type="button"
             onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
@@ -209,94 +206,86 @@ const ForgotPassword = () => {
           </button>
           <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground">Recuperar senha</h2>
         </div>
-      </div>
 
-      {/* Content */}
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-1 w-full max-w-md mx-auto">
-        <AnimatePresence mode="wait">
-          {!emailSent ? (
-            <motion.div
-              key="form"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="w-full"
-            >
-              {/* Title + subtitle — collapses when keyboard opens */}
-              <div
-                className="overflow-hidden transition-all duration-300 ease-out"
-                style={{
-                  maxHeight: isKeyboardOpen ? 0 : 120,
-                  opacity: isKeyboardOpen ? 0 : 1,
-                  marginBottom: isKeyboardOpen ? 0 : 24,
-                  paddingTop: isKeyboardOpen ? 0 : 4,
-                }}
+        {/* Content */}
+        <div className="px-6 w-full max-w-md mx-auto">
+          <AnimatePresence mode="wait">
+            {!emailSent ? (
+              <motion.div
+                key="form"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="w-full pt-2"
               >
+                {/* Título e subtítulo — sempre visíveis */}
                 <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
                   Esqueceu sua senha?
                 </h1>
                 <p className="text-[13px] text-foreground/55 mt-1.5">
                   Digite seu e-mail e enviaremos um link para você criar uma nova senha.
                 </p>
-              </div>
 
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-3"
-                noValidate
+                <form
+                  onSubmit={handleSubmit}
+                  className="space-y-3 mt-6"
+                  noValidate
+                >
+                  <FloatingInput
+                    id="fp-email"
+                    label="E-mail"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="username"
+                    enterKeyHint="send"
+                    value={email}
+                    onChange={setEmail}
+                  />
+                  <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
+                    Enviar
+                  </button>
+                </form>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="success"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.25 }}
+                className="w-full pt-8 flex flex-col items-center text-center"
               >
-                <FloatingInput
-                  id="fp-email"
-                  label="E-mail"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="username"
-                  enterKeyHint="send"
-                  value={email}
-                  onChange={setEmail}
-                />
-                <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
-                  Enviar
-                </button>
-              </form>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="success"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.25 }}
-              className="w-full pt-8 flex flex-col items-center text-center"
-            >
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
-                style={{
-                  background: "hsl(var(--primary) / 0.12)",
-                  border: "1px solid hsl(var(--primary) / 0.25)",
-                }}
-              >
-                <CheckCircle2 className="w-10 h-10 text-primary" />
-              </div>
-              <h1 className="text-[24px] font-extrabold tracking-tight text-foreground leading-tight">
-                E-mail enviado
-              </h1>
-              <p className="mt-2 text-[13px] text-foreground/60 leading-relaxed max-w-[280px]">
-                Verifique sua caixa de entrada em
-              </p>
-              <p className="mt-1 text-[13px] text-primary font-semibold break-all">{email}</p>
-              <p className="mt-3 text-[12px] text-foreground/45 leading-relaxed max-w-[280px]">
-                Toque no link do e-mail para redefinir sua senha.
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                <div
+                  className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
+                  style={{
+                    background: "hsl(var(--primary) / 0.12)",
+                    border: "1px solid hsl(var(--primary) / 0.25)",
+                  }}
+                >
+                  <CheckCircle2 className="w-10 h-10 text-primary" />
+                </div>
+                <h1 className="text-[24px] font-extrabold tracking-tight text-foreground leading-tight">
+                  E-mail enviado
+                </h1>
+                <p className="mt-2 text-[13px] text-foreground/60 leading-relaxed max-w-[280px]">
+                  Verifique sua caixa de entrada em
+                </p>
+                <p className="mt-1 text-[13px] text-primary font-semibold break-all">{email}</p>
+                <p className="mt-3 text-[12px] text-foreground/45 leading-relaxed max-w-[280px]">
+                  Toque no link do e-mail para redefinir sua senha.
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="h-4" />
+        </div>
       </main>
 
       {/* Bottom CTA */}
       <footer
-        className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20 transition-all"
+        className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20"
         style={{
           paddingTop: 8,
           paddingBottom: isKeyboardOpen
