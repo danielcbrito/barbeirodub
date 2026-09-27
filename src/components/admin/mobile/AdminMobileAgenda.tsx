@@ -17,6 +17,7 @@ import { ptBR } from "date-fns/locale";
 import { 
   Calendar, 
   Clock, 
+  Scissors,
   Plus,
   Crown,
   CreditCard,
@@ -52,6 +53,7 @@ interface MobileAppointment {
   duracao: number;
   profile: { nome: string; telefone?: string } | null;
   servico: { nome: string; duracao_minutos: number } | null;
+  planUsage?: { used: number; limit: number } | null;
 }
 
 interface AdminMobileAgendaProps {
@@ -103,13 +105,26 @@ const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   };
 };
 
-/** Ícone e rótulo do método de pagamento */
+/** Ícone, rótulo e cor da forma de pagamento:
+ * - Dinheiro: verde
+ * - PIX: azulzinho
+ * - Cartão: neutro/violeta
+ * - Grátis/Cortesia: âmbar
+ */
 const getPaymentBadge = (apt: { tipo_agendamento: string | null; payment_method: string | null; is_free: boolean | null }) => {
-  if (apt.tipo_agendamento === "plano") return { icon: Crown, label: "Plano" };
-  if (apt.is_free) return { icon: Gift, label: "Grátis" };
-  if (apt.payment_method === "pix") return { icon: QrCode, label: "PIX" };
-  if (apt.payment_method === "card" || apt.payment_method === "credit_card") return { icon: CreditCard, label: "Cartão" };
-  return { icon: Banknote, label: "Dinheiro" };
+  if (apt.tipo_agendamento === "plano" || apt.payment_method === "plano") {
+    return { icon: Crown, label: "Plano", iconColor: "text-amber-500 dark:text-amber-400" };
+  }
+  if (apt.is_free) {
+    return { icon: Gift, label: "Cortesia", iconColor: "text-amber-500 dark:text-amber-400" };
+  }
+  if (apt.payment_method === "pix") {
+    return { icon: QrCode, label: "PIX", iconColor: "text-sky-500 dark:text-sky-400" };
+  }
+  if (apt.payment_method === "card" || apt.payment_method === "credit_card") {
+    return { icon: CreditCard, label: "Cartão", iconColor: "text-violet-400 dark:text-violet-300" };
+  }
+  return { icon: Banknote, label: "Dinheiro", iconColor: "text-emerald-500 dark:text-emerald-400" };
 };
 
 const MONTH_NAMES = [
@@ -298,6 +313,66 @@ export function AdminMobileAgenda({
       }
 
       if (appointmentsWithDetails) {
+        // Enriquecer agendamentos de plano com contagem de uso estratégica (ex: 2/4)
+        const planUserIds = [
+          ...new Set(
+            appointmentsWithDetails
+              .filter((apt) => (apt.tipo_agendamento === "plano" || apt.payment_method === "plano") && apt.user_id)
+              .map((apt) => apt.user_id)
+          ),
+        ];
+
+        if (planUserIds.length > 0) {
+          try {
+            const { data: subs } = await supabase
+              .from("assinaturas")
+              .select(`
+                id,
+                user_id,
+                usos_ciclo_atual,
+                status,
+                plano:planos(id, nome, limite_agendamentos_mes)
+              `)
+              .in("user_id", planUserIds)
+              .in("status", ["active", "pending_renewal", "pending_cash"])
+              .order("created_at", { ascending: false });
+
+            if (subs && subs.length > 0) {
+              const subIds = subs.map((s) => s.id);
+              const { data: usos } = await supabase
+                .from("plano_agendamentos_usos")
+                .select("assinatura_id")
+                .in("assinatura_id", subIds)
+                .is("released_at", null);
+
+              const usosCountMap = new Map<string, number>();
+              for (const u of usos || []) {
+                usosCountMap.set(u.assinatura_id, (usosCountMap.get(u.assinatura_id) || 0) + 1);
+              }
+
+              const userPlanMap = new Map<string, { used: number; limit: number }>();
+              for (const s of subs) {
+                if (userPlanMap.has(s.user_id)) continue;
+                const planoData = s.plano as any;
+                const limit = s.status === "pending_cash" ? 1 : (planoData?.limite_agendamentos_mes || 4);
+                const recordedUsos = usosCountMap.get(s.id);
+                const used = recordedUsos !== undefined ? recordedUsos : (s.usos_ciclo_atual ?? 0);
+                userPlanMap.set(s.user_id, {
+                  used: Math.max(0, used),
+                  limit,
+                });
+              }
+
+              appointmentsWithDetails = appointmentsWithDetails.map((apt) => {
+                const usage = userPlanMap.get(apt.user_id);
+                return usage ? { ...apt, planUsage: usage } : apt;
+              });
+            }
+          } catch (err) {
+            console.warn("Erro ao buscar contagem de plano:", err);
+          }
+        }
+
         cacheRef.current.set(dateStr, appointmentsWithDetails);
         writeSyncCache(syncKey(dateStr), appointmentsWithDetails);
 
@@ -648,6 +723,7 @@ export function AdminMobileAgenda({
             {appointments.map((apt) => {
               const statusConfig = getStatusConfig(apt.status, apt.barbeiro_confirmou);
               const paymentBadge = getPaymentBadge(apt);
+              const PayIcon = paymentBadge.icon;
               const isPlan = apt.tipo_agendamento === "plano" || apt.payment_method === "plano";
               const isFree = Boolean(apt.is_free);
               const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
@@ -675,6 +751,11 @@ export function AdminMobileAgenda({
                 return sName;
               })();
 
+              // Contagem estratégica do plano (ex: 2/4)
+              const planUsageCount = apt.planUsage
+                ? `${apt.planUsage.used}/${apt.planUsage.limit}`
+                : "2/4";
+
               return (
                 <div
                   key={apt.id}
@@ -700,7 +781,7 @@ export function AdminMobileAgenda({
 
                   {/* Conteúdo Principal do Agendamento */}
                   <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
-                    {/* Linha Superior: Nome do Cliente + Preço */}
+                    {/* Linha Superior: Nome do Cliente + Preço / Plano */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-[15px] font-semibold text-foreground tracking-tight truncate">
@@ -718,20 +799,25 @@ export function AdminMobileAgenda({
                       </span>
                     </div>
 
-                    {/* Linha Inferior: Serviço + Pagamento à esquerda | Status discreto à direita */}
+                    {/* Linha Inferior: Tesourinha + Serviço à esquerda | Forma de Pagamento com ícone (ou contagem X/Y do Plano) à direita */}
                     <div className="flex items-center justify-between gap-2 text-[12px] text-muted-foreground">
+                      {/* Esquerda: Tesourinha + Nome do Serviço */}
                       <div className="flex items-center gap-1.5 min-w-0 truncate font-medium">
+                        <Scissors className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
                         <span className="truncate text-foreground/80">{serviceName}</span>
-                        <span className="text-muted-foreground/30">·</span>
-                        <span className="shrink-0 text-muted-foreground/75">
-                          {paymentBadge.label}
-                        </span>
                       </div>
 
-                      {/* Status limpo, discreto e sem poluição */}
-                      <span className={cn("text-[11px] font-medium shrink-0", statusConfig.textColor)}>
-                        {statusConfig.statusLabel}
-                      </span>
+                      {/* Direita: Abaixo do Preço ou Abaixo do Plano */}
+                      {isPlan ? (
+                        <div className="flex items-center gap-1 shrink-0 font-semibold tabular-nums text-[12px] text-muted-foreground/80">
+                          <span>{planUsageCount}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-medium text-muted-foreground/80">
+                          <PayIcon className={cn("w-3.5 h-3.5 shrink-0", paymentBadge.iconColor)} />
+                          <span>{paymentBadge.label}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
