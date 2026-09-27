@@ -805,8 +805,16 @@ export function AdminMobileAgenda({
                   {/* Coluna de Horário da Agenda (Esquerda) */}
                   <div className="w-12 shrink-0 flex flex-col items-center justify-center text-center">
                     <span
+                      style={
+                        isNextAppointment
+                          ? {
+                              animation: "soft-pulse-blink 1.8s ease-in-out infinite",
+                              willChange: "opacity",
+                            }
+                          : undefined
+                      }
                       className={cn(
-                        "agenda-strong font-mono text-[14.5px] tabular-nums tracking-tight transition-colors",
+                        "agenda-strong font-mono text-[14.5px] tabular-nums tracking-tight inline-block",
                         isNextAppointment
                           ? "text-emerald-600 dark:text-emerald-400/75 font-semibold animate-soft-blink"
                           : "text-foreground font-bold"

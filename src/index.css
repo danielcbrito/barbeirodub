@@ -1399,24 +1399,19 @@ html:not(.dark) .admin-mobile-agenda .agenda-strong * {
   font-weight: 800 !important;
 }
 
-/* Animação suave e minimalista de respiração/pulso para o próximo horário verde */
+/* Animação suave e minimalista de piscada para o próximo horário verde */
 @keyframes soft-pulse-blink {
   0%, 100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.38;
+    opacity: 0.15;
   }
 }
 
 .animate-soft-blink {
-  animation: soft-pulse-blink 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-soft-blink {
-    animation: none;
-    opacity: 1;
-  }
+  display: inline-block !important;
+  animation: soft-pulse-blink 1.8s ease-in-out infinite !important;
+  will-change: opacity;
 }
 
