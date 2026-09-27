@@ -137,7 +137,7 @@ const ForgotPassword = () => {
         <h2 className="text-[16px] font-semibold text-foreground/90">Recuperar senha</h2>
       </header>
 
-      <div className="w-full max-w-md mx-auto px-6 pt-3 flex-1 flex flex-col justify-start">
+      <div className="w-full max-w-md mx-auto px-6 pt-2 pb-2 flex-1 flex flex-col">
         <AnimatePresence mode="wait">
           {!emailSent ? (
             <motion.div
@@ -146,25 +146,34 @@ const ForgotPassword = () => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -16 }}
               transition={{ duration: 0.2 }}
-              className="w-full"
+              className="w-full flex-1 flex flex-col justify-between"
             >
               <form
                 onSubmit={handleSubmit}
-                className="space-y-3.5 pt-1"
+                className="flex-1 flex flex-col justify-between"
                 noValidate
               >
-                <FloatingInput
-                  id="fp-email"
-                  label="E-mail"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="username"
-                  enterKeyHint="send"
-                  value={email}
-                  onChange={setEmail}
-                />
+                <div>
+                  <h1 className="text-[25px] sm:text-[27px] font-extrabold tracking-tight text-foreground leading-tight mb-2">
+                    Recuperar senha
+                  </h1>
+                  <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
+                    Informe seu e-mail para receber as instruções de recuperação
+                  </p>
 
-                <div className="pt-4">
+                  <FloatingInput
+                    id="fp-email"
+                    label="E-mail"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="username"
+                    enterKeyHint="send"
+                    value={email}
+                    onChange={setEmail}
+                  />
+                </div>
+
+                <div className="mt-auto pt-8 pb-2 w-full">
                   <button
                     type="submit"
                     disabled={!canSubmit || isLoading}
@@ -174,18 +183,18 @@ const ForgotPassword = () => {
                     {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
                     Continuar
                   </button>
-                </div>
 
-                <p className="pt-4 text-center text-[13.5px] text-foreground/60">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/auth")}
-                    className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                    style={{ touchAction: "manipulation" }}
-                  >
-                    Voltar ao login
-                  </button>
-                </p>
+                  <p className="pt-4 text-center text-[13.5px] text-foreground/60">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/auth")}
+                      className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
+                      style={{ touchAction: "manipulation" }}
+                    >
+                      Voltar ao login
+                    </button>
+                  </p>
+                </div>
               </form>
             </motion.div>
           ) : (
@@ -195,29 +204,31 @@ const ForgotPassword = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.25 }}
-              className="w-full pt-4 flex flex-col items-center text-center"
+              className="w-full flex-1 flex flex-col justify-between pt-4 text-center"
             >
-              <div
-                className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
-                style={{
-                  background: "hsl(var(--primary) / 0.12)",
-                  border: "1px solid hsl(var(--primary) / 0.25)",
-                }}
-              >
-                <CheckCircle2 className="w-8 h-8 text-primary" />
+              <div className="flex flex-col items-center">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
+                  style={{
+                    background: "hsl(var(--primary) / 0.12)",
+                    border: "1px solid hsl(var(--primary) / 0.25)",
+                  }}
+                >
+                  <CheckCircle2 className="w-8 h-8 text-primary" />
+                </div>
+                <h1 className="text-[23px] sm:text-[25px] font-bold tracking-tight text-foreground leading-tight">
+                  E-mail enviado
+                </h1>
+                <p className="mt-2 text-[14px] text-foreground/60 leading-relaxed max-w-[280px]">
+                  Verifique sua caixa de entrada em
+                </p>
+                <p className="mt-1 text-[14px] text-primary font-semibold break-all">{email}</p>
+                <p className="mt-3 text-[13px] text-foreground/45 leading-relaxed max-w-[280px]">
+                  Toque no link recebido no e-mail para criar uma nova senha.
+                </p>
               </div>
-              <h1 className="text-[23px] sm:text-[25px] font-bold tracking-tight text-foreground leading-tight">
-                E-mail enviado
-              </h1>
-              <p className="mt-2 text-[14px] text-foreground/60 leading-relaxed max-w-[280px]">
-                Verifique sua caixa de entrada em
-              </p>
-              <p className="mt-1 text-[14px] text-primary font-semibold break-all">{email}</p>
-              <p className="mt-3 text-[13px] text-foreground/45 leading-relaxed max-w-[280px]">
-                Toque no link recebido no e-mail para criar uma nova senha.
-              </p>
 
-              <div className="pt-6 w-full">
+              <div className="mt-auto pt-8 pb-2 w-full">
                 <button
                   type="button"
                   onClick={() => navigate("/auth")}

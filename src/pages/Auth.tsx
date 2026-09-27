@@ -831,8 +831,8 @@ const Auth = () => {
         </div>
       )}
 
-      {/* ─── Content: posicionado no topo em fluxo normal, com respiro total do teclado ─── */}
-      <div className="w-full max-w-md mx-auto px-6 pt-3 flex-1 flex flex-col justify-start">
+      {/* ─── Content: layout com título no topo e botão ancorado no rodapé com rolagem natural ─── */}
+      <div className="w-full max-w-md mx-auto px-6 pt-2 pb-2 flex-1 flex flex-col">
         <AnimatePresence mode="wait">
           <motion.div
             key={mode === "login" ? "login" : `signup-${step}`}
@@ -840,65 +840,73 @@ const Auth = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-full"
+            className="w-full flex-1 flex flex-col justify-between"
           >
             {mode === "login" ? (
               <form
                 id="auth-login-form"
                 onSubmit={handleLoginSubmit}
-                className="space-y-3.5 pt-1"
+                className="flex-1 flex flex-col justify-between"
                 noValidate
               >
-                <FloatingInput
-                  id="email-input"
-                  label="E-mail"
-                  value={email}
-                  onChange={setEmail}
-                  type="email"
-                  inputMode="email"
-                  autoComplete="username"
-                  enterKeyHint="next"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                />
-                <FloatingInput
-                  id="senha-input"
-                  label="Senha"
-                  value={senha}
-                  onChange={setSenha}
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  enterKeyHint="done"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  rightSlot={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/60 hover:text-foreground active:scale-95 transition-all"
-                      style={{ touchAction: "manipulation" }}
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  }
-                />
+                <div>
+                  <h1 className="text-[25px] sm:text-[27px] font-extrabold tracking-tight text-foreground leading-tight mb-5">
+                    Entrar na sua conta
+                  </h1>
 
-                <div className="pt-0.5 flex justify-start">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/esqueci-senha")}
-                    className="text-[13.5px] font-semibold text-primary hover:underline underline-offset-4 active:opacity-70 transition-opacity"
-                    style={{ touchAction: "manipulation" }}
-                  >
-                    Esqueci minha senha
-                  </button>
+                  <div className="space-y-3.5">
+                    <FloatingInput
+                      id="email-input"
+                      label="E-mail"
+                      value={email}
+                      onChange={setEmail}
+                      type="email"
+                      inputMode="email"
+                      autoComplete="username"
+                      enterKeyHint="next"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                    <FloatingInput
+                      id="senha-input"
+                      label="Senha"
+                      value={senha}
+                      onChange={setSenha}
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      enterKeyHint="done"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      rightSlot={
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                          className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/60 hover:text-foreground active:scale-95 transition-all"
+                          style={{ touchAction: "manipulation" }}
+                        >
+                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      }
+                    />
+
+                    <div className="pt-0.5 flex justify-start">
+                      <button
+                        type="button"
+                        onClick={() => navigate("/esqueci-senha")}
+                        className="text-[13.5px] font-semibold text-primary hover:underline underline-offset-4 active:opacity-70 transition-opacity"
+                        style={{ touchAction: "manipulation" }}
+                      >
+                        Esqueci minha senha
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Botão Continuar — arredondado (rounded-full) no fluxo normal */}
-                <div className="pt-4">
+                {/* Botão Continuar — sempre bem lá embaixo */}
+                <div className="mt-auto pt-8 pb-2 w-full">
                   <button
                     type="submit"
                     onClick={onCtaClick}
@@ -909,75 +917,77 @@ const Auth = () => {
                     {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
                     {ctaLabel}
                   </button>
-                </div>
 
-                <p className="pt-4 text-center text-[13.5px] text-foreground/60">
-                  Não tem uma conta?{" "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode("signup");
-                      setStep("name");
-                    }}
-                    className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                    style={{ touchAction: "manipulation" }}
-                  >
-                    Criar conta
-                  </button>
-                </p>
-              </form>
-            ) : (
-              <>
-                <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-2">
-                  {signupContent!.heading}
-                </h1>
-                <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
-                  {signupContent!.hint}
-                </p>
-
-                <form
-                  id="auth-signup-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSignupNext();
-                  }}
-                  className="space-y-3.5"
-                  noValidate
-                >
-                  {signupContent!.input}
-
-                  {step === "cpf" && sCpfError && (
-                    <p className="text-[13px] font-medium text-destructive">{sCpfError}</p>
-                  )}
-
-                  {step === "otp" && (
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={handleResendCode}
-                        disabled={sResendCooldown > 0 || isLoading}
-                        className="text-[13px] font-semibold text-primary underline underline-offset-4 active:opacity-70 disabled:opacity-40 disabled:no-underline"
-                        style={{ touchAction: "manipulation" }}
-                      >
-                        {sResendCooldown > 0
-                          ? `Reenviar em ${sResendCooldown}s`
-                          : "Reenviar código"}
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="pt-4">
+                  <p className="pt-4 text-center text-[13.5px] text-foreground/60">
+                    Não tem uma conta?{" "}
                     <button
-                      type="submit"
-                      onClick={onCtaClick}
-                      disabled={!canGoCta || isLoading}
-                      className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                      type="button"
+                      onClick={() => {
+                        setMode("signup");
+                        setStep("name");
+                      }}
+                      className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
                       style={{ touchAction: "manipulation" }}
                     >
-                      {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-                      {ctaLabel}
+                      Criar conta
                     </button>
+                  </p>
+                </div>
+              </form>
+            ) : (
+              <form
+                id="auth-signup-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSignupNext();
+                }}
+                className="flex-1 flex flex-col justify-between"
+                noValidate
+              >
+                <div>
+                  <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-2">
+                    {signupContent!.heading}
+                  </h1>
+                  <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
+                    {signupContent!.hint}
+                  </p>
+
+                  <div className="space-y-3.5">
+                    {signupContent!.input}
+
+                    {step === "cpf" && sCpfError && (
+                      <p className="text-[13px] font-medium text-destructive">{sCpfError}</p>
+                    )}
+
+                    {step === "otp" && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={handleResendCode}
+                          disabled={sResendCooldown > 0 || isLoading}
+                          className="text-[13px] font-semibold text-primary underline underline-offset-4 active:opacity-70 disabled:opacity-40 disabled:no-underline"
+                          style={{ touchAction: "manipulation" }}
+                        >
+                          {sResendCooldown > 0
+                            ? `Reenviar em ${sResendCooldown}s`
+                            : "Reenviar código"}
+                        </button>
+                      </div>
+                    )}
                   </div>
+                </div>
+
+                <div className="mt-auto pt-8 pb-2 w-full">
+                  <button
+                    type="submit"
+                    onClick={onCtaClick}
+                    disabled={!canGoCta || isLoading}
+                    className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    style={{ touchAction: "manipulation" }}
+                  >
+                    {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+                    {ctaLabel}
+                  </button>
 
                   {step !== "otp" && (
                     <p className="pt-4 text-center text-[13.5px] text-foreground/60">
@@ -994,8 +1004,8 @@ const Auth = () => {
                       </button>
                     </p>
                   )}
-                </form>
-              </>
+                </div>
+              </form>
             )}
           </motion.div>
         </AnimatePresence>
