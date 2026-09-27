@@ -477,11 +477,25 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       <div className="flex-shrink-0 px-6 pt-2 pb-4">
         {/* Title + Controls */}
         <div className="flex items-center justify-between mb-5">
-          <div>
-            <h1 className="text-2xl font-bold tracking-wide text-foreground">Agenda</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
+          <div className="flex items-center gap-3">
+            <span className="text-[20px] font-bold text-foreground capitalize tracking-tight">
               {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
-            </p>
+            </span>
+            {!isToday(selectedDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate(today);
+                  scrollToDate(today);
+                }}
+                className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
+              >
+                Hoje
+              </button>
+            )}
+            <span className="text-[12px] font-medium text-muted-foreground/75 tabular-nums">
+              • {filteredAppointments.length} {filteredAppointments.length === 1 ? "agendamento" : "agendamentos"}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
