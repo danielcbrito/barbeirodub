@@ -294,10 +294,9 @@ All colors MUST be HSL. */
     scroll-padding-bottom: max(var(--kb-offset, 0px), 5.5rem);
   }
 
-  /* Garante respiro amplo automático para qualquer campo em foco com teclado mobile */
   input, textarea, select, [contenteditable="true"] {
-    scroll-margin-top: calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 2rem);
-    scroll-margin-bottom: max(var(--kb-offset, 0px), 4rem);
+    scroll-margin-top: calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 1rem);
+    scroll-margin-bottom: 2rem;
   }
 
   @media (prefers-reduced-motion: reduce) {

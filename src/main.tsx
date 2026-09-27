@@ -123,8 +123,15 @@ const scrollActiveInputIntoView = (el?: Element | null) => {
   const isInput = target.matches?.("input, textarea, select, [contenteditable='true']");
   if (!isInput) return;
 
+  const rect = target.getBoundingClientRect();
+  const visualH = window.visualViewport?.height || window.innerHeight;
+  // Se o campo já está visível dentro da área útil da tela, não faz scroll desnecessário
+  if (rect.top >= 48 && rect.bottom <= visualH - 48) {
+    return;
+  }
+
   try {
-    target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    target.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   } catch {
     target.scrollIntoView(false);
   }
