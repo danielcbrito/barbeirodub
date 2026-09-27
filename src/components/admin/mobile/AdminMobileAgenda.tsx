@@ -65,7 +65,7 @@ interface AdminMobileAgendaProps {
   showBack?: boolean;
 }
 
-/** Status oficial do sistema com destaque correto:
+/** Status oficial com cores nítidas:
  * - Concluído: VERDE (emerald)
  * - Agendado: AZUL (blue)
  * - Pendente: ÂMBAR (amber)
@@ -75,27 +75,27 @@ const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "completed") {
     return {
       dot: "bg-emerald-500",
-      textColor: "text-emerald-600 dark:text-emerald-400",
+      textColor: "text-emerald-500 dark:text-emerald-400",
       statusLabel: "Concluído",
     };
   }
   if (status === "no_show") {
     return {
       dot: "bg-rose-500",
-      textColor: "text-rose-600 dark:text-rose-400",
+      textColor: "text-rose-500 dark:text-rose-400",
       statusLabel: "Não veio",
     };
   }
   if (status === "confirmed" || barbeiroConfirmou) {
     return {
       dot: "bg-blue-500",
-      textColor: "text-blue-600 dark:text-blue-400",
+      textColor: "text-blue-500 dark:text-blue-400",
       statusLabel: "Agendado",
     };
   }
   return {
     dot: "bg-amber-500",
-    textColor: "text-amber-600 dark:text-amber-400",
+    textColor: "text-amber-500 dark:text-amber-400",
     statusLabel: "Pendente",
   };
 };
@@ -139,9 +139,6 @@ export function AdminMobileAgenda({
   const [selectedMonth, setSelectedMonth] = useState<Date>(() => startOfMonth(getLocalToday()));
   const [selectedDate, setSelectedDate] = useState<Date>(() => getLocalToday());
 
-  // Estado para contagem de agendamentos/slots de cada dia do mês
-  const [monthCounts, setMonthCounts] = useState<Record<string, number>>({});
-
   // Modal de seleção rápida de mês/ano
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(() => selectedMonth.getFullYear());
@@ -164,19 +161,24 @@ export function AdminMobileAgenda({
   const hasLoadedOnceRef = useRef(false);
   const cacheRef = useRef<Map<string, MobileAppointment[]>>(new Map());
 
-  // Todos os dias do mês atual selecionado (1 ao último dia)
+  // Todos os dias do mês atual selecionado (1 ao último dia do mês)
   const daysInMonth = useMemo(() => {
     const start = startOfMonth(selectedMonth);
     const end = endOfMonth(selectedMonth);
     return eachDayOfInterval({ start, end });
   }, [selectedMonth]);
 
+  const shortDayName = (date: Date) => {
+    const names = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+    return names[date.getDay()];
+  };
+
   const commitAppointments = useCallback((nextAppointments: MobileAppointment[], dateKey?: string) => {
     setAppointments(nextAppointments);
     if (dateKey) setAppointmentsDateKey(dateKey);
   }, []);
 
-  // Centraliza o dia selecionado no carrossel full-bleed
+  // Centraliza o dia selecionado no carrossel
   const scrollToDay = useCallback((day: Date, behavior: ScrollBehavior = "smooth") => {
     const container = carouselRef.current;
     if (!container) return;
@@ -194,38 +196,6 @@ export function AdminMobileAgenda({
       behavior,
     });
   }, []);
-
-  // Carrega contagens de agendamentos para todos os dias do mês atual
-  const loadMonthCounts = useCallback(async (monthDate: Date) => {
-    const startStr = format(startOfMonth(monthDate), 'yyyy-MM-dd');
-    const endStr = format(endOfMonth(monthDate), 'yyyy-MM-dd');
-
-    try {
-      let query = supabase
-        .from("agendamentos")
-        .select("data")
-        .gte("data", startStr)
-        .lte("data", endStr)
-        .in("status", ["pending", "confirmed", "completed"]);
-
-      if (barbeiroId) {
-        query = query.eq("barbeiro_id", barbeiroId);
-      }
-
-      const { data, error } = await query;
-      if (!error && data) {
-        const counts: Record<string, number> = {};
-        data.forEach((row) => {
-          if (row.data) {
-            counts[row.data] = (counts[row.data] || 0) + 1;
-          }
-        });
-        setMonthCounts(counts);
-      }
-    } catch (err) {
-      console.error("Error loading month counts:", err);
-    }
-  }, [barbeiroId]);
 
   // Carregar agendamentos do dia ativo
   const loadAppointments = useCallback(async (
@@ -345,11 +315,6 @@ export function AdminMobileAgenda({
     }
   }, [barbeiroId, commitAppointments]);
 
-  // Carrega contagens mensais quando o mês mudar
-  useEffect(() => {
-    loadMonthCounts(selectedMonth);
-  }, [selectedMonth, loadMonthCounts]);
-
   // Carrega agendamentos quando selectedDate mudar
   useEffect(() => {
     const dateStr = getDateKey(selectedDate);
@@ -388,12 +353,11 @@ export function AdminMobileAgenda({
       refreshTimer = setTimeout(() => {
         cacheRef.current.delete(getDateKey(selectedDate));
         loadAppointments(selectedDate, { silent: true, visible: true });
-        loadMonthCounts(selectedMonth);
       }, 250);
     };
 
     const channel = supabase
-      .channel(`mobile-agenda-v4-${barbeiroId || 'all'}`)
+      .channel(`mobile-agenda-v5-${barbeiroId || 'all'}`)
       .on('postgres_changes', channelConfig as any, scheduleSilentRefresh)
       .subscribe();
 
@@ -408,7 +372,7 @@ export function AdminMobileAgenda({
       supabase.removeChannel(channel);
       window.removeEventListener('agenda-refresh', handleHeaderRefresh);
     };
-  }, [selectedDate, selectedMonth, loadAppointments, loadMonthCounts, barbeiroId]);
+  }, [selectedDate, selectedMonth, loadAppointments, barbeiroId]);
 
   // Centraliza o carrossel no dia selecionado
   useEffect(() => {
@@ -449,9 +413,9 @@ export function AdminMobileAgenda({
 
   return (
     <div className="flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
-      {/* ══════ HEADER FIXO: Fundo Opaco (não vaza nada por trás), 100% Padrão do App ══════ */}
+      {/* ══════ HEADER FIXO: 100% OPACO (sem vazamento de agendamentos por trás) ══════ */}
       <div className="flex-shrink-0 z-20 bg-background pt-3 pb-2 border-b border-border/40 dark:border-white/[0.06]">
-        {/* Linha 1: Mês/Ano e Setas com Toque Confortável */}
+        {/* Linha 1: Mês/Ano + Botão Hoje + Setas de Navegação */}
         <div className="flex items-center justify-between px-4 mb-2.5">
           {/* Seletor Mês/Ano */}
           <div className="flex items-center gap-2 min-w-0">
@@ -499,96 +463,98 @@ export function AdminMobileAgenda({
           </div>
         </div>
 
-        {/* ══════ CARROSSEL 100% EDGE-TO-EDGE — Arejado, Minimalista e Nítido ══════ */}
+        {/* ══════ CARROSSEL ORIGINAL COM SQUIRCLES REDONDINHAS (100% Padrão Solicitado) ══════ */}
         <div
           ref={carouselRef}
-          className="w-full overflow-x-auto scrollbar-hide px-3"
+          className="w-full overflow-x-auto scrollbar-hide px-3 py-1"
           style={{
             WebkitOverflowScrolling: "touch",
           }}
         >
-          <div className="flex items-center gap-2 w-max py-0.5">
+          <div className="flex items-end gap-1.5 w-max px-2">
             {daysInMonth.map((day) => {
               const isSelected = isSameDay(day, selectedDate);
               const dayIsToday = isToday(day);
               const dateKey = format(day, "yyyy-MM-dd");
-              const count = monthCounts[dateKey] ?? 0;
-              const rawDay = format(day, "EEE", { locale: ptBR }).replace(".", "");
-              const dayOfWeek = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
-              const dayNumber = format(day, "d");
 
               return (
-                <button
+                <div
                   key={dateKey}
                   data-date={dateKey}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDate(day);
-                    scrollToDay(day, "smooth");
-                  }}
-                  className={cn(
-                    "flex-shrink-0 flex flex-col items-center justify-between w-[56px] h-[78px] py-2 px-1 rounded-2xl transition-all duration-150 cursor-pointer select-none active:scale-95",
-                    isSelected
-                      ? "bg-foreground text-background shadow-xs font-semibold"
-                      : cn(
-                          "bg-card/60 dark:bg-[#141414] border border-border/50 dark:border-white/[0.06] hover:bg-secondary/40 text-foreground",
-                          dayIsToday && "ring-1 ring-foreground/30 dark:ring-white/30"
-                        )
-                  )}
+                  className="flex-shrink-0 w-11"
                 >
-                  {/* 1ª Linha: Dia da semana */}
-                  <span
-                    className={cn(
-                      "text-[10.5px] font-semibold tracking-wider uppercase leading-none",
-                      isSelected ? "text-background/80" : "text-muted-foreground/70"
-                    )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDate(day);
+                      scrollToDay(day, "smooth");
+                    }}
+                    className="w-full flex flex-col items-center gap-1.5 py-1 active:scale-95 cursor-pointer select-none transition-all"
+                    style={{
+                      transform: isSelected ? "translateY(-2px)" : "translateY(0px)",
+                    }}
                   >
-                    {dayOfWeek}
-                  </span>
+                    {/* Dia da semana em cima */}
+                    <span className={cn(
+                      "text-[9.5px] font-bold uppercase leading-none tracking-wider",
+                      isSelected ? "text-foreground" : "text-muted-foreground/60"
+                    )}>
+                      {shortDayName(day)}
+                    </span>
 
-                  {/* 2ª Linha: Número do dia */}
-                  <span
-                    className={cn(
-                      "text-[17px] font-bold leading-none tracking-tight my-auto",
-                      isSelected ? "text-background font-black" : "text-foreground"
-                    )}
-                  >
-                    {dayNumber}
-                  </span>
+                    {/* Squircle redondinha moderno */}
+                    <div
+                      className={cn(
+                        "w-10 h-10 flex items-center justify-center rounded-2xl will-change-transform transition-all",
+                        isSelected
+                          ? "bg-foreground text-background shadow-sm font-bold"
+                          : "text-foreground font-semibold hover:bg-secondary/40 bg-card/40 dark:bg-white/[0.03] border border-border/30 dark:border-white/[0.05]",
+                        dayIsToday && !isSelected && "ring-1 ring-primary/40 text-primary font-bold"
+                      )}
+                      style={{
+                        transform: isSelected ? "scale(1.05)" : "scale(1)",
+                        transition: "transform 200ms ease-out",
+                      }}
+                    >
+                      <span
+                        className={cn(
+                          "leading-none",
+                          isSelected ? "text-background text-[15px] font-bold" : "text-foreground text-[13px] font-semibold"
+                        )}
+                      >
+                        {format(day, "d")}
+                      </span>
+                    </div>
 
-                  {/* 3ª Linha: Slots / Agendamentos */}
-                  <span
-                    className={cn(
-                      "text-[9.5px] font-medium leading-none tabular-nums",
-                      isSelected
-                        ? "text-background/80"
-                        : count > 0
-                        ? "text-muted-foreground/80 font-semibold"
-                        : "text-muted-foreground/30 font-normal"
-                    )}
-                  >
-                    {count === 0 ? "-" : `${count} ${count === 1 ? 'slot' : 'slots'}`}
-                  </span>
-                </button>
+                    {/* Dot indicador de seleção */}
+                    <div className="h-1.5 flex items-center justify-center">
+                      {isSelected ? (
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      ) : (
+                        <div className="w-1.5 h-1.5" />
+                      )}
+                    </div>
+                  </button>
+                </div>
               );
             })}
           </div>
         </div>
       </div>
 
-      {/* ══════ ÁREA SCROLLÁVEL: COM MÁSCARA DE DESAPARECIMENTO NO TOPO (NÃO VAZA ATRÁS DO CARROSSEL) ══════ */}
+      {/* ══════ ÁREA SCROLLÁVEL: MÁSCARA FADE NO TOPO + CARDS LARGOS E ESPECÍFICOS ══════ */}
       <div className="flex-1 min-h-0 relative">
-        {/* Fade mask superior: os agendamentos desaparecem suavemente ANTES de chegar no carrossel */}
+        {/* Fade mask no topo: agendamentos desaparecem suavemente ANTES do carrossel */}
         <div 
           className="absolute top-0 inset-x-0 h-6 z-10 pointer-events-none bg-gradient-to-b from-background to-transparent" 
         />
 
         <div className="h-full overflow-y-auto overscroll-contain pb-24 pt-2">
           
-          {/* ══════ BARRA DE AÇÃO: Data com Destaque + Botão de Encaixe com Proporção Ideal ══════ */}
-          <div className="px-4 pt-2 pb-2.5 flex items-center justify-between">
+          {/* ══════ BARRA DE AÇÃO SUPERIOR: DATA + BOTÃO NOVO ENCAIXE ══════ */}
+          <div className="px-4 pt-1 pb-3 flex items-center justify-between">
             <div className="min-w-0 pr-2">
-              <h3 className="text-[14px] font-bold text-foreground tracking-tight capitalize truncate">
+              <h3 className="text-[14.5px] font-bold text-foreground tracking-tight capitalize truncate">
                 {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
               </h3>
               <p className="text-[11.5px] font-medium text-muted-foreground mt-0.5">
@@ -611,20 +577,20 @@ export function AdminMobileAgenda({
                   setManualBookingOpen(true);
                 }
               }}
-              className="h-8 px-3 rounded-xl border border-border/70 dark:border-white/[0.1] bg-secondary/60 dark:bg-white/[0.05] hover:bg-secondary text-foreground text-[12px] font-semibold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-xs shrink-0"
+              className="h-8.5 px-3.5 rounded-xl border border-border/70 dark:border-white/[0.1] bg-secondary/60 dark:bg-white/[0.05] hover:bg-secondary text-foreground text-[12px] font-semibold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-xs shrink-0"
               aria-label="Novo Encaixe"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[2] text-foreground" />
+              <Plus className="w-3.5 h-3.5 stroke-[2.2] text-foreground" />
               <span>Novo Encaixe</span>
             </button>
           </div>
 
           {!isShowingSelectedDate ? (
-            <div className="px-4 space-y-2.5 animate-pulse mt-1">
+            <div className="px-4 space-y-3 animate-pulse mt-1">
               {[0, 1, 2].map((item) => (
                 <div key={item} className="rounded-2xl border border-border/40 dark:border-white/[0.05] bg-card p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="h-4 w-20 rounded-full bg-muted/40" />
+                    <div className="h-4 w-24 rounded-full bg-muted/40" />
                     <div className="h-3 w-16 rounded-full bg-muted/30" />
                   </div>
                   <div className="h-4 w-36 rounded-full bg-muted/40" />
@@ -669,7 +635,8 @@ export function AdminMobileAgenda({
               </button>
             </div>
           ) : (
-            <div className="px-4 space-y-2.5 mt-1">
+            /* ══════ CARDS LARGOS, ESPAÇOSOS E COM INFORMAÇÕES ESPECÍFICAS ══════ */
+            <div className="px-4 space-y-3 mt-1">
               {appointments.map((apt) => {
                 const statusConfig = getStatusConfig(apt.status, apt.barbeiro_confirmou);
                 const paymentBadge = getPaymentBadge(apt);
@@ -707,54 +674,63 @@ export function AdminMobileAgenda({
                     onClick={() => onAppointmentClick?.(apt)}
                     style={{ opacity: isPast ? 0.45 : 1 }}
                     className={cn(
-                      "w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card dark:bg-[#141414] p-3.5 sm:p-4 flex items-center gap-3.5 shadow-xs",
-                      "hover:border-border active:scale-[0.99] transition-all cursor-pointer"
+                      "w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card dark:bg-[#141414] p-4 space-y-3 shadow-xs",
+                      "hover:border-foreground/20 active:scale-[0.99] transition-all cursor-pointer relative overflow-hidden"
                     )}
                   >
-                    {/* Bloco de Horário — Foco Visual Imediato (Padrão Oficial da Tela Inicial) */}
-                    <div className="w-[54px] h-[54px] rounded-xl bg-secondary/70 dark:bg-white/[0.06] border border-border/50 dark:border-white/[0.08] flex flex-col items-center justify-center shrink-0">
-                      <span className="text-[16px] font-bold font-mono text-foreground leading-tight tracking-tight">
-                        {horaFormatted}
-                      </span>
-                      <span className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider leading-none mt-0.5">
-                        {duration}m
-                      </span>
-                    </div>
-
-                    {/* Informações Centrais: Nome do Cliente + Serviço + Status Oficial */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-[15px] sm:text-[15.5px] font-bold text-foreground truncate tracking-tight">
-                          {clientName}
-                        </p>
-                        {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
+                    {/* Linha 1: Horário + Duração à esquerda | Status colorido oficial à direita */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[12.5px] font-bold px-2.5 py-0.5 rounded-lg bg-secondary/80 dark:bg-white/[0.08] text-foreground tabular-nums border border-border/30 dark:border-white/[0.06]">
+                          {horaFormatted}
+                        </span>
+                        <span className="text-[12px] text-muted-foreground flex items-center gap-1 font-medium">
+                          <Clock className="w-3.5 h-3.5 text-muted-foreground/60" />
+                          {duration} min
+                        </span>
                       </div>
 
-                      <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                        <span className="text-[12.5px] text-muted-foreground truncate">
-                          {serviceName}
-                        </span>
-                        <span className="text-muted-foreground/30">•</span>
-                        <span className={cn("text-[11.5px] font-semibold shrink-0 flex items-center gap-1", statusConfig.textColor)}>
-                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
+                      {/* Status com ponto e texto nas cores solicitadas */}
+                      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary/40 dark:bg-white/[0.03] border border-border/30 dark:border-white/[0.06]">
+                        <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
+                        <span className={cn("text-[11.5px] font-semibold", statusConfig.textColor)}>
                           {statusConfig.statusLabel}
                         </span>
                       </div>
                     </div>
 
-                    {/* Lado Direito: Método de Pagamento (com Ícone) e Preço */}
-                    <div className="flex flex-col items-end shrink-0 pl-2">
-                      <span className="text-[14px] font-bold tabular-nums text-foreground">
+                    {/* Linha 2: Nome do Cliente com Destaque Forte + Preço */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[16px] font-bold text-foreground tracking-tight truncate">
+                          {clientName}
+                        </span>
+                        {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
+                      </div>
+
+                      {/* Preço em destaque */}
+                      <span className="text-[15px] font-bold tabular-nums text-foreground shrink-0">
                         {isPlan
                           ? "Plano"
                           : isFree
                             ? "Grátis"
                             : `R$ ${apt.preco.toFixed(2).replace('.', ',')}`}
                       </span>
+                    </div>
 
-                      <div className="flex items-center gap-1 mt-0.5 text-muted-foreground/75">
-                        <PayIcon className="w-3 h-3 text-muted-foreground/60" />
-                        <span className="text-[11px] font-medium">
+                    {/* Linha 3: Serviço com Tesoura à esquerda | Método de Pagamento com Ícone à direita */}
+                    <div className="flex items-center justify-between pt-2.5 border-t border-border/30 dark:border-white/[0.06] text-xs">
+                      <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                        <Scissors className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                        <span className="text-muted-foreground font-medium text-[12.5px] truncate">
+                          {serviceName}
+                        </span>
+                      </div>
+
+                      {/* Ícone e Nome do Pagamento */}
+                      <div className="flex items-center gap-1.5 shrink-0 px-2.5 py-0.5 rounded-md bg-secondary/50 dark:bg-white/[0.04] border border-border/30 dark:border-white/[0.05]">
+                        <PayIcon className="w-3 h-3 text-muted-foreground/70" />
+                        <span className="text-[11px] font-medium text-muted-foreground">
                           {paymentBadge.label}
                         </span>
                       </div>
@@ -891,7 +867,6 @@ export function AdminMobileAgenda({
         onSuccess={() => {
           cacheRef.current.delete(selectedDateKey);
           loadAppointments(selectedDate, { silent: true, visible: true });
-          loadMonthCounts(selectedMonth);
         }}
         skipValidation={true}
         barbeiroId={barbeiroId || undefined}
