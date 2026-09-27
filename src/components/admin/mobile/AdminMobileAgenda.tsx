@@ -808,7 +808,7 @@ export function AdminMobileAgenda({
                       className={cn(
                         "agenda-strong font-mono text-[14.5px] tabular-nums tracking-tight transition-colors",
                         isNextAppointment
-                          ? "text-emerald-600 dark:text-emerald-400/75 font-semibold"
+                          ? "text-emerald-600 dark:text-emerald-400/75 font-semibold animate-soft-blink"
                           : "text-foreground font-bold"
                       )}
                     >
