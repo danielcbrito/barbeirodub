@@ -192,17 +192,17 @@ const FloatingInput = ({
 
   return (
     <div
-      className={`relative h-[58px] rounded-xl transition-all duration-150 ${
+      className={`relative h-[62px] rounded-2xl transition-all duration-150 ${
         focused
-          ? "border-2 border-primary bg-background shadow-sm"
-          : "border border-foreground/25 bg-background hover:border-foreground/40"
+          ? "border-2 border-primary bg-transparent shadow-sm"
+          : "border border-transparent bg-foreground/[0.06] hover:bg-foreground/[0.08]"
       }`}
     >
       <label
         htmlFor={id}
-        className={`pointer-events-none absolute left-4 select-none transition-all duration-150 ${
+        className={`pointer-events-none absolute left-5 select-none transition-all duration-150 ${
           active
-            ? `top-[8px] text-[11.5px] font-medium tracking-wide leading-none ${
+            ? `top-[9px] text-[11.5px] font-medium tracking-wide leading-none ${
                 focused ? "text-primary" : "text-foreground/55"
               }`
             : "top-1/2 -translate-y-1/2 text-[15.5px] font-normal text-foreground/45"
@@ -229,14 +229,14 @@ const FloatingInput = ({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         data-no-auto-scroll="true"
-        className={`peer h-full w-full rounded-xl bg-transparent px-4 pt-[20px] pb-[6px] ${
+        className={`peer h-full w-full rounded-2xl bg-transparent px-5 pt-[22px] pb-[6px] ${
           rightSlot ? "pr-12" : ""
         } text-[15.5px] text-foreground placeholder:text-foreground/35 caret-primary outline-none leading-normal font-normal`}
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
 
       {rightSlot && (
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center">
+        <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center">
           {rightSlot}
         </div>
       )}
@@ -269,7 +269,7 @@ const CountryPicker = ({
         <button
           type="button"
           aria-label={`País: ${value.name} +${value.dial}`}
-          className="flex h-[58px] shrink-0 items-center gap-1.5 rounded-xl border border-foreground/25 bg-background px-3.5 outline-none transition-colors focus-visible:border-primary"
+          className="flex h-[62px] shrink-0 items-center gap-1.5 rounded-2xl border border-transparent bg-foreground/[0.06] hover:bg-foreground/[0.08] px-3.5 outline-none transition-colors focus-visible:border-primary"
         >
           <FlagIcon code={value.code} className="w-7 h-5" />
           <span className="text-[15px] font-medium text-foreground">+{value.dial}</span>
@@ -897,13 +897,13 @@ const Auth = () => {
                   </button>
                 </div>
 
-                {/* Botão Continuar — no fluxo normal, espaçoso e longe do teclado */}
-                <div className="pt-3">
+                {/* Botão Continuar — arredondado (rounded-full) no fluxo normal */}
+                <div className="pt-4">
                   <button
                     type="submit"
                     onClick={onCtaClick}
                     disabled={!canGoCta || isLoading}
-                    className="w-full h-[52px] rounded-xl bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-bold text-[15.5px] tracking-normal shadow-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                     style={{ touchAction: "manipulation" }}
                   >
                     {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
@@ -966,12 +966,12 @@ const Auth = () => {
                     </div>
                   )}
 
-                  <div className="pt-3">
+                  <div className="pt-4">
                     <button
                       type="submit"
                       onClick={onCtaClick}
                       disabled={!canGoCta || isLoading}
-                      className="w-full h-[52px] rounded-xl bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-bold text-[15.5px] tracking-normal shadow-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                       style={{ touchAction: "manipulation" }}
                     >
                       {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
