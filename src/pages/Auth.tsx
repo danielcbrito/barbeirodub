@@ -859,44 +859,56 @@ const Auth = () => {
   return (
     <div
       data-no-auto-scroll="true"
-      className="fixed inset-x-0 top-0 flex flex-col justify-between overflow-hidden bg-background text-foreground"
+      className="fixed inset-x-0 top-0 flex flex-col overflow-hidden bg-background text-foreground"
       style={{
         height: `${viewportHeight}px`,
         maxHeight: "100dvh",
       }}
     >
-      {/* ─── Header ───────────────────────────────────────────────── */}
-      <header
-        className="relative flex items-center justify-center px-4 shrink-0 transition-all"
+      {/* ─── Header — collapses smoothly when keyboard opens (like Instagram/iFood) ─── */}
+      <div
+        className="shrink-0 overflow-hidden transition-all duration-300 ease-out"
         style={{
+          maxHeight: isKeyboardOpen ? 0 : 80,
+          opacity: isKeyboardOpen ? 0 : 1,
           paddingTop: isKeyboardOpen
-            ? "8px"
+            ? 0
             : "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
-          paddingBottom: isKeyboardOpen ? "4px" : "10px",
+          paddingBottom: isKeyboardOpen ? 0 : 10,
         }}
       >
-        <button
-          type="button"
-          onClick={onBackClick}
-          aria-label="Voltar"
-          className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
-          style={{ touchAction: "manipulation" }}
-        >
-          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-        </button>
-        <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground/90">{title}</h2>
-      </header>
+        <header className="relative flex items-center justify-center px-4">
+          <button
+            type="button"
+            onClick={onBackClick}
+            aria-label="Voltar"
+            className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
+            style={{ touchAction: "manipulation" }}
+          >
+            <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
+          </button>
+          <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground/90">{title}</h2>
+        </header>
+      </div>
 
       {/* Progress bar (signup) */}
       {mode === "signup" && (
-        <div className="px-6 pb-1 shrink-0 max-w-md mx-auto w-full">
-          <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{
-                width: `${((SIGNUP_ORDER.indexOf(step) + 1) / SIGNUP_ORDER.length) * 100}%`,
-              }}
-            />
+        <div
+          className="shrink-0 overflow-hidden transition-all duration-300 ease-out"
+          style={{
+            maxHeight: isKeyboardOpen ? 0 : 20,
+            opacity: isKeyboardOpen ? 0 : 1,
+          }}
+        >
+          <div className="px-6 pb-1 max-w-md mx-auto w-full">
+            <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{
+                  width: `${((SIGNUP_ORDER.indexOf(step) + 1) / SIGNUP_ORDER.length) * 100}%`,
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -910,31 +922,32 @@ const Auth = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-full pt-1 sm:pt-4"
+            className="w-full"
           >
             {mode === "login" ? (
               <>
-                <h1
-                  className={cn(
-                    "font-extrabold tracking-tight text-foreground leading-tight transition-all",
-                    isKeyboardOpen ? "text-[21px]" : "text-[26px]"
-                  )}
+                {/* Title + subtitle — collapses when keyboard opens */}
+                <div
+                  className="overflow-hidden transition-all duration-300 ease-out"
+                  style={{
+                    maxHeight: isKeyboardOpen ? 0 : 120,
+                    opacity: isKeyboardOpen ? 0 : 1,
+                    marginBottom: isKeyboardOpen ? 0 : 24,
+                    paddingTop: isKeyboardOpen ? 0 : 4,
+                  }}
                 >
-                  Entrar na sua conta
-                </h1>
-                <p
-                  className={cn(
-                    "text-foreground/60 transition-all",
-                    isKeyboardOpen ? "text-[12px] mt-0.5" : "text-[13.5px] mt-1"
-                  )}
-                >
-                  Informe suas credenciais para acessar o aplicativo
-                </p>
+                  <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
+                    Entrar na sua conta
+                  </h1>
+                  <p className="text-[13.5px] text-foreground/60 mt-1">
+                    Informe suas credenciais para acessar o aplicativo
+                  </p>
+                </div>
 
                 <form
                   id="auth-login-form"
                   onSubmit={handleLoginSubmit}
-                  className={cn("space-y-3 transition-all", isKeyboardOpen ? "mt-3" : "mt-6")}
+                  className="space-y-3"
                   noValidate
                 >
                   <FloatingInput
@@ -990,22 +1003,23 @@ const Auth = () => {
               </>
             ) : (
               <>
-                <h1
-                  className={cn(
-                    "font-extrabold tracking-tight text-foreground leading-tight transition-all",
-                    isKeyboardOpen ? "text-[20px]" : "text-[24px]"
-                  )}
+                {/* Signup title + subtitle — collapses when keyboard opens */}
+                <div
+                  className="overflow-hidden transition-all duration-300 ease-out"
+                  style={{
+                    maxHeight: isKeyboardOpen ? 0 : 120,
+                    opacity: isKeyboardOpen ? 0 : 1,
+                    marginBottom: isKeyboardOpen ? 0 : 24,
+                    paddingTop: isKeyboardOpen ? 0 : 4,
+                  }}
                 >
-                  {signupContent!.heading}
-                </h1>
-                <p
-                  className={cn(
-                    "text-foreground/60 transition-all",
-                    isKeyboardOpen ? "text-[12px] mt-0.5" : "text-[13.5px] mt-1.5"
-                  )}
-                >
-                  {signupContent!.hint}
-                </p>
+                  <h1 className="text-[24px] font-extrabold tracking-tight text-foreground leading-tight">
+                    {signupContent!.heading}
+                  </h1>
+                  <p className="text-[13.5px] text-foreground/60 mt-1.5">
+                    {signupContent!.hint}
+                  </p>
+                </div>
 
                 <form
                   id="auth-signup-form"
@@ -1013,7 +1027,7 @@ const Auth = () => {
                     e.preventDefault();
                     handleSignupNext();
                   }}
-                  className={cn("space-y-3 transition-all", isKeyboardOpen ? "mt-3" : "mt-6")}
+                  className="space-y-3"
                   noValidate
                 >
                   {signupContent!.input}
@@ -1047,7 +1061,7 @@ const Auth = () => {
         </AnimatePresence>
       </main>
 
-      {/* ─── Footer / CTA — Sobe junto do teclado e fica colado na base sem cobrir os campos ──── */}
+      {/* ─── Footer / CTA — Sobe junto do teclado ──── */}
       <footer
         className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20 transition-all"
         style={{

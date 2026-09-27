@@ -5,7 +5,6 @@ import { ChevronLeft, Loader2, CheckCircle2 } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { cn } from "@/lib/utils";
 
 const emailSchema = z.object({
   email: z.string().trim().email("Email inválido"),
@@ -180,32 +179,36 @@ const ForgotPassword = () => {
   return (
     <div
       data-no-auto-scroll="true"
-      className="fixed inset-x-0 top-0 flex flex-col justify-between overflow-hidden bg-background text-foreground"
+      className="fixed inset-x-0 top-0 flex flex-col overflow-hidden bg-background text-foreground"
       style={{
         height: `${viewportHeight}px`,
         maxHeight: "100dvh",
       }}
     >
-      {/* Top bar */}
+      {/* Header — collapses smoothly when keyboard opens */}
       <div
-        className="relative flex items-center justify-center px-4 shrink-0 transition-all"
+        className="shrink-0 overflow-hidden transition-all duration-300 ease-out"
         style={{
+          maxHeight: isKeyboardOpen ? 0 : 80,
+          opacity: isKeyboardOpen ? 0 : 1,
           paddingTop: isKeyboardOpen
-            ? "8px"
+            ? 0
             : "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 10px)",
-          paddingBottom: isKeyboardOpen ? "4px" : "10px",
+          paddingBottom: isKeyboardOpen ? 0 : 10,
         }}
       >
-        <button
-          type="button"
-          onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
-          className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 active:scale-95 transition-all"
-          aria-label="Voltar"
-          style={{ touchAction: "manipulation" }}
-        >
-          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-        </button>
-        <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground">Recuperar senha</h2>
+        <div className="relative flex items-center justify-center px-4">
+          <button
+            type="button"
+            onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
+            className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 active:scale-95 transition-all"
+            aria-label="Voltar"
+            style={{ touchAction: "manipulation" }}
+          >
+            <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
+          </button>
+          <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground">Recuperar senha</h2>
+        </div>
       </div>
 
       {/* Content */}
@@ -218,28 +221,29 @@ const ForgotPassword = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
-              className="w-full pt-1 sm:pt-4"
+              className="w-full"
             >
-              <h1
-                className={cn(
-                  "font-extrabold tracking-tight text-foreground leading-tight transition-all",
-                  isKeyboardOpen ? "text-[21px]" : "text-[26px]"
-                )}
+              {/* Title + subtitle — collapses when keyboard opens */}
+              <div
+                className="overflow-hidden transition-all duration-300 ease-out"
+                style={{
+                  maxHeight: isKeyboardOpen ? 0 : 120,
+                  opacity: isKeyboardOpen ? 0 : 1,
+                  marginBottom: isKeyboardOpen ? 0 : 24,
+                  paddingTop: isKeyboardOpen ? 0 : 4,
+                }}
               >
-                Esqueceu sua senha?
-              </h1>
-              <p
-                className={cn(
-                  "text-foreground/55 transition-all",
-                  isKeyboardOpen ? "text-[12px] mt-0.5" : "text-[13px] mt-1.5"
-                )}
-              >
-                Digite seu e-mail e enviaremos um link para você criar uma nova senha.
-              </p>
+                <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
+                  Esqueceu sua senha?
+                </h1>
+                <p className="text-[13px] text-foreground/55 mt-1.5">
+                  Digite seu e-mail e enviaremos um link para você criar uma nova senha.
+                </p>
+              </div>
 
               <form
                 onSubmit={handleSubmit}
-                className={cn("space-y-3 transition-all", isKeyboardOpen ? "mt-3" : "mt-6")}
+                className="space-y-3"
                 noValidate
               >
                 <FloatingInput
@@ -290,7 +294,7 @@ const ForgotPassword = () => {
         </AnimatePresence>
       </main>
 
-      {/* Bottom CTA — Sobe junto do teclado e fica sempre na base sem sobrepor os campos */}
+      {/* Bottom CTA */}
       <footer
         className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20 transition-all"
         style={{
