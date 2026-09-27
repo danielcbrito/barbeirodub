@@ -66,18 +66,18 @@ interface AdminMobileAgendaProps {
   showBack?: boolean;
 }
 
-/** Status minimalista: dot + label discreto */
+/** Status minimalista: dot + label discreto em tons neutros/monocromáticos */
 const getStatusColorConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "completed") {
-    return { dot: "bg-emerald-500", statusLabel: "Concluído" };
+    return { dot: "bg-foreground/70 dark:bg-white/70", statusLabel: "Concluído" };
   }
   if (status === "no_show") {
-    return { dot: "bg-orange-500", statusLabel: "Não veio" };
+    return { dot: "bg-red-500", statusLabel: "Não veio" };
   }
   if (status === "confirmed" || barbeiroConfirmou) {
-    return { dot: "bg-blue-500", statusLabel: "Agendado" };
+    return { dot: "bg-foreground dark:bg-white", statusLabel: "Agendado" };
   }
-  return { dot: "bg-amber-500", statusLabel: "Pendente" };
+  return { dot: "bg-muted-foreground/60", statusLabel: "Pendente" };
 };
 
 /** Pagamento minimalista */
@@ -268,47 +268,49 @@ export function AdminMobileAgenda({
         }
 
         const { data, error } = await query;
-        if (error) throw error;
+        if (!error && data) {
+          const rawAppointments = data || [];
+          const userIds = [...new Set(rawAppointments.map((apt) => apt.user_id).filter(Boolean))];
+          const serviceIds = [...new Set(rawAppointments.map((apt) => apt.servico_id).filter(Boolean))];
 
-        const rawAppointments = data || [];
-        const userIds = [...new Set(rawAppointments.map((apt) => apt.user_id).filter(Boolean))];
-        const serviceIds = [...new Set(rawAppointments.map((apt) => apt.servico_id).filter(Boolean))];
+          const [profilesRes, servicosRes] = await Promise.all([
+            userIds.length
+              ? supabase.from("profiles").select("id, nome, telefone").in("id", userIds)
+              : Promise.resolve({ data: [] }),
+            serviceIds.length
+              ? supabase.from("servicos").select("id, nome, duracao_minutos").in("id", serviceIds)
+              : Promise.resolve({ data: [] }),
+          ]);
 
-        const [profilesRes, servicosRes] = await Promise.all([
-          userIds.length
-            ? supabase.from("profiles").select("id, nome, telefone").in("id", userIds)
-            : Promise.resolve({ data: [] }),
-          serviceIds.length
-            ? supabase.from("servicos").select("id, nome, duracao_minutos").in("id", serviceIds)
-            : Promise.resolve({ data: [] }),
-        ]);
+          const profilesMap = new Map(
+            ((profilesRes.data || []) as Array<{ id: string; nome: string; telefone?: string | null }>).map((profile) => [
+              profile.id,
+              { nome: profile.nome, telefone: profile.telefone ?? undefined },
+            ])
+          );
+          const servicosMap = new Map(
+            ((servicosRes.data || []) as Array<{ id: string; nome: string; duracao_minutos: number }>).map((servico) => [servico.id, servico])
+          );
 
-        const profilesMap = new Map(
-          ((profilesRes.data || []) as Array<{ id: string; nome: string; telefone?: string | null }>).map((profile) => [
-            profile.id,
-            { nome: profile.nome, telefone: profile.telefone ?? undefined },
-          ])
-        );
-        const servicosMap = new Map(
-          ((servicosRes.data || []) as Array<{ id: string; nome: string; duracao_minutos: number }>).map((servico) => [servico.id, servico])
-        );
-
-        appointmentsWithDetails = rawAppointments.map((apt) => {
-          const walkInName = extractWalkInName(apt.observacoes);
-          const whatsAppName = extractWhatsAppName(apt.observacoes);
-          const displayName = whatsAppName || walkInName || null;
-          const profile = displayName
-            ? { nome: displayName, telefone: profilesMap.get(apt.user_id)?.telefone ?? undefined }
-            : profilesMap.get(apt.user_id) || null;
-          return { ...apt, profile, servico: servicosMap.get(apt.servico_id) || null };
-        }) as MobileAppointment[];
+          appointmentsWithDetails = rawAppointments.map((apt) => {
+            const walkInName = extractWalkInName(apt.observacoes);
+            const whatsAppName = extractWhatsAppName(apt.observacoes);
+            const displayName = whatsAppName || walkInName || null;
+            const profile = displayName
+              ? { nome: displayName, telefone: profilesMap.get(apt.user_id)?.telefone ?? undefined }
+              : profilesMap.get(apt.user_id) || null;
+            return { ...apt, profile, servico: servicosMap.get(apt.servico_id) || null };
+          }) as MobileAppointment[];
+        }
       }
 
-      cacheRef.current.set(dateStr, appointmentsWithDetails);
-      writeSyncCache(syncKey(dateStr), appointmentsWithDetails);
+      if (appointmentsWithDetails) {
+        cacheRef.current.set(dateStr, appointmentsWithDetails);
+        writeSyncCache(syncKey(dateStr), appointmentsWithDetails);
 
-      if (visible && visibleDateRef.current === dateStr && requestSeqRef.current === requestId) {
-        commitAppointments(appointmentsWithDetails, dateStr);
+        if (visible && visibleDateRef.current === dateStr && requestSeqRef.current === requestId) {
+          commitAppointments(appointmentsWithDetails, dateStr);
+        }
       }
 
     } catch (error) {
@@ -427,10 +429,11 @@ export function AdminMobileAgenda({
 
   return (
     <div className="flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
-      {/* ══════ HEADER FIXO: Minimalista, Sério, Alto Padrão ══════ */}
-      <div className="flex-shrink-0 z-20 bg-background/95 backdrop-blur-md border-b border-border/40 dark:border-white/[0.06] pt-3 pb-3">
+      {/* ══════ HEADER FIXO: Minimalista, Monocromático, Sem Linha ("Listra") Dura ══════ */}
+      {/* Sombra suave e sem border-b para que os agendamentos rolem por trás de forma fluida */}
+      <div className="flex-shrink-0 z-20 bg-background/95 backdrop-blur-md pt-3 pb-2 shadow-[0_4px_16px_-4px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_-4px_rgba(0,0,0,0.5)]">
         {/* Linha 1: Mês/Ano com Dropdown + Setas de Navegação */}
-        <div className="flex items-center justify-between px-4 mb-3">
+        <div className="flex items-center justify-between px-4 mb-2.5">
           {/* Seletor Mês/Ano */}
           <div className="flex items-center gap-2 min-w-0">
             <button
@@ -439,7 +442,7 @@ export function AdminMobileAgenda({
                 setPickerYear(selectedMonth.getFullYear());
                 setIsMonthPickerOpen(true);
               }}
-              className="flex items-center gap-1.5 text-[17px] font-bold text-foreground capitalize tracking-tight hover:opacity-85 active:scale-95 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 text-[16px] font-bold text-foreground capitalize tracking-tight hover:opacity-80 active:scale-95 transition-all cursor-pointer"
             >
               <span>{format(selectedMonth, "MMMM yyyy", { locale: ptBR })}</span>
               <ChevronDown className="w-4 h-4 text-muted-foreground stroke-[2.2]" />
@@ -457,27 +460,27 @@ export function AdminMobileAgenda({
           </div>
 
           {/* Setas Anterior / Próximo Mês */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={goToPreviousMonth}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-foreground hover:bg-secondary/80 active:scale-90 transition-all border border-border/40 dark:border-white/[0.08] cursor-pointer"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-foreground hover:bg-secondary active:scale-90 transition-all border border-border/40 dark:border-white/[0.08] cursor-pointer"
               aria-label="Mês anterior"
             >
-              <ChevronLeft className="w-4 h-4 stroke-[2.2]" />
+              <ChevronLeft className="w-3.5 h-3.5 stroke-[2.2]" />
             </button>
             <button
               type="button"
               onClick={goToNextMonth}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-foreground hover:bg-secondary/80 active:scale-90 transition-all border border-border/40 dark:border-white/[0.08] cursor-pointer"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-foreground hover:bg-secondary active:scale-90 transition-all border border-border/40 dark:border-white/[0.08] cursor-pointer"
               aria-label="Próximo mês"
             >
-              <ChevronRight className="w-4 h-4 stroke-[2.2]" />
+              <ChevronRight className="w-3.5 h-3.5 stroke-[2.2]" />
             </button>
           </div>
         </div>
 
-        {/* ══════ CARROSSEL 100% EDGE-TO-EDGE ══════ */}
+        {/* ══════ CARROSSEL 100% EDGE-TO-EDGE — Cores Preto & Branco, Tipografia Desafogada ══════ */}
         <div
           ref={carouselRef}
           className="w-full overflow-x-auto scrollbar-hide px-3"
@@ -491,7 +494,8 @@ export function AdminMobileAgenda({
               const dayIsToday = isToday(day);
               const dateKey = format(day, "yyyy-MM-dd");
               const count = monthCounts[dateKey] ?? 0;
-              const dayOfWeek = format(day, "EEE", { locale: ptBR }).replace(".", "");
+              const rawDay = format(day, "EEE", { locale: ptBR }).replace(".", "");
+              const dayOfWeek = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
               const dayNumber = format(day, "d");
 
               return (
@@ -504,44 +508,44 @@ export function AdminMobileAgenda({
                     scrollToDay(day, "smooth");
                   }}
                   className={cn(
-                    "flex-shrink-0 flex flex-col items-center justify-between w-[58px] h-[84px] py-2.5 px-1 rounded-2xl transition-all duration-200 cursor-pointer select-none active:scale-95",
+                    "flex-shrink-0 flex flex-col items-center justify-between w-[60px] h-[82px] py-2 px-1 rounded-2xl transition-all duration-200 cursor-pointer select-none active:scale-95",
                     isSelected
-                      ? "bg-gradient-to-b from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-600/25 ring-1 ring-emerald-400/40"
+                      ? "bg-foreground text-background shadow-md shadow-black/15 dark:shadow-white/10 font-semibold"
                       : cn(
-                          "bg-card/75 dark:bg-[#141414] border border-border/70 dark:border-white/[0.08] hover:bg-secondary/40 text-foreground",
-                          dayIsToday && "ring-1 ring-emerald-500/50"
+                          "bg-card/40 dark:bg-[#141414] border border-border/40 dark:border-white/[0.06] hover:bg-secondary/40 text-foreground",
+                          dayIsToday && "ring-1 ring-foreground/30 dark:ring-white/30"
                         )
                   )}
                 >
-                  {/* 1ª Linha: Dia da semana (ex: Seg, Ter, Qua) */}
+                  {/* 1ª Linha: Dia da semana (limpo, discreto, sem aperto) */}
                   <span
                     className={cn(
-                      "text-[11px] font-medium uppercase tracking-wider leading-none",
-                      isSelected ? "text-white/90 font-semibold" : "text-muted-foreground/75"
+                      "text-[11px] font-medium tracking-normal leading-none",
+                      isSelected ? "text-background/80 font-semibold" : "text-muted-foreground/70"
                     )}
                   >
                     {dayOfWeek}
                   </span>
 
-                  {/* 2ª Linha: Número do dia (ex: 12, 13, 14) */}
+                  {/* 2ª Linha: Número do dia */}
                   <span
                     className={cn(
-                      "text-[20px] font-bold leading-none tracking-tight",
-                      isSelected ? "text-white font-extrabold" : "text-foreground"
+                      "text-[18px] font-bold leading-none tracking-tight my-auto",
+                      isSelected ? "text-background font-extrabold" : "text-foreground"
                     )}
                   >
                     {dayNumber}
                   </span>
 
-                  {/* 3ª Linha: Slots / Agendamentos (ex: 2 slots, -, 6 slots) */}
+                  {/* 3ª Linha: Slots / Agendamentos */}
                   <span
                     className={cn(
-                      "text-[10px] font-medium leading-none tabular-nums",
+                      "text-[10px] font-normal leading-none tabular-nums",
                       isSelected
-                        ? "text-white/90 font-semibold"
+                        ? "text-background/80 font-medium"
                         : count > 0
                         ? "text-muted-foreground/80 font-medium"
-                        : "text-muted-foreground/40 font-normal"
+                        : "text-muted-foreground/30 font-normal"
                     )}
                   >
                     {count === 0 ? "-" : count === 1 ? "1 slot" : `${count} slots`}
@@ -553,11 +557,44 @@ export function AdminMobileAgenda({
         </div>
       </div>
 
-      {/* ══════ ÁREA SCROLLÁVEL: CARDS 100% SÉRIOS E MINIMALISTAS ══════ */}
+      {/* ══════ ÁREA SCROLLÁVEL: BARRA SUPERIOR DE ENCAIXE + CARDS MINIMALISTAS ══════ */}
       <div className="flex-1 min-h-0 relative">
-        <div className="h-full overflow-y-auto overscroll-contain pb-32 pt-3">
+        <div className="h-full overflow-y-auto overscroll-contain pb-24 pt-2">
+          
+          {/* ══════ BARRA DE AÇÃO ESTRATÉGICA: VISÍVEL, TRANSPARENTE E SEM COBRIR NADA ══════ */}
+          <div className="px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[12.5px] font-medium text-muted-foreground capitalize">
+                {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
+              </span>
+              {appointments.length > 0 && (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground tabular-nums">
+                  {appointments.length}
+                </span>
+              )}
+            </div>
+
+            {/* Botão de Encaixe Limpo e Transparente no Topo dos Agendamentos */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onAddClick) {
+                  onAddClick(selectedDateKey, "09:00");
+                } else {
+                  setSelectedSlotTime("09:00");
+                  setManualBookingOpen(true);
+                }
+              }}
+              className="h-7 px-2.5 rounded-lg border border-border/60 dark:border-white/[0.08] bg-transparent hover:bg-secondary/60 text-foreground text-[11.5px] font-medium flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+              aria-label="Novo Encaixe"
+            >
+              <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>Novo Encaixe</span>
+            </button>
+          </div>
+
           {!isShowingSelectedDate ? (
-            <div className="px-4 space-y-2.5 animate-pulse">
+            <div className="px-4 space-y-2.5 animate-pulse mt-1">
               {[0, 1, 2].map((item) => (
                 <div key={item} className="rounded-2xl border border-border/40 dark:border-white/[0.05] bg-card/60 p-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -574,17 +611,17 @@ export function AdminMobileAgenda({
             </div>
           ) : loading && !hasLoadedOnceRef.current && appointments.length === 0 ? (
             <div className="flex items-center justify-center h-40">
-              <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
             </div>
           ) : appointments.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-56 text-center px-8">
               <div className="w-12 h-12 rounded-2xl bg-secondary/50 dark:bg-white/[0.04] border border-border/40 dark:border-white/[0.06] flex items-center justify-center mb-3 text-muted-foreground/50">
                 <Calendar className="w-6 h-6 stroke-[1.6]" />
               </div>
-              <p className="text-[14.5px] font-semibold text-foreground">
+              <p className="text-[14px] font-semibold text-foreground">
                 {isToday(selectedDate) ? "Nenhum agendamento para hoje" : "Nenhum agendamento neste dia"}
               </p>
-              <p className="text-[12.5px] text-muted-foreground/75 mt-1 max-w-[260px] leading-relaxed">
+              <p className="text-[12px] text-muted-foreground/75 mt-1 max-w-[260px] leading-relaxed">
                 {isToday(selectedDate)
                   ? "Seus horários livres estão disponíveis e podem ser reservados a qualquer momento."
                   : "Navegue pelas datas no carrossel ou adicione um encaixe manual."}
@@ -606,7 +643,7 @@ export function AdminMobileAgenda({
               </button>
             </div>
           ) : (
-            <div className="px-4 space-y-2.5">
+            <div className="px-4 space-y-2 mt-1">
               {appointments.map((apt) => {
                 const statusConfig = getStatusColorConfig(apt.status, apt.barbeiro_confirmou);
                 const paymentBadge = getPaymentBadge(apt);
@@ -644,12 +681,12 @@ export function AdminMobileAgenda({
                     onClick={() => onAppointmentClick?.(apt)}
                     style={{ opacity: isPast ? 0.5 : 1 }}
                     className={cn(
-                      "rounded-2xl p-4 border border-border/50 dark:border-white/[0.07] bg-card/90 dark:bg-[#141414] shadow-[0_2px_8px_rgba(0,0,0,0.02)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)]",
+                      "rounded-2xl p-3.5 border border-border/40 dark:border-white/[0.06] bg-card/90 dark:bg-[#141414] shadow-[0_2px_8px_rgba(0,0,0,0.02)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)]",
                       "active:scale-[0.985] transition-all duration-150 cursor-pointer hover:border-foreground/20 relative overflow-hidden"
                     )}
                   >
                     {/* Linha Superior: Horário + Duração + Status */}
-                    <div className="flex items-center justify-between gap-2 mb-2 relative z-10">
+                    <div className="flex items-center justify-between gap-2 mb-1.5 relative z-10">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[12px] font-bold px-2 py-0.5 rounded-md bg-secondary/80 dark:bg-white/[0.08] text-foreground tabular-nums border border-border/30 dark:border-white/[0.06]">
                           {horaFormatted}
@@ -669,19 +706,16 @@ export function AdminMobileAgenda({
                     </div>
 
                     {/* Linha Central: Nome do Cliente (SEM fotos, SEM bolhas de avatar) */}
-                    <div className="flex items-center justify-between gap-2 mb-2.5 relative z-10">
+                    <div className="flex items-center justify-between gap-2 mb-2 relative z-10">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[15.5px] font-semibold text-foreground tracking-tight truncate">
+                        <span className="text-[15px] font-semibold text-foreground tracking-tight truncate">
                           {clientName}
                         </span>
                         {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       </div>
 
                       {/* Preço / Plano */}
-                      <span className={cn(
-                        "text-[14px] font-bold tabular-nums shrink-0",
-                        isFree ? "text-emerald-500 font-semibold" : "text-foreground"
-                      )}>
+                      <span className="text-[13.5px] font-bold tabular-nums shrink-0 text-foreground">
                         {isPlan
                           ? "Plano"
                           : isFree
@@ -708,40 +742,38 @@ export function AdminMobileAgenda({
                   </div>
                 );
               })}
+
+              {/* Botão no final dos agendamentos para adicionar novo encaixe */}
+              <div className="pt-3 pb-8 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onAddClick) {
+                      onAddClick(selectedDateKey, "09:00");
+                    } else {
+                      setSelectedSlotTime("09:00");
+                      setManualBookingOpen(true);
+                    }
+                  }}
+                  className="h-8 px-3.5 rounded-xl border border-dashed border-border/60 dark:border-white/[0.1] hover:border-foreground/30 text-muted-foreground hover:text-foreground text-[11.5px] font-medium flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Adicionar outro encaixe</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ══════ BOTÃO DE ENCAIXE ESTRATÉGICO FLUTUANTE (FAB) ══════ */}
-      <button
-        type="button"
-        onClick={() => {
-          if (onAddClick) {
-            onAddClick(selectedDateKey, "09:00");
-          } else {
-            setSelectedSlotTime("09:00");
-            setManualBookingOpen(true);
-          }
-        }}
-        style={{
-          bottom: "calc(56px + var(--app-safe-bottom, 12px) + 12px)",
-        }}
-        className="fixed right-4 z-30 flex items-center gap-2 h-11 px-4 rounded-full bg-foreground text-background font-semibold text-[13px] shadow-[0_6px_24px_rgba(0,0,0,0.35)] active:scale-95 hover:opacity-90 transition-all cursor-pointer select-none"
-        aria-label="Novo Encaixe"
-      >
-        <Plus className="w-4 h-4 stroke-[2.5]" />
-        <span>Novo Encaixe</span>
-      </button>
-
-      {/* ══════ MODAL DE SELEÇÃO RÁPIDA DE MÊS/ANO ══════ */}
+      {/* ══════ MODAL DE SELEÇÃO RÁPIDA DE MÊS/ANO: 100% MINIMALISTA, MONOCROMÁTICO ══════ */}
       {isMonthPickerOpen && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
           onClick={() => setIsMonthPickerOpen(false)}
         >
           <div
-            className="w-full max-w-xs rounded-2xl bg-card dark:bg-[#141414] border border-border dark:border-white/[0.1] shadow-2xl p-4 space-y-4"
+            className="w-full max-w-xs rounded-2xl bg-card dark:bg-[#121212] border border-border/60 dark:border-white/[0.08] shadow-2xl p-4 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header: Troca de Ano */}
@@ -755,7 +787,7 @@ export function AdminMobileAgenda({
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <span className="text-[16px] font-bold text-foreground">
+              <span className="text-[15px] font-bold text-foreground">
                 {pickerYear}
               </span>
 
@@ -769,7 +801,7 @@ export function AdminMobileAgenda({
               </button>
             </div>
 
-            {/* Grid dos 12 Meses */}
+            {/* Grid dos 12 Meses (Preto e Branco Puro) */}
             <div className="grid grid-cols-3 gap-2">
               {MONTH_NAMES.map((mName, idx) => {
                 const isCurrentSelected =
@@ -791,10 +823,10 @@ export function AdminMobileAgenda({
                     className={cn(
                       "h-10 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center cursor-pointer active:scale-95",
                       isCurrentSelected
-                        ? "bg-emerald-600 text-white font-bold shadow-sm"
+                        ? "bg-foreground text-background font-bold shadow-sm"
                         : isThisMonth
-                        ? "bg-secondary text-foreground ring-1 ring-emerald-500/50"
-                        : "text-foreground hover:bg-secondary/70"
+                        ? "bg-secondary text-foreground ring-1 ring-border"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                     )}
                   >
                     {mName}
@@ -804,7 +836,7 @@ export function AdminMobileAgenda({
             </div>
 
             {/* Rodapé: Atalho Hoje + Fechar */}
-            <div className="flex items-center justify-between pt-2 border-t border-border/40 dark:border-white/[0.08]">
+            <div className="flex items-center justify-between pt-2 border-t border-border/40 dark:border-white/[0.06]">
               <button
                 type="button"
                 onClick={() => {
@@ -814,14 +846,14 @@ export function AdminMobileAgenda({
                   setSelectedDate(now);
                   setIsMonthPickerOpen(false);
                 }}
-                className="text-[12px] font-semibold text-emerald-500 hover:underline cursor-pointer"
+                className="text-[12px] font-semibold text-foreground dark:text-white hover:underline cursor-pointer"
               >
                 Mês atual
               </button>
               <button
                 type="button"
                 onClick={() => setIsMonthPickerOpen(false)}
-                className="text-[12px] font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                className="text-[12px] font-medium text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 Fechar
               </button>
