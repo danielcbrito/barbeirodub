@@ -338,7 +338,6 @@ const Auth = () => {
 
   // Modo global
   const [mode, setMode] = useState<"login" | "signup">(initialSignup ? "signup" : "login");
-  const [loginStep, setLoginStep] = useState<"identifier" | "password">("identifier");
 
   // Estados do formulário
   // Login state
@@ -405,18 +404,6 @@ const Auth = () => {
   }, [sCode, step, mode, isLoading]);
 
   /* ─── Login submit ──────────────────────────────────────────────── */
-  const handleIdentifierSubmit = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const cleanEmail = email.trim().toLowerCase();
-    const res = emailSchema.safeParse(cleanEmail);
-    if (!res.success) {
-      toast.error("Digite um e-mail válido");
-      return;
-    }
-    setEmail(cleanEmail);
-    setLoginStep("password");
-  };
-
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || isLoading || cooldown > 0) return;
@@ -544,7 +531,6 @@ const Auth = () => {
             toast.error("Este e-mail já está cadastrado. Faça login.");
             setMode("login");
             setEmail(sEmail.trim().toLowerCase());
-            setLoginStep("password");
             return;
           }
           if (error.message.includes("only request this after")) {
@@ -601,7 +587,6 @@ const Auth = () => {
           toast.success("Conta confirmada! Faça login para continuar.");
           setMode("login");
           setEmail(sEmail.trim().toLowerCase());
-          setLoginStep("password");
           return;
         }
 
@@ -797,23 +782,11 @@ const Auth = () => {
 
   const onCtaClick = (e: React.MouseEvent | React.FormEvent) => {
     e.preventDefault();
-    if (mode === "login") {
-      if (loginStep === "identifier") handleIdentifierSubmit(e as React.FormEvent);
-      else handleLoginSubmit(e as React.FormEvent);
-    } else {
-      handleSignupNext();
-    }
+    if (mode === "login") handleLoginSubmit(e as React.FormEvent);
+    else handleSignupNext();
   };
 
   const onBackClick = () => {
-    if (mode === "login") {
-      if (loginStep === "password") {
-        setLoginStep("identifier");
-        return;
-      }
-      navigate("/");
-      return;
-    }
     if (mode === "signup") {
       stepBack();
       return;
@@ -824,49 +797,45 @@ const Auth = () => {
   return (
     <div
       data-no-auto-scroll="true"
-      className="min-h-[100dvh] w-full flex flex-col bg-background text-foreground"
+      className="min-h-[100dvh] w-full flex flex-col bg-background text-foreground overflow-y-auto overscroll-y-contain"
       style={{
-        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 16px)",
+        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
         paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 24px)",
       }}
     >
-      <div className="w-full max-w-md mx-auto px-6 flex-1 flex flex-col justify-start">
-        {/* Back button — discreto no canto superior esquerdo */}
-        <div className="flex items-center pb-2 -ml-2">
-          <button
-            type="button"
-            onClick={onBackClick}
-            aria-label="Voltar"
-            className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/75 hover:bg-foreground/5 active:scale-95 transition-all"
-            style={{ touchAction: "manipulation" }}
-          >
-            <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-          </button>
-        </div>
+      {/* ─── Header: idêntico ao modelo anterior com < na esquerda e título centralizado ─── */}
+      <header className="relative flex items-center justify-center px-4 shrink-0 pb-3">
+        <button
+          type="button"
+          onClick={onBackClick}
+          aria-label="Voltar"
+          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
+          style={{ touchAction: "manipulation" }}
+        >
+          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
+        </button>
+        <h2 className="text-[16px] font-semibold text-foreground/90">{title}</h2>
+      </header>
 
-        {/* Brand Logo — exatamente no estilo do iFood */}
-        <div className="flex items-center gap-2.5 mb-5 mt-1">
-          <img src="/favicon.png" alt="Barbearia DUB" className="h-10 w-10 object-contain dark:invert" />
-          <span className="text-[25px] font-black tracking-tight text-primary">DUB</span>
-        </div>
-
-        {/* Progress bar (signup) */}
-        {mode === "signup" && (
-          <div className="pb-4 w-full shrink-0">
-            <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all duration-300"
-                style={{
-                  width: `${((SIGNUP_ORDER.indexOf(step) + 1) / SIGNUP_ORDER.length) * 100}%`,
-                }}
-              />
-            </div>
+      {/* Progress bar (signup) */}
+      {mode === "signup" && (
+        <div className="px-6 pb-2 shrink-0 max-w-md mx-auto w-full">
+          <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{
+                width: `${((SIGNUP_ORDER.indexOf(step) + 1) / SIGNUP_ORDER.length) * 100}%`,
+              }}
+            />
           </div>
-        )}
+        </div>
+      )}
 
+      {/* ─── Content: posicionado no topo em fluxo normal, com respiro total do teclado ─── */}
+      <div className="w-full max-w-md mx-auto px-6 pt-3 flex-1 flex flex-col justify-start">
         <AnimatePresence mode="wait">
           <motion.div
-            key={mode === "login" ? `login-${loginStep}` : `signup-${step}`}
+            key={mode === "login" ? "login" : `signup-${step}`}
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
@@ -874,160 +843,89 @@ const Auth = () => {
             className="w-full"
           >
             {mode === "login" ? (
-              loginStep === "identifier" ? (
-                <div>
-                  {/* Title — direto, limpo e sem poluição, exatamente como o iFood */}
-                  <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-5">
-                    Entre na sua conta
-                  </h1>
+              <form
+                id="auth-login-form"
+                onSubmit={handleLoginSubmit}
+                className="space-y-3.5 pt-1"
+                noValidate
+              >
+                <FloatingInput
+                  id="email-input"
+                  label="E-mail"
+                  value={email}
+                  onChange={setEmail}
+                  type="email"
+                  inputMode="email"
+                  autoComplete="username"
+                  enterKeyHint="next"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+                <FloatingInput
+                  id="senha-input"
+                  label="Senha"
+                  value={senha}
+                  onChange={setSenha}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  enterKeyHint="done"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  rightSlot={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/60 hover:text-foreground active:scale-95 transition-all"
+                      style={{ touchAction: "manipulation" }}
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  }
+                />
 
-                  <form
-                    id="auth-login-identifier-form"
-                    onSubmit={handleIdentifierSubmit}
-                    className="space-y-4"
-                    noValidate
+                <div className="pt-0.5 flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/esqueci-senha")}
+                    className="text-[13.5px] font-semibold text-primary hover:underline underline-offset-4 active:opacity-70 transition-opacity"
+                    style={{ touchAction: "manipulation" }}
                   >
-                    <FloatingInput
-                      id="email-input"
-                      label="E-mail ou celular"
-                      placeholder="nome@email.com.br"
-                      value={email}
-                      onChange={setEmail}
-                      type="email"
-                      inputMode="email"
-                      autoComplete="username"
-                      enterKeyHint="next"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      autoFocus
-                    />
-
-                    {/* Botão Continuar — estilo iFood (rounded-xl, solid black, font-bold) */}
-                    <div className="pt-2">
-                      <button
-                        type="submit"
-                        disabled={email.trim().length === 0}
-                        className="w-full h-[52px] rounded-xl bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-bold text-[15.5px] tracking-normal shadow-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-                        style={{ touchAction: "manipulation" }}
-                      >
-                        Continuar
-                      </button>
-                    </div>
-
-                    <p className="pt-4 text-center text-[13.5px] text-foreground/60">
-                      Não tem uma conta?{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode("signup");
-                          setStep("name");
-                          setLoginStep("identifier");
-                        }}
-                        className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                        style={{ touchAction: "manipulation" }}
-                      >
-                        Criar conta
-                      </button>
-                    </p>
-                  </form>
+                    Esqueci minha senha
+                  </button>
                 </div>
-              ) : (
-                <div>
-                  <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-3">
-                    Entre na sua conta
-                  </h1>
 
-                  <form
-                    id="auth-login-password-form"
-                    onSubmit={handleLoginSubmit}
-                    className="space-y-3.5"
-                    noValidate
+                {/* Botão Continuar — no fluxo normal, espaçoso e longe do teclado */}
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    onClick={onCtaClick}
+                    disabled={!canGoCta || isLoading}
+                    className="w-full h-[52px] rounded-xl bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-bold text-[15.5px] tracking-normal shadow-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    style={{ touchAction: "manipulation" }}
                   >
-                    {/* Chip do e-mail com botão alterar (estilo Google / iFood) */}
-                    <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-foreground/[0.04] border border-foreground/10">
-                      <div className="flex flex-col min-w-0 pr-2">
-                        <span className="text-[11px] font-medium text-foreground/50 leading-tight">E-mail</span>
-                        <span className="text-[14px] text-foreground font-semibold truncate leading-tight mt-0.5">
-                          {email}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setLoginStep("identifier")}
-                        className="text-[12.5px] font-semibold text-primary hover:underline shrink-0"
-                        style={{ touchAction: "manipulation" }}
-                      >
-                        Alterar
-                      </button>
-                    </div>
-
-                    <FloatingInput
-                      id="senha-input"
-                      label="Senha"
-                      value={senha}
-                      onChange={setSenha}
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      enterKeyHint="done"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      autoFocus
-                      rightSlot={
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((v) => !v)}
-                          aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                          className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/60 hover:text-foreground active:scale-95 transition-all"
-                          style={{ touchAction: "manipulation" }}
-                        >
-                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                        </button>
-                      }
-                    />
-
-                    <div className="pt-0.5 flex justify-start">
-                      <button
-                        type="button"
-                        onClick={() => navigate("/esqueci-senha")}
-                        className="text-[13px] font-semibold text-primary hover:underline underline-offset-4 active:opacity-70 transition-opacity"
-                        style={{ touchAction: "manipulation" }}
-                      >
-                        Esqueci minha senha
-                      </button>
-                    </div>
-
-                    <div className="pt-2">
-                      <button
-                        type="submit"
-                        disabled={!passwordValid || isLoading || cooldown > 0}
-                        className="w-full h-[52px] rounded-xl bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-bold text-[15.5px] tracking-normal shadow-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-                        style={{ touchAction: "manipulation" }}
-                      >
-                        {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-                        {cooldown > 0 ? `Aguarde ${cooldown}s` : "Continuar"}
-                      </button>
-                    </div>
-
-                    <p className="pt-4 text-center text-[13.5px] text-foreground/60">
-                      Não tem uma conta?{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode("signup");
-                          setStep("name");
-                          setLoginStep("identifier");
-                        }}
-                        className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                        style={{ touchAction: "manipulation" }}
-                      >
-                        Criar conta
-                      </button>
-                    </p>
-                  </form>
+                    {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+                    {ctaLabel}
+                  </button>
                 </div>
-              )
+
+                <p className="pt-4 text-center text-[13.5px] text-foreground/60">
+                  Não tem uma conta?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("signup");
+                      setStep("name");
+                    }}
+                    className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
+                    style={{ touchAction: "manipulation" }}
+                  >
+                    Criar conta
+                  </button>
+                </p>
+              </form>
             ) : (
               <>
                 <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-2">

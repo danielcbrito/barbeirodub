@@ -117,32 +117,27 @@ const ForgotPassword = () => {
   return (
     <div
       data-no-auto-scroll="true"
-      className="min-h-[100dvh] w-full flex flex-col bg-background text-foreground"
+      className="min-h-[100dvh] w-full flex flex-col bg-background text-foreground overflow-y-auto overscroll-y-contain"
       style={{
-        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 16px)",
+        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
         paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 24px)",
       }}
     >
-      <div className="w-full max-w-md mx-auto px-6 flex-1 flex flex-col justify-start">
-        {/* Back button — discreto no canto superior esquerdo */}
-        <div className="flex items-center pb-2 -ml-2">
-          <button
-            type="button"
-            onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/75 hover:bg-foreground/5 active:scale-95 transition-all"
-            aria-label="Voltar"
-            style={{ touchAction: "manipulation" }}
-          >
-            <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-          </button>
-        </div>
+      {/* ─── Header: centralizado com < na esquerda ─── */}
+      <header className="relative flex items-center justify-center px-4 shrink-0 pb-3">
+        <button
+          type="button"
+          onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
+          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
+          aria-label="Voltar"
+          style={{ touchAction: "manipulation" }}
+        >
+          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
+        </button>
+        <h2 className="text-[16px] font-semibold text-foreground/90">Recuperar senha</h2>
+      </header>
 
-        {/* Brand Logo — exatamente no estilo do iFood */}
-        <div className="flex items-center gap-2.5 mb-5 mt-1">
-          <img src="/favicon.png" alt="Barbearia DUB" className="h-10 w-10 object-contain dark:invert" />
-          <span className="text-[25px] font-black tracking-tight text-primary">DUB</span>
-        </div>
-
+      <div className="w-full max-w-md mx-auto px-6 pt-3 flex-1 flex flex-col justify-start">
         <AnimatePresence mode="wait">
           {!emailSent ? (
             <motion.div
@@ -153,16 +148,9 @@ const ForgotPassword = () => {
               transition={{ duration: 0.2 }}
               className="w-full"
             >
-              <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-1.5">
-                Recuperar senha
-              </h1>
-              <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
-                Digite seu e-mail para receber o link de redefinição.
-              </p>
-
               <form
                 onSubmit={handleSubmit}
-                className="space-y-4"
+                className="space-y-3.5 pt-1"
                 noValidate
               >
                 <FloatingInput
@@ -172,13 +160,11 @@ const ForgotPassword = () => {
                   inputMode="email"
                   autoComplete="username"
                   enterKeyHint="send"
-                  placeholder="nome@email.com.br"
-                  autoFocus
                   value={email}
                   onChange={setEmail}
                 />
 
-                <div className="pt-2">
+                <div className="pt-3">
                   <button
                     type="submit"
                     disabled={!canSubmit || isLoading}
