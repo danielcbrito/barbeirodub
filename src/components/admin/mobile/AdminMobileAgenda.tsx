@@ -65,37 +65,37 @@ interface AdminMobileAgendaProps {
   showBack?: boolean;
 }
 
-/** Status com as cores solicitadas:
- * - Concluídos: VERDE (emerald)
- * - Agendados / Confirmados: AZUL (blue)
- * - Pendentes: ÂMBAR (amber)
- * - Não compareceu: VERMELHO (rose)
+/** Status oficial do sistema com destaque correto:
+ * - Concluído: VERDE (emerald)
+ * - Agendado: AZUL (blue)
+ * - Pendente: ÂMBAR (amber)
+ * - Não veio: VERMELHO (rose)
  */
 const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "completed") {
     return {
       dot: "bg-emerald-500",
-      textColor: "text-emerald-500 dark:text-emerald-400",
+      textColor: "text-emerald-600 dark:text-emerald-400",
       statusLabel: "Concluído",
     };
   }
   if (status === "no_show") {
     return {
       dot: "bg-rose-500",
-      textColor: "text-rose-500 dark:text-rose-400",
+      textColor: "text-rose-600 dark:text-rose-400",
       statusLabel: "Não veio",
     };
   }
   if (status === "confirmed" || barbeiroConfirmou) {
     return {
       dot: "bg-blue-500",
-      textColor: "text-blue-500 dark:text-blue-400",
+      textColor: "text-blue-600 dark:text-blue-400",
       statusLabel: "Agendado",
     };
   }
   return {
     dot: "bg-amber-500",
-    textColor: "text-amber-500 dark:text-amber-400",
+    textColor: "text-amber-600 dark:text-amber-400",
     statusLabel: "Pendente",
   };
 };
@@ -393,7 +393,7 @@ export function AdminMobileAgenda({
     };
 
     const channel = supabase
-      .channel(`mobile-agenda-v3-${barbeiroId || 'all'}`)
+      .channel(`mobile-agenda-v4-${barbeiroId || 'all'}`)
       .on('postgres_changes', channelConfig as any, scheduleSilentRefresh)
       .subscribe();
 
@@ -449,9 +449,9 @@ export function AdminMobileAgenda({
 
   return (
     <div className="flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
-      {/* ══════ HEADER FIXO: Fundo Opaco (não vaza agendamento por trás), Tipografia Fina e Sutil ══════ */}
-      <div className="flex-shrink-0 z-20 bg-background pt-3 pb-2 border-b border-border/20 dark:border-white/[0.03]">
-        {/* Linha 1: Mês/Ano e Setas com Tipografia Fina e Espaçamento Confortável */}
+      {/* ══════ HEADER FIXO: Fundo Opaco (não vaza nada por trás), 100% Padrão do App ══════ */}
+      <div className="flex-shrink-0 z-20 bg-background pt-3 pb-2 border-b border-border/40 dark:border-white/[0.06]">
+        {/* Linha 1: Mês/Ano e Setas com Toque Confortável */}
         <div className="flex items-center justify-between px-4 mb-2.5">
           {/* Seletor Mês/Ano */}
           <div className="flex items-center gap-2 min-w-0">
@@ -461,17 +461,17 @@ export function AdminMobileAgenda({
                 setPickerYear(selectedMonth.getFullYear());
                 setIsMonthPickerOpen(true);
               }}
-              className="flex items-center gap-1.5 text-[15px] font-medium text-foreground capitalize tracking-tight hover:opacity-75 active:scale-95 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 text-[16px] font-bold text-foreground capitalize tracking-tight hover:opacity-80 active:scale-95 transition-all cursor-pointer"
             >
               <span>{format(selectedMonth, "MMMM yyyy", { locale: ptBR })}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/60 stroke-[1.8]" />
+              <ChevronDown className="w-4 h-4 text-muted-foreground/70 stroke-[2]" />
             </button>
 
             {!isSameMonth(selectedMonth, today) && (
               <button
                 type="button"
                 onClick={goToToday}
-                className="px-2 py-0.5 text-[10.5px] font-normal rounded-full bg-secondary/80 text-muted-foreground hover:text-foreground active:scale-95 transition-all cursor-pointer"
+                className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
               >
                 Hoje
               </button>
@@ -479,27 +479,27 @@ export function AdminMobileAgenda({
           </div>
 
           {/* Setas Anterior / Próximo Mês */}
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={goToPreviousMonth}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-90 transition-all border border-border/30 dark:border-white/[0.06] bg-transparent cursor-pointer"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-foreground hover:bg-secondary active:scale-90 transition-all border border-border/50 dark:border-white/[0.08] bg-secondary/40 dark:bg-white/[0.04] cursor-pointer"
               aria-label="Mês anterior"
             >
-              <ChevronLeft className="w-3.5 h-3.5 stroke-[1.8]" />
+              <ChevronLeft className="w-4 h-4 stroke-[2]" />
             </button>
             <button
               type="button"
               onClick={goToNextMonth}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-90 transition-all border border-border/30 dark:border-white/[0.06] bg-transparent cursor-pointer"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-foreground hover:bg-secondary active:scale-90 transition-all border border-border/50 dark:border-white/[0.08] bg-secondary/40 dark:bg-white/[0.04] cursor-pointer"
               aria-label="Próximo mês"
             >
-              <ChevronRight className="w-3.5 h-3.5 stroke-[1.8]" />
+              <ChevronRight className="w-4 h-4 stroke-[2]" />
             </button>
           </div>
         </div>
 
-        {/* ══════ CARROSSEL 100% EDGE-TO-EDGE — Letras Finas, Arejado, Sem Sufocar ══════ */}
+        {/* ══════ CARROSSEL 100% EDGE-TO-EDGE — Arejado, Minimalista e Nítido ══════ */}
         <div
           ref={carouselRef}
           className="w-full overflow-x-auto scrollbar-hide px-3"
@@ -527,20 +527,20 @@ export function AdminMobileAgenda({
                     scrollToDay(day, "smooth");
                   }}
                   className={cn(
-                    "flex-shrink-0 flex flex-col items-center justify-between w-[52px] h-[70px] py-1.5 px-1 rounded-xl transition-all duration-150 cursor-pointer select-none active:scale-95",
+                    "flex-shrink-0 flex flex-col items-center justify-between w-[56px] h-[78px] py-2 px-1 rounded-2xl transition-all duration-150 cursor-pointer select-none active:scale-95",
                     isSelected
-                      ? "bg-foreground text-background shadow-xs font-normal"
+                      ? "bg-foreground text-background shadow-xs font-semibold"
                       : cn(
-                          "bg-transparent border border-border/30 dark:border-white/[0.05] hover:bg-secondary/30 text-foreground",
-                          dayIsToday && "ring-1 ring-foreground/25 dark:ring-white/20"
+                          "bg-card/60 dark:bg-[#141414] border border-border/50 dark:border-white/[0.06] hover:bg-secondary/40 text-foreground",
+                          dayIsToday && "ring-1 ring-foreground/30 dark:ring-white/30"
                         )
                   )}
                 >
-                  {/* 1ª Linha: Dia da semana (fino, discreto) */}
+                  {/* 1ª Linha: Dia da semana */}
                   <span
                     className={cn(
-                      "text-[10px] font-normal tracking-normal leading-none",
-                      isSelected ? "text-background/70" : "text-muted-foreground/60"
+                      "text-[10.5px] font-semibold tracking-wider uppercase leading-none",
+                      isSelected ? "text-background/80" : "text-muted-foreground/70"
                     )}
                   >
                     {dayOfWeek}
@@ -549,8 +549,8 @@ export function AdminMobileAgenda({
                   {/* 2ª Linha: Número do dia */}
                   <span
                     className={cn(
-                      "text-[15px] font-medium leading-none tracking-tight my-auto",
-                      isSelected ? "text-background" : "text-foreground/90"
+                      "text-[17px] font-bold leading-none tracking-tight my-auto",
+                      isSelected ? "text-background font-black" : "text-foreground"
                     )}
                   >
                     {dayNumber}
@@ -559,12 +559,12 @@ export function AdminMobileAgenda({
                   {/* 3ª Linha: Slots / Agendamentos */}
                   <span
                     className={cn(
-                      "text-[9px] font-normal leading-none tabular-nums",
+                      "text-[9.5px] font-medium leading-none tabular-nums",
                       isSelected
-                        ? "text-background/60"
+                        ? "text-background/80"
                         : count > 0
-                        ? "text-muted-foreground/70"
-                        : "text-muted-foreground/25"
+                        ? "text-muted-foreground/80 font-semibold"
+                        : "text-muted-foreground/30 font-normal"
                     )}
                   >
                     {count === 0 ? "-" : `${count} ${count === 1 ? 'slot' : 'slots'}`}
@@ -576,31 +576,31 @@ export function AdminMobileAgenda({
         </div>
       </div>
 
-      {/* ══════ ÁREA SCROLLÁVEL: COM MÁSCARA DE DESAPARECIMENTO NO TOPO (NÃO PASSA ATRÁS DO CARROSSEL) ══════ */}
+      {/* ══════ ÁREA SCROLLÁVEL: COM MÁSCARA DE DESAPARECIMENTO NO TOPO (NÃO VAZA ATRÁS DO CARROSSEL) ══════ */}
       <div className="flex-1 min-h-0 relative">
         {/* Fade mask superior: os agendamentos desaparecem suavemente ANTES de chegar no carrossel */}
         <div 
-          className="absolute top-0 inset-x-0 h-5 z-10 pointer-events-none bg-gradient-to-b from-background to-transparent" 
+          className="absolute top-0 inset-x-0 h-6 z-10 pointer-events-none bg-gradient-to-b from-background to-transparent" 
         />
 
-        <div className="h-full overflow-y-auto overscroll-contain pb-24 pt-1">
+        <div className="h-full overflow-y-auto overscroll-contain pb-24 pt-2">
           
-          {/* ══════ BARRA DE AÇÃO: Data com Tipografia Fina + Botão de Encaixe Elegante ══════ */}
-          <div className="px-4 pt-2.5 pb-2 flex items-center justify-between">
+          {/* ══════ BARRA DE AÇÃO: Data com Destaque + Botão de Encaixe com Proporção Ideal ══════ */}
+          <div className="px-4 pt-2 pb-2.5 flex items-center justify-between">
             <div className="min-w-0 pr-2">
-              <h3 className="text-[13.5px] font-medium text-foreground tracking-tight capitalize truncate">
+              <h3 className="text-[14px] font-bold text-foreground tracking-tight capitalize truncate">
                 {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
               </h3>
-              <p className="text-[11px] font-normal text-muted-foreground mt-0.5">
+              <p className="text-[11.5px] font-medium text-muted-foreground mt-0.5">
                 {appointments.length === 0
                   ? "Nenhum agendamento"
                   : appointments.length === 1
-                  ? "1 agendamento"
-                  : `${appointments.length} agendamentos`}
+                  ? "1 agendamento marcado"
+                  : `${appointments.length} agendamentos marcados`}
               </p>
             </div>
 
-            {/* Botão de Encaixe com Proporção Ideal e Letras Finas */}
+            {/* Botão de Encaixe com Proporção Ideal */}
             <button
               type="button"
               onClick={() => {
@@ -611,10 +611,10 @@ export function AdminMobileAgenda({
                   setManualBookingOpen(true);
                 }
               }}
-              className="h-8 px-3 rounded-lg border border-border/50 dark:border-white/[0.08] bg-transparent hover:bg-secondary/40 text-foreground text-[12px] font-normal flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shrink-0"
+              className="h-8 px-3 rounded-xl border border-border/70 dark:border-white/[0.1] bg-secondary/60 dark:bg-white/[0.05] hover:bg-secondary text-foreground text-[12px] font-semibold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-xs shrink-0"
               aria-label="Novo Encaixe"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[1.8] text-muted-foreground" />
+              <Plus className="w-3.5 h-3.5 stroke-[2] text-foreground" />
               <span>Novo Encaixe</span>
             </button>
           </div>
@@ -622,32 +622,32 @@ export function AdminMobileAgenda({
           {!isShowingSelectedDate ? (
             <div className="px-4 space-y-2.5 animate-pulse mt-1">
               {[0, 1, 2].map((item) => (
-                <div key={item} className="rounded-2xl border border-border/30 dark:border-white/[0.04] bg-card/40 p-4 space-y-3">
+                <div key={item} className="rounded-2xl border border-border/40 dark:border-white/[0.05] bg-card p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="h-3.5 w-20 rounded-full bg-muted/30" />
-                    <div className="h-3 w-16 rounded-full bg-muted/20" />
+                    <div className="h-4 w-20 rounded-full bg-muted/40" />
+                    <div className="h-3 w-16 rounded-full bg-muted/30" />
                   </div>
-                  <div className="h-4 w-32 rounded-full bg-muted/30" />
-                  <div className="flex items-center justify-between pt-2 border-t border-border/15">
-                    <div className="h-3 w-24 rounded-full bg-muted/20" />
-                    <div className="h-3 w-12 rounded-full bg-muted/30" />
+                  <div className="h-4 w-36 rounded-full bg-muted/40" />
+                  <div className="flex items-center justify-between pt-2 border-t border-border/20">
+                    <div className="h-3 w-28 rounded-full bg-muted/30" />
+                    <div className="h-3 w-14 rounded-full bg-muted/40" />
                   </div>
                 </div>
               ))}
             </div>
           ) : loading && !hasLoadedOnceRef.current && appointments.length === 0 ? (
             <div className="flex items-center justify-center h-40">
-              <div className="w-7 h-7 border-2 border-foreground/20 border-t-foreground/80 rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
             </div>
           ) : appointments.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-56 text-center px-8">
-              <div className="w-11 h-11 rounded-2xl bg-secondary/50 dark:bg-white/[0.03] border border-border/30 dark:border-white/[0.05] flex items-center justify-center mb-3 text-muted-foreground/40">
-                <Calendar className="w-5 h-5 stroke-[1.5]" />
+              <div className="w-12 h-12 rounded-2xl bg-secondary/60 dark:bg-white/[0.04] border border-border/50 dark:border-white/[0.06] flex items-center justify-center mb-3 text-muted-foreground/60">
+                <Calendar className="w-6 h-6 stroke-[1.6]" />
               </div>
-              <p className="text-[13.5px] font-medium text-foreground">
+              <p className="text-[14px] font-bold text-foreground">
                 {isToday(selectedDate) ? "Nenhum agendamento para hoje" : "Nenhum agendamento neste dia"}
               </p>
-              <p className="text-[11.5px] font-normal text-muted-foreground/70 mt-1 max-w-[250px] leading-relaxed">
+              <p className="text-[12px] text-muted-foreground/75 mt-1 max-w-[260px] leading-relaxed">
                 {isToday(selectedDate)
                   ? "Seus horários livres estão disponíveis e podem ser reservados a qualquer momento."
                   : "Navegue pelas datas no carrossel ou adicione um encaixe manual."}
@@ -662,9 +662,9 @@ export function AdminMobileAgenda({
                     setManualBookingOpen(true);
                   }
                 }}
-                className="mt-4 h-8 px-3.5 rounded-lg border border-border/50 dark:border-white/[0.08] bg-secondary/50 text-foreground text-[12px] font-normal flex items-center gap-1.5 active:scale-95 hover:bg-secondary transition-all cursor-pointer"
+                className="mt-4 h-8 px-3.5 rounded-xl bg-foreground text-background text-[12px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5 stroke-[1.8]" />
+                <Plus className="w-3.5 h-3.5 stroke-[2]" />
                 <span>Adicionar Encaixe</span>
               </button>
             </div>
@@ -707,64 +707,55 @@ export function AdminMobileAgenda({
                     onClick={() => onAppointmentClick?.(apt)}
                     style={{ opacity: isPast ? 0.45 : 1 }}
                     className={cn(
-                      "w-full rounded-2xl border border-border/40 dark:border-white/[0.05] bg-card/80 dark:bg-[#131313] p-3.5 space-y-2",
-                      "hover:border-border/70 active:scale-[0.99] transition-all cursor-pointer shadow-xs"
+                      "w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card dark:bg-[#141414] p-3.5 sm:p-4 flex items-center gap-3.5 shadow-xs",
+                      "hover:border-border active:scale-[0.99] transition-all cursor-pointer"
                     )}
                   >
-                    {/* Linha Superior: Horário + Duração à esquerda | Status Oficial (Verde, Azul, Âmbar) à direita */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                        <Clock className="w-3 h-3 text-muted-foreground/50" />
-                        <span className="font-mono text-foreground/90 font-normal tabular-nums">
-                          {horaFormatted}
-                        </span>
-                        <span className="text-muted-foreground/30">·</span>
-                        <span className="font-normal text-muted-foreground/70">
-                          {duration} min
-                        </span>
+                    {/* Bloco de Horário — Foco Visual Imediato (Padrão Oficial da Tela Inicial) */}
+                    <div className="w-[54px] h-[54px] rounded-xl bg-secondary/70 dark:bg-white/[0.06] border border-border/50 dark:border-white/[0.08] flex flex-col items-center justify-center shrink-0">
+                      <span className="text-[16px] font-bold font-mono text-foreground leading-tight tracking-tight">
+                        {horaFormatted}
+                      </span>
+                      <span className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider leading-none mt-0.5">
+                        {duration}m
+                      </span>
+                    </div>
+
+                    {/* Informações Centrais: Nome do Cliente + Serviço + Status Oficial */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[15px] sm:text-[15.5px] font-bold text-foreground truncate tracking-tight">
+                          {clientName}
+                        </p>
+                        {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
-                        <span className={cn("text-[11px] font-normal", statusConfig.textColor)}>
+                      <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                        <span className="text-[12.5px] text-muted-foreground truncate">
+                          {serviceName}
+                        </span>
+                        <span className="text-muted-foreground/30">•</span>
+                        <span className={cn("text-[11.5px] font-semibold shrink-0 flex items-center gap-1", statusConfig.textColor)}>
+                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
                           {statusConfig.statusLabel}
                         </span>
                       </div>
                     </div>
 
-                    {/* Linha Central: Nome do Cliente com Letras Finas e Elegantes */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[14.5px] font-medium text-foreground tracking-tight truncate">
-                          {clientName}
-                        </span>
-                        {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
-                      </div>
-                    </div>
+                    {/* Lado Direito: Método de Pagamento (com Ícone) e Preço */}
+                    <div className="flex flex-col items-end shrink-0 pl-2">
+                      <span className="text-[14px] font-bold tabular-nums text-foreground">
+                        {isPlan
+                          ? "Plano"
+                          : isFree
+                            ? "Grátis"
+                            : `R$ ${apt.preco.toFixed(2).replace('.', ',')}`}
+                      </span>
 
-                    {/* Linha Inferior: Serviço à esquerda | Ícone de Pagamento + Valor à direita */}
-                    <div className="flex items-center justify-between pt-2 border-t border-border/25 dark:border-white/[0.04] text-[12px]">
-                      <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                        <Scissors className="w-3 h-3 text-muted-foreground/40 shrink-0" />
-                        <span className="text-muted-foreground/80 font-normal truncate">
-                          {serviceName}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
-                          <PayIcon className="w-3 h-3 text-muted-foreground/60" />
-                          <span>{paymentBadge.label}</span>
-                        </span>
-
-                        <span className="text-foreground/20 font-light">•</span>
-
-                        <span className="text-[12.5px] font-medium tabular-nums text-foreground">
-                          {isPlan
-                            ? "Plano"
-                            : isFree
-                              ? "Grátis"
-                              : `R$ ${apt.preco.toFixed(2).replace('.', ',')}`}
+                      <div className="flex items-center gap-1 mt-0.5 text-muted-foreground/75">
+                        <PayIcon className="w-3 h-3 text-muted-foreground/60" />
+                        <span className="text-[11px] font-medium">
+                          {paymentBadge.label}
                         </span>
                       </div>
                     </div>
@@ -784,9 +775,9 @@ export function AdminMobileAgenda({
                       setManualBookingOpen(true);
                     }
                   }}
-                  className="h-8 px-3.5 rounded-lg border border-dashed border-border/50 dark:border-white/[0.08] hover:border-foreground/30 text-muted-foreground hover:text-foreground text-[11.5px] font-normal flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                  className="h-9 px-4 rounded-xl border border-dashed border-border/70 dark:border-white/[0.12] hover:border-foreground/30 text-muted-foreground hover:text-foreground text-[12px] font-medium flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3.5 h-3.5" />
                   <span>Adicionar outro encaixe</span>
                 </button>
               </div>
@@ -802,7 +793,7 @@ export function AdminMobileAgenda({
           onClick={() => setIsMonthPickerOpen(false)}
         >
           <div
-            className="w-full max-w-xs rounded-2xl bg-card dark:bg-[#121212] border border-border/50 dark:border-white/[0.06] shadow-2xl p-4 space-y-4"
+            className="w-full max-w-xs rounded-2xl bg-card dark:bg-[#121212] border border-border/60 dark:border-white/[0.08] shadow-2xl p-4 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header: Troca de Ano */}
@@ -810,28 +801,28 @@ export function AdminMobileAgenda({
               <button
                 type="button"
                 onClick={() => setPickerYear((y) => y - 1)}
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-secondary active:scale-95 text-foreground transition-all cursor-pointer"
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary active:scale-95 text-foreground transition-all cursor-pointer"
                 aria-label="Ano anterior"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <span className="text-[14px] font-medium text-foreground">
+              <span className="text-[15px] font-bold text-foreground">
                 {pickerYear}
               </span>
 
               <button
                 type="button"
                 onClick={() => setPickerYear((y) => y + 1)}
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-secondary active:scale-95 text-foreground transition-all cursor-pointer"
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary active:scale-95 text-foreground transition-all cursor-pointer"
                 aria-label="Próximo ano"
               >
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
             {/* Grid dos 12 Meses (Preto e Branco Puro) */}
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-2">
               {MONTH_NAMES.map((mName, idx) => {
                 const isCurrentSelected =
                   selectedMonth.getMonth() === idx && selectedMonth.getFullYear() === pickerYear;
@@ -850,11 +841,11 @@ export function AdminMobileAgenda({
                       setIsMonthPickerOpen(false);
                     }}
                     className={cn(
-                      "h-9 rounded-lg text-[12.5px] font-normal transition-all flex items-center justify-center cursor-pointer active:scale-95",
+                      "h-10 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center cursor-pointer active:scale-95",
                       isCurrentSelected
-                        ? "bg-foreground text-background font-medium shadow-xs"
+                        ? "bg-foreground text-background font-bold shadow-sm"
                         : isThisMonth
-                        ? "bg-secondary text-foreground ring-1 ring-border/50"
+                        ? "bg-secondary text-foreground ring-1 ring-border"
                         : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                     )}
                   >
@@ -865,7 +856,7 @@ export function AdminMobileAgenda({
             </div>
 
             {/* Rodapé: Atalho Hoje + Fechar */}
-            <div className="flex items-center justify-between pt-2 border-t border-border/30 dark:border-white/[0.05]">
+            <div className="flex items-center justify-between pt-2 border-t border-border/40 dark:border-white/[0.06]">
               <button
                 type="button"
                 onClick={() => {
@@ -875,14 +866,14 @@ export function AdminMobileAgenda({
                   setSelectedDate(now);
                   setIsMonthPickerOpen(false);
                 }}
-                className="text-[11.5px] font-normal text-foreground dark:text-white hover:underline cursor-pointer"
+                className="text-[12px] font-semibold text-foreground dark:text-white hover:underline cursor-pointer"
               >
                 Mês atual
               </button>
               <button
                 type="button"
                 onClick={() => setIsMonthPickerOpen(false)}
-                className="text-[11.5px] font-normal text-muted-foreground hover:text-foreground cursor-pointer"
+                className="text-[12px] font-medium text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 Fechar
               </button>
