@@ -106,22 +106,23 @@ const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
 };
 
 /** Ícone, rótulo e cor da forma de pagamento:
- * - Dinheiro: verde
- * - PIX: azulzinho
+ * - Dinheiro: verde (emerald)
+ * - PIX: azulzinho (blue)
+ * - Cortesia: roxo elegante (purple)
  * - Cartão: neutro/violeta
- * - Grátis/Cortesia: âmbar
  */
 const getPaymentBadge = (apt: { tipo_agendamento: string | null; payment_method: string | null; is_free: boolean | null }) => {
   if (apt.tipo_agendamento === "plano" || apt.payment_method === "plano") {
     return { icon: Crown, label: "Plano", iconColor: "text-amber-500 dark:text-amber-400" };
   }
   if (apt.is_free) {
-    return { icon: Gift, label: "Cortesia", iconColor: "text-amber-500 dark:text-amber-400" };
+    return { icon: Gift, label: "Cortesia", iconColor: "text-purple-500 dark:text-purple-400" };
   }
-  if (apt.payment_method === "pix") {
-    return { icon: QrCode, label: "PIX", iconColor: "text-sky-500 dark:text-sky-400" };
+  const method = (apt.payment_method || "").toLowerCase();
+  if (method === "pix") {
+    return { icon: QrCode, label: "PIX", iconColor: "text-blue-500 dark:text-blue-400" };
   }
-  if (apt.payment_method === "card" || apt.payment_method === "credit_card") {
+  if (method === "card" || method === "credit_card" || method === "credit" || method === "debit") {
     return { icon: CreditCard, label: "Cartão", iconColor: "text-violet-400 dark:text-violet-300" };
   }
   return { icon: Banknote, label: "Dinheiro", iconColor: "text-emerald-500 dark:text-emerald-400" };
@@ -185,6 +186,34 @@ export function AdminMobileAgenda({
     const end = endOfMonth(selectedMonth);
     return eachDayOfInterval({ start, end });
   }, [selectedMonth]);
+
+  // Identifica o próximo corte de hoje para destacar os números do horário em verde
+  const nextAppointmentId = useMemo(() => {
+    if (!isToday(selectedDate) || appointments.length === 0) return null;
+
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // Agendamentos ativos (não concluídos, não faltas e não cancelados)
+    const activeAppointments = appointments.filter(
+      (apt) => apt.status !== "completed" && apt.status !== "no_show" && (apt as any).status !== "cancelled"
+    );
+
+    if (activeAppointments.length === 0) return null;
+
+    // Procura o primeiro agendamento cujo horário de término ainda não passou
+    const upcoming = activeAppointments.find((apt) => {
+      const [h, m] = apt.hora.split(":").map(Number);
+      const startMin = h * 60 + m;
+      const dur = apt.duracao || apt.servico?.duracao_minutos || 30;
+      return (startMin + dur) > nowMinutes;
+    });
+
+    if (upcoming) return upcoming.id;
+
+    // Se todos os ativos já passaram do horário teórico, destaca o primeiro não concluído
+    return activeAppointments[0]?.id || null;
+  }, [appointments, selectedDate]);
 
   const shortDayName = (date: Date) => {
     const names = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
@@ -756,6 +785,9 @@ export function AdminMobileAgenda({
                 ? `${apt.planUsage.used}/${apt.planUsage.limit}`
                 : "2/4";
 
+              // Próximo corte do dia (destaca somente os números do horário em verde)
+              const isNextAppointment = apt.id === nextAppointmentId;
+
               return (
                 <div
                   key={apt.id}
@@ -768,7 +800,14 @@ export function AdminMobileAgenda({
                 >
                   {/* Coluna de Horário da Agenda (Esquerda) */}
                   <div className="w-12 shrink-0 flex flex-col items-center justify-center text-center">
-                    <span className="font-mono text-[14.5px] font-bold text-foreground tabular-nums tracking-tight">
+                    <span
+                      className={cn(
+                        "font-mono text-[14.5px] tabular-nums tracking-tight transition-colors",
+                        isNextAppointment
+                          ? "text-emerald-500 dark:text-emerald-400 font-extrabold"
+                          : "text-foreground font-bold"
+                      )}
+                    >
                       {horaFormatted}
                     </span>
                     <span className="text-[11px] font-medium text-muted-foreground/65 mt-0.5">
@@ -800,9 +839,9 @@ export function AdminMobileAgenda({
                     </div>
 
                     {/* Linha Inferior: Tesourinha + Serviço à esquerda | Forma de Pagamento com ícone (ou contagem X/Y do Plano) à direita */}
-                    <div className="flex items-center justify-between gap-2 text-[12px] text-muted-foreground">
+                    <div className="flex items-center justify-between gap-2 text-[12px]">
                       {/* Esquerda: Tesourinha + Nome do Serviço */}
-                      <div className="flex items-center gap-1.5 min-w-0 truncate font-medium">
+                      <div className="flex items-center gap-1.5 min-w-0 truncate font-medium text-muted-foreground">
                         <Scissors className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
                         <span className="truncate text-foreground/80">{serviceName}</span>
                       </div>
@@ -813,9 +852,9 @@ export function AdminMobileAgenda({
                           <span>{planUsageCount}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-medium text-muted-foreground/80">
+                        <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-medium">
                           <PayIcon className={cn("w-3.5 h-3.5 shrink-0", paymentBadge.iconColor)} />
-                          <span>{paymentBadge.label}</span>
+                          <span className="text-muted-foreground/85">{paymentBadge.label}</span>
                         </div>
                       )}
                     </div>
@@ -824,24 +863,8 @@ export function AdminMobileAgenda({
               );
             })}
 
-              {/* Botão no final dos agendamentos para adicionar outro encaixe */}
-              <div className="pt-3 pb-8 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onAddClick) {
-                      onAddClick(selectedDateKey, "09:00");
-                    } else {
-                      setSelectedSlotTime("09:00");
-                      setManualBookingOpen(true);
-                    }
-                  }}
-                  className="h-9 px-4 rounded-xl border border-dashed border-border/70 dark:border-white/[0.12] hover:border-foreground/30 text-muted-foreground hover:text-foreground text-[12px] font-medium flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Adicionar outro encaixe</span>
-                </button>
-              </div>
+              {/* Espaçamento inferior elegante para rolagem (botão de baixo removido a pedido) */}
+              <div className="pb-8" />
             </div>
           )}
         </div>
