@@ -75,6 +75,7 @@ const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "completed") {
     return {
       dot: "bg-emerald-500",
+      barColor: "bg-emerald-500",
       textColor: "text-emerald-600 dark:text-emerald-400",
       bgColor: "bg-emerald-500/10 dark:bg-emerald-500/15",
       borderColor: "border-emerald-500/20 dark:border-emerald-500/30",
@@ -84,6 +85,7 @@ const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "no_show") {
     return {
       dot: "bg-rose-500",
+      barColor: "bg-rose-500",
       textColor: "text-rose-600 dark:text-rose-400",
       bgColor: "bg-rose-500/10 dark:bg-rose-500/15",
       borderColor: "border-rose-500/20 dark:border-rose-500/30",
@@ -93,6 +95,7 @@ const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "confirmed" || barbeiroConfirmou) {
     return {
       dot: "bg-blue-500",
+      barColor: "bg-blue-500",
       textColor: "text-blue-600 dark:text-blue-400",
       bgColor: "bg-blue-500/10 dark:bg-blue-500/15",
       borderColor: "border-blue-500/20 dark:border-blue-500/30",
@@ -101,6 +104,7 @@ const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   }
   return {
     dot: "bg-amber-500",
+    barColor: "bg-amber-500",
     textColor: "text-amber-600 dark:text-amber-400",
     bgColor: "bg-amber-500/10 dark:bg-amber-500/15",
     borderColor: "border-amber-500/20 dark:border-amber-500/30",
@@ -593,142 +597,129 @@ export function AdminMobileAgenda({
         </div>
 
         {!isShowingSelectedDate ? (
-          <div className="px-4 space-y-3 animate-pulse">
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="rounded-xl border border-border/40 dark:border-white/[0.05] bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="h-4 w-24 rounded-full bg-muted/40" />
-                  <div className="h-3 w-16 rounded-full bg-muted/30" />
+          <div className="px-4 space-y-2.5 animate-pulse">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="h-16 rounded-xl border border-border/40 dark:border-white/[0.05] bg-card/60 p-3 flex items-center gap-3">
+                <div className="w-13 shrink-0 flex flex-col items-center gap-1">
+                  <div className="h-4 w-10 rounded bg-muted/40" />
+                  <div className="h-3 w-8 rounded bg-muted/20" />
                 </div>
-                <div className="h-4 w-36 rounded-full bg-muted/40" />
-                <div className="flex items-center justify-between pt-2 border-t border-border/20">
-                  <div className="h-3 w-28 rounded-full bg-muted/30" />
-                  <div className="h-3 w-14 rounded-full bg-muted/40" />
+                <div className="w-1 h-10 rounded-full bg-muted/30 shrink-0" />
+                <div className="flex-1 space-y-2 min-w-0">
+                  <div className="flex justify-between items-center">
+                    <div className="h-4 w-28 rounded bg-muted/40" />
+                    <div className="h-4 w-14 rounded bg-muted/30" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="h-3 w-24 rounded bg-muted/30" />
+                    <div className="h-3 w-16 rounded bg-muted/20" />
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         ) : loading && !hasLoadedOnceRef.current && appointments.length === 0 ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="w-8 h-8 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+          <div className="flex items-center justify-center h-40">
+            <div className="w-8 h-8 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+          </div>
+        ) : appointments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-56 text-center px-8">
+            <div className="w-12 h-12 rounded-2xl bg-secondary/60 dark:bg-white/[0.04] border border-border/50 dark:border-white/[0.06] flex items-center justify-center mb-3 text-muted-foreground/60">
+              <Calendar className="w-6 h-6 stroke-[1.6]" />
             </div>
-          ) : appointments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-56 text-center px-8">
-              <div className="w-12 h-12 rounded-2xl bg-secondary/60 dark:bg-white/[0.04] border border-border/50 dark:border-white/[0.06] flex items-center justify-center mb-3 text-muted-foreground/60">
-                <Calendar className="w-6 h-6 stroke-[1.6]" />
-              </div>
-              <p className="text-[14px] font-bold text-foreground">
-                {isToday(selectedDate) ? "Nenhum agendamento para hoje" : "Nenhum agendamento neste dia"}
-              </p>
-              <p className="text-[12px] text-muted-foreground/75 mt-1 max-w-[260px] leading-relaxed">
-                {isToday(selectedDate)
-                  ? "Seus horários livres estão disponíveis e podem ser reservados a qualquer momento."
-                  : "Navegue pelas datas no carrossel ou adicione um encaixe manual."}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  if (onAddClick) {
-                    onAddClick(selectedDateKey, "09:00");
-                  } else {
-                    setSelectedSlotTime("09:00");
-                    setManualBookingOpen(true);
-                  }
-                }}
-                className="mt-4 h-9 px-4 rounded-xl bg-foreground text-background text-[12.5px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 stroke-[2]" />
-                <span>Adicionar Encaixe</span>
-              </button>
-            </div>
-          ) : (
-            /* ══════ CARDS LARGOS, SEM POLUIÇÃO, 100% ORGANIZADOS E SÉRIOS ══════ */
-            <div className="px-4 space-y-3 mt-1">
-              {appointments.map((apt) => {
-                const statusConfig = getStatusConfig(apt.status, apt.barbeiro_confirmou);
-                const paymentBadge = getPaymentBadge(apt);
-                const PayIcon = paymentBadge.icon;
-                const isPlan = apt.tipo_agendamento === "plano" || apt.payment_method === "plano";
-                const isFree = Boolean(apt.is_free);
-                const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
-                const horaFormatted = apt.hora.substring(0, 5);
+            <p className="text-[14px] font-bold text-foreground">
+              {isToday(selectedDate) ? "Nenhum agendamento para hoje" : "Nenhum agendamento neste dia"}
+            </p>
+            <p className="text-[12px] text-muted-foreground/75 mt-1 max-w-[260px] leading-relaxed">
+              {isToday(selectedDate)
+                ? "Seus horários livres estão disponíveis e podem ser reservados a qualquer momento."
+                : "Navegue pelas datas no carrossel ou adicione um encaixe manual."}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (onAddClick) {
+                  onAddClick(selectedDateKey, "09:00");
+                } else {
+                  setSelectedSlotTime("09:00");
+                  setManualBookingOpen(true);
+                }
+              }}
+              className="mt-4 h-9 px-4 rounded-xl bg-foreground text-background text-[12.5px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2]" />
+              <span>Adicionar Encaixe</span>
+            </button>
+          </div>
+        ) : (
+          /* ══════ LISTA DE AGENDAMENTOS: ESTILO AGENDA NORMAL, MINIMALISTA, SÉRIO E MODERNO ══════ */
+          <div className="px-4 space-y-2 mt-0.5">
+            {appointments.map((apt) => {
+              const statusConfig = getStatusConfig(apt.status, apt.barbeiro_confirmou);
+              const paymentBadge = getPaymentBadge(apt);
+              const PayIcon = paymentBadge.icon;
+              const isPlan = apt.tipo_agendamento === "plano" || apt.payment_method === "plano";
+              const isFree = Boolean(apt.is_free);
+              const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
+              const horaFormatted = apt.hora.substring(0, 5);
 
-                const now = new Date();
-                const isViewingToday = isToday(selectedDate);
-                const [h, m] = apt.hora.split(':').map(Number);
-                const endMinutes = (h * 60 + m) + duration;
-                const nowMinutes = now.getHours() * 60 + now.getMinutes();
-                const isPast = isViewingToday && endMinutes <= nowMinutes && (apt.status === 'completed' || apt.status === 'no_show');
+              const now = new Date();
+              const isViewingToday = isToday(selectedDate);
+              const [h, m] = apt.hora.split(':').map(Number);
+              const endMinutes = (h * 60 + m) + duration;
+              const nowMinutes = now.getHours() * 60 + now.getMinutes();
+              const isPast = isViewingToday && endMinutes <= nowMinutes && (apt.status === 'completed' || apt.status === 'no_show');
 
-                const clientName = apt.profile?.nome || "Cliente";
-                const serviceName = (() => {
-                  if (apt.observacoes?.startsWith("Serviços:")) {
-                    return apt.observacoes.split(".")[0].replace("Serviços: ", "");
-                  }
-                  const sName = apt.servico?.nome || "Serviço";
-                  const sDur = apt.servico?.duracao_minutos || 0;
-                  const aDur = (apt as any).duracao || 0;
-                  if (sDur > 0 && aDur > sDur) {
-                    const qty = Math.round(aDur / sDur);
-                    if (qty > 1) return `${qty}x ${sName}`;
-                  }
-                  return sName;
-                })();
+              const clientName = apt.profile?.nome || "Cliente";
+              const serviceName = (() => {
+                if (apt.observacoes?.startsWith("Serviços:")) {
+                  return apt.observacoes.split(".")[0].replace("Serviços: ", "");
+                }
+                const sName = apt.servico?.nome || "Serviço";
+                const sDur = apt.servico?.duracao_minutos || 0;
+                const aDur = (apt as any).duracao || 0;
+                if (sDur > 0 && aDur > sDur) {
+                  const qty = Math.round(aDur / sDur);
+                  if (qty > 1) return `${qty}x ${sName}`;
+                }
+                return sName;
+              })();
 
-                return (
-                  <div
-                    key={apt.id}
-                    onClick={() => onAppointmentClick?.(apt)}
-                    style={{ opacity: isPast ? 0.45 : 1 }}
-                    className={cn(
-                      "relative w-full rounded-2xl p-4 overflow-hidden cursor-pointer transition-all duration-200",
-                      "backdrop-blur-xl active:scale-[0.99]",
-                      /* Efeito de Espelho Refletivo (Reflective Mirror / Glassmorphism) */
-                      "bg-gradient-to-b from-white/95 via-white/80 to-white/65 dark:from-white/[0.08] dark:via-white/[0.04] dark:to-white/[0.015]",
-                      "border border-white/90 dark:border-white/[0.12]",
-                      "shadow-[0_8px_30px_rgb(0,0,0,0.04),inset_0_1px_1.5px_rgba(255,255,255,0.95)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.35),inset_0_1px_1.5px_rgba(255,255,255,0.12)]",
-                      "hover:border-foreground/25 hover:shadow-[0_12px_36px_rgb(0,0,0,0.07)] dark:hover:border-white/[0.2]"
-                    )}
-                  >
-                    {/* Linha reflexiva superior de brilho do espelho */}
-                    <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/90 dark:via-white/25 to-transparent" />
+              return (
+                <div
+                  key={apt.id}
+                  onClick={() => onAppointmentClick?.(apt)}
+                  style={{ opacity: isPast ? 0.45 : 1 }}
+                  className={cn(
+                    "w-full rounded-xl border border-border/50 dark:border-white/[0.07] bg-card dark:bg-[#141414] p-3 sm:p-3.5",
+                    "flex items-center gap-3 active:scale-[0.99] hover:border-foreground/25 transition-all cursor-pointer shadow-2xs"
+                  )}
+                >
+                  {/* Coluna de Horário da Agenda (Esquerda) */}
+                  <div className="w-13 shrink-0 flex flex-col items-center justify-center text-center">
+                    <span className="font-mono text-[14.5px] font-bold text-foreground tabular-nums tracking-tight">
+                      {horaFormatted}
+                    </span>
+                    <span className="text-[11px] font-medium text-muted-foreground/75 mt-0.5">
+                      {duration} min
+                    </span>
+                  </div>
 
-                    {/* Linha 1: Horário Limpo à esquerda | Status Oficial em pill à direita */}
-                    <div className="flex items-center justify-between mb-2.5 relative z-10">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[14.5px] font-bold text-foreground tabular-nums tracking-tight">
-                          {horaFormatted}
-                        </span>
-                        <span className="text-muted-foreground/35 font-light text-[12px]">·</span>
-                        <span className="text-[12px] text-muted-foreground font-medium flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-muted-foreground/60" />
-                          {duration} min
-                        </span>
-                      </div>
+                  {/* Barra vertical de status da agenda */}
+                  <div className={cn("w-1 self-stretch rounded-full shrink-0", statusConfig.barColor)} />
 
-                      {/* Status limpo em pill espelhado */}
-                      <div className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-semibold shrink-0 backdrop-blur-md",
-                        statusConfig.bgColor,
-                        statusConfig.borderColor,
-                        statusConfig.textColor
-                      )}>
-                        <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
-                        <span>{statusConfig.statusLabel}</span>
-                      </div>
-                    </div>
-
-                    {/* Linha 2: Nome do Cliente com Tipografia Forte + Preço à direita */}
-                    <div className="flex items-center justify-between gap-3 mb-2.5 relative z-10">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[16px] font-bold text-foreground tracking-tight truncate">
+                  {/* Conteúdo Principal do Agendamento */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5">
+                    {/* Linha Superior: Nome do Cliente + Preço */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[15px] font-bold text-foreground tracking-tight truncate">
                           {clientName}
                         </span>
                         {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       </div>
 
-                      {/* Preço em destaque */}
-                      <span className="text-[15.5px] font-bold tabular-nums text-foreground shrink-0">
+                      <span className="text-[14.5px] font-bold tabular-nums text-foreground shrink-0">
                         {isPlan
                           ? "Plano"
                           : isFree
@@ -737,24 +728,30 @@ export function AdminMobileAgenda({
                       </span>
                     </div>
 
-                    {/* Linha 3: Divisor de espelho + Serviço à esquerda + Forma de Pagamento com Ícone à direita */}
-                    <div className="flex items-center justify-between pt-2.5 border-t border-black/[0.04] dark:border-white/[0.06] text-[12px] text-muted-foreground relative z-10">
-                      <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                        <Scissors className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                        <span className="truncate font-medium text-foreground/85">
-                          {serviceName}
+                    {/* Linha Inferior: Serviço + Forma de Pagamento + Status */}
+                    <div className="flex items-center justify-between gap-2 text-[12px] text-muted-foreground">
+                      <div className="flex items-center gap-1.5 min-w-0 truncate">
+                        <Scissors className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+                        <span className="truncate font-medium text-foreground/80">{serviceName}</span>
+                        <span className="text-muted-foreground/30">•</span>
+                        <span className="shrink-0 flex items-center gap-1 text-muted-foreground/80">
+                          <PayIcon className="w-3 h-3" />
+                          {paymentBadge.label}
                         </span>
                       </div>
 
-                      {/* Ícone e Nome do Pagamento */}
-                      <div className="flex items-center gap-1.5 shrink-0 font-medium text-muted-foreground">
-                        <PayIcon className="w-3.5 h-3.5 text-muted-foreground/70" />
-                        <span>{paymentBadge.label}</span>
+                      {/* Ponto e texto de status */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
+                        <span className={cn("text-[11.5px] font-semibold", statusConfig.textColor)}>
+                          {statusConfig.statusLabel}
+                        </span>
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              );
+            })}
 
               {/* Botão no final dos agendamentos para adicionar outro encaixe */}
               <div className="pt-3 pb-8 flex justify-center">
