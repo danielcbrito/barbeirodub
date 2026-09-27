@@ -197,18 +197,20 @@ const FloatingInput = ({
 
   return (
     <div
-      className={`relative h-[64px] rounded-2xl transition-all ${
+      className={`relative h-[58px] rounded-2xl border-2 transition-all duration-200 ${
         focused
-          ? "border-2 border-primary bg-foreground/[0.03] shadow-sm"
-          : "border border-transparent bg-foreground/[0.06]"
+          ? "border-primary bg-primary/[0.02] shadow-sm"
+          : "border-transparent bg-foreground/[0.05]"
       }`}
     >
       <label
         htmlFor={id}
-        className={`pointer-events-none absolute left-4 transition-all ${
+        className={`pointer-events-none absolute left-4 select-none transition-all duration-150 ${
           active
-            ? `top-2.5 text-[11.5px] font-semibold ${focused ? "text-primary" : "text-foreground/60"}`
-            : "top-1/2 -translate-y-1/2 text-[15.5px] text-foreground/55"
+            ? `top-[8px] text-[11px] font-semibold tracking-wide leading-none ${
+                focused ? "text-primary" : "text-foreground/50"
+              }`
+            : "top-1/2 -translate-y-1/2 text-[15px] font-normal text-foreground/45"
         }`}
       >
         {label}
@@ -230,14 +232,14 @@ const FloatingInput = ({
         onFocus={handleFocus}
         onBlur={() => setFocused(false)}
         data-no-auto-scroll="true"
-        className={`peer h-full w-full rounded-2xl bg-transparent px-4 pt-4.5 pb-1 ${
+        className={`peer h-full w-full rounded-2xl bg-transparent px-4 pt-[24px] pb-[7px] ${
           rightSlot ? "pr-12" : ""
-        } text-[16px] text-foreground caret-primary outline-none`}
+        } text-[15.5px] text-foreground caret-primary outline-none leading-normal font-normal`}
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
 
       {rightSlot && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center">
           {rightSlot}
         </div>
       )}
@@ -270,7 +272,7 @@ const CountryPicker = ({
         <button
           type="button"
           aria-label={`País: ${value.name} +${value.dial}`}
-          className="flex h-[64px] shrink-0 items-center gap-1.5 rounded-2xl border border-transparent bg-foreground/[0.06] px-3.5 outline-none transition-colors focus-visible:border-primary"
+          className="flex h-[58px] shrink-0 items-center gap-1.5 rounded-2xl border-2 border-transparent bg-foreground/[0.05] px-3.5 outline-none transition-colors focus-visible:border-primary"
         >
           <FlagIcon code={value.code} className="w-7 h-5" />
           <span className="text-[15px] font-medium text-foreground">+{value.dial}</span>
@@ -345,6 +347,7 @@ const Auth = () => {
   const [viewportHeight, setViewportHeight] = useState<number>(() =>
     typeof window !== "undefined" ? window.innerHeight : 800
   );
+  const [vvOffset, setVvOffset] = useState<number>(0);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -362,14 +365,16 @@ const Auth = () => {
 
     const update = () => {
       const vh = vv ? Math.round(vv.height) : window.innerHeight;
+      const offset = vv ? Math.round(vv.offsetTop) : 0;
       setViewportHeight(vh);
+      setVvOffset(offset);
 
       if (!initialHeightRef.current || vh > initialHeightRef.current) {
         initialHeightRef.current = Math.max(initialHeightRef.current || 0, window.innerHeight, vh);
       }
 
       const diff = initialHeightRef.current - vh;
-      setIsKeyboardOpen(diff > 130);
+      setIsKeyboardOpen(diff > 120);
 
       // Garante que o documento nunca seja deslocado para cima ou fora de visão
       if (window.scrollY !== 0 || window.scrollX !== 0) {
@@ -863,46 +868,48 @@ const Auth = () => {
       style={{
         height: `${viewportHeight}px`,
         maxHeight: "100dvh",
+        top: vvOffset ? `${vvOffset}px` : "0px",
       }}
     >
-      {/* ─── Scrollable area: header + title + form — tudo visível, rola naturalmente ─── */}
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        {/* Header — sempre visível */}
-        <header
-          className="relative flex items-center justify-center px-4 shrink-0"
-          style={{
-            paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
-            paddingBottom: "10px",
-          }}
+      {/* ─── Header: SEMPRE FIXO no topo, NUNCA rola para fora nem desaparece ─── */}
+      <header
+        className="relative flex items-center justify-center px-4 shrink-0 z-20 transition-all duration-200"
+        style={{
+          paddingTop: isKeyboardOpen
+            ? "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 8px)"
+            : "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
+          paddingBottom: isKeyboardOpen ? "6px" : "10px",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onBackClick}
+          aria-label="Voltar"
+          className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
+          style={{ touchAction: "manipulation" }}
         >
-          <button
-            type="button"
-            onClick={onBackClick}
-            aria-label="Voltar"
-            className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
-            style={{ touchAction: "manipulation" }}
-          >
-            <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-          </button>
-          <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground/90">{title}</h2>
-        </header>
+          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
+        </button>
+        <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground/90">{title}</h2>
+      </header>
 
-        {/* Progress bar (signup) */}
-        {mode === "signup" && (
-          <div className="px-6 pb-1 max-w-md mx-auto w-full">
-            <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all duration-300"
-                style={{
-                  width: `${((SIGNUP_ORDER.indexOf(step) + 1) / SIGNUP_ORDER.length) * 100}%`,
-                }}
-              />
-            </div>
+      {/* Progress bar (signup) */}
+      {mode === "signup" && (
+        <div className="px-6 pb-1 max-w-md mx-auto w-full shrink-0">
+          <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{
+                width: `${((SIGNUP_ORDER.indexOf(step) + 1) / SIGNUP_ORDER.length) * 100}%`,
+              }}
+            />
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Content */}
-        <div className="px-6 w-full max-w-md mx-auto">
+      {/* ─── Main content: espaçoso e com cabeçalho protegido ─── */}
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col justify-start">
+        <div className="px-6 w-full max-w-md mx-auto flex-1 flex flex-col justify-start">
           <AnimatePresence mode="wait">
             <motion.div
               key={mode === "login" ? "login" : `signup-${step}`}
@@ -910,22 +917,32 @@ const Auth = () => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -16 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="w-full pt-2"
+              className="w-full"
             >
               {mode === "login" ? (
                 <>
-                  {/* Título e subtítulo — sempre visíveis */}
-                  <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
-                    Entrar na sua conta
-                  </h1>
-                  <p className="text-[13.5px] text-foreground/60 mt-1">
-                    Informe suas credenciais para acessar o aplicativo
-                  </p>
+                  {/* Título e subtítulo — adaptam-se suavemente para garantir conforto total */}
+                  <div className={`transition-all duration-200 ${isKeyboardOpen ? "pt-1 pb-1" : "pt-4 pb-2"}`}>
+                    <h1
+                      className={`font-extrabold tracking-tight text-foreground leading-tight transition-all duration-200 ${
+                        isKeyboardOpen ? "text-[21px] sm:text-[23px]" : "text-[25px] sm:text-[27px]"
+                      }`}
+                    >
+                      Entrar na sua conta
+                    </h1>
+                    <p
+                      className={`text-foreground/60 transition-all duration-200 ${
+                        isKeyboardOpen ? "text-[12.5px] mt-0.5" : "text-[13.5px] mt-1"
+                      }`}
+                    >
+                      Informe suas credenciais para acessar o aplicativo
+                    </p>
+                  </div>
 
                   <form
                     id="auth-login-form"
                     onSubmit={handleLoginSubmit}
-                    className="space-y-3 mt-6"
+                    className={`transition-all duration-200 ${isKeyboardOpen ? "space-y-2.5 mt-3" : "space-y-3 mt-5"}`}
                     noValidate
                   >
                     <FloatingInput
@@ -981,13 +998,23 @@ const Auth = () => {
                 </>
               ) : (
                 <>
-                  {/* Signup título e subtítulo — sempre visíveis */}
-                  <h1 className="text-[24px] font-extrabold tracking-tight text-foreground leading-tight">
-                    {signupContent!.heading}
-                  </h1>
-                  <p className="text-[13.5px] text-foreground/60 mt-1.5">
-                    {signupContent!.hint}
-                  </p>
+                  {/* Signup título e subtítulo */}
+                  <div className={`transition-all duration-200 ${isKeyboardOpen ? "pt-1 pb-1" : "pt-4 pb-2"}`}>
+                    <h1
+                      className={`font-extrabold tracking-tight text-foreground leading-tight transition-all duration-200 ${
+                        isKeyboardOpen ? "text-[21px] sm:text-[23px]" : "text-[24px] sm:text-[26px]"
+                      }`}
+                    >
+                      {signupContent!.heading}
+                    </h1>
+                    <p
+                      className={`text-foreground/60 transition-all duration-200 ${
+                        isKeyboardOpen ? "text-[12.5px] mt-0.5" : "text-[13.5px] mt-1"
+                      }`}
+                    >
+                      {signupContent!.hint}
+                    </p>
+                  </div>
 
                   <form
                     id="auth-signup-form"
@@ -995,7 +1022,7 @@ const Auth = () => {
                       e.preventDefault();
                       handleSignupNext();
                     }}
-                    className="space-y-3 mt-6"
+                    className={`transition-all duration-200 ${isKeyboardOpen ? "space-y-2.5 mt-3" : "space-y-3 mt-5"}`}
                     noValidate
                   >
                     {signupContent!.input}
@@ -1027,19 +1054,16 @@ const Auth = () => {
               )}
             </motion.div>
           </AnimatePresence>
-
-          {/* Espaçamento extra no final para garantir scroll confortável */}
-          <div className="h-4" />
         </div>
       </main>
 
-      {/* ─── Footer / CTA — sempre fixo na base, sobe com teclado ──── */}
+      {/* ─── Footer / CTA — sempre fixo na base, sobe suavemente com o teclado ──── */}
       <footer
         className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20"
         style={{
-          paddingTop: 8,
+          paddingTop: isKeyboardOpen ? 6 : 10,
           paddingBottom: isKeyboardOpen
-            ? "10px"
+            ? "12px"
             : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
         }}
       >

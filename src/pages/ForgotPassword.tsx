@@ -44,18 +44,20 @@ const FloatingInput = ({
 
   return (
     <div
-      className={`relative h-[64px] rounded-2xl transition-all ${
+      className={`relative h-[58px] rounded-2xl border-2 transition-all duration-200 ${
         focused
-          ? "border-2 border-primary bg-foreground/[0.03] shadow-sm"
-          : "border border-transparent bg-foreground/[0.06]"
+          ? "border-primary bg-primary/[0.02] shadow-sm"
+          : "border-transparent bg-foreground/[0.05]"
       }`}
     >
       <label
         htmlFor={id}
-        className={`pointer-events-none absolute left-4 transition-all ${
+        className={`pointer-events-none absolute left-4 select-none transition-all duration-150 ${
           active
-            ? `top-2.5 text-[11.5px] font-semibold ${focused ? "text-primary" : "text-foreground/60"}`
-            : "top-1/2 -translate-y-1/2 text-[15.5px] text-foreground/55"
+            ? `top-[8px] text-[11px] font-semibold tracking-wide leading-none ${
+                focused ? "text-primary" : "text-foreground/50"
+              }`
+            : "top-1/2 -translate-y-1/2 text-[15px] font-normal text-foreground/45"
         }`}
       >
         {label}
@@ -74,7 +76,7 @@ const FloatingInput = ({
         onFocus={handleFocus}
         onBlur={() => setFocused(false)}
         data-no-auto-scroll="true"
-        className="peer h-full w-full rounded-2xl bg-transparent px-4 pt-4.5 pb-1 text-[16px] text-foreground caret-primary outline-none"
+        className="peer h-full w-full rounded-2xl bg-transparent px-4 pt-[24px] pb-[7px] text-[15.5px] text-foreground caret-primary outline-none leading-normal font-normal"
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
     </div>
@@ -92,6 +94,7 @@ const ForgotPassword = () => {
   const [viewportHeight, setViewportHeight] = useState<number>(() =>
     typeof window !== "undefined" ? window.innerHeight : 800
   );
+  const [vvOffset, setVvOffset] = useState<number>(0);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -108,14 +111,16 @@ const ForgotPassword = () => {
 
     const update = () => {
       const vh = vv ? Math.round(vv.height) : window.innerHeight;
+      const offset = vv ? Math.round(vv.offsetTop) : 0;
       setViewportHeight(vh);
+      setVvOffset(offset);
 
       if (!initialHeightRef.current || vh > initialHeightRef.current) {
         initialHeightRef.current = Math.max(initialHeightRef.current || 0, window.innerHeight, vh);
       }
 
       const diff = initialHeightRef.current - vh;
-      setIsKeyboardOpen(diff > 130);
+      setIsKeyboardOpen(diff > 120);
 
       if (window.scrollY !== 0 || window.scrollX !== 0) {
         window.scrollTo(0, 0);
@@ -183,32 +188,34 @@ const ForgotPassword = () => {
       style={{
         height: `${viewportHeight}px`,
         maxHeight: "100dvh",
+        top: vvOffset ? `${vvOffset}px` : "0px",
       }}
     >
-      {/* Scrollable area: header + title + form — tudo visível */}
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        {/* Header — sempre visível */}
-        <div
-          className="relative flex items-center justify-center px-4 shrink-0"
-          style={{
-            paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 10px)",
-            paddingBottom: "10px",
-          }}
+      {/* Header — SEMPRE FIXO no topo, NUNCA rola para fora nem desaparece */}
+      <header
+        className="relative flex items-center justify-center px-4 shrink-0 z-20 transition-all duration-200"
+        style={{
+          paddingTop: isKeyboardOpen
+            ? "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 8px)"
+            : "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
+          paddingBottom: isKeyboardOpen ? "6px" : "10px",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
+          className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 active:scale-95 transition-all"
+          aria-label="Voltar"
+          style={{ touchAction: "manipulation" }}
         >
-          <button
-            type="button"
-            onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
-            className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 active:scale-95 transition-all"
-            aria-label="Voltar"
-            style={{ touchAction: "manipulation" }}
-          >
-            <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-          </button>
-          <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground">Recuperar senha</h2>
-        </div>
+          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
+        </button>
+        <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground">Recuperar senha</h2>
+      </header>
 
-        {/* Content */}
-        <div className="px-6 w-full max-w-md mx-auto">
+      {/* Main content: espaçoso e com cabeçalho protegido */}
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col justify-start">
+        <div className="px-6 w-full max-w-md mx-auto flex-1 flex flex-col justify-start">
           <AnimatePresence mode="wait">
             {!emailSent ? (
               <motion.div
@@ -217,19 +224,29 @@ const ForgotPassword = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
-                className="w-full pt-2"
+                className="w-full"
               >
-                {/* Título e subtítulo — sempre visíveis */}
-                <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
-                  Esqueceu sua senha?
-                </h1>
-                <p className="text-[13px] text-foreground/55 mt-1.5">
-                  Digite seu e-mail e enviaremos um link para você criar uma nova senha.
-                </p>
+                {/* Título e subtítulo — adaptam-se suavemente para garantir conforto total */}
+                <div className={`transition-all duration-200 ${isKeyboardOpen ? "pt-1 pb-1" : "pt-4 pb-2"}`}>
+                  <h1
+                    className={`font-extrabold tracking-tight text-foreground leading-tight transition-all duration-200 ${
+                      isKeyboardOpen ? "text-[21px] sm:text-[23px]" : "text-[25px] sm:text-[27px]"
+                    }`}
+                  >
+                    Esqueceu sua senha?
+                  </h1>
+                  <p
+                    className={`text-foreground/55 transition-all duration-200 ${
+                      isKeyboardOpen ? "text-[12.5px] mt-0.5" : "text-[13px] mt-1.5"
+                    }`}
+                  >
+                    Digite seu e-mail e enviaremos um link para você criar uma nova senha.
+                  </p>
+                </div>
 
                 <form
                   onSubmit={handleSubmit}
-                  className="space-y-3 mt-6"
+                  className={`transition-all duration-200 ${isKeyboardOpen ? "space-y-2.5 mt-3" : "space-y-3 mt-5"}`}
                   noValidate
                 >
                   <FloatingInput
@@ -278,18 +295,16 @@ const ForgotPassword = () => {
               </motion.div>
             )}
           </AnimatePresence>
-
-          <div className="h-4" />
         </div>
       </main>
 
-      {/* Bottom CTA */}
+      {/* Bottom CTA — sempre fixo na base, sobe suavemente com o teclado */}
       <footer
         className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20"
         style={{
-          paddingTop: 8,
+          paddingTop: isKeyboardOpen ? 6 : 10,
           paddingBottom: isKeyboardOpen
-            ? "10px"
+            ? "12px"
             : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
         }}
       >
