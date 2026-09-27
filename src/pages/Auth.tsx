@@ -197,9 +197,9 @@ const FloatingInput = ({
 
   return (
     <div
-      className={`relative h-[56px] rounded-2xl transition-all ${
+      className={`relative h-[64px] rounded-2xl transition-all ${
         focused
-          ? "border border-primary bg-foreground/[0.04] shadow-sm"
+          ? "border-2 border-primary bg-foreground/[0.03] shadow-sm"
           : "border border-transparent bg-foreground/[0.06]"
       }`}
     >
@@ -207,8 +207,8 @@ const FloatingInput = ({
         htmlFor={id}
         className={`pointer-events-none absolute left-4 transition-all ${
           active
-            ? `top-2 text-[11px] font-medium ${focused ? "text-primary" : "text-foreground/60"}`
-            : "top-1/2 -translate-y-1/2 text-[15px] text-foreground/55"
+            ? `top-2.5 text-[11.5px] font-semibold ${focused ? "text-primary" : "text-foreground/60"}`
+            : "top-1/2 -translate-y-1/2 text-[15.5px] text-foreground/55"
         }`}
       >
         {label}
@@ -230,9 +230,9 @@ const FloatingInput = ({
         onFocus={handleFocus}
         onBlur={() => setFocused(false)}
         data-no-auto-scroll="true"
-        className={`peer h-full w-full rounded-2xl bg-transparent px-4 pt-4 pb-1 ${
+        className={`peer h-full w-full rounded-2xl bg-transparent px-4 pt-4.5 pb-1 ${
           rightSlot ? "pr-12" : ""
-        } text-[15.5px] text-foreground caret-primary outline-none`}
+        } text-[16px] text-foreground caret-primary outline-none`}
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
 
@@ -270,7 +270,7 @@ const CountryPicker = ({
         <button
           type="button"
           aria-label={`País: ${value.name} +${value.dial}`}
-          className="flex h-[56px] shrink-0 items-center gap-1.5 rounded-2xl border border-transparent bg-foreground/[0.06] px-3 outline-none transition-colors focus-visible:border-primary"
+          className="flex h-[64px] shrink-0 items-center gap-1.5 rounded-2xl border border-transparent bg-foreground/[0.06] px-3.5 outline-none transition-colors focus-visible:border-primary"
         >
           <FlagIcon code={value.code} className="w-7 h-5" />
           <span className="text-[15px] font-medium text-foreground">+{value.dial}</span>
@@ -944,7 +944,7 @@ const Auth = () => {
                     onChange={setEmail}
                     type="email"
                     inputMode="email"
-                    autoComplete="email"
+                    autoComplete="username"
                     enterKeyHint="next"
                     autoCapitalize="none"
                     autoCorrect="off"
@@ -958,6 +958,9 @@ const Auth = () => {
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     enterKeyHint="done"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     rightSlot={
                       <button
                         type="button"

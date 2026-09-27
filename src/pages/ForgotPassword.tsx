@@ -45,9 +45,9 @@ const FloatingInput = ({
 
   return (
     <div
-      className={`relative h-[56px] rounded-2xl transition-all ${
+      className={`relative h-[64px] rounded-2xl transition-all ${
         focused
-          ? "border border-primary bg-foreground/[0.04] shadow-sm"
+          ? "border-2 border-primary bg-foreground/[0.03] shadow-sm"
           : "border border-transparent bg-foreground/[0.06]"
       }`}
     >
@@ -55,8 +55,8 @@ const FloatingInput = ({
         htmlFor={id}
         className={`pointer-events-none absolute left-4 transition-all ${
           active
-            ? `top-2 text-[11px] font-medium ${focused ? "text-primary" : "text-foreground/60"}`
-            : "top-1/2 -translate-y-1/2 text-[15px] text-foreground/55"
+            ? `top-2.5 text-[11.5px] font-semibold ${focused ? "text-primary" : "text-foreground/60"}`
+            : "top-1/2 -translate-y-1/2 text-[15.5px] text-foreground/55"
         }`}
       >
         {label}
@@ -75,7 +75,7 @@ const FloatingInput = ({
         onFocus={handleFocus}
         onBlur={() => setFocused(false)}
         data-no-auto-scroll="true"
-        className="peer h-full w-full rounded-2xl bg-transparent px-4 pt-4 pb-1 text-[15.5px] text-foreground caret-primary outline-none"
+        className="peer h-full w-full rounded-2xl bg-transparent px-4 pt-4.5 pb-1 text-[16px] text-foreground caret-primary outline-none"
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
     </div>
@@ -247,7 +247,7 @@ const ForgotPassword = () => {
                   label="E-mail"
                   type="email"
                   inputMode="email"
-                  autoComplete="email"
+                  autoComplete="username"
                   enterKeyHint="send"
                   value={email}
                   onChange={setEmail}
