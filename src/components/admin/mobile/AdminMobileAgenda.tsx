@@ -65,7 +65,7 @@ interface AdminMobileAgendaProps {
   showBack?: boolean;
 }
 
-/** Status oficial com cores nítidas:
+/** Status oficial do sistema com cores claras:
  * - Concluído: VERDE (emerald)
  * - Agendado: AZUL (blue)
  * - Pendente: ÂMBAR (amber)
@@ -357,7 +357,7 @@ export function AdminMobileAgenda({
     };
 
     const channel = supabase
-      .channel(`mobile-agenda-v5-${barbeiroId || 'all'}`)
+      .channel(`mobile-agenda-v6-${barbeiroId || 'all'}`)
       .on('postgres_changes', channelConfig as any, scheduleSilentRefresh)
       .subscribe();
 
@@ -413,8 +413,8 @@ export function AdminMobileAgenda({
 
   return (
     <div className="flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
-      {/* ══════ HEADER FIXO: 100% OPACO (sem vazamento de agendamentos por trás) ══════ */}
-      <div className="flex-shrink-0 z-20 bg-background pt-3 pb-2 border-b border-border/40 dark:border-white/[0.06]">
+      {/* ══════ HEADER FIXO: 100% NA COR DE FUNDO (SEM LISTRA/BORDA ATRÁS) ══════ */}
+      <div className="flex-shrink-0 z-20 bg-background pt-3 pb-2.5">
         {/* Linha 1: Mês/Ano + Botão Hoje + Setas de Navegação */}
         <div className="flex items-center justify-between px-4 mb-2.5">
           {/* Seletor Mês/Ano */}
@@ -425,10 +425,10 @@ export function AdminMobileAgenda({
                 setPickerYear(selectedMonth.getFullYear());
                 setIsMonthPickerOpen(true);
               }}
-              className="flex items-center gap-1.5 text-[16px] font-bold text-foreground capitalize tracking-tight hover:opacity-80 active:scale-95 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 text-[16.5px] font-bold text-foreground capitalize tracking-tight hover:opacity-80 active:scale-95 transition-all cursor-pointer"
             >
               <span>{format(selectedMonth, "MMMM yyyy", { locale: ptBR })}</span>
-              <ChevronDown className="w-4 h-4 text-muted-foreground/70 stroke-[2]" />
+              <ChevronDown className="w-4 h-4 text-muted-foreground/70 stroke-[2.2]" />
             </button>
 
             {!isSameMonth(selectedMonth, today) && (
@@ -463,7 +463,7 @@ export function AdminMobileAgenda({
           </div>
         </div>
 
-        {/* ══════ CARROSSEL ORIGINAL COM SQUIRCLES REDONDINHAS (100% Padrão Solicitado) ══════ */}
+        {/* ══════ CARROSSEL ORIGINAL COM SQUIRCLES REDONDINHAS E MAIORES (Fácil de Tocar) ══════ */}
         <div
           ref={carouselRef}
           className="w-full overflow-x-auto scrollbar-hide px-3 py-1"
@@ -471,7 +471,7 @@ export function AdminMobileAgenda({
             WebkitOverflowScrolling: "touch",
           }}
         >
-          <div className="flex items-end gap-1.5 w-max px-2">
+          <div className="flex items-end gap-2 w-max px-2">
             {daysInMonth.map((day) => {
               const isSelected = isSameDay(day, selectedDate);
               const dayIsToday = isToday(day);
@@ -481,7 +481,7 @@ export function AdminMobileAgenda({
                 <div
                   key={dateKey}
                   data-date={dateKey}
-                  className="flex-shrink-0 w-11"
+                  className="flex-shrink-0 w-[52px]"
                 >
                   <button
                     type="button"
@@ -494,32 +494,31 @@ export function AdminMobileAgenda({
                       transform: isSelected ? "translateY(-2px)" : "translateY(0px)",
                     }}
                   >
-                    {/* Dia da semana em cima */}
+                    {/* Dia da semana */}
                     <span className={cn(
-                      "text-[9.5px] font-bold uppercase leading-none tracking-wider",
+                      "text-[10.5px] font-bold uppercase leading-none tracking-wider",
                       isSelected ? "text-foreground" : "text-muted-foreground/60"
                     )}>
                       {shortDayName(day)}
                     </span>
 
-                    {/* Squircle redondinha moderno */}
+                    {/* Squircle redondinha maior e mais confortável */}
                     <div
                       className={cn(
-                        "w-10 h-10 flex items-center justify-center rounded-2xl will-change-transform transition-all",
+                        "w-12 h-12 flex items-center justify-center rounded-[18px] will-change-transform transition-all",
                         isSelected
-                          ? "bg-foreground text-background shadow-sm font-bold"
-                          : "text-foreground font-semibold hover:bg-secondary/40 bg-card/40 dark:bg-white/[0.03] border border-border/30 dark:border-white/[0.05]",
+                          ? "bg-foreground text-background shadow-sm font-bold scale-[1.04]"
+                          : "text-foreground font-semibold hover:bg-secondary/40 bg-card/60 dark:bg-white/[0.04] border border-border/40 dark:border-white/[0.06]",
                         dayIsToday && !isSelected && "ring-1 ring-primary/40 text-primary font-bold"
                       )}
                       style={{
-                        transform: isSelected ? "scale(1.05)" : "scale(1)",
                         transition: "transform 200ms ease-out",
                       }}
                     >
                       <span
                         className={cn(
                           "leading-none",
-                          isSelected ? "text-background text-[15px] font-bold" : "text-foreground text-[13px] font-semibold"
+                          isSelected ? "text-background text-[17px] font-bold" : "text-foreground text-[15px] font-semibold"
                         )}
                       >
                         {format(day, "d")}
@@ -542,31 +541,31 @@ export function AdminMobileAgenda({
         </div>
       </div>
 
-      {/* ══════ ÁREA SCROLLÁVEL: MÁSCARA FADE NO TOPO + CARDS LARGOS E ESPECÍFICOS ══════ */}
+      {/* ══════ ÁREA SCROLLÁVEL: MÁSCARA ALTA (AGENDAMENTOS SOMEM SUAVEMENTE ANTES DO CARROSSEL) ══════ */}
       <div className="flex-1 min-h-0 relative">
-        {/* Fade mask no topo: agendamentos desaparecem suavemente ANTES do carrossel */}
+        {/* Máscara gradiente suave de 40px no topo: desaparecimento gradual sem listra */}
         <div 
-          className="absolute top-0 inset-x-0 h-6 z-10 pointer-events-none bg-gradient-to-b from-background to-transparent" 
+          className="absolute top-0 inset-x-0 h-10 z-10 pointer-events-none bg-gradient-to-b from-background via-background/70 to-transparent" 
         />
 
-        <div className="h-full overflow-y-auto overscroll-contain pb-24 pt-2">
+        <div className="h-full overflow-y-auto overscroll-contain pb-28 pt-1">
           
-          {/* ══════ BARRA DE AÇÃO SUPERIOR: DATA + BOTÃO NOVO ENCAIXE ══════ */}
-          <div className="px-4 pt-1 pb-3 flex items-center justify-between">
+          {/* ══════ BARRA DE AÇÃO: DATA + BOTÃO "NOVO ENCAIXE" ROBUSTO E SÓLIDO ══════ */}
+          <div className="px-4 pt-2 pb-3 flex items-center justify-between">
             <div className="min-w-0 pr-2">
-              <h3 className="text-[14.5px] font-bold text-foreground tracking-tight capitalize truncate">
+              <h3 className="text-[15px] font-bold text-foreground tracking-tight capitalize truncate">
                 {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
               </h3>
-              <p className="text-[11.5px] font-medium text-muted-foreground mt-0.5">
+              <p className="text-[12px] font-medium text-muted-foreground mt-0.5">
                 {appointments.length === 0
                   ? "Nenhum agendamento"
                   : appointments.length === 1
-                  ? "1 agendamento marcado"
-                  : `${appointments.length} agendamentos marcados`}
+                  ? "1 agendamento"
+                  : `${appointments.length} agendamentos`}
               </p>
             </div>
 
-            {/* Botão de Encaixe com Proporção Ideal */}
+            {/* Botão Novo Encaixe: Robusto, Sólido, Moderno e Ergonômico (Não fino!) */}
             <button
               type="button"
               onClick={() => {
@@ -577,10 +576,10 @@ export function AdminMobileAgenda({
                   setManualBookingOpen(true);
                 }
               }}
-              className="h-8.5 px-3.5 rounded-xl border border-border/70 dark:border-white/[0.1] bg-secondary/60 dark:bg-white/[0.05] hover:bg-secondary text-foreground text-[12px] font-semibold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-xs shrink-0"
+              className="h-10 px-4 rounded-xl bg-foreground text-background text-[13px] font-semibold flex items-center gap-2 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-sm shrink-0"
               aria-label="Novo Encaixe"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[2.2] text-foreground" />
+              <Plus className="w-4 h-4 stroke-[2.2]" />
               <span>Novo Encaixe</span>
             </button>
           </div>
@@ -628,14 +627,14 @@ export function AdminMobileAgenda({
                     setManualBookingOpen(true);
                   }
                 }}
-                className="mt-4 h-8 px-3.5 rounded-xl bg-foreground text-background text-[12px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
+                className="mt-4 h-9 px-4 rounded-xl bg-foreground text-background text-[12.5px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2]" />
                 <span>Adicionar Encaixe</span>
               </button>
             </div>
           ) : (
-            /* ══════ CARDS LARGOS, ESPAÇOSOS E COM INFORMAÇÕES ESPECÍFICAS ══════ */
+            /* ══════ CARDS LARGOS, SEM POLUIÇÃO, 100% ORGANIZADOS E SÉRIOS ══════ */
             <div className="px-4 space-y-3 mt-1">
               {appointments.map((apt) => {
                 const statusConfig = getStatusConfig(apt.status, apt.barbeiro_confirmou);
@@ -674,33 +673,33 @@ export function AdminMobileAgenda({
                     onClick={() => onAppointmentClick?.(apt)}
                     style={{ opacity: isPast ? 0.45 : 1 }}
                     className={cn(
-                      "w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card dark:bg-[#141414] p-4 space-y-3 shadow-xs",
-                      "hover:border-foreground/20 active:scale-[0.99] transition-all cursor-pointer relative overflow-hidden"
+                      "w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card dark:bg-[#141414] p-4",
+                      "hover:border-foreground/20 active:scale-[0.99] transition-all cursor-pointer shadow-xs"
                     )}
                   >
-                    {/* Linha 1: Horário + Duração à esquerda | Status colorido oficial à direita */}
-                    <div className="flex items-center justify-between gap-2">
+                    {/* Linha 1: Horário Limpo à esquerda | Status Oficial à direita (sem caixas redundantes) */}
+                    <div className="flex items-center justify-between mb-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[12.5px] font-bold px-2.5 py-0.5 rounded-lg bg-secondary/80 dark:bg-white/[0.08] text-foreground tabular-nums border border-border/30 dark:border-white/[0.06]">
+                        <span className="font-mono text-[14px] font-bold text-foreground tabular-nums">
                           {horaFormatted}
                         </span>
-                        <span className="text-[12px] text-muted-foreground flex items-center gap-1 font-medium">
-                          <Clock className="w-3.5 h-3.5 text-muted-foreground/60" />
+                        <span className="text-muted-foreground/35 font-light text-[12px]">·</span>
+                        <span className="text-[12px] text-muted-foreground font-medium">
                           {duration} min
                         </span>
                       </div>
 
-                      {/* Status com ponto e texto nas cores solicitadas */}
-                      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary/40 dark:bg-white/[0.03] border border-border/30 dark:border-white/[0.06]">
-                        <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
-                        <span className={cn("text-[11.5px] font-semibold", statusConfig.textColor)}>
+                      {/* Status limpo com dot oficial */}
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", statusConfig.dot)} />
+                        <span className={cn("text-[12px] font-semibold", statusConfig.textColor)}>
                           {statusConfig.statusLabel}
                         </span>
                       </div>
                     </div>
 
-                    {/* Linha 2: Nome do Cliente com Destaque Forte + Preço */}
-                    <div className="flex items-center justify-between gap-2">
+                    {/* Linha 2: Nome do Cliente com Tipografia Forte + Preço à direita */}
+                    <div className="flex items-center justify-between gap-3 mb-2.5">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[16px] font-bold text-foreground tracking-tight truncate">
                           {clientName}
@@ -718,28 +717,26 @@ export function AdminMobileAgenda({
                       </span>
                     </div>
 
-                    {/* Linha 3: Serviço com Tesoura à esquerda | Método de Pagamento com Ícone à direita */}
-                    <div className="flex items-center justify-between pt-2.5 border-t border-border/30 dark:border-white/[0.06] text-xs">
+                    {/* Linha 3: Serviço à esquerda | Forma de Pagamento com Ícone à direita */}
+                    <div className="flex items-center justify-between pt-2.5 border-t border-border/30 dark:border-white/[0.05] text-[12.5px] text-muted-foreground">
                       <div className="flex items-center gap-1.5 min-w-0 pr-2">
                         <Scissors className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
-                        <span className="text-muted-foreground font-medium text-[12.5px] truncate">
+                        <span className="truncate font-medium">
                           {serviceName}
                         </span>
                       </div>
 
                       {/* Ícone e Nome do Pagamento */}
-                      <div className="flex items-center gap-1.5 shrink-0 px-2.5 py-0.5 rounded-md bg-secondary/50 dark:bg-white/[0.04] border border-border/30 dark:border-white/[0.05]">
-                        <PayIcon className="w-3 h-3 text-muted-foreground/70" />
-                        <span className="text-[11px] font-medium text-muted-foreground">
-                          {paymentBadge.label}
-                        </span>
+                      <div className="flex items-center gap-1.5 shrink-0 font-medium text-muted-foreground/80">
+                        <PayIcon className="w-3.5 h-3.5 text-muted-foreground/70" />
+                        <span>{paymentBadge.label}</span>
                       </div>
                     </div>
                   </div>
                 );
               })}
 
-              {/* Botão no final dos agendamentos para adicionar novo encaixe */}
+              {/* Botão no final dos agendamentos para adicionar outro encaixe */}
               <div className="pt-3 pb-8 flex justify-center">
                 <button
                   type="button"
