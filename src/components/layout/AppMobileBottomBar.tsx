@@ -178,19 +178,40 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
   };
 
   return (
-    <div
-      className={cn(
-        "fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none flex justify-center items-center w-full px-3 transition-all duration-200",
-        isKeyboardOpen ? "opacity-0 translate-y-16 pointer-events-none" : "opacity-100 translate-y-0"
-      )}
-      style={{
-        bottom: "calc(0.75rem + var(--app-safe-bottom, 8px))",
-      }}
-    >
-      <nav
-        aria-label="Navegação do aplicativo"
-        className="pointer-events-auto flex items-center justify-between p-2 h-[72px] bg-[#202126] border border-white/10 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.18)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300 dark:bg-[#121820]/95 dark:backdrop-blur-xl dark:border-white/[0.08] dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+    <>
+      {/* Efeito de neblina inferior suave e progressivo — contido até o último terço do dock flutuante */}
+      <div
+        className={cn(
+          "fixed bottom-0 left-0 right-0 pointer-events-none z-[45] transition-opacity duration-300",
+          isKeyboardOpen && "opacity-0"
+        )}
+        style={{
+          height: "calc(var(--app-safe-bottom, 8px) + 4.25rem)",
+          background:
+            "linear-gradient(to top, hsl(var(--background) / 0.88) 0%, hsl(var(--background) / 0.82) 15%, hsl(var(--background) / 0.70) 30%, hsl(var(--background) / 0.52) 48%, hsl(var(--background) / 0.32) 64%, hsl(var(--background) / 0.16) 78%, hsl(var(--background) / 0.06) 88%, hsl(var(--background) / 0.015) 95%, hsl(var(--background) / 0) 100%)",
+          WebkitMaskImage:
+            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 25%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.18) 80%, rgba(0,0,0,0) 100%)",
+          maskImage:
+            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 25%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.18) 80%, rgba(0,0,0,0) 100%)",
+          backdropFilter: "blur(6px)",
+          WebkitBackdropFilter: "blur(6px)",
+        }}
+        aria-hidden="true"
+      />
+
+      <div
+        className={cn(
+          "fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none flex justify-center items-center w-full px-3 transition-all duration-200",
+          isKeyboardOpen ? "opacity-0 translate-y-16 pointer-events-none" : "opacity-100 translate-y-0"
+        )}
+        style={{
+          bottom: "calc(0.75rem + var(--app-safe-bottom, 8px))",
+        }}
       >
+        <nav
+          aria-label="Navegação do aplicativo"
+          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] bg-[#202126] border border-white/10 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.18)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300 dark:bg-[#121820]/95 dark:backdrop-blur-xl dark:border-white/[0.08] dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+        >
           {items.map(({ key, label, path, end, Icon, countKey }) => {
             const to = `${basePath}${path}`;
             const cleanCurrent = location.pathname.replace(/\/$/, "");
@@ -267,5 +288,6 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
           })}
         </nav>
       </div>
-    );
-  }
+    </>
+  );
+}
