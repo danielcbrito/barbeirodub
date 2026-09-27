@@ -178,7 +178,10 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
 
   return (
     <>
-      <div className="min-h-screen bg-background text-foreground pb-24 select-none">
+      <div
+        className="min-h-screen bg-background text-foreground select-none"
+        style={{ paddingBottom: "calc(6.5rem + var(--app-safe-bottom, 8px))" }}
+      >
       {/* Container principal */}
       <div className="max-w-lg mx-auto">
         {/* ═══ BANNER FINO NO TOPO (edge-to-edge, sob a status bar) ═══ */}
