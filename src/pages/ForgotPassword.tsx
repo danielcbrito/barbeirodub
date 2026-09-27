@@ -9,53 +9,47 @@ import { supabase } from "@/integrations/supabase/client";
 const emailSchema = z.object({
   email: z.string().trim().email("Email inválido"),
 });
-
-/* ─── Floating input (mesmo padrão do Auth) ─────────────────────── */
+/* ─── Floating input (mesmo padrão do Auth / iFood) ──────────────── */
 const FloatingInput = ({
   id,
   label,
   value,
   onChange,
+  placeholder,
   type = "text",
   inputMode,
   autoComplete,
   enterKeyHint,
+  autoFocus,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
+  placeholder?: string;
   type?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   autoComplete?: string;
-  enterKeyHint?: React.HTMLAttributes<HTMLInputElement>["enterKeyHint"];
+  enterKeyHint?: React.InputHTMLAttributes<HTMLInputElement>["enterKeyHint"];
+  autoFocus?: boolean;
 }) => {
   const [focused, setFocused] = useState(false);
   const active = focused || value.length > 0;
 
-  const handleFocus = () => {
-    setFocused(true);
-    if (typeof window !== "undefined") {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    }
-  };
-
   return (
     <div
-      className={`relative h-[60px] rounded-2xl border-2 transition-all duration-200 ${
+      className={`relative h-[58px] rounded-xl transition-all duration-150 ${
         focused
-          ? "border-primary bg-primary/[0.02] shadow-sm"
-          : "border-transparent bg-foreground/[0.05]"
+          ? "border-2 border-primary bg-background shadow-sm"
+          : "border border-foreground/25 bg-background hover:border-foreground/40"
       }`}
     >
       <label
         htmlFor={id}
         className={`pointer-events-none absolute left-4 select-none transition-all duration-150 ${
           active
-            ? `top-[9px] text-[12px] font-semibold tracking-wide leading-none ${
-                focused ? "text-primary" : "text-foreground/50"
+            ? `top-[8px] text-[11.5px] font-medium tracking-wide leading-none ${
+                focused ? "text-primary" : "text-foreground/55"
               }`
             : "top-1/2 -translate-y-1/2 text-[15.5px] font-normal text-foreground/45"
         }`}
@@ -71,12 +65,14 @@ const FloatingInput = ({
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}
+        autoFocus={autoFocus}
+        placeholder={active && placeholder ? placeholder : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         data-no-auto-scroll="true"
-        className="peer h-full w-full rounded-2xl bg-transparent px-4 pt-[25px] pb-[8px] text-[16px] text-foreground caret-primary outline-none leading-normal font-normal"
+        className="peer h-full w-full rounded-xl bg-transparent px-4 pt-[20px] pb-[6px] text-[15.5px] text-foreground placeholder:text-foreground/35 caret-primary outline-none leading-normal font-normal"
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
     </div>
@@ -89,14 +85,12 @@ const ForgotPassword = () => {
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
 
-
-
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (isLoading) return;
     setIsLoading(true);
     try {
-      const { email: validEmail } = emailSchema.parse({ email });
+      const { email: validEmail } = emailSchema.parse({ email: email.trim().toLowerCase() });
       const productionUrl = window.location.origin.includes("localhost")
         ? "https://dubadmin.lovable.app"
         : window.location.origin;
@@ -124,47 +118,47 @@ const ForgotPassword = () => {
     <div
       data-no-auto-scroll="true"
       className="min-h-[100dvh] w-full flex flex-col bg-background text-foreground"
+      style={{
+        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 16px)",
+        paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 24px)",
+      }}
     >
-      {/* Header — no topo */}
-      <header
-        className="w-full flex items-center justify-center px-4 relative shrink-0"
-        style={{
-          paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
-          paddingBottom: "12px",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
-          className="absolute left-4 flex h-10 w-10 items-center justify-center rounded-full text-foreground/85 active:scale-95 transition-all"
-          aria-label="Voltar"
-          style={{ touchAction: "manipulation" }}
-        >
-          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-        </button>
-        <h2 className="text-[15px] font-semibold text-foreground">Recuperar senha</h2>
-      </header>
+      <div className="w-full max-w-md mx-auto px-6 flex-1 flex flex-col justify-start">
+        {/* Back button — discreto no canto superior esquerdo */}
+        <div className="flex items-center pb-2 -ml-2">
+          <button
+            type="button"
+            onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/75 hover:bg-foreground/5 active:scale-95 transition-all"
+            aria-label="Voltar"
+            style={{ touchAction: "manipulation" }}
+          >
+            <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
+          </button>
+        </div>
 
-      {/* Main content: espaçoso e com respiro total do teclado */}
-      <main className="w-full max-w-md mx-auto px-6 pt-3 pb-12 flex-1 flex flex-col justify-start">
+        {/* Brand Logo — exatamente no estilo do iFood */}
+        <div className="flex items-center gap-2.5 mb-5 mt-1">
+          <img src="/favicon.png" alt="Barbearia DUB" className="h-10 w-10 object-contain dark:invert" />
+          <span className="text-[25px] font-black tracking-tight text-primary">DUB</span>
+        </div>
+
         <AnimatePresence mode="wait">
           {!emailSent ? (
             <motion.div
               key="form"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -16 }}
               transition={{ duration: 0.2 }}
               className="w-full"
             >
-              <div className="pt-2 pb-6">
-                <h1 className="text-[26px] sm:text-[28px] font-extrabold tracking-tight text-foreground leading-tight">
-                  Esqueceu sua senha?
-                </h1>
-                <p className="text-[14px] text-foreground/60 mt-1.5 leading-normal">
-                  Digite seu e-mail e enviaremos um link para você criar uma nova senha.
-                </p>
-              </div>
+              <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-1.5">
+                Recuperar senha
+              </h1>
+              <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
+                Digite seu e-mail para receber o link de redefinição.
+              </p>
 
               <form
                 onSubmit={handleSubmit}
@@ -178,23 +172,25 @@ const ForgotPassword = () => {
                   inputMode="email"
                   autoComplete="username"
                   enterKeyHint="send"
+                  placeholder="nome@email.com.br"
+                  autoFocus
                   value={email}
                   onChange={setEmail}
                 />
 
-                <div className="pt-6">
+                <div className="pt-2">
                   <button
                     type="submit"
                     disabled={!canSubmit || isLoading}
-                    className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full h-[52px] rounded-xl bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-bold text-[15.5px] tracking-normal shadow-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                     style={{ touchAction: "manipulation" }}
                   >
                     {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-                    Enviar
+                    Continuar
                   </button>
                 </div>
 
-                <p className="pt-4 text-center text-[14px] text-foreground/60">
+                <p className="pt-4 text-center text-[13.5px] text-foreground/60">
                   <button
                     type="button"
                     onClick={() => navigate("/auth")}
@@ -209,22 +205,22 @@ const ForgotPassword = () => {
           ) : (
             <motion.div
               key="success"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.25 }}
-              className="w-full pt-8 flex flex-col items-center text-center"
+              className="w-full pt-4 flex flex-col items-center text-center"
             >
               <div
-                className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
+                className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
                 style={{
                   background: "hsl(var(--primary) / 0.12)",
                   border: "1px solid hsl(var(--primary) / 0.25)",
                 }}
               >
-                <CheckCircle2 className="w-10 h-10 text-primary" />
+                <CheckCircle2 className="w-8 h-8 text-primary" />
               </div>
-              <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
+              <h1 className="text-[23px] sm:text-[25px] font-bold tracking-tight text-foreground leading-tight">
                 E-mail enviado
               </h1>
               <p className="mt-2 text-[14px] text-foreground/60 leading-relaxed max-w-[280px]">
@@ -232,14 +228,14 @@ const ForgotPassword = () => {
               </p>
               <p className="mt-1 text-[14px] text-primary font-semibold break-all">{email}</p>
               <p className="mt-3 text-[13px] text-foreground/45 leading-relaxed max-w-[280px]">
-                Toque no link do e-mail para redefinir sua senha.
+                Toque no link recebido no e-mail para criar uma nova senha.
               </p>
 
-              <div className="pt-8 w-full">
+              <div className="pt-6 w-full">
                 <button
                   type="button"
                   onClick={() => navigate("/auth")}
-                  className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all flex items-center justify-center cursor-pointer"
+                  className="w-full h-[52px] rounded-xl bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-bold text-[15.5px] tracking-normal shadow-sm active:scale-[0.98] transition-all flex items-center justify-center cursor-pointer"
                   style={{ touchAction: "manipulation" }}
                 >
                   Voltar ao login
@@ -248,7 +244,7 @@ const ForgotPassword = () => {
             </motion.div>
           )}
         </AnimatePresence>
-      </main>
+      </div>
     </div>
   );
 };
