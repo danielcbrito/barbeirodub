@@ -10,6 +10,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import { cn } from "@/lib/utils";
 
 /* ─── Schemas ─────────────────────────────────────────────────────── */
 const emailSchema = z.string().trim().email("E-mail inválido").max(255);
@@ -335,6 +336,44 @@ const Auth = () => {
 
   // Modo global
   const [mode, setMode] = useState<"login" | "signup">(initialSignup ? "signup" : "login");
+
+  // Monitora o visualViewport: o container e o botão acompanham o teclado perfeitamente em Android, iOS e Safari
+  const initialHeightRef = useRef<number>(typeof window !== "undefined" ? window.innerHeight : 0);
+  const [viewportState, setViewportState] = useState<{ height: number; offsetTop: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    if (!initialHeightRef.current) {
+      initialHeightRef.current = window.innerHeight;
+    }
+
+    const update = () => {
+      setViewportState({
+        height: Math.round(vv.height),
+        offsetTop: Math.round(vv.offsetTop || 0),
+      });
+    };
+
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
+  const isKeyboardOpen = Boolean(
+    viewportState &&
+    initialHeightRef.current > 0 &&
+    initialHeightRef.current - viewportState.height > 120
+  );
 
   // Login state
   const [email, setEmail] = useState("");
@@ -792,29 +831,38 @@ const Auth = () => {
 
   return (
     <div
-      className="min-h-full min-h-[100dvh] w-full flex flex-col justify-between bg-background text-foreground overflow-y-auto overscroll-y-contain"
+      className="fixed inset-x-0 top-0 flex flex-col justify-between overflow-hidden bg-background text-foreground"
       style={{
-        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
-        paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 20px)",
+        height: viewportState ? `${viewportState.height}px` : "100dvh",
+        top: viewportState ? `${viewportState.offsetTop}px` : 0,
+        maxHeight: "100dvh",
       }}
     >
       {/* ─── Header ───────────────────────────────────────────────── */}
-      <header className="relative flex items-center justify-center px-4 shrink-0 pb-2">
+      <header
+        className="relative flex items-center justify-center px-4 shrink-0 transition-all"
+        style={{
+          paddingTop: isKeyboardOpen
+            ? "8px"
+            : "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
+          paddingBottom: isKeyboardOpen ? "4px" : "10px",
+        }}
+      >
         <button
           type="button"
           onClick={onBackClick}
           aria-label="Voltar"
-          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
+          className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
           style={{ touchAction: "manipulation" }}
         >
           <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
         </button>
-        <h2 className="text-[15px] font-semibold text-foreground/90">{title}</h2>
+        <h2 className="text-[14.5px] sm:text-[15px] font-semibold text-foreground/90">{title}</h2>
       </header>
 
       {/* Progress bar (signup) */}
       {mode === "signup" && (
-        <div className="px-6 pb-2 shrink-0 max-w-md mx-auto w-full">
+        <div className="px-6 pb-1 shrink-0 max-w-md mx-auto w-full">
           <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
@@ -827,26 +875,41 @@ const Auth = () => {
       )}
 
       {/* ─── Content ──────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col justify-between w-full max-w-md mx-auto px-6">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-1 w-full max-w-md mx-auto">
         <AnimatePresence mode="wait">
           <motion.div
             key={mode === "login" ? "login" : `signup-${step}`}
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
-            transition={{ duration: 0.24, ease: "easeOut" }}
-            className="w-full pt-3 sm:pt-5"
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="w-full pt-1 sm:pt-4"
           >
             {mode === "login" ? (
               <>
-                <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
+                <h1
+                  className={cn(
+                    "font-extrabold tracking-tight text-foreground leading-tight transition-all",
+                    isKeyboardOpen ? "text-[21px]" : "text-[26px]"
+                  )}
+                >
                   Entrar na sua conta
                 </h1>
-                <p className="mt-1 text-[13.5px] text-foreground/60">
+                <p
+                  className={cn(
+                    "text-foreground/60 transition-all",
+                    isKeyboardOpen ? "text-[12px] mt-0.5" : "text-[13.5px] mt-1"
+                  )}
+                >
                   Informe suas credenciais para acessar o aplicativo
                 </p>
 
-                <form id="auth-login-form" onSubmit={handleLoginSubmit} className="mt-6 space-y-3.5" noValidate>
+                <form
+                  id="auth-login-form"
+                  onSubmit={handleLoginSubmit}
+                  className={cn("space-y-3 transition-all", isKeyboardOpen ? "mt-3" : "mt-6")}
+                  noValidate
+                >
                   <FloatingInput
                     id="email-input"
                     label="E-mail"
@@ -880,7 +943,7 @@ const Auth = () => {
                       </button>
                     }
                   />
-                  <div className="pt-1">
+                  <div className="pt-0.5">
                     <button
                       type="button"
                       onClick={() => navigate("/esqueci-senha")}
@@ -897,10 +960,22 @@ const Auth = () => {
               </>
             ) : (
               <>
-                <h1 className="text-[24px] font-extrabold tracking-tight text-foreground leading-tight">
+                <h1
+                  className={cn(
+                    "font-extrabold tracking-tight text-foreground leading-tight transition-all",
+                    isKeyboardOpen ? "text-[20px]" : "text-[24px]"
+                  )}
+                >
                   {signupContent!.heading}
                 </h1>
-                <p className="mt-1.5 text-[13.5px] text-foreground/60">{signupContent!.hint}</p>
+                <p
+                  className={cn(
+                    "text-foreground/60 transition-all",
+                    isKeyboardOpen ? "text-[12px] mt-0.5" : "text-[13.5px] mt-1.5"
+                  )}
+                >
+                  {signupContent!.hint}
+                </p>
 
                 <form
                   id="auth-signup-form"
@@ -908,7 +983,7 @@ const Auth = () => {
                     e.preventDefault();
                     handleSignupNext();
                   }}
-                  className="mt-6 space-y-3.5"
+                  className={cn("space-y-3 transition-all", isKeyboardOpen ? "mt-3" : "mt-6")}
                   noValidate
                 >
                   {signupContent!.input}
@@ -922,7 +997,7 @@ const Auth = () => {
                 )}
 
                 {step === "otp" && (
-                  <div className="pt-4">
+                  <div className="pt-3">
                     <button
                       type="button"
                       onClick={handleResendCode}
@@ -940,42 +1015,50 @@ const Auth = () => {
             )}
           </motion.div>
         </AnimatePresence>
-
-        {/* ─── CTA + Links (no final do fluxo com mt-auto para empurrar pro rodapé naturalmente) ─── */}
-        <div className="mt-auto pt-8 pb-3 w-full">
-          <button
-            type="button"
-            onClick={onCtaClick}
-            disabled={!canGoCta || isLoading}
-            className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[15.5px] sm:text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-            style={{ touchAction: "manipulation" }}
-          >
-            {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-            {ctaLabel}
-          </button>
-
-          {step !== "otp" && (
-            <p className="mt-3 text-center text-[13.5px] text-foreground/60">
-              {mode === "signup" ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
-              <button
-                type="button"
-                onClick={() => {
-                  if (mode === "login") {
-                    setMode("signup");
-                    setStep("name");
-                  } else {
-                    setMode("login");
-                  }
-                }}
-                className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                style={{ touchAction: "manipulation" }}
-              >
-                {mode === "signup" ? "Entrar" : "Criar conta"}
-              </button>
-            </p>
-          )}
-        </div>
       </main>
+
+      {/* ─── Footer / CTA — Sobe junto do teclado e fica colado na base sem cobrir os campos ──── */}
+      <footer
+        className="w-full max-w-md mx-auto px-6 shrink-0 bg-background z-20 transition-all"
+        style={{
+          paddingTop: 8,
+          paddingBottom: isKeyboardOpen
+            ? "10px"
+            : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onCtaClick}
+          disabled={!canGoCta || isLoading}
+          className="w-full h-[52px] sm:h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[15.5px] sm:text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+          style={{ touchAction: "manipulation" }}
+        >
+          {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+          {ctaLabel}
+        </button>
+
+        {step !== "otp" && !isKeyboardOpen && (
+          <p className="mt-3 text-center text-[13.5px] text-foreground/60">
+            {mode === "signup" ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                if (mode === "login") {
+                  setMode("signup");
+                  setStep("name");
+                } else {
+                  setMode("login");
+                }
+              }}
+              className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
+              style={{ touchAction: "manipulation" }}
+            >
+              {mode === "signup" ? "Entrar" : "Criar conta"}
+            </button>
+          </p>
+        )}
+      </footer>
     </div>
   );
 };
