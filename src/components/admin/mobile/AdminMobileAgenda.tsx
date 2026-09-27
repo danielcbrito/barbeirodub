@@ -424,10 +424,10 @@ export function AdminMobileAgenda({
 
   return (
     <div className="flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
-      {/* ══════ HEADER FIXO: 100% SÓLIDO NA COR DE FUNDO (SEM LISTRA E SEM MANCHA) ══════ */}
-      <div className="flex-shrink-0 z-20 bg-background pt-3 pb-2 space-y-2">
+      {/* ══════ HEADER FIXO: CARROSSEL DE DATAS COM NEBLINA PROGRESSIVA INFERIOR ══════ */}
+      <div className="flex-shrink-0 z-20 bg-background/95 backdrop-blur-xl pt-3 pb-2 relative">
         {/* Linha 1: Mês/Ano + Botão Hoje + Setas de Navegação */}
-        <div className="flex items-center justify-between px-4">
+        <div className="flex items-center justify-between px-4 mb-2.5">
           {/* Seletor Mês/Ano */}
           <div className="flex items-center gap-2 min-w-0">
             <button
@@ -474,15 +474,15 @@ export function AdminMobileAgenda({
           </div>
         </div>
 
-        {/* ══════ CARROSSEL DE DATAS: CARDS UNIFICADOS, SÉRIOS E MINIMALISTAS (SEM BOLINHA VERMELHA) ══════ */}
+        {/* ══════ CARROSSEL COM DATAS REDONDAS E MAIORES (COMO ANTES) ══════ */}
         <div
           ref={carouselRef}
-          className="w-full overflow-x-auto scrollbar-hide px-3 py-0.5"
+          className="w-full overflow-x-auto scrollbar-hide px-3 py-1"
           style={{
             WebkitOverflowScrolling: "touch",
           }}
         >
-          <div className="flex items-center gap-1.5 w-max px-2">
+          <div className="flex items-end gap-2 w-max px-2">
             {daysInMonth.map((day) => {
               const isSelected = isSameDay(day, selectedDate);
               const dayIsToday = isToday(day);
@@ -492,7 +492,7 @@ export function AdminMobileAgenda({
                 <div
                   key={dateKey}
                   data-date={dateKey}
-                  className="flex-shrink-0 w-11"
+                  className="flex-shrink-0 w-12"
                 >
                   <button
                     type="button"
@@ -500,31 +500,38 @@ export function AdminMobileAgenda({
                       setSelectedDate(day);
                       scrollToDay(day, "smooth");
                     }}
-                    className={cn(
-                      "w-full h-14 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer select-none active:scale-95",
-                      isSelected
-                        ? "bg-foreground text-background shadow-xs font-bold"
-                        : "text-foreground hover:bg-secondary/60 bg-card/50 dark:bg-white/[0.03] border border-border/40 dark:border-white/[0.06]",
-                      dayIsToday && !isSelected && "border-foreground/35 font-bold"
-                    )}
+                    className="w-full flex flex-col items-center gap-1.5 py-1 active:scale-95 cursor-pointer select-none transition-all"
+                    style={{
+                      transform: isSelected ? "translateY(-2px)" : "translateY(0px)",
+                    }}
                   >
                     {/* Dia da semana */}
                     <span className={cn(
-                      "text-[9.5px] font-semibold uppercase leading-none tracking-wider",
-                      isSelected ? "text-background/80 font-bold" : "text-muted-foreground/70"
+                      "text-[10px] font-bold uppercase leading-none tracking-wider",
+                      isSelected ? "text-foreground" : "text-muted-foreground/60"
                     )}>
                       {shortDayName(day)}
                     </span>
 
-                    {/* Número do dia */}
-                    <span
+                    {/* Botão Redondo e Maior (Círculo Ergonômico) */}
+                    <div
                       className={cn(
-                        "leading-none tabular-nums",
-                        isSelected ? "text-background text-[16px] font-bold" : "text-foreground text-[14.5px] font-semibold"
+                        "w-12 h-12 flex items-center justify-center rounded-full will-change-transform transition-all",
+                        isSelected
+                          ? "bg-foreground text-background shadow-md font-bold scale-105"
+                          : "text-foreground font-semibold hover:bg-secondary/40 bg-card/60 dark:bg-white/[0.04] border border-border/40 dark:border-white/[0.06]",
+                        dayIsToday && !isSelected && "ring-1.5 ring-foreground/35 font-bold"
                       )}
                     >
-                      {format(day, "d")}
-                    </span>
+                      <span
+                        className={cn(
+                          "leading-none tabular-nums",
+                          isSelected ? "text-background text-[17px] font-bold" : "text-foreground text-[15px] font-semibold"
+                        )}
+                      >
+                        {format(day, "d")}
+                      </span>
+                    </div>
                   </button>
                 </div>
               );
@@ -532,8 +539,27 @@ export function AdminMobileAgenda({
           </div>
         </div>
 
-        {/* ══════ BARRA DE AÇÃO FIXA: TÍTULO DA DATA + BOTÃO NOVO ENCAIXE (100% NÍTIDO, SEM MANCHA) ══════ */}
-        <div className="px-4 pt-1 pb-1 flex items-center justify-between">
+        {/* Efeito de Neblina suave e progressivo na borda inferior do header fixo (mesma fórmula da barra de navegação) */}
+        <div
+          className="absolute -bottom-6 left-0 right-0 h-6 pointer-events-none z-10"
+          style={{
+            background:
+              "linear-gradient(to bottom, hsl(var(--background) / 0.95) 0%, hsl(var(--background) / 0.75) 30%, hsl(var(--background) / 0.35) 65%, transparent 100%)",
+            WebkitMaskImage:
+              "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 30%, rgba(0,0,0,0.35) 65%, transparent 100%)",
+            maskImage:
+              "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 30%, rgba(0,0,0,0.35) 65%, transparent 100%)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+          }}
+          aria-hidden="true"
+        />
+      </div>
+
+      {/* ══════ ÁREA SCROLLÁVEL: DATA, CONTAGEM E BOTÃO SOBEM JUNTOS AO ROLAR A TELA ══════ */}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-28 pt-2">
+        {/* Barra de Ação (Data + Contagem + Botão Novo Encaixe) — sobe junto com os agendamentos */}
+        <div className="px-4 pt-1 pb-3 flex items-center justify-between">
           <div className="min-w-0 pr-2">
             <h3 className="text-[15px] font-bold text-foreground tracking-tight truncate">
               {formattedDateTitle}
@@ -547,7 +573,7 @@ export function AdminMobileAgenda({
             </p>
           </div>
 
-          {/* Botão Novo Encaixe: Sólido, Robusto e Minimalista */}
+          {/* Botão Novo Encaixe */}
           <button
             type="button"
             onClick={() => {
@@ -558,17 +584,14 @@ export function AdminMobileAgenda({
                 setManualBookingOpen(true);
               }
             }}
-            className="h-9 px-3.5 rounded-xl bg-foreground text-background text-[13px] font-semibold flex items-center gap-1.5 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-xs shrink-0"
+            className="h-9 px-4 rounded-xl bg-foreground text-background text-[13px] font-semibold flex items-center gap-1.5 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-xs shrink-0"
             aria-label="Novo Encaixe"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
             <span>Novo Encaixe</span>
           </button>
         </div>
-      </div>
 
-      {/* ══════ ÁREA SCROLLÁVEL: APENAS OS AGENDAMENTOS (SEM MÁSCARAS / SEM MANCHAS) ══════ */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-28 pt-1">
         {!isShowingSelectedDate ? (
           <div className="px-4 space-y-3 animate-pulse">
             {[0, 1, 2].map((item) => (
@@ -658,26 +681,34 @@ export function AdminMobileAgenda({
                     onClick={() => onAppointmentClick?.(apt)}
                     style={{ opacity: isPast ? 0.45 : 1 }}
                     className={cn(
-                      "w-full rounded-xl border border-border/50 dark:border-white/[0.07] bg-card dark:bg-[#141414] p-3.5 sm:p-4",
-                      "hover:border-foreground/20 active:scale-[0.99] transition-all cursor-pointer shadow-xs"
+                      "relative w-full rounded-2xl p-4 overflow-hidden cursor-pointer transition-all duration-200",
+                      "backdrop-blur-xl active:scale-[0.99]",
+                      /* Efeito de Espelho Refletivo (Reflective Mirror / Glassmorphism) */
+                      "bg-gradient-to-b from-white/95 via-white/80 to-white/65 dark:from-white/[0.08] dark:via-white/[0.04] dark:to-white/[0.015]",
+                      "border border-white/90 dark:border-white/[0.12]",
+                      "shadow-[0_8px_30px_rgb(0,0,0,0.04),inset_0_1px_1.5px_rgba(255,255,255,0.95)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.35),inset_0_1px_1.5px_rgba(255,255,255,0.12)]",
+                      "hover:border-foreground/25 hover:shadow-[0_12px_36px_rgb(0,0,0,0.07)] dark:hover:border-white/[0.2]"
                     )}
                   >
+                    {/* Linha reflexiva superior de brilho do espelho */}
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/90 dark:via-white/25 to-transparent" />
+
                     {/* Linha 1: Horário Limpo à esquerda | Status Oficial em pill à direita */}
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-2.5 relative z-10">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[14px] font-bold text-foreground tabular-nums tracking-tight">
+                        <span className="font-mono text-[14.5px] font-bold text-foreground tabular-nums tracking-tight">
                           {horaFormatted}
                         </span>
                         <span className="text-muted-foreground/35 font-light text-[12px]">·</span>
                         <span className="text-[12px] text-muted-foreground font-medium flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-muted-foreground/60" />
+                          <Clock className="w-3.5 h-3.5 text-muted-foreground/60" />
                           {duration} min
                         </span>
                       </div>
 
-                      {/* Status limpo em pill elegante */}
+                      {/* Status limpo em pill espelhado */}
                       <div className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-semibold shrink-0",
+                        "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-semibold shrink-0 backdrop-blur-md",
                         statusConfig.bgColor,
                         statusConfig.borderColor,
                         statusConfig.textColor
@@ -688,16 +719,16 @@ export function AdminMobileAgenda({
                     </div>
 
                     {/* Linha 2: Nome do Cliente com Tipografia Forte + Preço à direita */}
-                    <div className="flex items-center justify-between gap-3 mb-2.5">
+                    <div className="flex items-center justify-between gap-3 mb-2.5 relative z-10">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[15.5px] font-bold text-foreground tracking-tight truncate">
+                        <span className="text-[16px] font-bold text-foreground tracking-tight truncate">
                           {clientName}
                         </span>
                         {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       </div>
 
                       {/* Preço em destaque */}
-                      <span className="text-[15px] font-bold tabular-nums text-foreground shrink-0">
+                      <span className="text-[15.5px] font-bold tabular-nums text-foreground shrink-0">
                         {isPlan
                           ? "Plano"
                           : isFree
@@ -706,8 +737,8 @@ export function AdminMobileAgenda({
                       </span>
                     </div>
 
-                    {/* Linha 3: Serviço à esquerda | Forma de Pagamento com Ícone à direita */}
-                    <div className="flex items-center justify-between pt-2 border-t border-border/30 dark:border-white/[0.05] text-[12px] text-muted-foreground">
+                    {/* Linha 3: Divisor de espelho + Serviço à esquerda + Forma de Pagamento com Ícone à direita */}
+                    <div className="flex items-center justify-between pt-2.5 border-t border-black/[0.04] dark:border-white/[0.06] text-[12px] text-muted-foreground relative z-10">
                       <div className="flex items-center gap-1.5 min-w-0 pr-2">
                         <Scissors className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
                         <span className="truncate font-medium text-foreground/85">
