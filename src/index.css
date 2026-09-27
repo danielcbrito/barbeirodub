@@ -1367,3 +1367,35 @@ html.platform-android-browser body {
   background-color: hsl(var(--background)) !important;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   AGENDA MOBILE - REGRA DE TIPOGRAFIA EXCLUSIVA DO TEMA CLARO
+   - Todos os textos da agenda em negrito no tema claro
+   - Textos destacados / principais: nível mais forte de negrito (font-weight: 800)
+   - Demais textos: nível menor de negrito (font-weight: 600)
+   - Aplicado ESTRITAMENTE ao tema claro (html:not(.dark)) e à agenda (.admin-mobile-agenda)
+   - O tema escuro (html.dark) permanece 100% inalterado com seus pesos padrão
+   ══════════════════════════════════════════════════════════════════════ */
+html:not(.dark) .admin-mobile-agenda,
+html:not(.dark) .admin-mobile-agenda button,
+html:not(.dark) .admin-mobile-agenda span,
+html:not(.dark) .admin-mobile-agenda p,
+html:not(.dark) .admin-mobile-agenda h1,
+html:not(.dark) .admin-mobile-agenda h2,
+html:not(.dark) .admin-mobile-agenda h3,
+html:not(.dark) .admin-mobile-agenda h4,
+html:not(.dark) .admin-mobile-agenda div {
+  font-weight: 600;
+}
+
+/* Nível Menor de Negrito (font-weight: 600) para todos os textos secundários / normais */
+html:not(.dark) .admin-mobile-agenda .agenda-subtle,
+html:not(.dark) .admin-mobile-agenda .agenda-subtle * {
+  font-weight: 600 !important;
+}
+
+/* Nível Mais Forte de Negrito (font-weight: 800) para textos destacados / principais */
+html:not(.dark) .admin-mobile-agenda .agenda-strong,
+html:not(.dark) .admin-mobile-agenda .agenda-strong * {
+  font-weight: 800 !important;
+}
+

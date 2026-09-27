@@ -522,7 +522,7 @@ export function AdminMobileAgenda({
   const formattedDateTitle = rawDateTitle.charAt(0).toUpperCase() + rawDateTitle.slice(1);
 
   return (
-    <div className="flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
+    <div className="admin-mobile-agenda flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
       {/* ══════ HEADER FIXO: CARROSSEL DE DATAS COM NEBLINA PROGRESSIVA INFERIOR ══════ */}
       <div className="flex-shrink-0 z-20 bg-background/95 backdrop-blur-xl pt-3 pb-2 relative">
         {/* Linha 1: Mês/Ano + Botão Hoje + Setas de Navegação */}
@@ -535,7 +535,7 @@ export function AdminMobileAgenda({
                 setPickerYear(selectedMonth.getFullYear());
                 setIsMonthPickerOpen(true);
               }}
-              className="flex items-center gap-1.5 text-[16.5px] font-bold text-foreground capitalize tracking-tight hover:opacity-80 active:scale-95 transition-all cursor-pointer"
+              className="agenda-strong flex items-center gap-1.5 text-[16.5px] font-bold text-foreground capitalize tracking-tight hover:opacity-80 active:scale-95 transition-all cursor-pointer"
             >
               <span>{format(selectedMonth, "MMMM yyyy", { locale: ptBR })}</span>
               <ChevronDown className="w-4 h-4 text-muted-foreground/70 stroke-[2.2]" />
@@ -545,7 +545,7 @@ export function AdminMobileAgenda({
               <button
                 type="button"
                 onClick={goToToday}
-                className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
+                className="agenda-strong px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
               >
                 Hoje
               </button>
@@ -606,7 +606,7 @@ export function AdminMobileAgenda({
                   >
                     {/* Dia da semana */}
                     <span className={cn(
-                      "text-[10px] font-bold uppercase leading-none tracking-wider",
+                      "agenda-subtle text-[10px] font-bold uppercase leading-none tracking-wider",
                       isSelected ? "text-foreground" : "text-muted-foreground/60"
                     )}>
                       {shortDayName(day)}
@@ -625,7 +625,11 @@ export function AdminMobileAgenda({
                       <span
                         className={cn(
                           "leading-none tabular-nums",
-                          isSelected ? "text-background text-[17px] font-bold" : "text-foreground text-[15px] font-semibold"
+                          isSelected
+                            ? "agenda-strong text-background text-[17px] font-bold"
+                            : dayIsToday
+                              ? "agenda-strong text-foreground text-[15px] font-bold"
+                              : "agenda-subtle text-foreground text-[15px] font-semibold"
                         )}
                       >
                         {format(day, "d")}
@@ -660,10 +664,10 @@ export function AdminMobileAgenda({
         {/* Barra de Ação (Data + Contagem + Botão Novo Encaixe) — sobe junto com os agendamentos */}
         <div className="px-4 pt-1 pb-3 flex items-center justify-between">
           <div className="min-w-0 pr-2">
-            <h3 className="text-[15px] font-bold text-foreground tracking-tight truncate">
+            <h3 className="agenda-strong text-[15px] font-bold text-foreground tracking-tight truncate">
               {formattedDateTitle}
             </h3>
-            <p className="text-[12px] font-medium text-muted-foreground mt-0.5">
+            <p className="agenda-subtle text-[12px] font-medium text-muted-foreground mt-0.5">
               {appointments.length === 0
                 ? "Nenhum agendamento"
                 : appointments.length === 1
@@ -683,7 +687,7 @@ export function AdminMobileAgenda({
                 setManualBookingOpen(true);
               }
             }}
-            className="h-9 px-4 rounded-xl bg-foreground text-background text-[13px] font-semibold flex items-center gap-1.5 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-xs shrink-0"
+            className="agenda-strong h-9 px-4 rounded-xl bg-foreground text-background text-[13px] font-semibold flex items-center gap-1.5 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-xs shrink-0"
             aria-label="Novo Encaixe"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
@@ -722,10 +726,10 @@ export function AdminMobileAgenda({
             <div className="w-12 h-12 rounded-2xl bg-secondary/60 dark:bg-white/[0.04] border border-border/50 dark:border-white/[0.06] flex items-center justify-center mb-3 text-muted-foreground/60">
               <Calendar className="w-6 h-6 stroke-[1.6]" />
             </div>
-            <p className="text-[14px] font-bold text-foreground">
+            <p className="agenda-strong text-[14px] font-bold text-foreground">
               {isToday(selectedDate) ? "Nenhum agendamento para hoje" : "Nenhum agendamento neste dia"}
             </p>
-            <p className="text-[12px] text-muted-foreground/75 mt-1 max-w-[260px] leading-relaxed">
+            <p className="agenda-subtle text-[12px] text-muted-foreground/75 mt-1 max-w-[260px] leading-relaxed">
               {isToday(selectedDate)
                 ? "Seus horários livres estão disponíveis e podem ser reservados a qualquer momento."
                 : "Navegue pelas datas no carrossel ou adicione um encaixe manual."}
@@ -740,7 +744,7 @@ export function AdminMobileAgenda({
                   setManualBookingOpen(true);
                 }
               }}
-              className="mt-4 h-9 px-4 rounded-xl bg-foreground text-background text-[12.5px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
+              className="agenda-strong mt-4 h-9 px-4 rounded-xl bg-foreground text-background text-[12.5px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2]" />
               <span>Adicionar Encaixe</span>
@@ -802,7 +806,7 @@ export function AdminMobileAgenda({
                   <div className="w-12 shrink-0 flex flex-col items-center justify-center text-center">
                     <span
                       className={cn(
-                        "font-mono text-[14.5px] tabular-nums tracking-tight transition-colors",
+                        "agenda-strong font-mono text-[14.5px] tabular-nums tracking-tight transition-colors",
                         isNextAppointment
                           ? "text-emerald-600 dark:text-emerald-400/75 font-semibold"
                           : "text-foreground font-bold"
@@ -810,7 +814,7 @@ export function AdminMobileAgenda({
                     >
                       {horaFormatted}
                     </span>
-                    <span className="text-[11px] font-medium text-muted-foreground/65 mt-0.5">
+                    <span className="agenda-subtle text-[11px] font-medium text-muted-foreground/65 mt-0.5">
                       {duration} min
                     </span>
                   </div>
@@ -823,13 +827,13 @@ export function AdminMobileAgenda({
                     {/* Linha Superior: Nome do Cliente + Preço / Plano */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[15px] font-semibold text-foreground tracking-tight truncate">
+                        <span className="agenda-strong text-[15px] font-semibold text-foreground tracking-tight truncate">
                           {clientName}
                         </span>
                         {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       </div>
 
-                      <span className="text-[14px] font-bold tabular-nums text-foreground shrink-0">
+                      <span className="agenda-strong text-[14px] font-bold tabular-nums text-foreground shrink-0">
                         {isPlan
                           ? "Plano"
                           : isFree
@@ -843,18 +847,18 @@ export function AdminMobileAgenda({
                       {/* Esquerda: Tesourinha + Nome do Serviço */}
                       <div className="flex items-center gap-1.5 min-w-0 truncate font-medium text-muted-foreground">
                         <Scissors className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                        <span className="truncate text-foreground/80">{serviceName}</span>
+                        <span className="agenda-subtle truncate text-foreground/80">{serviceName}</span>
                       </div>
 
                       {/* Direita: Abaixo do Preço ou Abaixo do Plano */}
                       {isPlan ? (
                         <div className="flex items-center gap-1 shrink-0 font-semibold tabular-nums text-[12px] text-muted-foreground/80">
-                          <span>{planUsageCount}</span>
+                          <span className="agenda-subtle">{planUsageCount}</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-medium">
                           <PayIcon className={cn("w-3.5 h-3.5 shrink-0", paymentBadge.iconColor)} />
-                          <span className="text-muted-foreground/85">{paymentBadge.label}</span>
+                          <span className="agenda-subtle text-muted-foreground/85">{paymentBadge.label}</span>
                         </div>
                       )}
                     </div>
@@ -890,7 +894,7 @@ export function AdminMobileAgenda({
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <span className="text-[15px] font-bold text-foreground">
+              <span className="agenda-strong text-[15px] font-bold text-foreground">
                 {pickerYear}
               </span>
 
@@ -926,10 +930,10 @@ export function AdminMobileAgenda({
                     className={cn(
                       "h-10 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center cursor-pointer active:scale-95",
                       isCurrentSelected
-                        ? "bg-foreground text-background font-bold shadow-sm"
+                        ? "agenda-strong bg-foreground text-background font-bold shadow-sm"
                         : isThisMonth
-                        ? "bg-secondary text-foreground ring-1 ring-border"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                        ? "agenda-strong bg-secondary text-foreground ring-1 ring-border"
+                        : "agenda-subtle text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                     )}
                   >
                     {mName}
@@ -949,14 +953,14 @@ export function AdminMobileAgenda({
                   setSelectedDate(now);
                   setIsMonthPickerOpen(false);
                 }}
-                className="text-[12px] font-semibold text-foreground dark:text-white hover:underline cursor-pointer"
+                className="agenda-strong text-[12px] font-semibold text-foreground dark:text-white hover:underline cursor-pointer"
               >
                 Mês atual
               </button>
               <button
                 type="button"
                 onClick={() => setIsMonthPickerOpen(false)}
-                className="text-[12px] font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                className="agenda-subtle text-[12px] font-medium text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 Fechar
               </button>
