@@ -27,7 +27,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,18 +65,39 @@ interface AdminMobileAgendaProps {
   showBack?: boolean;
 }
 
-/** Status minimalista: dot + label discreto em tons neutros/monocromáticos */
-const getStatusColorConfig = (status: string, barbeiroConfirmou: boolean | null) => {
+/** Status com as cores oficiais solicitadas:
+ * - Concluídos: VERDE (emerald)
+ * - Agendados / Confirmados: AZUL (blue)
+ * - Pendentes: ÂMBAR (amber)
+ * - Não compareceu: VERMELHO (rose)
+ */
+const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "completed") {
-    return { dot: "bg-foreground/70 dark:bg-white/70", statusLabel: "Concluído" };
+    return {
+      dot: "bg-emerald-500",
+      textColor: "text-emerald-600 dark:text-emerald-400",
+      statusLabel: "Concluído",
+    };
   }
   if (status === "no_show") {
-    return { dot: "bg-red-500", statusLabel: "Não veio" };
+    return {
+      dot: "bg-rose-500",
+      textColor: "text-rose-600 dark:text-rose-400",
+      statusLabel: "Não veio",
+    };
   }
   if (status === "confirmed" || barbeiroConfirmou) {
-    return { dot: "bg-foreground dark:bg-white", statusLabel: "Agendado" };
+    return {
+      dot: "bg-blue-500",
+      textColor: "text-blue-600 dark:text-blue-400",
+      statusLabel: "Agendado",
+    };
   }
-  return { dot: "bg-muted-foreground/60", statusLabel: "Pendente" };
+  return {
+    dot: "bg-amber-500",
+    textColor: "text-amber-600 dark:text-amber-400",
+    statusLabel: "Pendente",
+  };
 };
 
 /** Pagamento minimalista */
@@ -268,40 +288,40 @@ export function AdminMobileAgenda({
         }
 
         const { data, error } = await query;
-        if (!error && data) {
-          const rawAppointments = data || [];
-          const userIds = [...new Set(rawAppointments.map((apt) => apt.user_id).filter(Boolean))];
-          const serviceIds = [...new Set(rawAppointments.map((apt) => apt.servico_id).filter(Boolean))];
+        if (error) throw error;
 
-          const [profilesRes, servicosRes] = await Promise.all([
-            userIds.length
-              ? supabase.from("profiles").select("id, nome, telefone").in("id", userIds)
-              : Promise.resolve({ data: [] }),
-            serviceIds.length
-              ? supabase.from("servicos").select("id, nome, duracao_minutos").in("id", serviceIds)
-              : Promise.resolve({ data: [] }),
-          ]);
+        const rawAppointments = data || [];
+        const userIds = [...new Set(rawAppointments.map((apt) => apt.user_id).filter(Boolean))];
+        const serviceIds = [...new Set(rawAppointments.map((apt) => apt.servico_id).filter(Boolean))];
 
-          const profilesMap = new Map(
-            ((profilesRes.data || []) as Array<{ id: string; nome: string; telefone?: string | null }>).map((profile) => [
-              profile.id,
-              { nome: profile.nome, telefone: profile.telefone ?? undefined },
-            ])
-          );
-          const servicosMap = new Map(
-            ((servicosRes.data || []) as Array<{ id: string; nome: string; duracao_minutos: number }>).map((servico) => [servico.id, servico])
-          );
+        const [profilesRes, servicosRes] = await Promise.all([
+          userIds.length
+            ? supabase.from("profiles").select("id, nome, telefone").in("id", userIds)
+            : Promise.resolve({ data: [] }),
+          serviceIds.length
+            ? supabase.from("servicos").select("id, nome, duracao_minutos").in("id", serviceIds)
+            : Promise.resolve({ data: [] }),
+        ]);
 
-          appointmentsWithDetails = rawAppointments.map((apt) => {
-            const walkInName = extractWalkInName(apt.observacoes);
-            const whatsAppName = extractWhatsAppName(apt.observacoes);
-            const displayName = whatsAppName || walkInName || null;
-            const profile = displayName
-              ? { nome: displayName, telefone: profilesMap.get(apt.user_id)?.telefone ?? undefined }
-              : profilesMap.get(apt.user_id) || null;
-            return { ...apt, profile, servico: servicosMap.get(apt.servico_id) || null };
-          }) as MobileAppointment[];
-        }
+        const profilesMap = new Map(
+          ((profilesRes.data || []) as Array<{ id: string; nome: string; telefone?: string | null }>).map((profile) => [
+            profile.id,
+            { nome: profile.nome, telefone: profile.telefone ?? undefined },
+          ])
+        );
+        const servicosMap = new Map(
+          ((servicosRes.data || []) as Array<{ id: string; nome: string; duracao_minutos: number }>).map((servico) => [servico.id, servico])
+        );
+
+        appointmentsWithDetails = rawAppointments.map((apt) => {
+          const walkInName = extractWalkInName(apt.observacoes);
+          const whatsAppName = extractWhatsAppName(apt.observacoes);
+          const displayName = whatsAppName || walkInName || null;
+          const profile = displayName
+            ? { nome: displayName, telefone: profilesMap.get(apt.user_id)?.telefone ?? undefined }
+            : profilesMap.get(apt.user_id) || null;
+          return { ...apt, profile, servico: servicosMap.get(apt.servico_id) || null };
+        }) as MobileAppointment[];
       }
 
       if (appointmentsWithDetails) {
@@ -429,23 +449,22 @@ export function AdminMobileAgenda({
 
   return (
     <div className="flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
-      {/* ══════ HEADER FIXO: Minimalista, Monocromático, Sem Linha ("Listra") Dura ══════ */}
-      {/* Sombra suave e sem border-b para que os agendamentos rolem por trás de forma fluida */}
+      {/* ══════ HEADER FIXO: Minimalista, Espaçamento Confortável, Sem Linha ("Listra") ══════ */}
       <div className="flex-shrink-0 z-20 bg-background/95 backdrop-blur-md pt-3 pb-2 shadow-[0_4px_16px_-4px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_-4px_rgba(0,0,0,0.5)]">
-        {/* Linha 1: Mês/Ano com Dropdown + Setas de Navegação */}
-        <div className="flex items-center justify-between px-4 mb-2.5">
+        {/* Linha 1: Mês/Ano e Setas com Espaçamento Adequado (sem grudar) */}
+        <div className="flex items-center justify-between px-4 mb-3">
           {/* Seletor Mês/Ano */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
               onClick={() => {
                 setPickerYear(selectedMonth.getFullYear());
                 setIsMonthPickerOpen(true);
               }}
-              className="flex items-center gap-1.5 text-[16px] font-bold text-foreground capitalize tracking-tight hover:opacity-80 active:scale-95 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 text-[17px] font-bold text-foreground capitalize tracking-tight hover:opacity-80 active:scale-95 transition-all cursor-pointer"
             >
               <span>{format(selectedMonth, "MMMM yyyy", { locale: ptBR })}</span>
-              <ChevronDown className="w-4 h-4 text-muted-foreground stroke-[2.2]" />
+              <ChevronDown className="w-4 h-4 text-muted-foreground/70 stroke-[2.2]" />
             </button>
 
             {!isSameMonth(selectedMonth, today) && (
@@ -459,28 +478,28 @@ export function AdminMobileAgenda({
             )}
           </div>
 
-          {/* Setas Anterior / Próximo Mês */}
-          <div className="flex items-center gap-1 shrink-0">
+          {/* Setas Anterior / Próximo Mês — espaçadas e com toque confortável */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={goToPreviousMonth}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-foreground hover:bg-secondary active:scale-90 transition-all border border-border/40 dark:border-white/[0.08] cursor-pointer"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-foreground hover:bg-secondary active:scale-90 transition-all border border-border/50 dark:border-white/[0.08] bg-card/60 dark:bg-white/[0.04] cursor-pointer"
               aria-label="Mês anterior"
             >
-              <ChevronLeft className="w-3.5 h-3.5 stroke-[2.2]" />
+              <ChevronLeft className="w-4 h-4 stroke-[2.2]" />
             </button>
             <button
               type="button"
               onClick={goToNextMonth}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-foreground hover:bg-secondary active:scale-90 transition-all border border-border/40 dark:border-white/[0.08] cursor-pointer"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-foreground hover:bg-secondary active:scale-90 transition-all border border-border/50 dark:border-white/[0.08] bg-card/60 dark:bg-white/[0.04] cursor-pointer"
               aria-label="Próximo mês"
             >
-              <ChevronRight className="w-3.5 h-3.5 stroke-[2.2]" />
+              <ChevronRight className="w-4 h-4 stroke-[2.2]" />
             </button>
           </div>
         </div>
 
-        {/* ══════ CARROSSEL 100% EDGE-TO-EDGE — Cores Preto & Branco, Tipografia Desafogada ══════ */}
+        {/* ══════ CARROSSEL 100% EDGE-TO-EDGE — Design Limpo, Espaçamento Refinado ══════ */}
         <div
           ref={carouselRef}
           className="w-full overflow-x-auto scrollbar-hide px-3"
@@ -508,7 +527,7 @@ export function AdminMobileAgenda({
                     scrollToDay(day, "smooth");
                   }}
                   className={cn(
-                    "flex-shrink-0 flex flex-col items-center justify-between w-[60px] h-[82px] py-2 px-1 rounded-2xl transition-all duration-200 cursor-pointer select-none active:scale-95",
+                    "flex-shrink-0 flex flex-col items-center justify-between w-[56px] h-[80px] py-2 px-1 rounded-2xl transition-all duration-200 cursor-pointer select-none active:scale-95",
                     isSelected
                       ? "bg-foreground text-background shadow-md shadow-black/15 dark:shadow-white/10 font-semibold"
                       : cn(
@@ -517,11 +536,11 @@ export function AdminMobileAgenda({
                         )
                   )}
                 >
-                  {/* 1ª Linha: Dia da semana (limpo, discreto, sem aperto) */}
+                  {/* 1ª Linha: Dia da semana */}
                   <span
                     className={cn(
                       "text-[11px] font-medium tracking-normal leading-none",
-                      isSelected ? "text-background/80 font-semibold" : "text-muted-foreground/70"
+                      isSelected ? "text-background/80 font-semibold" : "text-muted-foreground/75"
                     )}
                   >
                     {dayOfWeek}
@@ -530,8 +549,8 @@ export function AdminMobileAgenda({
                   {/* 2ª Linha: Número do dia */}
                   <span
                     className={cn(
-                      "text-[18px] font-bold leading-none tracking-tight my-auto",
-                      isSelected ? "text-background font-extrabold" : "text-foreground"
+                      "text-[17px] font-bold leading-none tracking-tight my-auto",
+                      isSelected ? "text-background font-black" : "text-foreground"
                     )}
                   >
                     {dayNumber}
@@ -540,7 +559,7 @@ export function AdminMobileAgenda({
                   {/* 3ª Linha: Slots / Agendamentos */}
                   <span
                     className={cn(
-                      "text-[10px] font-normal leading-none tabular-nums",
+                      "text-[10px] font-medium leading-none tabular-nums",
                       isSelected
                         ? "text-background/80 font-medium"
                         : count > 0
@@ -557,24 +576,26 @@ export function AdminMobileAgenda({
         </div>
       </div>
 
-      {/* ══════ ÁREA SCROLLÁVEL: BARRA SUPERIOR DE ENCAIXE + CARDS MINIMALISTAS ══════ */}
+      {/* ══════ ÁREA SCROLLÁVEL: BARRA DE AÇÃO + CARDS MINIMALISTAS (ESTILO TELA INICIAL) ══════ */}
       <div className="flex-1 min-h-0 relative">
-        <div className="h-full overflow-y-auto overscroll-contain pb-24 pt-2">
+        <div className="h-full overflow-y-auto overscroll-contain pb-24 pt-1">
           
-          {/* ══════ BARRA DE AÇÃO ESTRATÉGICA: VISÍVEL, TRANSPARENTE E SEM COBRIR NADA ══════ */}
-          <div className="px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-[12.5px] font-medium text-muted-foreground capitalize">
+          {/* ══════ BARRA DE AÇÃO: Data com Destaque + Botão de Encaixe Mais Estratégico ══════ */}
+          <div className="px-4 pt-3 pb-2.5 flex items-center justify-between">
+            <div className="min-w-0 pr-2">
+              <h3 className="text-[15px] font-bold text-foreground tracking-tight capitalize truncate">
                 {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
-              </span>
-              {appointments.length > 0 && (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground tabular-nums">
-                  {appointments.length}
-                </span>
-              )}
+              </h3>
+              <p className="text-[11.5px] text-muted-foreground font-medium mt-0.5">
+                {appointments.length === 0
+                  ? "Nenhum agendamento"
+                  : appointments.length === 1
+                  ? "1 agendamento marcado"
+                  : `${appointments.length} agendamentos marcados`}
+              </p>
             </div>
 
-            {/* Botão de Encaixe Limpo e Transparente no Topo dos Agendamentos */}
+            {/* Botão de Encaixe com Proporção Ideal e Sutil */}
             <button
               type="button"
               onClick={() => {
@@ -585,10 +606,10 @@ export function AdminMobileAgenda({
                   setManualBookingOpen(true);
                 }
               }}
-              className="h-7 px-2.5 rounded-lg border border-border/60 dark:border-white/[0.08] bg-transparent hover:bg-secondary/60 text-foreground text-[11.5px] font-medium flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+              className="h-9 px-3.5 rounded-xl border border-border/70 dark:border-white/[0.1] bg-card/70 dark:bg-white/[0.05] hover:bg-secondary text-foreground text-[12.5px] font-semibold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-xs shrink-0"
               aria-label="Novo Encaixe"
             >
-              <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+              <Plus className="w-4 h-4 stroke-[2.2] text-foreground" />
               <span>Novo Encaixe</span>
             </button>
           </div>
@@ -596,9 +617,9 @@ export function AdminMobileAgenda({
           {!isShowingSelectedDate ? (
             <div className="px-4 space-y-2.5 animate-pulse mt-1">
               {[0, 1, 2].map((item) => (
-                <div key={item} className="rounded-2xl border border-border/40 dark:border-white/[0.05] bg-card/60 p-4 space-y-3">
+                <div key={item} className="rounded-2xl border border-border/40 dark:border-white/[0.05] bg-card/60 p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <div className="h-4 w-16 rounded-full bg-muted/40" />
+                    <div className="h-4 w-20 rounded-full bg-muted/40" />
                     <div className="h-3 w-16 rounded-full bg-muted/30" />
                   </div>
                   <div className="h-4 w-36 rounded-full bg-muted/40" />
@@ -636,16 +657,16 @@ export function AdminMobileAgenda({
                     setManualBookingOpen(true);
                   }
                 }}
-                className="mt-4 h-8 px-4 rounded-full bg-foreground text-background text-[12px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
+                className="mt-4 h-9 px-4 rounded-xl bg-foreground text-background text-[12.5px] font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 hover:opacity-90 transition-all cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
+                <Plus className="w-4 h-4 stroke-[2.2]" />
                 <span>Adicionar Encaixe</span>
               </button>
             </div>
           ) : (
             <div className="px-4 space-y-2 mt-1">
               {appointments.map((apt) => {
-                const statusConfig = getStatusColorConfig(apt.status, apt.barbeiro_confirmou);
+                const statusConfig = getStatusConfig(apt.status, apt.barbeiro_confirmou);
                 const paymentBadge = getPaymentBadge(apt);
                 const isPlan = apt.tipo_agendamento === "plano" || apt.payment_method === "plano";
                 const isFree = Boolean(apt.is_free);
@@ -679,62 +700,53 @@ export function AdminMobileAgenda({
                   <div
                     key={apt.id}
                     onClick={() => onAppointmentClick?.(apt)}
-                    style={{ opacity: isPast ? 0.5 : 1 }}
+                    style={{ opacity: isPast ? 0.45 : 1 }}
                     className={cn(
-                      "rounded-2xl p-3.5 border border-border/40 dark:border-white/[0.06] bg-card/90 dark:bg-[#141414] shadow-[0_2px_8px_rgba(0,0,0,0.02)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)]",
-                      "active:scale-[0.985] transition-all duration-150 cursor-pointer hover:border-foreground/20 relative overflow-hidden"
+                      "w-full rounded-2xl border border-border/50 dark:border-white/[0.07] bg-card dark:bg-[#141414] p-3 sm:p-3.5 flex items-center gap-3.5 shadow-xs",
+                      "hover:border-border active:scale-[0.99] transition-all cursor-pointer"
                     )}
                   >
-                    {/* Linha Superior: Horário + Duração + Status */}
-                    <div className="flex items-center justify-between gap-2 mb-1.5 relative z-10">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[12px] font-bold px-2 py-0.5 rounded-md bg-secondary/80 dark:bg-white/[0.08] text-foreground tabular-nums border border-border/30 dark:border-white/[0.06]">
-                          {horaFormatted}
-                        </span>
-                        <span className="text-[11.5px] text-muted-foreground/75 flex items-center gap-1 font-medium">
-                          <Clock className="w-3 h-3 text-muted-foreground/50" />
-                          {duration} min
-                        </span>
-                      </div>
+                    {/* Horário Minimalista em Bloco — Idêntico ao padrão da Tela Inicial */}
+                    <div className="w-[52px] h-[52px] rounded-xl bg-secondary/70 dark:bg-white/[0.05] border border-border/50 dark:border-white/[0.06] flex flex-col items-center justify-center shrink-0">
+                      <span className="text-[15px] font-bold font-mono text-foreground leading-tight tracking-tight">
+                        {horaFormatted}
+                      </span>
+                      <span className="text-[9.5px] font-medium text-muted-foreground uppercase tracking-wider leading-none mt-0.5">
+                        {duration}m
+                      </span>
+                    </div>
 
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
-                        <span className="text-[11.5px] font-medium text-muted-foreground">
+                    {/* Informações Centrais: Nome do Cliente + Serviço + Status Oficial (Verde, Azul, Âmbar) */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[15px] font-bold text-foreground truncate tracking-tight">
+                          {clientName}
+                        </p>
+                        {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                        <span className="text-[12.5px] text-muted-foreground truncate">
+                          {serviceName}
+                        </span>
+                        <span className="text-muted-foreground/30">•</span>
+                        <span className={cn("text-[11.5px] font-semibold shrink-0 flex items-center gap-1", statusConfig.textColor)}>
+                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
                           {statusConfig.statusLabel}
                         </span>
                       </div>
                     </div>
 
-                    {/* Linha Central: Nome do Cliente (SEM fotos, SEM bolhas de avatar) */}
-                    <div className="flex items-center justify-between gap-2 mb-2 relative z-10">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[15px] font-semibold text-foreground tracking-tight truncate">
-                          {clientName}
-                        </span>
-                        {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
-                      </div>
-
-                      {/* Preço / Plano */}
-                      <span className="text-[13.5px] font-bold tabular-nums shrink-0 text-foreground">
+                    {/* Valor e Forma de Pagamento à Direita */}
+                    <div className="flex flex-col items-end shrink-0 pl-2">
+                      <span className="text-[14px] font-bold tabular-nums text-foreground">
                         {isPlan
                           ? "Plano"
                           : isFree
                             ? "Grátis"
                             : `R$ ${apt.preco.toFixed(2).replace('.', ',')}`}
                       </span>
-                    </div>
-
-                    {/* Linha Inferior: Serviço + Método de Pagamento */}
-                    <div className="flex items-center justify-between pt-2 border-t border-border/30 dark:border-white/[0.05] text-xs relative z-10">
-                      <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                        <Scissors className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
-                        <span className="text-muted-foreground/85 font-medium text-[12px] truncate">
-                          {serviceName}
-                        </span>
-                      </div>
-
                       {showMethodBadge && (
-                        <span className="text-muted-foreground/60 text-[11px] font-medium shrink-0">
+                        <span className="text-[10.5px] text-muted-foreground/65 font-medium mt-0.5">
                           {paymentBadge.label}
                         </span>
                       )}
@@ -755,7 +767,7 @@ export function AdminMobileAgenda({
                       setManualBookingOpen(true);
                     }
                   }}
-                  className="h-8 px-3.5 rounded-xl border border-dashed border-border/60 dark:border-white/[0.1] hover:border-foreground/30 text-muted-foreground hover:text-foreground text-[11.5px] font-medium flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                  className="h-9 px-4 rounded-xl border border-dashed border-border/70 dark:border-white/[0.12] hover:border-foreground/30 text-muted-foreground hover:text-foreground text-[12px] font-medium flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Adicionar outro encaixe</span>
