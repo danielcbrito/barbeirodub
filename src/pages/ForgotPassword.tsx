@@ -34,26 +34,28 @@ const FloatingInput = ({
   const [focused, setFocused] = useState(false);
   const active = focused || value.length > 0;
 
-  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+  const handleFocus = () => {
     setFocused(true);
-    setTimeout(() => {
-      e.target.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 120);
+    if (typeof window !== "undefined") {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
   };
 
   return (
     <div
-      className={`relative rounded-2xl transition-colors ${
+      className={`relative h-[56px] rounded-2xl transition-all ${
         focused
-          ? "border border-primary bg-transparent"
+          ? "border border-primary bg-foreground/[0.04] shadow-sm"
           : "border border-transparent bg-foreground/[0.06]"
       }`}
     >
       <label
         htmlFor={id}
-        className={`pointer-events-none absolute left-5 transition-all ${
+        className={`pointer-events-none absolute left-4 transition-all ${
           active
-            ? `top-2 text-[11px] ${focused ? "text-primary" : "text-foreground/60"}`
+            ? `top-2 text-[11px] font-medium ${focused ? "text-primary" : "text-foreground/60"}`
             : "top-1/2 -translate-y-1/2 text-[15px] text-foreground/55"
         }`}
       >
@@ -72,7 +74,8 @@ const FloatingInput = ({
         onChange={(e) => onChange(e.target.value)}
         onFocus={handleFocus}
         onBlur={() => setFocused(false)}
-        className="peer h-[68px] w-full rounded-2xl bg-transparent px-5 pt-5 pb-1 text-[15px] text-foreground caret-primary outline-none"
+        data-no-auto-scroll="true"
+        className="peer h-full w-full rounded-2xl bg-transparent px-4 pt-4 pb-1 text-[15.5px] text-foreground caret-primary outline-none"
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
     </div>
@@ -86,44 +89,64 @@ const ForgotPassword = () => {
   const [emailSent, setEmailSent] = useState(false);
 
   // Monitora o visualViewport: o container e o botão acompanham o teclado perfeitamente
-  const initialHeightRef = useRef<number>(typeof window !== "undefined" ? window.innerHeight : 0);
-  const [viewportState, setViewportState] = useState<{ height: number; offsetTop: number } | null>(null);
+  const initialHeightRef = useRef<number>(typeof window !== "undefined" ? window.innerHeight : 800);
+  const [viewportHeight, setViewportHeight] = useState<number>(() =>
+    typeof window !== "undefined" ? window.innerHeight : 800
+  );
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const vv = window.visualViewport;
-    if (!vv) return;
 
-    if (!initialHeightRef.current) {
-      initialHeightRef.current = window.innerHeight;
-    }
+    const origOverflow = document.body.style.overflow;
+    const origTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
+
+    const vv = window.visualViewport;
 
     const update = () => {
-      setViewportState({
-        height: Math.round(vv.height),
-        offsetTop: Math.round(vv.offsetTop || 0),
-      });
+      const vh = vv ? Math.round(vv.height) : window.innerHeight;
+      setViewportHeight(vh);
+
+      if (!initialHeightRef.current || vh > initialHeightRef.current) {
+        initialHeightRef.current = Math.max(initialHeightRef.current || 0, window.innerHeight, vh);
+      }
+
+      const diff = initialHeightRef.current - vh;
+      setIsKeyboardOpen(diff > 130);
+
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
     };
 
     update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
+    if (vv) {
+      vv.addEventListener("resize", update);
+      vv.addEventListener("scroll", update);
+    }
     window.addEventListener("resize", update);
+    window.addEventListener("scroll", update);
 
     return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
+      document.body.style.overflow = origOverflow;
+      document.body.style.touchAction = origTouchAction;
+      document.body.style.overscrollBehavior = "";
+      document.documentElement.style.overflow = "";
+      document.documentElement.style.overscrollBehavior = "";
+      if (vv) {
+        vv.removeEventListener("resize", update);
+        vv.removeEventListener("scroll", update);
+      }
       window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update);
     };
   }, []);
-
-  const isKeyboardOpen = Boolean(
-    viewportState &&
-    initialHeightRef.current > 0 &&
-    initialHeightRef.current - viewportState.height > 120
-  );
-
-
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -156,10 +179,10 @@ const ForgotPassword = () => {
 
   return (
     <div
+      data-no-auto-scroll="true"
       className="fixed inset-x-0 top-0 flex flex-col justify-between overflow-hidden bg-background text-foreground"
       style={{
-        height: viewportState ? `${viewportState.height}px` : "100dvh",
-        top: viewportState ? `${viewportState.offsetTop}px` : 0,
+        height: `${viewportHeight}px`,
         maxHeight: "100dvh",
       }}
     >

@@ -121,7 +121,7 @@ const scrollActiveInputIntoView = (el?: Element | null) => {
   const target = (el || document.activeElement) as HTMLElement | null;
   if (!target) return;
   const isInput = target.matches?.("input, textarea, select, [contenteditable='true']");
-  if (!isInput) return;
+  if (!isInput || target.closest("[data-no-auto-scroll]")) return;
 
   const rect = target.getBoundingClientRect();
   const visualH = window.visualViewport?.height || window.innerHeight;
