@@ -17,7 +17,6 @@ import { ptBR } from "date-fns/locale";
 import { 
   Calendar, 
   Clock, 
-  Scissors,
   Plus,
   Crown,
   CreditCard,
@@ -74,40 +73,32 @@ interface AdminMobileAgendaProps {
 const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "completed") {
     return {
-      dot: "bg-emerald-500",
-      barColor: "bg-emerald-500",
-      textColor: "text-emerald-600 dark:text-emerald-400",
-      bgColor: "bg-emerald-500/10 dark:bg-emerald-500/15",
-      borderColor: "border-emerald-500/20 dark:border-emerald-500/30",
+      dot: "bg-emerald-500/70",
+      barColor: "bg-emerald-500/75 dark:bg-emerald-500/70",
+      textColor: "text-muted-foreground/75",
       statusLabel: "Concluído",
     };
   }
   if (status === "no_show") {
     return {
-      dot: "bg-rose-500",
-      barColor: "bg-rose-500",
-      textColor: "text-rose-600 dark:text-rose-400",
-      bgColor: "bg-rose-500/10 dark:bg-rose-500/15",
-      borderColor: "border-rose-500/20 dark:border-rose-500/30",
+      dot: "bg-rose-500/70",
+      barColor: "bg-rose-500/75 dark:bg-rose-500/70",
+      textColor: "text-rose-600/80 dark:text-rose-400/80",
       statusLabel: "Não veio",
     };
   }
   if (status === "confirmed" || barbeiroConfirmou) {
     return {
-      dot: "bg-blue-500",
-      barColor: "bg-blue-500",
-      textColor: "text-blue-600 dark:text-blue-400",
-      bgColor: "bg-blue-500/10 dark:bg-blue-500/15",
-      borderColor: "border-blue-500/20 dark:border-blue-500/30",
+      dot: "bg-blue-500/70",
+      barColor: "bg-blue-500/75 dark:bg-blue-500/70",
+      textColor: "text-muted-foreground/75",
       statusLabel: "Agendado",
     };
   }
   return {
-    dot: "bg-amber-500",
-    barColor: "bg-amber-500",
-    textColor: "text-amber-600 dark:text-amber-400",
-    bgColor: "bg-amber-500/10 dark:bg-amber-500/15",
-    borderColor: "border-amber-500/20 dark:border-amber-500/30",
+    dot: "bg-amber-500/70",
+    barColor: "bg-amber-500/75 dark:bg-amber-500/70",
+    textColor: "text-amber-600/80 dark:text-amber-400/80",
     statusLabel: "Pendente",
   };
 };
@@ -600,11 +591,11 @@ export function AdminMobileAgenda({
           <div className="px-4 space-y-2.5 animate-pulse">
             {[0, 1, 2, 3].map((item) => (
               <div key={item} className="h-16 rounded-xl border border-border/40 dark:border-white/[0.05] bg-card/60 p-3 flex items-center gap-3">
-                <div className="w-13 shrink-0 flex flex-col items-center gap-1">
+                <div className="w-12 shrink-0 flex flex-col items-center gap-1">
                   <div className="h-4 w-10 rounded bg-muted/40" />
                   <div className="h-3 w-8 rounded bg-muted/20" />
                 </div>
-                <div className="w-1 h-10 rounded-full bg-muted/30 shrink-0" />
+                <div className="w-[2.5px] h-10 rounded-full bg-muted/30 shrink-0" />
                 <div className="flex-1 space-y-2 min-w-0">
                   <div className="flex justify-between items-center">
                     <div className="h-4 w-28 rounded bg-muted/40" />
@@ -657,7 +648,6 @@ export function AdminMobileAgenda({
             {appointments.map((apt) => {
               const statusConfig = getStatusConfig(apt.status, apt.barbeiro_confirmou);
               const paymentBadge = getPaymentBadge(apt);
-              const PayIcon = paymentBadge.icon;
               const isPlan = apt.tipo_agendamento === "plano" || apt.payment_method === "plano";
               const isFree = Boolean(apt.is_free);
               const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
@@ -696,30 +686,30 @@ export function AdminMobileAgenda({
                   )}
                 >
                   {/* Coluna de Horário da Agenda (Esquerda) */}
-                  <div className="w-13 shrink-0 flex flex-col items-center justify-center text-center">
+                  <div className="w-12 shrink-0 flex flex-col items-center justify-center text-center">
                     <span className="font-mono text-[14.5px] font-bold text-foreground tabular-nums tracking-tight">
                       {horaFormatted}
                     </span>
-                    <span className="text-[11px] font-medium text-muted-foreground/75 mt-0.5">
+                    <span className="text-[11px] font-medium text-muted-foreground/65 mt-0.5">
                       {duration} min
                     </span>
                   </div>
 
-                  {/* Barra vertical de status da agenda */}
-                  <div className={cn("w-1 self-stretch rounded-full shrink-0", statusConfig.barColor)} />
+                  {/* Barra vertical fina, elegante e minimalista (2.5px) */}
+                  <div className={cn("w-[2.5px] self-stretch rounded-full shrink-0", statusConfig.barColor)} />
 
                   {/* Conteúdo Principal do Agendamento */}
-                  <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5">
+                  <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
                     {/* Linha Superior: Nome do Cliente + Preço */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[15px] font-bold text-foreground tracking-tight truncate">
+                        <span className="text-[15px] font-semibold text-foreground tracking-tight truncate">
                           {clientName}
                         </span>
                         {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       </div>
 
-                      <span className="text-[14.5px] font-bold tabular-nums text-foreground shrink-0">
+                      <span className="text-[14px] font-bold tabular-nums text-foreground shrink-0">
                         {isPlan
                           ? "Plano"
                           : isFree
@@ -728,25 +718,20 @@ export function AdminMobileAgenda({
                       </span>
                     </div>
 
-                    {/* Linha Inferior: Serviço + Forma de Pagamento + Status */}
+                    {/* Linha Inferior: Serviço + Pagamento à esquerda | Status discreto à direita */}
                     <div className="flex items-center justify-between gap-2 text-[12px] text-muted-foreground">
-                      <div className="flex items-center gap-1.5 min-w-0 truncate">
-                        <Scissors className="w-3 h-3 text-muted-foreground/60 shrink-0" />
-                        <span className="truncate font-medium text-foreground/80">{serviceName}</span>
-                        <span className="text-muted-foreground/30">•</span>
-                        <span className="shrink-0 flex items-center gap-1 text-muted-foreground/80">
-                          <PayIcon className="w-3 h-3" />
+                      <div className="flex items-center gap-1.5 min-w-0 truncate font-medium">
+                        <span className="truncate text-foreground/80">{serviceName}</span>
+                        <span className="text-muted-foreground/30">·</span>
+                        <span className="shrink-0 text-muted-foreground/75">
                           {paymentBadge.label}
                         </span>
                       </div>
 
-                      {/* Ponto e texto de status */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusConfig.dot)} />
-                        <span className={cn("text-[11.5px] font-semibold", statusConfig.textColor)}>
-                          {statusConfig.statusLabel}
-                        </span>
-                      </div>
+                      {/* Status limpo, discreto e sem poluição */}
+                      <span className={cn("text-[11px] font-medium shrink-0", statusConfig.textColor)}>
+                        {statusConfig.statusLabel}
+                      </span>
                     </div>
                   </div>
                 </div>
