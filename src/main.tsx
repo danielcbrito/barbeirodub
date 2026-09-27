@@ -126,7 +126,7 @@ const scrollActiveInputIntoView = (el?: Element | null) => {
   const rect = target.getBoundingClientRect();
   const visualH = window.visualViewport?.height || window.innerHeight;
   // Se o campo já está visível dentro da área útil da tela, não faz scroll desnecessário
-  if (rect.top >= 48 && rect.bottom <= visualH - 48) {
+  if (rect.top >= 48 && rect.bottom <= visualH - 96) {
     return;
   }
 

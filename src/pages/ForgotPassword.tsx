@@ -1,12 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, Loader2, CheckCircle2 } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-
-import { useViewportHeight } from "@/hooks/useViewportHeight";
 
 const emailSchema = z.object({
   email: z.string().trim().email("Email inválido"),
@@ -78,7 +76,41 @@ const ForgotPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
-  const { visualHeight, keyboardOpen } = useViewportHeight();
+
+  // Keyboard height (iOS/Android) — usado para fazer o CTA subir junto do teclado suavemente e sem travar
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+
+    const updateKeyboard = () => {
+      if (!vv) {
+        setKeyboardHeight(0);
+        return;
+      }
+      const diff = window.innerHeight - vv.height - (vv.offsetTop || 0);
+      setKeyboardHeight(diff > 60 ? Math.round(diff) : 0);
+    };
+
+    updateKeyboard();
+
+    if (vv) {
+      vv.addEventListener("resize", updateKeyboard);
+      vv.addEventListener("scroll", updateKeyboard);
+    }
+    window.addEventListener("resize", updateKeyboard);
+    window.addEventListener("orientationchange", updateKeyboard);
+
+    return () => {
+      if (vv) {
+        vv.removeEventListener("resize", updateKeyboard);
+        vv.removeEventListener("scroll", updateKeyboard);
+      }
+      window.removeEventListener("resize", updateKeyboard);
+      window.removeEventListener("orientationchange", updateKeyboard);
+    };
+  }, []);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -111,10 +143,10 @@ const ForgotPassword = () => {
 
   return (
     <div
-      className="fixed inset-0 flex flex-col overflow-hidden bg-background"
+      className="fixed inset-0 flex flex-col justify-between overflow-hidden bg-background"
       style={{
-        height: keyboardOpen ? visualHeight : "var(--app-height, 100svh)",
-        maxHeight: "var(--kb-viewport-height, 100svh)",
+        background: "hsl(var(--background))",
+        color: "hsl(var(--foreground))",
       }}
     >
       {/* Top bar */}
@@ -125,8 +157,9 @@ const ForgotPassword = () => {
         <button
           type="button"
           onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
-          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/85 active:scale-95"
+          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/85 active:scale-95 transition-all"
           aria-label="Voltar"
+          style={{ touchAction: "manipulation" }}
         >
           <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
         </button>
@@ -134,7 +167,13 @@ const ForgotPassword = () => {
       </div>
 
       {/* Content */}
-      <main className="flex-1 overflow-y-auto overscroll-contain px-6 pb-8">
+      <main
+        className="flex-1 w-full max-w-md mx-auto overflow-y-auto overscroll-contain px-6 pb-8"
+        style={{
+          paddingBottom: keyboardHeight > 0 ? `${keyboardHeight + 110}px` : "24px",
+          transition: "padding-bottom 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+        }}
+      >
         <AnimatePresence mode="wait">
           {!emailSent ? (
             <motion.div
@@ -163,7 +202,7 @@ const ForgotPassword = () => {
                   value={email}
                   onChange={setEmail}
                 />
-                <button type="submit" className="sr-only" tabIndex={-1}>
+                <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
                   Enviar
                 </button>
               </form>
@@ -201,31 +240,40 @@ const ForgotPassword = () => {
         </AnimatePresence>
       </main>
 
-      {/* Bottom CTA */}
-      <div
-        className="px-6 pt-3"
-        style={{ paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)" }}
+      {/* Bottom CTA — Sempre embaixo, sobe junto do teclado sem travar */}
+      <footer
+        className="relative w-full max-w-md mx-auto px-6 pt-3 shrink-0 bg-background z-40 after:content-[''] after:absolute after:top-full after:left-0 after:right-0 after:h-[100vh] after:bg-background"
+        style={{
+          paddingBottom: keyboardHeight > 0
+            ? "12px"
+            : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
+          transform: keyboardHeight > 0 ? `translate3d(0, -${keyboardHeight}px, 0)` : "translate3d(0, 0, 0)",
+          transition: "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), padding-bottom 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+          willChange: "transform",
+        }}
       >
         {!emailSent ? (
           <button
             type="button"
             onClick={() => handleSubmit()}
             disabled={!canSubmit || isLoading}
-            className="w-full h-[48px] rounded-xl bg-foreground text-background font-semibold text-[15px] active:scale-[0.99] transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[15.5px] sm:text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+            style={{ touchAction: "manipulation" }}
           >
-            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
             Enviar
           </button>
         ) : (
           <button
             type="button"
             onClick={() => navigate("/auth")}
-            className="w-full h-[48px] rounded-xl bg-foreground text-background font-semibold text-[15px] active:scale-[0.99] transition-transform flex items-center justify-center"
+            className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[15.5px] sm:text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all flex items-center justify-center cursor-pointer"
+            style={{ touchAction: "manipulation" }}
           >
             Voltar ao login
           </button>
         )}
-      </div>
+      </footer>
     </div>
   );
 };
