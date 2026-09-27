@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import barberWelcomeHero from "@/assets/barber-welcome-hero.png";
+import { motion } from "framer-motion";
+import lumaBarberOrbit from "@/assets/luma-barber-orbit.png";
 import { SplashScreen } from "@/components/SplashScreen";
 import AuthBottomSheet from "@/components/AuthBottomSheet";
 import { supabase } from "@/integrations/supabase/client";
@@ -89,50 +90,69 @@ const Index = () => {
     <>
       <SplashScreen visible={showSplash} />
 
-      {/* Container Raiz: Fundo branco puro 100dvh, modelo idêntico à referência */}
-      <div className="fixed inset-0 w-full h-[100dvh] bg-white text-zinc-900 overflow-hidden flex flex-col justify-between select-none">
-        
-        {/* ═══ 1. Topo: Título e subtexto 100% minimalistas (Sem badge) ═══ */}
+      {/* Container Raiz: Fundo pastel idêntico ao modelo Luma (celeste no topo-esquerdo, pêssego/rosa no topo-direito) */}
+      <div
+        className="fixed inset-0 w-full h-[100dvh] text-zinc-900 overflow-hidden flex flex-col justify-between select-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 75% 45% at 10% 8%, rgba(210, 233, 255, 0.75) 0%, transparent 65%), radial-gradient(ellipse 75% 45% at 90% 8%, rgba(255, 222, 222, 0.75) 0%, transparent 65%), #ffffff",
+        }}
+      >
+        {/* ═══ 1. Centro/Superior: Sistema Orbital de Órbitas Concéntricas com Ícones 3D e Memojis ═══ */}
         <div
-          className="relative z-10 w-full max-w-[430px] mx-auto px-6 text-center shrink-0"
+          className="relative flex-1 w-full max-w-[430px] mx-auto flex items-center justify-center px-2 min-h-0"
           style={{
-            paddingTop: "calc(env(safe-area-inset-top, 0px) + 28px)",
+            paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)",
           }}
         >
-          <h1
-            className="text-[28px] sm:text-[32px] font-bold text-zinc-950 tracking-[-0.025em] leading-[1.18] mx-auto max-w-[340px]"
-            style={{ fontFamily: "'Plus Jakarta Sans', Inter, -apple-system, sans-serif" }}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: showSplash ? 0 : 1, scale: showSplash ? 0.96 : 1 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="relative w-full max-w-[360px] sm:max-w-[390px] aspect-square flex items-center justify-center"
           >
-            Leve sua barbearia<br />ao próximo nível
-          </h1>
-          <p className="mt-2.5 text-[14px] text-zinc-500 font-normal leading-relaxed max-w-[295px] mx-auto">
-            Agendamentos, clientes e gestão completa na palma da sua mão.
-          </p>
-        </div>
-
-        {/* ═══ 2. Centro: Imagem estática e minimalista 100% idêntica ao modelo ═══ */}
-        <div className="relative flex-1 w-full max-w-[430px] mx-auto flex items-center justify-center px-4 my-auto min-h-0">
-          <div className="relative w-full max-w-[320px] sm:max-w-[360px] max-h-[50vh] flex items-center justify-center">
             <img
-              src={barberWelcomeHero}
-              alt="Barbearia DUB"
-              className="w-full h-full max-h-[48vh] object-contain select-none pointer-events-none"
+              src={lumaBarberOrbit}
+              alt="Ecossistema Barbearia DUB"
+              className="w-full h-full object-contain select-none pointer-events-none"
               draggable={false}
             />
-          </div>
+          </motion.div>
         </div>
 
-        {/* ═══ 3. Rodapé: Botões Criar conta e Entrar no app ═══ */}
-        <div
-          className="relative z-10 w-full max-w-[430px] mx-auto px-6 sm:px-8 pb-3 pt-2 shrink-0 flex flex-col items-center"
+        {/* ═══ 2. Inferior: Logo dub✦, Título Sólido e Botões (100% no padrão Luma) ═══ */}
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: showSplash ? 0 : 1, y: showSplash ? 14 : 0 }}
+          transition={{ duration: 0.45, delay: 0.15 }}
+          className="relative z-10 w-full max-w-[430px] mx-auto px-6 sm:px-8 pb-3 pt-1 shrink-0 flex flex-col items-center text-center"
           style={{
             paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
           }}
         >
-          {/* Botão Principal: Preto, arredondado pill */}
+          {/* Logo do app: dub✦ (estilo luma✦) */}
+          <div className="flex items-center justify-center gap-0.5 mb-2">
+            <span
+              className="text-[21px] sm:text-[22px] font-bold text-zinc-500/90 tracking-tight lowercase"
+              style={{ fontFamily: "'Plus Jakarta Sans', Inter, -apple-system, sans-serif" }}
+            >
+              dub
+            </span>
+            <span className="text-[13px] text-zinc-400 font-semibold mb-1">✦</span>
+          </div>
+
+          {/* Título de 2 linhas em texto sólido (sem cores coloridas nas letras como pedido) */}
+          <h1
+            className="text-[30px] sm:text-[34px] font-extrabold text-zinc-950 tracking-[-0.035em] leading-[1.12] mb-6 max-w-[340px]"
+            style={{ fontFamily: "'Plus Jakarta Sans', Inter, -apple-system, sans-serif" }}
+          >
+            Cortes Incríveis<br />Começam Aqui
+          </h1>
+
+          {/* Botão Principal: Preto, arredondado pill ("Get Started" da Luma) */}
           <button
             onClick={() => navigate("/login?mode=signup")}
-            className="w-full max-w-[340px] h-[54px] sm:h-[56px] rounded-full bg-[#18181b] hover:bg-black text-white font-semibold text-[15.5px] sm:text-[16px] tracking-normal flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-[0.98] transition-all cursor-pointer"
+            className="w-full max-w-[340px] h-[54px] sm:h-[56px] rounded-full bg-[#141416] hover:bg-black text-white font-semibold text-[15.5px] sm:text-[16px] tracking-normal flex items-center justify-center shadow-[0_10px_25px_rgba(0,0,0,0.14)] active:scale-[0.98] transition-all cursor-pointer"
           >
             Criar conta
           </button>
@@ -140,14 +160,14 @@ const Index = () => {
           {/* Botão Secundário: Tipografia limpa e elegante */}
           <button
             onClick={() => navigate("/login")}
-            className="w-full max-w-[340px] h-[46px] rounded-full text-zinc-900 hover:text-black font-semibold text-[14.5px] sm:text-[15px] tracking-normal flex items-center justify-center mt-2 active:scale-[0.98] transition-all cursor-pointer"
+            className="w-full max-w-[340px] h-[44px] rounded-full text-zinc-900 hover:text-black font-semibold text-[14.5px] sm:text-[15px] tracking-normal flex items-center justify-center mt-2 active:scale-[0.98] transition-all cursor-pointer"
           >
             Entrar no app
           </button>
 
           {/* Indicador Home Bar do dispositivo móvel */}
           <div className="w-28 h-1 bg-zinc-300/80 rounded-full mx-auto mt-3.5" aria-hidden="true" />
-        </div>
+        </motion.div>
       </div>
 
       <AuthBottomSheet isOpen={showAuth} onClose={() => setShowAuth(false)} />
