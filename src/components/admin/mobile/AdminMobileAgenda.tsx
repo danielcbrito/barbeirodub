@@ -1,11 +1,22 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { format, addDays, subDays, isToday, isSameDay, startOfDay } from "date-fns";
+import { 
+  format, 
+  addDays, 
+  subDays, 
+  isToday, 
+  isSameDay, 
+  startOfMonth, 
+  endOfMonth, 
+  eachDayOfInterval, 
+  addMonths, 
+  subMonths, 
+  isSameMonth 
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
   Calendar, 
   Clock, 
-  User, 
   Scissors,
   Plus,
   Crown,
@@ -13,6 +24,10 @@ import {
   Banknote,
   Gift,
   QrCode,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,7 +66,7 @@ interface AdminMobileAgendaProps {
   showBack?: boolean;
 }
 
-/** Status minimalista: dot + label em texto muted */
+/** Status minimalista: dot + label discreto */
 const getStatusColorConfig = (status: string, barbeiroConfirmou: boolean | null) => {
   if (status === "completed") {
     return { dot: "bg-emerald-500", statusLabel: "Concluído" };
@@ -65,7 +80,7 @@ const getStatusColorConfig = (status: string, barbeiroConfirmou: boolean | null)
   return { dot: "bg-amber-500", statusLabel: "Pendente" };
 };
 
-/** Pagamento minimalista: apenas ícone + label em muted */
+/** Pagamento minimalista */
 const getPaymentBadge = (apt: { tipo_agendamento: string | null; payment_method: string | null; is_free: boolean | null }) => {
   if (apt.tipo_agendamento === "plano") return { icon: Crown, label: "Plano" };
   if (apt.is_free) return { icon: Gift, label: "Grátis" };
@@ -74,6 +89,11 @@ const getPaymentBadge = (apt: { tipo_agendamento: string | null; payment_method:
   return { icon: Banknote, label: "Dinheiro" };
 };
 
+const MONTH_NAMES = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", 
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez"
+];
+
 export function AdminMobileAgenda({
   onAppointmentClick,
   onAddClick,
@@ -81,25 +101,31 @@ export function AdminMobileAgenda({
   tenantId,
   title = "Agenda",
   onBack,
-  showBack = true,
+  showBack = false,
 }: AdminMobileAgendaProps) {
   const navigate = useNavigate();
+
   const getLocalToday = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   };
 
   const getDateKey = (date: Date) => format(date, 'yyyy-MM-dd');
-
-  /** Chave de cache persistente (localStorage) — hidratação em 0ms como no barbeiro */
   const syncKey = (dateStr: string) => `admin-agenda:${barbeiroId || tenantId || "all"}:${dateStr}`;
 
-  const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    return getLocalToday();
-  });
-  const [carouselDate, setCarouselDate] = useState<Date>(() => {
-    return getLocalToday();
-  });
+  const today = useMemo(() => getLocalToday(), []);
+
+  // Mês selecionado no carrossel e data selecionada
+  const [selectedMonth, setSelectedMonth] = useState<Date>(() => startOfMonth(getLocalToday()));
+  const [selectedDate, setSelectedDate] = useState<Date>(() => getLocalToday());
+
+  // Estado para contagem de agendamentos/slots de cada dia do mês
+  const [monthCounts, setMonthCounts] = useState<Record<string, number>>({});
+
+  // Modal de seleção rápida de mês/ano
+  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() => selectedMonth.getFullYear());
+
   const [appointments, setAppointments] = useState<MobileAppointment[]>(
     () => readSyncCache<MobileAppointment[]>(syncKey(getDateKey(getLocalToday())))?.data || []
   );
@@ -110,167 +136,78 @@ export function AdminMobileAgenda({
   const [refreshing, setRefreshing] = useState(false);
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
   const [selectedSlotTime, setSelectedSlotTime] = useState("09:00");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
+
+  const carouselRef = useRef<HTMLDivElement>(null);
   const isInitialScrollDone = useRef(false);
   const visibleDateRef = useRef<string>(format(selectedDate, 'yyyy-MM-dd'));
   const requestSeqRef = useRef(0);
-  const scrollCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const programmaticScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isProgrammaticScrollRef = useRef(false);
-  const pendingScrollDateRef = useRef<Date | null>(null);
   const hasLoadedOnceRef = useRef(false);
-  const appointmentsRef = useRef<MobileAppointment[]>([]);
-  // Cache in-memory por dia — evita piscar "spinner + lista vazia" ao trocar de dia
   const cacheRef = useRef<Map<string, MobileAppointment[]>>(new Map());
 
+  // Todos os dias do mês atual selecionado (1 ao último dia)
+  const daysInMonth = useMemo(() => {
+    const start = startOfMonth(selectedMonth);
+    const end = endOfMonth(selectedMonth);
+    return eachDayOfInterval({ start, end });
+  }, [selectedMonth]);
 
   const commitAppointments = useCallback((nextAppointments: MobileAppointment[], dateKey?: string) => {
-    appointmentsRef.current = nextAppointments;
     setAppointments(nextAppointments);
     if (dateKey) setAppointmentsDateKey(dateKey);
   }, []);
 
-  const clearScrollCommitTimer = useCallback(() => {
-    if (scrollCommitTimerRef.current) {
-      clearTimeout(scrollCommitTimerRef.current);
-      scrollCommitTimerRef.current = null;
-    }
+  // Centraliza o dia selecionado no carrossel full-bleed
+  const scrollToDay = useCallback((day: Date, behavior: ScrollBehavior = "smooth") => {
+    const container = carouselRef.current;
+    if (!container) return;
+    const dayKey = format(day, "yyyy-MM-dd");
+    const el = container.querySelector(`[data-date="${dayKey}"]`) as HTMLElement;
+    if (!el) return;
+
+    const containerWidth = container.offsetWidth;
+    const cardLeft = el.offsetLeft;
+    const cardWidth = el.offsetWidth;
+    const targetScroll = cardLeft - (containerWidth / 2) + (cardWidth / 2);
+
+    container.scrollTo({
+      left: Math.max(0, targetScroll),
+      behavior,
+    });
   }, []);
 
-  const commitCarouselSelection = useCallback((day: Date, delay = 360) => {
-    clearScrollCommitTimer();
-    scrollCommitTimerRef.current = setTimeout(() => {
-      pendingScrollDateRef.current = null;
-      setCarouselDate(prev => (isSameDay(prev, day) ? prev : day));
-      setSelectedDate(prev => (isSameDay(prev, day) ? prev : day));
-    }, delay);
-  }, [clearScrollCommitTimer]);
+  // Carrega contagens de agendamentos para todos os dias do mês atual
+  const loadMonthCounts = useCallback(async (monthDate: Date) => {
+    const startStr = format(startOfMonth(monthDate), 'yyyy-MM-dd');
+    const endStr = format(endOfMonth(monthDate), 'yyyy-MM-dd');
 
-  // Estabilizar array de dias — hoje SEMPRE no fuso local
-  const today = useMemo(() => getLocalToday(), []);
-  const allDays = useMemo(() => Array.from({ length: 31 }, (_, i) => addDays(today, i - 15)), [today]);
-  const todayIndex = 15;
+    try {
+      let query = supabase
+        .from("agendamentos")
+        .select("data")
+        .gte("data", startStr)
+        .lte("data", endStr)
+        .in("status", ["pending", "confirmed", "completed"]);
 
-  const shortDayName = (date: Date) => {
-    const names = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-    return names[date.getDay()];
-  };
-
-  const getCenteredDayFromScroll = useCallback(() => {
-    const el = scrollRef.current;
-    const inner = innerRef.current;
-    if (!el || !inner) return null;
-
-    const centerX = el.scrollLeft + el.offsetWidth / 2;
-    const children = Array.from(inner.children) as HTMLElement[];
-    let closestIdx = 0;
-    let minDist = Infinity;
-
-    for (let i = 0; i < children.length; i++) {
-      const childCenter = children[i].offsetLeft + children[i].offsetWidth / 2;
-      const dist = Math.abs(childCenter - centerX);
-      if (dist < minDist) {
-        minDist = dist;
-        closestIdx = i;
+      if (barbeiroId) {
+        query = query.eq("barbeiro_id", barbeiroId);
       }
-    }
 
-    return allDays[closestIdx] ?? null;
-  }, [allDays]);
-
-  // Scroll inicial para o dia de hoje — com pequeno delay para garantir layout
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const el = scrollRef.current;
-      const inner = innerRef.current;
-      if (!el || !inner) return;
-      const child = inner.children[todayIndex] as HTMLElement;
-      if (!child) return;
-      el.scrollLeft = child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2;
-      // Marcar como feito após o scroll parar
-      setTimeout(() => {
-        setCarouselDate(today);
-        isInitialScrollDone.current = true;
-      }, 100);
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [today]);
-
-  // Detectar o dia central durante scroll — usa o container interno
-  useEffect(() => {
-    const el = scrollRef.current;
-    const inner = innerRef.current;
-    if (!el || !inner) return;
-
-    let rafId: number;
-    const handleScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        // Não alterar seleção até o scroll inicial terminar
-        if (!isInitialScrollDone.current) return;
-        const closestDay = getCenteredDayFromScroll();
-        if (closestDay) {
-          // No iPhone, atualizar o estado visual em cada pixel do scroll cria
-          // "bolhas"/piscadas. Guardamos o candidato em ref e só confirmamos
-          // quando o carrossel realmente parar.
-          pendingScrollDateRef.current = closestDay;
-          if (!isProgrammaticScrollRef.current) {
-            commitCarouselSelection(closestDay);
+      const { data, error } = await query;
+      if (!error && data) {
+        const counts: Record<string, number> = {};
+        data.forEach((row) => {
+          if (row.data) {
+            counts[row.data] = (counts[row.data] || 0) + 1;
           }
-        }
-      });
-    };
-
-    const handleScrollEnd = () => {
-      if (isProgrammaticScrollRef.current) return;
-      const closestDay = getCenteredDayFromScroll() ?? pendingScrollDateRef.current;
-      if (closestDay) {
-        clearScrollCommitTimer();
-        pendingScrollDateRef.current = null;
-        setCarouselDate(prev => (isSameDay(prev, closestDay) ? prev : closestDay));
-        setSelectedDate(prev => (isSameDay(prev, closestDay) ? prev : closestDay));
+        });
+        setMonthCounts(counts);
       }
-    };
+    } catch (err) {
+      console.error("Error loading month counts:", err);
+    }
+  }, [barbeiroId]);
 
-    const handleTouchEnd = () => {
-      if (isProgrammaticScrollRef.current) return;
-      const closestDay = getCenteredDayFromScroll() ?? pendingScrollDateRef.current;
-      if (closestDay) commitCarouselSelection(closestDay, 420);
-    };
-
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    el.addEventListener("scrollend", handleScrollEnd, { passive: true });
-    el.addEventListener("touchend", handleTouchEnd, { passive: true });
-    el.addEventListener("pointerup", handleTouchEnd, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", handleScroll);
-      el.removeEventListener("scrollend", handleScrollEnd);
-      el.removeEventListener("touchend", handleTouchEnd);
-      el.removeEventListener("pointerup", handleTouchEnd);
-      cancelAnimationFrame(rafId);
-      clearScrollCommitTimer();
-    };
-  }, [clearScrollCommitTimer, commitCarouselSelection, getCenteredDayFromScroll]);
-
-  const scrollToDate = useCallback((date: Date) => {
-    const el = scrollRef.current;
-    const inner = innerRef.current;
-    if (!el || !inner) return;
-    const idx = allDays.findIndex(d => isSameDay(d, date));
-    if (idx < 0) return;
-    const child = inner.children[idx] as HTMLElement;
-    if (!child) return;
-    isProgrammaticScrollRef.current = true;
-    if (programmaticScrollTimerRef.current) clearTimeout(programmaticScrollTimerRef.current);
-    el.scrollTo({ left: child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2, behavior: "smooth" });
-    programmaticScrollTimerRef.current = setTimeout(() => {
-      isProgrammaticScrollRef.current = false;
-      pendingScrollDateRef.current = null;
-      setCarouselDate(date);
-    }, 420);
-  }, [allDays]);
-
+  // Carregar agendamentos do dia ativo
   const loadAppointments = useCallback(async (
     date: Date,
     options: { silent?: boolean; visible?: boolean } = {}
@@ -284,15 +221,13 @@ export function AdminMobileAgenda({
     }
 
     try {
-      // Spinner cheio apenas no primeiro carregamento real.
-      // Depois disso, mantém a lista/estado atual até o novo dia chegar para não piscar no iPhone.
       if (visible && !silent && !cacheRef.current.has(dateStr) && !hasLoadedOnceRef.current) {
         setLoading(true);
       }
 
       let appointmentsWithDetails: MobileAppointment[] | null = null;
 
-      /* ── Caminho rápido: 1 única RPC agregada (igual ao app do barbeiro) ── */
+      // RPC rápida agregada
       if (barbeiroId) {
         const { data: bundle, error: bundleError } = await supabase.rpc("get_barber_agenda_bundle", {
           p_barbeiro_id: barbeiroId,
@@ -369,11 +304,9 @@ export function AdminMobileAgenda({
         }) as MobileAppointment[];
       }
 
-      // Grava no cache SEMPRE (mesmo silent) — pré-fetch popula os dias adjacentes
       cacheRef.current.set(dateStr, appointmentsWithDetails);
       writeSyncCache(syncKey(dateStr), appointmentsWithDetails);
 
-      // Só sobrescreve a lista visível se ainda for o dia atual
       if (visible && visibleDateRef.current === dateStr && requestSeqRef.current === requestId) {
         commitAppointments(appointmentsWithDetails, dateStr);
       }
@@ -390,6 +323,12 @@ export function AdminMobileAgenda({
     }
   }, [barbeiroId, commitAppointments]);
 
+  // Carrega contagens mensais quando o mês mudar
+  useEffect(() => {
+    loadMonthCounts(selectedMonth);
+  }, [selectedMonth, loadMonthCounts]);
+
+  // Carrega agendamentos quando selectedDate mudar
   useEffect(() => {
     const dateStr = getDateKey(selectedDate);
     const cached =
@@ -397,7 +336,6 @@ export function AdminMobileAgenda({
       readSyncCache<MobileAppointment[]>(syncKey(dateStr))?.data;
 
     if (cached) {
-      // Mostra imediatamente e revalida em background (sem piscar)
       cacheRef.current.set(dateStr, cached);
       commitAppointments(cached, dateStr);
       setLoading(false);
@@ -405,18 +343,15 @@ export function AdminMobileAgenda({
       visibleDateRef.current = dateStr;
       loadAppointments(selectedDate, { silent: true, visible: true });
     } else {
-      // Sem cache: NÃO limpa lista pra evitar flash — só mostra spinner se realmente vazio
       loadAppointments(selectedDate, { visible: true });
     }
 
-
-    // Prefetch silencioso do dia anterior e do próximo
+    // Prefetch silencioso dos dias adjacentes
     const prev = subDays(selectedDate, 1);
     const next = addDays(selectedDate, 1);
     [prev, next].forEach((d) => {
       const key = getDateKey(d);
       if (!cacheRef.current.has(key)) {
-        // fire-and-forget silent
         loadAppointments(d, { silent: true, visible: false });
       }
     });
@@ -425,19 +360,18 @@ export function AdminMobileAgenda({
       ? { event: '*', schema: 'public', table: 'agendamentos', filter: `barbeiro_id=eq.${barbeiroId}` }
       : { event: '*', schema: 'public', table: 'agendamentos' };
 
-    // Debounce global — evita double-load quando realtime + agenda-refresh
-    // (ex.: ao finalizar atendimento no iPhone) disparam juntos.
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     const scheduleSilentRefresh = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
         cacheRef.current.delete(getDateKey(selectedDate));
         loadAppointments(selectedDate, { silent: true, visible: true });
+        loadMonthCounts(selectedMonth);
       }, 250);
     };
 
     const channel = supabase
-      .channel(`mobile-agenda-v2-${barbeiroId || 'all'}`)
+      .channel(`mobile-agenda-v3-${barbeiroId || 'all'}`)
       .on('postgres_changes', channelConfig as any, scheduleSilentRefresh)
       .subscribe();
 
@@ -452,150 +386,178 @@ export function AdminMobileAgenda({
       supabase.removeChannel(channel);
       window.removeEventListener('agenda-refresh', handleHeaderRefresh);
     };
-  }, [selectedDate, loadAppointments, barbeiroId]);
+  }, [selectedDate, selectedMonth, loadAppointments, loadMonthCounts, barbeiroId]);
+
+  // Centraliza o carrossel no dia selecionado
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      scrollToDay(selectedDate, isInitialScrollDone.current ? "smooth" : "auto");
+      isInitialScrollDone.current = true;
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [selectedDate, selectedMonth, scrollToDay]);
+
+  // Troca de mês pelos botões de seta
+  const goToPreviousMonth = () => {
+    setSelectedMonth((prev) => {
+      const nextMonth = subMonths(prev, 1);
+      const newDate = isSameMonth(nextMonth, today) ? today : startOfMonth(nextMonth);
+      setSelectedDate(newDate);
+      return nextMonth;
+    });
+  };
+
+  const goToNextMonth = () => {
+    setSelectedMonth((prev) => {
+      const nextMonth = addMonths(prev, 1);
+      const newDate = isSameMonth(nextMonth, today) ? today : startOfMonth(nextMonth);
+      setSelectedDate(newDate);
+      return nextMonth;
+    });
+  };
+
+  const goToToday = () => {
+    const now = getLocalToday();
+    setSelectedMonth(startOfMonth(now));
+    setSelectedDate(now);
+  };
+
   const selectedDateKey = getDateKey(selectedDate);
   const isShowingSelectedDate = appointmentsDateKey === selectedDateKey;
 
-
-
   return (
-    <div className="flex flex-col bg-background" style={{ height: 'calc(100dvh - 56px)' }}>
-      {/* ══════ HEADER FIXO: Minimalista, Alto Padrão ══════ */}
-      <div className="flex-shrink-0 px-4 pt-3 pb-2.5 z-20 bg-background/95 backdrop-blur-md border-b border-border/30 dark:border-white/[0.06]">
-        {/* Linha superior minimalista: Mês/Ano + Hoje + Contagem à esquerda, Encaixe à direita */}
-        <div className="flex items-center justify-between gap-3 h-10 mb-2.5">
+    <div className="flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
+      {/* ══════ HEADER FIXO: Minimalista, Sério, Alto Padrão ══════ */}
+      <div className="flex-shrink-0 z-20 bg-background/95 backdrop-blur-md border-b border-border/40 dark:border-white/[0.06] pt-3 pb-3">
+        {/* Linha 1: Mês/Ano com Dropdown + Setas de Navegação */}
+        <div className="flex items-center justify-between px-4 mb-3">
+          {/* Seletor Mês/Ano */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[15.5px] font-bold text-foreground capitalize tracking-tight">
-              {format(carouselDate, "MMMM 'de' yyyy", { locale: ptBR })}
-            </span>
-            {!isToday(carouselDate) && (
+            <button
+              type="button"
+              onClick={() => {
+                setPickerYear(selectedMonth.getFullYear());
+                setIsMonthPickerOpen(true);
+              }}
+              className="flex items-center gap-1.5 text-[17px] font-bold text-foreground capitalize tracking-tight hover:opacity-85 active:scale-95 transition-all cursor-pointer"
+            >
+              <span>{format(selectedMonth, "MMMM yyyy", { locale: ptBR })}</span>
+              <ChevronDown className="w-4 h-4 text-muted-foreground stroke-[2.2]" />
+            </button>
+
+            {!isSameMonth(selectedMonth, today) && (
               <button
                 type="button"
-                onClick={() => {
-                  clearScrollCommitTimer();
-                  setCarouselDate(today);
-                  setSelectedDate(today);
-                  scrollToDate(today);
-                }}
+                onClick={goToToday}
                 className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
               >
                 Hoje
               </button>
             )}
-            <span className="text-[11.5px] font-medium text-muted-foreground/75 tabular-nums hidden xs:inline-block">
-              • {appointments.length} {appointments.length === 1 ? "agendamento" : "agendamentos"}
-            </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              if (onAddClick) {
-                onAddClick(selectedDateKey, "09:00");
-              } else {
-                setSelectedSlotTime("09:00");
-                setManualBookingOpen(true);
-              }
-            }}
-            className="h-8 px-3.5 rounded-full bg-foreground text-background text-[12px] font-semibold flex items-center gap-1.5 shadow-sm hover:opacity-90 active:scale-95 transition-all shrink-0 cursor-pointer"
-            aria-label="Novo encaixe"
-          >
-            <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
-            <span>Encaixe</span>
-          </button>
+          {/* Setas Anterior / Próximo Mês */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={goToPreviousMonth}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-foreground hover:bg-secondary/80 active:scale-90 transition-all border border-border/40 dark:border-white/[0.08] cursor-pointer"
+              aria-label="Mês anterior"
+            >
+              <ChevronLeft className="w-4 h-4 stroke-[2.2]" />
+            </button>
+            <button
+              type="button"
+              onClick={goToNextMonth}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-foreground hover:bg-secondary/80 active:scale-90 transition-all border border-border/40 dark:border-white/[0.08] cursor-pointer"
+              aria-label="Próximo mês"
+            >
+              <ChevronRight className="w-4 h-4 stroke-[2.2]" />
+            </button>
+          </div>
         </div>
 
-        {/* Carrossel nativo — scroll suave, sem tremor */}
-        <div className="relative">
-          <div
-            ref={scrollRef}
-            className="overflow-x-auto scrollbar-hide"
-            style={{ 
-              WebkitOverflowScrolling: "touch",
-              scrollSnapType: "x mandatory",
-            }}
-          >
-            <div ref={innerRef} className="flex items-end" style={{ paddingLeft: "calc(50% - 24px)", paddingRight: "calc(50% - 24px)" }}>
-              {allDays.map((day) => {
-                const isSelected = isSameDay(day, carouselDate);
-                const dayIsToday = isToday(day);
+        {/* ══════ CARROSSEL 100% EDGE-TO-EDGE ══════ */}
+        <div
+          ref={carouselRef}
+          className="w-full overflow-x-auto scrollbar-hide px-3"
+          style={{
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          <div className="flex items-center gap-2 w-max py-0.5">
+            {daysInMonth.map((day) => {
+              const isSelected = isSameDay(day, selectedDate);
+              const dayIsToday = isToday(day);
+              const dateKey = format(day, "yyyy-MM-dd");
+              const count = monthCounts[dateKey] ?? 0;
+              const dayOfWeek = format(day, "EEE", { locale: ptBR }).replace(".", "");
+              const dayNumber = format(day, "d");
 
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className="flex-shrink-0 w-12"
-                    style={{ scrollSnapAlign: "center" }}
+              return (
+                <button
+                  key={dateKey}
+                  data-date={dateKey}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDate(day);
+                    scrollToDay(day, "smooth");
+                  }}
+                  className={cn(
+                    "flex-shrink-0 flex flex-col items-center justify-between w-[58px] h-[84px] py-2.5 px-1 rounded-2xl transition-all duration-200 cursor-pointer select-none active:scale-95",
+                    isSelected
+                      ? "bg-gradient-to-b from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-600/25 ring-1 ring-emerald-400/40"
+                      : cn(
+                          "bg-card/75 dark:bg-[#141414] border border-border/70 dark:border-white/[0.08] hover:bg-secondary/40 text-foreground",
+                          dayIsToday && "ring-1 ring-emerald-500/50"
+                        )
+                  )}
+                >
+                  {/* 1ª Linha: Dia da semana (ex: Seg, Ter, Qua) */}
+                  <span
+                    className={cn(
+                      "text-[11px] font-medium uppercase tracking-wider leading-none",
+                      isSelected ? "text-white/90 font-semibold" : "text-muted-foreground/75"
+                    )}
                   >
-                    <button
-                      onClick={() => {
-                        clearScrollCommitTimer();
-                        setCarouselDate(day);
-                        setSelectedDate(day);
-                        scrollToDate(day);
-                      }}
-                      className="w-full flex flex-col items-center gap-1.5 py-1 active:scale-95 cursor-pointer"
-                      style={{
-                        transform: isSelected ? "translateY(-3px)" : "translateY(0px)",
-                        transition: "transform 200ms ease-out",
-                      }}
-                    >
-                      <span className={cn(
-                        "text-[9.5px] font-semibold uppercase leading-none tracking-wider",
-                        isSelected ? "text-foreground" : "text-muted-foreground/60"
-                      )}>
-                        {shortDayName(day)}
-                      </span>
+                    {dayOfWeek}
+                  </span>
 
-                      {/* Squircle moderno do dia selecionado/não selecionado */}
-                      <div
-                        className={cn(
-                          "w-10 h-10 flex items-center justify-center rounded-2xl will-change-transform transition-all",
-                          isSelected
-                            ? "bg-foreground text-background shadow-sm font-bold"
-                            : "text-foreground font-semibold hover:bg-secondary/40",
-                          dayIsToday && !isSelected && "ring-1 ring-primary/40 text-primary font-bold"
-                        )}
-                        style={{
-                          transform: isSelected ? "scale(1.05)" : "scale(1)",
-                          transition: "transform 200ms ease-out",
-                        }}
-                      >
-                        <span
-                          className={cn(
-                            "leading-none",
-                            isSelected ? "text-background text-[15.5px] font-bold" : "text-foreground text-[13px] font-semibold"
-                          )}
-                        >
-                          {format(day, "d")}
-                        </span>
-                      </div>
+                  {/* 2ª Linha: Número do dia (ex: 12, 13, 14) */}
+                  <span
+                    className={cn(
+                      "text-[20px] font-bold leading-none tracking-tight",
+                      isSelected ? "text-white font-extrabold" : "text-foreground"
+                    )}
+                  >
+                    {dayNumber}
+                  </span>
 
-                      {/* Dot indicador — espaço fixo */}
-                      <div className="h-1.5 flex items-center justify-center">
-                        {isSelected && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                        )}
-                      </div>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                  {/* 3ª Linha: Slots / Agendamentos (ex: 2 slots, -, 6 slots) */}
+                  <span
+                    className={cn(
+                      "text-[10px] font-medium leading-none tabular-nums",
+                      isSelected
+                        ? "text-white/90 font-semibold"
+                        : count > 0
+                        ? "text-muted-foreground/80 font-medium"
+                        : "text-muted-foreground/40 font-normal"
+                    )}
+                  >
+                    {count === 0 ? "-" : count === 1 ? "1 slot" : `${count} slots`}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* ══════ ÁREA SCROLLÁVEL com fade-mask no topo ══════ */}
+      {/* ══════ ÁREA SCROLLÁVEL: CARDS 100% SÉRIOS E MINIMALISTAS ══════ */}
       <div className="flex-1 min-h-0 relative">
-        {/* Fade mask superior — cards entram por baixo */}
-        <div 
-          className="absolute top-0 left-0 right-0 h-6 z-10 pointer-events-none"
-          style={{ background: "linear-gradient(to bottom, hsl(var(--background)), transparent)" }}
-        />
-
-        <div className="h-full overflow-y-auto overscroll-contain pb-36 pt-2">
+        <div className="h-full overflow-y-auto overscroll-contain pb-32 pt-3">
           {!isShowingSelectedDate ? (
-            <div className="px-4 pt-2 pb-8 space-y-2.5 animate-pulse">
+            <div className="px-4 space-y-2.5 animate-pulse">
               {[0, 1, 2].map((item) => (
                 <div key={item} className="rounded-2xl border border-border/40 dark:border-white/[0.05] bg-card/60 p-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -615,9 +577,7 @@ export function AdminMobileAgenda({
               <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             </div>
           ) : appointments.length === 0 ? (
-            <div
-              className="flex flex-col items-center justify-center h-56 text-center px-8"
-            >
+            <div className="flex flex-col items-center justify-center h-56 text-center px-8">
               <div className="w-12 h-12 rounded-2xl bg-secondary/50 dark:bg-white/[0.04] border border-border/40 dark:border-white/[0.06] flex items-center justify-center mb-3 text-muted-foreground/50">
                 <Calendar className="w-6 h-6 stroke-[1.6]" />
               </div>
@@ -646,120 +606,80 @@ export function AdminMobileAgenda({
               </button>
             </div>
           ) : (
-            <div className="px-4 pt-1 pb-28 space-y-2.5">
+            <div className="px-4 space-y-2.5">
+              {appointments.map((apt) => {
+                const statusConfig = getStatusColorConfig(apt.status, apt.barbeiro_confirmou);
+                const paymentBadge = getPaymentBadge(apt);
+                const isPlan = apt.tipo_agendamento === "plano" || apt.payment_method === "plano";
+                const isFree = Boolean(apt.is_free);
+                const showMethodBadge = !isPlan && !isFree && paymentBadge;
+                const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
+                const horaFormatted = apt.hora.substring(0, 5);
 
-            {appointments.map((apt, idx) => {
-              const statusConfig = getStatusColorConfig(apt.status, apt.barbeiro_confirmou);
-              const paymentBadge = getPaymentBadge(apt);
-              const PayIcon = paymentBadge.icon;
-              const isPlan = apt.tipo_agendamento === "plano" || apt.payment_method === "plano";
-              const isFree = Boolean(apt.is_free);
-              const showMethodBadge = !isPlan && !isFree && paymentBadge;
-              const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
-              const horaFormatted = apt.hora.substring(0, 5);
-
-              /* ── Visual hierarchy ── */
-              const now = new Date();
-              const isViewingToday = isToday(selectedDate);
-              const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-              const aptEndMinutes = (() => {
+                const now = new Date();
+                const isViewingToday = isToday(selectedDate);
                 const [h, m] = apt.hora.split(':').map(Number);
-                return (h * 60 + m) + duration;
-              })();
-              const nowMinutes = now.getHours() * 60 + now.getMinutes();
-              const isPast = isViewingToday && aptEndMinutes <= nowMinutes && (apt.status === 'completed' || apt.status === 'no_show');
-              
-              /* Find the NEXT upcoming appointment today */
-              const isNextUp = isViewingToday && !isPast && apt.hora >= currentTimeStr
-                && apt.status !== 'completed' && apt.status !== 'no_show'
-                && idx === appointments.findIndex(a => 
-                  a.hora >= currentTimeStr 
-                  && a.status !== 'completed' 
-                  && a.status !== 'no_show'
-                );
+                const endMinutes = (h * 60 + m) + duration;
+                const nowMinutes = now.getHours() * 60 + now.getMinutes();
+                const isPast = isViewingToday && endMinutes <= nowMinutes && (apt.status === 'completed' || apt.status === 'no_show');
 
-              return (
-                <div
-                  key={apt.id}
-                  onClick={() => onAppointmentClick?.(apt)}
-                  style={{ opacity: isPast ? 0.45 : 1 }}
-                  className={cn(
-                    "rounded-2xl p-4 border border-border/50 dark:border-white/[0.06] bg-card/90 dark:bg-[#141414] shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)]",
-                    "active:scale-[0.985] transition-all duration-150 cursor-pointer hover:border-foreground/20 relative overflow-hidden",
-                    isNextUp && "border-primary/40 dark:border-primary/50 ring-1 ring-primary/30 dark:ring-primary/40"
-                  )}
-                >
-                  {/* Sutil glow de destaque quando for o agendamento atual / próximo */}
-                  {isNextUp && (
-                    <div className="pointer-events-none absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-primary/10 blur-xl" />
-                  )}
+                const clientName = apt.profile?.nome || "Cliente";
+                const serviceName = (() => {
+                  if (apt.observacoes?.startsWith("Serviços:")) {
+                    return apt.observacoes.split(".")[0].replace("Serviços: ", "");
+                  }
+                  const sName = apt.servico?.nome || "Serviço";
+                  const sDur = apt.servico?.duracao_minutos || 0;
+                  const aDur = (apt as any).duracao || 0;
+                  if (sDur > 0 && aDur > sDur) {
+                    const qty = Math.round(aDur / sDur);
+                    if (qty > 1) return `${qty}x ${sName}`;
+                  }
+                  return sName;
+                })();
 
-                  {/* Linha Superior: Horário + Duração + Status */}
-                  <div className="flex items-center justify-between gap-2 mb-2.5 relative z-10">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12px] font-bold px-2.5 py-0.5 rounded-full bg-secondary/80 dark:bg-white/[0.08] text-foreground tabular-nums border border-border/30 dark:border-white/[0.06]">
-                        {horaFormatted}
-                      </span>
-                      <span className="text-[11.5px] text-muted-foreground flex items-center gap-1 font-medium">
-                        <Clock className="w-3 h-3 text-muted-foreground/60" />
-                        {duration}min
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
-                      <span className="text-[11.5px] font-medium text-muted-foreground">
-                        {statusConfig.statusLabel}
-                      </span>
-                      {isNextUp && (
-                        <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full ml-1">
-                          Agora
+                return (
+                  <div
+                    key={apt.id}
+                    onClick={() => onAppointmentClick?.(apt)}
+                    style={{ opacity: isPast ? 0.5 : 1 }}
+                    className={cn(
+                      "rounded-2xl p-4 border border-border/50 dark:border-white/[0.07] bg-card/90 dark:bg-[#141414] shadow-[0_2px_8px_rgba(0,0,0,0.02)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.25)]",
+                      "active:scale-[0.985] transition-all duration-150 cursor-pointer hover:border-foreground/20 relative overflow-hidden"
+                    )}
+                  >
+                    {/* Linha Superior: Horário + Duração + Status */}
+                    <div className="flex items-center justify-between gap-2 mb-2 relative z-10">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[12px] font-bold px-2 py-0.5 rounded-md bg-secondary/80 dark:bg-white/[0.08] text-foreground tabular-nums border border-border/30 dark:border-white/[0.06]">
+                          {horaFormatted}
                         </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Nome do Cliente com Avatar Inicial */}
-                  <div className="flex items-center gap-2.5 mb-1 relative z-10">
-                    <div className="w-7 h-7 rounded-full bg-secondary/70 dark:bg-white/[0.08] flex items-center justify-center text-foreground font-semibold text-[11px] shrink-0 border border-border/40 dark:border-white/[0.06]">
-                      {apt.profile?.nome ? apt.profile.nome.charAt(0).toUpperCase() : "C"}
-                    </div>
-                    <span className="text-[15px] font-semibold text-foreground tracking-tight truncate">
-                      {apt.profile?.nome || "Cliente"}
-                    </span>
-                    {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
-                  </div>
-
-                  {/* Linha Inferior: Serviço + Pagamento + Preço */}
-                  <div className="flex items-center justify-between pt-2.5 border-t border-border/30 dark:border-white/[0.06] mt-2.5 text-xs relative z-10">
-                    <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                      <Scissors className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
-                      <span className="text-muted-foreground font-medium text-[12px] truncate">
-                        {(() => {
-                          if (apt.observacoes?.startsWith("Serviços:")) {
-                            return apt.observacoes.split(".")[0].replace("Serviços: ", "");
-                          }
-                          const sName = apt.servico?.nome || "Serviço";
-                          const sDur = apt.servico?.duracao_minutos || 0;
-                          const aDur = (apt as any).duracao || 0;
-                          if (sDur > 0 && aDur > sDur) {
-                            const qty = Math.round(aDur / sDur);
-                            if (qty > 1) return `${qty}x ${sName}`;
-                          }
-                          return sName;
-                        })()}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      {showMethodBadge && (
-                        <span className="inline-flex items-center gap-1 text-muted-foreground/80 text-[11px] font-medium">
-                          <PayIcon className="w-3 h-3" />
-                          {paymentBadge.label}
+                        <span className="text-[11.5px] text-muted-foreground/75 flex items-center gap-1 font-medium">
+                          <Clock className="w-3 h-3 text-muted-foreground/50" />
+                          {duration} min
                         </span>
-                      )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
+                        <span className="text-[11.5px] font-medium text-muted-foreground">
+                          {statusConfig.statusLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Linha Central: Nome do Cliente (SEM fotos, SEM bolhas de avatar) */}
+                    <div className="flex items-center justify-between gap-2 mb-2.5 relative z-10">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[15.5px] font-semibold text-foreground tracking-tight truncate">
+                          {clientName}
+                        </span>
+                        {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
+                      </div>
+
+                      {/* Preço / Plano */}
                       <span className={cn(
-                        "text-[13.5px] font-bold tabular-nums",
+                        "text-[14px] font-bold tabular-nums shrink-0",
                         isFree ? "text-emerald-500 font-semibold" : "text-foreground"
                       )}>
                         {isPlan
@@ -769,14 +689,146 @@ export function AdminMobileAgenda({
                             : `R$ ${apt.preco.toFixed(2).replace('.', ',')}`}
                       </span>
                     </div>
+
+                    {/* Linha Inferior: Serviço + Método de Pagamento */}
+                    <div className="flex items-center justify-between pt-2 border-t border-border/30 dark:border-white/[0.05] text-xs relative z-10">
+                      <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                        <Scissors className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                        <span className="text-muted-foreground/85 font-medium text-[12px] truncate">
+                          {serviceName}
+                        </span>
+                      </div>
+
+                      {showMethodBadge && (
+                        <span className="text-muted-foreground/60 text-[11px] font-medium shrink-0">
+                          {paymentBadge.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ══════ BOTÃO DE ENCAIXE ESTRATÉGICO FLUTUANTE (FAB) ══════ */}
+      <button
+        type="button"
+        onClick={() => {
+          if (onAddClick) {
+            onAddClick(selectedDateKey, "09:00");
+          } else {
+            setSelectedSlotTime("09:00");
+            setManualBookingOpen(true);
+          }
+        }}
+        style={{
+          bottom: "calc(56px + var(--app-safe-bottom, 12px) + 12px)",
+        }}
+        className="fixed right-4 z-30 flex items-center gap-2 h-11 px-4 rounded-full bg-foreground text-background font-semibold text-[13px] shadow-[0_6px_24px_rgba(0,0,0,0.35)] active:scale-95 hover:opacity-90 transition-all cursor-pointer select-none"
+        aria-label="Novo Encaixe"
+      >
+        <Plus className="w-4 h-4 stroke-[2.5]" />
+        <span>Novo Encaixe</span>
+      </button>
+
+      {/* ══════ MODAL DE SELEÇÃO RÁPIDA DE MÊS/ANO ══════ */}
+      {isMonthPickerOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => setIsMonthPickerOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl bg-card dark:bg-[#141414] border border-border dark:border-white/[0.1] shadow-2xl p-4 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header: Troca de Ano */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setPickerYear((y) => y - 1)}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary active:scale-95 text-foreground transition-all cursor-pointer"
+                aria-label="Ano anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <span className="text-[16px] font-bold text-foreground">
+                {pickerYear}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setPickerYear((y) => y + 1)}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary active:scale-95 text-foreground transition-all cursor-pointer"
+                aria-label="Próximo ano"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Grid dos 12 Meses */}
+            <div className="grid grid-cols-3 gap-2">
+              {MONTH_NAMES.map((mName, idx) => {
+                const isCurrentSelected =
+                  selectedMonth.getMonth() === idx && selectedMonth.getFullYear() === pickerYear;
+                const isThisMonth =
+                  today.getMonth() === idx && today.getFullYear() === pickerYear;
+
+                return (
+                  <button
+                    key={mName}
+                    type="button"
+                    onClick={() => {
+                      const newMonthDate = new Date(pickerYear, idx, 1);
+                      setSelectedMonth(newMonthDate);
+                      const newDate = isSameMonth(newMonthDate, today) ? today : newMonthDate;
+                      setSelectedDate(newDate);
+                      setIsMonthPickerOpen(false);
+                    }}
+                    className={cn(
+                      "h-10 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center cursor-pointer active:scale-95",
+                      isCurrentSelected
+                        ? "bg-emerald-600 text-white font-bold shadow-sm"
+                        : isThisMonth
+                        ? "bg-secondary text-foreground ring-1 ring-emerald-500/50"
+                        : "text-foreground hover:bg-secondary/70"
+                    )}
+                  >
+                    {mName}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Rodapé: Atalho Hoje + Fechar */}
+            <div className="flex items-center justify-between pt-2 border-t border-border/40 dark:border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => {
+                  const now = getLocalToday();
+                  setPickerYear(now.getFullYear());
+                  setSelectedMonth(startOfMonth(now));
+                  setSelectedDate(now);
+                  setIsMonthPickerOpen(false);
+                }}
+                className="text-[12px] font-semibold text-emerald-500 hover:underline cursor-pointer"
+              >
+                Mês atual
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsMonthPickerOpen(false)}
+                className="text-[12px] font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Encaixe Manual */}
       <MobileManualBookingModal
@@ -787,6 +839,7 @@ export function AdminMobileAgenda({
         onSuccess={() => {
           cacheRef.current.delete(selectedDateKey);
           loadAppointments(selectedDate, { silent: true, visible: true });
+          loadMonthCounts(selectedMonth);
         }}
         skipValidation={true}
         barbeiroId={barbeiroId || undefined}
