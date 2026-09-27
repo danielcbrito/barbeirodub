@@ -1002,7 +1002,7 @@ export function AppointmentDetailsView({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
             className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
-            style={{ background: "#0c1014" }}
+            style={{ background: "#0f0f0f" }}
           >
             {/* Linha verde sutil no topo */}
             <motion.div

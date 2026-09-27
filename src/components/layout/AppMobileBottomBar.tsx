@@ -210,7 +210,7 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
       >
         <nav
           aria-label="Navegação do aplicativo"
-          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] bg-[#202126] border border-white/10 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.18)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300 dark:bg-[#121820]/95 dark:backdrop-blur-xl dark:border-white/[0.08] dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] bg-[#202126] border border-white/10 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.18)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300 dark:bg-[#18181b]/95 dark:backdrop-blur-xl dark:border-white/[0.08] dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
         >
           {items.map(({ key, label, path, end, Icon, countKey }) => {
             const to = `${basePath}${path}`;
@@ -267,7 +267,7 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
                           <span
                             className={cn(
                               "absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 rounded-full text-[9.5px] font-bold flex items-center justify-center leading-none shadow-sm bg-red-500 text-white",
-                              active ? "ring-2 ring-white dark:ring-white/20" : "ring-2 ring-[#202126] dark:ring-[#121820]"
+                              active ? "ring-2 ring-white dark:ring-white/20" : "ring-2 ring-[#202126] dark:ring-[#18181b]"
                             )}
                             aria-label={`${count} pendências`}
                           >

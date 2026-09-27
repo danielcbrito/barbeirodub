@@ -59,7 +59,7 @@ const isStandalone =
   window.matchMedia?.("(display-mode: standalone)").matches ||
   (navigator as any).standalone === true;
 
-const DARK_APP_BACKGROUND = "#0c1014";
+const DARK_APP_BACKGROUND = "#0f0f0f";
 const LIGHT_APP_BACKGROUND = "#F4F5F7";
 
 const platformClass = isIOS

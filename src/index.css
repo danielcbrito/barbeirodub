@@ -41,19 +41,19 @@ All colors MUST be HSL. */
   .dark {
 
 
-    /* DARK THEME - Red Premium (tweakcn) */
+    /* DARK THEME - #0f0f0f Neutral Dark */
     
-    /* Backgrounds — #0c1014 (tom escuro rico, nítido e elegante) */
-    --background: 210 25% 6.3%;
-    --background-elevated: 210 23% 8.5%;
+    /* Backgrounds — #0f0f0f */
+    --background: 0 0% 5.9%;
+    --background-elevated: 0 0% 8.5%;
     --foreground: 210 15% 98%;
 
-    /* Cards — contraste refinado e nítido sobre o fundo #0c1014 */
-    --card: 210 22% 10%;
-    --card-elevated: 210 20% 13.5%;
+    /* Cards — contraste refinado e nítido sobre o fundo #0f0f0f */
+    --card: 0 0% 10%;
+    --card-elevated: 0 0% 13.5%;
     --card-foreground: 210 15% 98%;
 
-    --popover: 210 22% 10%;
+    --popover: 0 0% 10%;
     --popover-foreground: 210 15% 98%;
 
     /* Primary - vivid red */
@@ -62,12 +62,12 @@ All colors MUST be HSL. */
     --primary-foreground: 0 0% 97%;
 
     /* Secondary */
-    --secondary: 210 18% 14%;
+    --secondary: 0 0% 14%;
     --secondary-foreground: 210 15% 98%;
 
     /* Muted */
-    --muted: 210 18% 13%;
-    --muted-foreground: 210 12% 60%;
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 60%;
 
     --accent: 22 40% 12%;
     --accent-foreground: 18 35% 85%;
@@ -93,9 +93,9 @@ All colors MUST be HSL. */
     --success-foreground: 0 0% 100%;
 
     /* Borders */
-    --border: 210 18% 14%;
+    --border: 0 0% 15%;
     --border-glow: 10 78% 42% / 0.2;
-    --input: 210 18% 14%;
+    --input: 0 0% 15%;
     --ring: 10 78% 42%;
 
     --radius: 0.5rem;
@@ -108,13 +108,13 @@ All colors MUST be HSL. */
     --chart-5: 12 35% 32%;
 
     /* Sidebar */
-    --sidebar: 210 24% 8%;
+    --sidebar: 0 0% 7%;
     --sidebar-foreground: 210 15% 92%;
     --sidebar-primary: 10 78% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 18% 14%;
+    --sidebar-accent: 0 0% 14%;
     --sidebar-accent-foreground: 210 15% 90%;
-    --sidebar-border: 210 18% 13%;
+    --sidebar-border: 0 0% 14%;
     --sidebar-ring: 10 78% 42%;
 
     /* Gradients Dark */
