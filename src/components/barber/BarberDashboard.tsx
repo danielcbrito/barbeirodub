@@ -35,6 +35,7 @@ import { CreateBankBanner } from "./CreateBankBanner";
 import { SetupCompletionBanner } from "./SetupCompletionBanner";
 import { CampaignPromoBanners } from "@/components/admin/CampaignPromoBanners";
 import { NotificationBell } from "@/components/NotificationBell";
+import { NextAppointmentCard } from "@/components/shared/NextAppointmentCard";
 
 /* ─────────────────────────────────────────────
  * BarberDashboard — tela inicial do barbeiro.
@@ -287,50 +288,8 @@ export function BarberDashboard({
     </div>
   );
 
-  /* ─── 4. Próximo Atendimento: Minimalista, Estratégico (Sem corte de nome, horário grande, chevron elegante) ─── */
+  /* ─── 4. Próximo Atendimento: Minimalista, Idêntico ao Card da Agenda com Horário Verde Piscando ─── */
   const UpcomingAppointmentsSection = () => {
-    if (!data.nextAppointment) {
-      return (
-        <div>
-          <div className="flex items-center justify-between px-1 mb-2">
-            <span className="text-[12px] font-bold text-muted-foreground uppercase tracking-wider">
-              Próximo corte
-            </span>
-            <button
-              onClick={() => navigate(`${basePath}/agenda`)}
-              className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground hover:text-foreground transition-colors group"
-            >
-              <span>Ver agenda</span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/70 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
-            </button>
-          </div>
-          <div
-            onClick={() => navigate(`${basePath}/agenda`)}
-            className="w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 sm:p-4.5 flex items-center gap-3.5 shadow-xs hover:border-border active:scale-[0.99] transition-all cursor-pointer"
-          >
-            <div className="w-[52px] h-[52px] rounded-xl bg-secondary/80 dark:bg-secondary/60 border border-border/50 flex items-center justify-center shrink-0">
-              <Calendar className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-bold text-foreground truncate">
-                Sem agendamentos nas próximas horas
-              </p>
-              <p className="text-[12px] text-muted-foreground truncate mt-0.5">
-                Toque para abrir a agenda do dia
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    const statusLabel =
-      data.nextAppointment.status === "completed"
-        ? "Concluído"
-        : data.nextAppointment.status === "confirmed"
-        ? "Agendado"
-        : "Pendente";
-
     return (
       <div>
         <div className="flex items-center justify-between px-1 mb-2">
@@ -345,42 +304,7 @@ export function BarberDashboard({
             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/70 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
           </button>
         </div>
-        <div
-          onClick={() => {
-            if (data.nextAppointment?.id) {
-              navigate(`${basePath}/agendamento/${data.nextAppointment.id}`);
-            } else {
-              navigate(`${basePath}/agenda`);
-            }
-          }}
-          className="w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-3.5 sm:p-4 flex items-center gap-3.5 shadow-xs hover:border-border active:scale-[0.99] transition-all cursor-pointer"
-        >
-          {/* Horário minimalista e limpo */}
-          <div className="w-[54px] h-[54px] rounded-xl bg-secondary/70 dark:bg-secondary/50 border border-border/50 flex flex-col items-center justify-center shrink-0">
-            <span className="text-[16px] font-bold font-mono text-foreground leading-tight tracking-tight">
-              {data.nextAppointment.hora}
-            </span>
-            <span className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider leading-none mt-0.5">
-              Hoje
-            </span>
-          </div>
-
-          {/* Nome do cliente (sem ícone verde) e corte com status */}
-          <div className="min-w-0 flex-1">
-            <p className="text-[15px] sm:text-[15.5px] font-bold text-foreground truncate tracking-tight">
-              {data.nextAppointment.clientName || "Cliente"}
-            </p>
-            <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-              <span className="text-[12.5px] text-muted-foreground truncate">
-                {data.nextAppointment.serviceName || "Atendimento"}
-              </span>
-              <span className="text-muted-foreground/30">•</span>
-              <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
-                {statusLabel}
-              </span>
-            </div>
-          </div>
-        </div>
+        <NextAppointmentCard appointment={data.nextAppointment} basePath={basePath} />
       </div>
     );
   };

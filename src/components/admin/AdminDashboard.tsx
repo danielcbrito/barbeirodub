@@ -55,6 +55,7 @@ import { CampaignPromoBanners } from "@/components/admin/CampaignPromoBanners";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { NotificationBell } from "@/components/NotificationBell";
 import { resolveClienteDisplayName } from "@/lib/walkInName";
+import { NextAppointmentCard, NextAppointmentData } from "@/components/shared/NextAppointmentCard";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -74,7 +75,7 @@ interface DashboardData {
   todayCount: number;
   yesterdayCount: number;
   pendingCount: number;
-  nextAppointment: { id?: string; hora: string; clientName: string; serviceName: string; status?: string; avatarUrl?: string | null } | null;
+  nextAppointment: NextAppointmentData | null;
   monthRevenue: number;
   lastMonthRevenue: number;
   monthCuts: number;
@@ -235,6 +236,22 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
               clientName: String(raw.nextAppointment.clientName ?? "Cliente"),
               serviceName: String(raw.nextAppointment.serviceName ?? "Serviço"),
               status: String(raw.nextAppointment.status ?? "confirmed"),
+              duracao: Number(raw.nextAppointment.duracao) || 30,
+              preco: Number(raw.nextAppointment.preco) || 0,
+              payment_method: raw.nextAppointment.payment_method ?? null,
+              tipo_agendamento: raw.nextAppointment.tipo_agendamento ?? null,
+              is_free: Boolean(raw.nextAppointment.is_free),
+              barbeiro_confirmou: raw.nextAppointment.barbeiro_confirmou ?? null,
+              observacoes: raw.nextAppointment.observacoes ?? null,
+              avatarUrl: raw.nextAppointment.avatarUrl ?? null,
+              isBlinking: (() => {
+                const [h, m] = String(raw.nextAppointment.hora ?? "").split(":").map(Number);
+                const sMin = (h || 0) * 60 + (m || 0);
+                const dur = Number(raw.nextAppointment.duracao) || 30;
+                const now = new Date();
+                const nowMin = now.getHours() * 60 + now.getMinutes();
+                return nowMin >= (sMin - 5) && nowMin < (sMin + dur);
+              })(),
             }
           : null,
         monthRevenue: Number(raw.monthRevenue) || 0,
@@ -262,17 +279,17 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           : [],
       };
 
-      // Busca agendamento mais próximo de hoje para garantir id e nome real de cliente (ex: encaixe manual / walk-in)
+      // Busca agendamento mais próximo de hoje para garantir dados completos e horário em tempo real
       const todayStr = format(new Date(), "yyyy-MM-dd");
-      const nowTimeStr = format(new Date(), "HH:mm");
+      const now = new Date();
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
       let nextAptQuery = supabase
         .from("agendamentos")
-        .select("id, hora, status, observacoes, servico_id, servicos(nome), profiles(nome, avatar_url)")
+        .select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
         .eq("data", todayStr)
         .in("status", ["pending", "confirmed"])
-        .gte("hora", nowTimeStr)
         .order("hora", { ascending: true })
-        .limit(1);
+        .limit(20);
 
       if (adminContext.barbeiroId) {
         nextAptQuery = nextAptQuery.eq("barbeiro_id", adminContext.barbeiroId);
@@ -282,19 +299,38 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
       const { data: realNextApts } = await nextAptQuery;
       if (realNextApts && realNextApts.length > 0) {
-        const apt = realNextApts[0];
+        const upcoming = realNextApts.find((apt: any) => {
+          const [h, m] = (apt.hora || "00:00").split(":").map(Number);
+          const startMin = (h || 0) * 60 + (m || 0);
+          const dur = apt.duracao || (apt.servicos as any)?.duracao_minutos || 30;
+          return (startMin + dur) > nowMinutes;
+        }) || realNextApts[0];
+
         const realClientName = resolveClienteDisplayName(
-          apt.observacoes,
-          (apt.profiles as any)?.nome,
+          upcoming.observacoes,
+          (upcoming.profiles as any)?.nome,
           "Cliente"
         );
+        const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
+        const uStartMin = (uh || 0) * 60 + (um || 0);
+        const uDur = upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30;
+        const isBlinkingNow = nowMinutes >= (uStartMin - 5) && nowMinutes < (uStartMin + uDur);
+
         parsed.nextAppointment = {
-          id: apt.id,
-          hora: (apt.hora || "").slice(0, 5),
+          id: upcoming.id,
+          hora: (upcoming.hora || "").slice(0, 5),
           clientName: realClientName,
-          serviceName: (apt.servicos as any)?.nome || "Atendimento",
-          status: apt.status || "confirmed",
-          avatarUrl: (apt.profiles as any)?.avatar_url || null,
+          serviceName: (upcoming.servicos as any)?.nome || "Atendimento",
+          status: upcoming.status || "confirmed",
+          duracao: upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30,
+          preco: upcoming.preco ?? (upcoming.servicos as any)?.preco ?? 0,
+          payment_method: upcoming.payment_method || null,
+          tipo_agendamento: upcoming.tipo_agendamento || null,
+          is_free: Boolean(upcoming.is_free),
+          barbeiro_confirmou: upcoming.barbeiro_confirmou,
+          observacoes: upcoming.observacoes,
+          avatarUrl: (upcoming.profiles as any)?.avatar_url || null,
+          isBlinking: isBlinkingNow,
         };
       }
 
@@ -353,7 +389,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
         addFilter(supabase.from("agendamentos").select("*", { count: "exact", head: true }).eq("data", today).in("status", ["pending", "confirmed", "completed"])),
         addFilter(supabase.from("agendamentos").select("*", { count: "exact", head: true }).eq("data", yesterday).in("status", ["pending", "confirmed", "completed"])),
         addFilter(supabase.from("assinaturas").select("*", { count: "exact", head: true }).eq("payment_method", "cash").or("status.in.(suspended,pending_cash),and(status.eq.active,cash_payment_confirmed.eq.false)")),
-        addFilter(supabase.from("agendamentos").select("id, hora, status, observacoes, user_id, servico_id").eq("data", today).in("status", ["pending", "confirmed"]).gte("hora", format(new Date(), "HH:mm")).order("hora", { ascending: true }).limit(1)),
+        addFilter(supabase.from("agendamentos").select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, user_id, servico_id").eq("data", today).in("status", ["pending", "confirmed"]).order("hora", { ascending: true }).limit(20)),
         addFilter(supabase.from("agendamentos").select("preco").gte("data", firstDayOfMonth).eq("status", "completed").limit(1000)),
         addFilter(supabase.from("agendamentos").select("preco").gte("data", firstDayLastMonth).lte("data", lastDayLastMonth).eq("status", "completed").limit(1000)),
         addFilter(supabase.from("agendamentos").select("*", { count: "exact", head: true }).gte("data", firstDayOfMonth).eq("status", "completed")),
@@ -387,22 +423,44 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       // Next appointment
       let nextAppointment = null;
       if (nextAptRes.data && nextAptRes.data.length > 0) {
-        const apt = nextAptRes.data[0];
+        const now = new Date();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const upcoming = nextAptRes.data.find((apt: any) => {
+          const [h, m] = (apt.hora || "00:00").split(":").map(Number);
+          const startMin = (h || 0) * 60 + (m || 0);
+          const dur = apt.duracao || 30;
+          return (startMin + dur) > nowMinutes;
+        }) || nextAptRes.data[0];
+
         const [pRes, sRes] = await Promise.all([
-          supabase.from("profiles").select("nome").eq("id", apt.user_id).single(),
-          supabase.from("servicos").select("nome").eq("id", apt.servico_id).single(),
+          supabase.from("profiles").select("nome, avatar_url").eq("id", upcoming.user_id).single(),
+          supabase.from("servicos").select("nome, duracao_minutos, preco").eq("id", upcoming.servico_id).single(),
         ]);
         const realClientName = resolveClienteDisplayName(
-          apt.observacoes,
+          upcoming.observacoes,
           pRes.data?.nome,
           "Cliente"
         );
+        const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
+        const uStartMin = (uh || 0) * 60 + (um || 0);
+        const uDur = upcoming.duracao || sRes.data?.duracao_minutos || 30;
+        const isBlinkingNow = nowMinutes >= (uStartMin - 5) && nowMinutes < (uStartMin + uDur);
+
         nextAppointment = {
-          id: apt.id,
-          hora: (apt.hora || "").slice(0, 5),
+          id: upcoming.id,
+          hora: (upcoming.hora || "").slice(0, 5),
           clientName: realClientName,
           serviceName: sRes.data?.nome || "Serviço",
-          status: apt.status || "confirmed",
+          status: upcoming.status || "confirmed",
+          duracao: upcoming.duracao || sRes.data?.duracao_minutos || 30,
+          preco: upcoming.preco ?? sRes.data?.preco ?? 0,
+          payment_method: upcoming.payment_method || null,
+          tipo_agendamento: upcoming.tipo_agendamento || null,
+          is_free: Boolean(upcoming.is_free),
+          barbeiro_confirmou: upcoming.barbeiro_confirmou,
+          observacoes: upcoming.observacoes,
+          avatarUrl: pRes.data?.avatar_url || null,
+          isBlinking: isBlinkingNow,
         };
       }
 
@@ -676,7 +734,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           </button>
         </div>
 
-        {/* 4. Próximo Atendimento: Minimalista, Estratégico com Título e Status Padrão */}
+        {/* 4. Próximo Atendimento: Minimalista, Idêntico ao Card da Agenda com Horário Verde Piscando */}
         <div>
           <div className="flex items-center justify-between px-1 mb-2">
             <span className="text-[12px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -690,65 +748,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
               <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/70 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
             </button>
           </div>
-          {data.nextAppointment ? (
-            <div
-              onClick={() => {
-                if (data.nextAppointment?.id) {
-                  navigate(`${basePath}/agendamento/${data.nextAppointment.id}`);
-                } else {
-                  navigate(`${basePath}/agenda`);
-                }
-              }}
-              className="w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-3.5 sm:p-4 flex items-center gap-3.5 shadow-xs hover:border-border active:scale-[0.99] transition-all cursor-pointer"
-            >
-              {/* Horário minimalista e limpo */}
-              <div className="w-[54px] h-[54px] rounded-xl bg-secondary/70 dark:bg-secondary/50 border border-border/50 flex flex-col items-center justify-center shrink-0">
-                <span className="text-[16px] font-bold font-mono text-foreground leading-tight tracking-tight">
-                  {data.nextAppointment.hora}
-                </span>
-                <span className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider leading-none mt-0.5">
-                  Hoje
-                </span>
-              </div>
-
-              {/* Nome do cliente (sem ícone verde) e corte com status */}
-              <div className="min-w-0 flex-1">
-                <p className="text-[15px] sm:text-[15.5px] font-bold text-foreground truncate tracking-tight">
-                  {data.nextAppointment.clientName || "Cliente"}
-                </p>
-                <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                  <span className="text-[12.5px] text-muted-foreground truncate">
-                    {data.nextAppointment.serviceName || "Atendimento"}
-                  </span>
-                  <span className="text-muted-foreground/30">•</span>
-                  <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
-                    {data.nextAppointment.status === "completed"
-                      ? "Concluído"
-                      : data.nextAppointment.status === "confirmed"
-                      ? "Agendado"
-                      : "Pendente"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div
-              onClick={() => navigate(`${basePath}/agenda`)}
-              className="w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 sm:p-4.5 flex items-center gap-3.5 shadow-xs hover:border-border active:scale-[0.99] transition-all cursor-pointer"
-            >
-              <div className="w-[52px] h-[52px] rounded-xl bg-secondary/80 dark:bg-secondary/60 border border-border/50 flex items-center justify-center shrink-0">
-                <Calendar className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-bold text-foreground truncate">
-                  Sem agendamentos nas próximas horas
-                </p>
-                <p className="text-[12px] text-muted-foreground truncate mt-0.5">
-                  Toque para abrir a agenda do dia
-                </p>
-              </div>
-            </div>
-          )}
+          <NextAppointmentCard appointment={data.nextAppointment} basePath={basePath} />
         </div>
 
         {/* 5. Card Faturamento 100% Sério e Minimalista (Com cor apenas nas letras) */}
@@ -854,21 +854,12 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       {/* Banner de ativação removido — o PendingSetupModal cuida disso */}
       </div>
 
-      {/* Next + Pending row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {data.nextAppointment && (
-          <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-5 space-y-1">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-primary/70 font-semibold">Próximo cliente</p>
-              <span className="text-xl font-bold text-primary font-mono">{data.nextAppointment.hora}</span>
-            </div>
-            <p className="text-base font-semibold text-foreground">{data.nextAppointment.clientName}</p>
-            <p className="text-sm text-muted-foreground">{data.nextAppointment.serviceName}</p>
-          </div>
-        )}
-        {/* Card de confirmações pendentes removido do dashboard */}
-
-      </div>
+      {/* Next row */}
+      {data.nextAppointment && (
+        <div className="max-w-md mb-4">
+          <NextAppointmentCard appointment={data.nextAppointment} basePath={basePath} />
+        </div>
+      )}
 
       {/* Performance Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

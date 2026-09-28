@@ -215,6 +215,25 @@ export function AdminMobileAgenda({
     return activeAppointments[0]?.id || null;
   }, [appointments, selectedDate]);
 
+  // Sincroniza em tempo real o agendamento ativo com o Dashboard ("Próximo corte")
+  useEffect(() => {
+    if (!isToday(selectedDate)) return;
+    const activeApt = appointments.find((a) => a.id === nextAppointmentId);
+    const activeHora = activeApt ? (activeApt.hora || "").slice(0, 5) : null;
+
+    writeSyncCache("agenda:activeBlinkingApt", {
+      id: nextAppointmentId,
+      hora: activeHora,
+      updatedAt: Date.now(),
+    });
+
+    window.dispatchEvent(
+      new CustomEvent("agenda-active-blinking-changed", {
+        detail: { id: nextAppointmentId, hora: activeHora },
+      })
+    );
+  }, [nextAppointmentId, selectedDate, appointments]);
+
   const shortDayName = (date: Date) => {
     const names = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
     return names[date.getDay()];

@@ -3,12 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { resolveClienteDisplayName } from "@/lib/walkInName";
+import { NextAppointmentData } from "@/components/shared/NextAppointmentCard";
 
 export interface DashboardData {
   todayCount: number;
   yesterdayCount: number;
   pendingCount: number;
-  nextAppointment: { id?: string; hora: string; clientName: string; serviceName: string; status?: string; avatarUrl?: string | null } | null;
+  nextAppointment: NextAppointmentData | null;
   monthRevenue: number;
   lastMonthRevenue: number;
   monthCuts: number;
@@ -50,11 +51,35 @@ const parseDashboardData = (value: unknown): DashboardData => {
   if (!isRecord(value)) return emptyDashboardData;
 
   const nextRaw = value.nextAppointment;
-  const nextAppointment = isRecord(nextRaw)
+  const nextAppointment: NextAppointmentData | null = isRecord(nextRaw)
     ? {
+        id: nextRaw.id ? toStringValue(nextRaw.id) : undefined,
         hora: toStringValue(nextRaw.hora),
         clientName: toStringValue(nextRaw.clientName, "Cliente"),
         serviceName: toStringValue(nextRaw.serviceName, "Serviço"),
+        status: toStringValue(nextRaw.status, "confirmed"),
+        duracao: typeof nextRaw.duracao === "number" ? nextRaw.duracao : 30,
+        preco: typeof nextRaw.preco === "number" ? nextRaw.preco : 0,
+        payment_method: nextRaw.payment_method ? toStringValue(nextRaw.payment_method) : null,
+        tipo_agendamento: nextRaw.tipo_agendamento ? toStringValue(nextRaw.tipo_agendamento) : null,
+        is_free: typeof nextRaw.is_free === "boolean" ? nextRaw.is_free : false,
+        barbeiro_confirmou: typeof nextRaw.barbeiro_confirmou === "boolean" ? nextRaw.barbeiro_confirmou : null,
+        observacoes: nextRaw.observacoes ? toStringValue(nextRaw.observacoes) : null,
+        avatarUrl: nextRaw.avatarUrl ? toStringValue(nextRaw.avatarUrl) : null,
+        planUsage: isRecord(nextRaw.planUsage)
+          ? {
+              used: toNumber((nextRaw.planUsage as any).used),
+              limit: toNumber((nextRaw.planUsage as any).limit),
+            }
+          : null,
+        isBlinking: (() => {
+          const [h, m] = toStringValue(nextRaw.hora).split(":").map(Number);
+          const sMin = (h || 0) * 60 + (m || 0);
+          const dur = typeof nextRaw.duracao === "number" ? nextRaw.duracao : 30;
+          const now = new Date();
+          const nowMin = now.getHours() * 60 + now.getMinutes();
+          return nowMin >= (sMin - 5) && nowMin < (sMin + dur);
+        })(),
       }
     : null;
 
@@ -87,14 +112,20 @@ const buildFallbackFromAgendaCache = (barbeiroId: string): { data: DashboardData
   const cachedAgenda = readSyncCache<Array<Record<string, unknown>>>(`barber-agenda:${barbeiroId}:${today}`);
   if (!cachedAgenda?.data) return null;
 
-  const nowTime = new Date().toTimeString().slice(0, 5);
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const activeRows = cachedAgenda.data.filter((apt) => {
     const status = toStringValue(apt.status);
-    return status !== "cancelled_by_admin" && status !== "cancelled_by_user" && status !== "no_show";
+    return status !== "cancelled_by_admin" && status !== "cancelled_by_user" && status !== "no_show" && status !== "completed";
   });
 
   const sorted = [...activeRows].sort((a, b) => toStringValue(a.hora).localeCompare(toStringValue(b.hora)));
-  const nextRaw = sorted.find((apt) => toStringValue(apt.hora).slice(0, 5) >= nowTime) || sorted[0];
+  const nextRaw = sorted.find((apt) => {
+    const [h, m] = toStringValue(apt.hora).split(":").map(Number);
+    const startMin = (h || 0) * 60 + (m || 0);
+    const dur = toNumber(apt.duracao) || 30;
+    return (startMin + dur) > nowMinutes;
+  }) || sorted[0];
 
   const getClientName = (apt: Record<string, unknown>) => {
     const profile = apt.profile;
@@ -120,6 +151,19 @@ const buildFallbackFromAgendaCache = (barbeiroId: string): { data: DashboardData
             clientName: getClientName(nextRaw),
             serviceName: getServiceName(nextRaw),
             status: toStringValue(nextRaw.status, "confirmed"),
+            duracao: toNumber(nextRaw.duracao) || 30,
+            preco: toNumber(nextRaw.preco) || 0,
+            payment_method: nextRaw.payment_method ? toStringValue(nextRaw.payment_method) : null,
+            tipo_agendamento: nextRaw.tipo_agendamento ? toStringValue(nextRaw.tipo_agendamento) : null,
+            is_free: Boolean(nextRaw.is_free),
+            barbeiro_confirmou: typeof nextRaw.barbeiro_confirmou === "boolean" ? nextRaw.barbeiro_confirmou : null,
+            observacoes: nextRaw.observacoes ? toStringValue(nextRaw.observacoes) : null,
+            isBlinking: (() => {
+              const [h, m] = toStringValue(nextRaw.hora).split(":").map(Number);
+              const sMin = (h || 0) * 60 + (m || 0);
+              const dur = toNumber(nextRaw.duracao) || 30;
+              return nowMinutes >= (sMin - 5) && nowMinutes < (sMin + dur);
+            })(),
           }
         : null,
       recentAppointments: sorted.slice(0, 5).map((apt) => ({
@@ -146,33 +190,53 @@ export async function fetchBarberDashboard(barbeiroId: string): Promise<Dashboar
   if (error) throw error;
   const parsed = parseDashboardData(data);
 
-  // Busca agendamento mais próximo de hoje para garantir id e nome real de cliente (ex: encaixe manual / walk-in)
+  // Busca agendamento mais próximo de hoje para garantir id e dados reais completos
   const today = new Date().toISOString().slice(0, 10);
-  const nowTime = new Date().toTimeString().slice(0, 5);
-  const { data: realNext } = await supabase
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const { data: realNextApts } = await supabase
     .from("agendamentos")
-    .select("id, hora, status, observacoes, servico_id, servicos(nome), profiles(nome, avatar_url)")
+    .select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
     .eq("barbeiro_id", barbeiroId)
     .eq("data", today)
     .in("status", ["pending", "confirmed"])
-    .gte("hora", nowTime)
     .order("hora", { ascending: true })
-    .limit(1);
+    .limit(20);
 
-  if (realNext && realNext.length > 0) {
-    const apt = realNext[0];
+  if (realNextApts && realNextApts.length > 0) {
+    const upcoming = realNextApts.find((apt: any) => {
+      const [h, m] = (apt.hora || "00:00").split(":").map(Number);
+      const startMin = (h || 0) * 60 + (m || 0);
+      const dur = apt.duracao || (apt.servicos as any)?.duracao_minutos || 30;
+      return (startMin + dur) > nowMinutes;
+    }) || realNextApts[0];
+
     const realClientName = resolveClienteDisplayName(
-      apt.observacoes,
-      (apt.profiles as any)?.nome,
+      upcoming.observacoes,
+      (upcoming.profiles as any)?.nome,
       "Cliente"
     );
+    const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
+    const uStartMin = (uh || 0) * 60 + (um || 0);
+    const uDur = upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30;
+    const isBlinkingNow = nowMinutes >= (uStartMin - 5) && nowMinutes < (uStartMin + uDur);
+
     parsed.nextAppointment = {
-      id: apt.id,
-      hora: (apt.hora || "").slice(0, 5),
+      id: upcoming.id,
+      hora: (upcoming.hora || "").slice(0, 5),
       clientName: realClientName,
-      serviceName: (apt.servicos as any)?.nome || "Atendimento",
-      status: apt.status || "confirmed",
-      avatarUrl: (apt.profiles as any)?.avatar_url || null,
+      serviceName: (upcoming.servicos as any)?.nome || "Atendimento",
+      status: upcoming.status || "confirmed",
+      duracao: upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30,
+      preco: upcoming.preco ?? (upcoming.servicos as any)?.preco ?? 0,
+      payment_method: upcoming.payment_method || null,
+      tipo_agendamento: upcoming.tipo_agendamento || null,
+      is_free: Boolean(upcoming.is_free),
+      barbeiro_confirmou: upcoming.barbeiro_confirmou,
+      observacoes: upcoming.observacoes,
+      avatarUrl: (upcoming.profiles as any)?.avatar_url || null,
+      isBlinking: isBlinkingNow,
     };
   }
 
