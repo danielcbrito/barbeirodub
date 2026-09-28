@@ -55,7 +55,8 @@ type HubScreen =
   | "avaliacoes"
   | "barbeiros"
   | "clientes"
-  | "todas-unidades";
+  | "todas-unidades"
+  | "fotos-banner";
 
 const DEFAULT_COMPANY_NAME = "Barbearia DUB";
 const DEFAULT_COMPANY_LOGO = "https://djtpzvujzmrrslirzwun.supabase.co/storage/v1/object/public/logos/global/logo-global-1772648853243.png";
@@ -93,7 +94,6 @@ export function BarberConfigBarbearia({
 
   // Modais
   const [showSelectUnitDrawer, setShowSelectUnitDrawer] = useState(false);
-  const [showImageEditModal, setShowImageEditModal] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [detailUnidade, setDetailUnidade] = useState<Unidade | null>(null);
 
@@ -517,6 +517,134 @@ export function BarberConfigBarbearia({
             </div>
           </div>
         );
+      case "fotos-banner":
+        return (
+          <div className="pb-10 min-h-app bg-background">
+            <ScheduleHeader title="Foto e Banner" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
+              {/* Seção 1: Banner da Barbearia (Capa) */}
+              <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[14px] font-semibold text-foreground block">
+                      Banner de Capa
+                    </span>
+                    <span className="text-[11.5px] text-muted-foreground">
+                      Exibido no topo do perfil e agendamento dos clientes
+                    </span>
+                  </div>
+                  {bannerUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveBanner}
+                      className="text-[12px] text-muted-foreground hover:text-destructive font-medium transition-colors"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+
+                <div className="relative w-full h-32 rounded-xl bg-muted overflow-hidden border border-border/40">
+                  <img
+                    src={bannerUrl || profileBannerDefault}
+                    alt="Banner da barbearia"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/20" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => bannerInputRef.current?.click()}
+                  disabled={uploadingBanner}
+                  className="w-full h-10 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12.5px] font-medium flex items-center justify-center gap-2 border border-border/40 active:scale-[0.99] transition-all"
+                >
+                  {uploadingBanner ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Camera className="w-4 h-4 opacity-70" />
+                  )}
+                  <span>{bannerUrl ? "Alterar banner de capa" : "Adicionar banner de capa"}</span>
+                </button>
+              </div>
+
+              {/* Seção 2: Foto de Perfil da Barbearia (Logo) */}
+              <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 space-y-3 shadow-xs">
+                <div>
+                  <span className="text-[14px] font-semibold text-foreground block">
+                    Foto da Barbearia (Logo)
+                  </span>
+                  <span className="text-[11.5px] text-muted-foreground">
+                    Ícone principal de identificação da barbearia
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3.5 p-3 rounded-xl bg-secondary/30 border border-border/40">
+                  <div
+                    className="rounded-2xl border border-border/60 bg-secondary overflow-hidden shrink-0 flex items-center justify-center shadow-xs"
+                    style={{ width: 60, height: 60, minWidth: 60, minHeight: 60 }}
+                  >
+                    {activeUnit?.logo_url || tenantLogoUrl ? (
+                      <img
+                        src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
+                        alt={tenantNome}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center font-bold text-foreground text-lg">
+                        {(tenantNome || "B").charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-semibold text-foreground truncate">
+                      {activeUnit?.nome || tenantNome || DEFAULT_COMPANY_NAME}
+                    </p>
+                    <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
+                      {activeUnit?.is_sede ? "Unidade Principal (Sede)" : "Filial da barbearia"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={uploadingLogo}
+                  className="w-full h-10 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12.5px] font-medium flex items-center justify-center gap-2 border border-border/40 active:scale-[0.99] transition-all"
+                >
+                  {uploadingLogo ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Camera className="w-4 h-4 opacity-70" />
+                  )}
+                  <span>Alterar foto de perfil</span>
+                </button>
+              </div>
+
+              {/* Informações de recomendação */}
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/40 space-y-1">
+                <p className="text-[12px] text-foreground font-medium flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 opacity-70" />
+                  <span>Dica de proporções</span>
+                </p>
+                <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+                  Para máxima nitidez, use imagem quadrada (1:1) para a foto de perfil e formato horizontal panorâmico (16:9) para o banner.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen("hub")}
+                  className="w-full h-11 rounded-xl bg-foreground text-background text-[13px] font-semibold active:scale-[0.98] transition-transform shadow-xs"
+                >
+                  Salvar e Voltar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
       default:
         return null;
     }
@@ -526,6 +654,10 @@ export function BarberConfigBarbearia({
   if (activeScreen !== "hub") {
     return (
       <div className="min-h-app bg-background">
+        {/* Inputs ocultos para upload de foto e banner em sub-telas */}
+        <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+        <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+
         {renderSubScreen()}
 
         {/* Modal Wizard se acionado na sub-tela */}
@@ -610,7 +742,7 @@ export function BarberConfigBarbearia({
 
         {/* ═══ CARD DE IDENTIDADE VISUAL: FOTO E BANNER DA BARBEARIA ═══ */}
         <div
-          onClick={() => setShowImageEditModal(true)}
+          onClick={() => setActiveScreen("fotos-banner")}
           className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card overflow-hidden shadow-xs cursor-pointer group hover:border-foreground/30 transition-all"
         >
           {/* Banner Preview Compacto com altura controlada (100px) */}
@@ -706,7 +838,7 @@ export function BarberConfigBarbearia({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setShowImageEditModal(true);
+                setActiveScreen("fotos-banner");
               }}
               className="shrink-0 mb-0.5 flex items-center gap-1 active:scale-95 transition-all px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium border border-border/40 shadow-xs"
             >
@@ -767,162 +899,6 @@ export function BarberConfigBarbearia({
         </div>
       </div>
 
-      {/* ═══ MODAL/DRAWER EXCLUSIVO DE EDIÇÃO DE FOTO E BANNER (100% SÉRIO & ORGANIZADO) ═══ */}
-      <AnimatePresence>
-        {showImageEditModal && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
-            <div className="absolute inset-0" onClick={() => setShowImageEditModal(false)} />
-            <motion.div
-              initial={{ y: "100%", opacity: 0.5 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: "100%", opacity: 0 }}
-              transition={{ type: "spring", damping: 28, stiffness: 320 }}
-              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-border/70 dark:border-white/[0.1] bg-card p-5 pb-8 sm:pb-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-[16px] font-bold text-foreground tracking-tight">
-                    Foto e Banner da Barbearia
-                  </h3>
-                  <p className="text-[12px] text-muted-foreground mt-0.5">
-                    Personalize a imagem de perfil e o banner da sua barbearia
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowImageEditModal(false)}
-                  className="w-8 h-8 rounded-full bg-secondary hover:bg-secondary/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0 text-xs font-semibold"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Seção 1: Banner da Barbearia (Capa) */}
-              <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[13.5px] font-semibold text-foreground block">
-                      Banner de Capa
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      Exibido no topo do perfil e agendamento
-                    </span>
-                  </div>
-                  {bannerUrl && (
-                    <button
-                      type="button"
-                      onClick={handleRemoveBanner}
-                      className="text-[11.5px] text-muted-foreground hover:text-destructive font-medium transition-colors"
-                    >
-                      Remover
-                    </button>
-                  )}
-                </div>
-
-                <div className="relative w-full h-24 rounded-xl bg-muted overflow-hidden border border-border/40">
-                  <img
-                    src={bannerUrl || profileBannerDefault}
-                    alt="Banner da barbearia"
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/20" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => bannerInputRef.current?.click()}
-                  disabled={uploadingBanner}
-                  className="w-full h-9 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium flex items-center justify-center gap-2 border border-border/40 active:scale-[0.99] transition-all"
-                >
-                  {uploadingBanner ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Camera className="w-3.5 h-3.5 opacity-70" />
-                  )}
-                  <span>{bannerUrl ? "Alterar banner de capa" : "Adicionar banner de capa"}</span>
-                </button>
-              </div>
-
-              {/* Seção 2: Foto de Perfil da Barbearia (Logo) */}
-              <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-3">
-                <div>
-                  <span className="text-[13.5px] font-semibold text-foreground block">
-                    Foto de Perfil (Logo)
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    Ícone principal visto pelos clientes
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3.5 p-3 rounded-xl bg-card border border-border/40">
-                  <div
-                    className="rounded-2xl border border-border/60 bg-secondary overflow-hidden shrink-0 flex items-center justify-center shadow-xs"
-                    style={{ width: 56, height: 56, minWidth: 56, minHeight: 56 }}
-                  >
-                    {activeUnit?.logo_url || tenantLogoUrl ? (
-                      <img
-                        src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
-                        alt={tenantNome}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center font-bold text-foreground text-lg">
-                        {(tenantNome || "B").charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13.5px] font-semibold text-foreground truncate">
-                      {activeUnit?.nome || tenantNome || DEFAULT_COMPANY_NAME}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                      {activeUnit?.is_sede ? "Unidade Principal (Sede)" : "Filial da barbearia"}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => logoInputRef.current?.click()}
-                  disabled={uploadingLogo}
-                  className="w-full h-9 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium flex items-center justify-center gap-2 border border-border/40 active:scale-[0.99] transition-all"
-                >
-                  {uploadingLogo ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Camera className="w-3.5 h-3.5 opacity-70" />
-                  )}
-                  <span>Alterar foto de perfil</span>
-                </button>
-              </div>
-
-              {/* Informações de recomendação */}
-              <div className="p-3 rounded-xl bg-muted/30 border border-border/40 space-y-1">
-                <p className="text-[11.5px] text-foreground font-medium flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5 opacity-70" />
-                  <span>Dica de proporções</span>
-                </p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Para máxima nitidez, use imagem quadrada (1:1) para a foto de perfil e formato horizontal panorâmico para o banner.
-                </p>
-              </div>
-
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowImageEditModal(false)}
-                  className="w-full h-11 rounded-xl bg-foreground text-background text-[13px] font-semibold active:scale-[0.98] transition-transform shadow-xs"
-                >
-                  Concluir
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* ═══ DRAWER DE SELEÇÃO DE BARBEARIA / FILIAL (GAVETA COMPARTILHADA) ═══ */}
       <SelectBarbeariaDrawer
