@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Clock, Users, ChevronRight, ChevronLeft,
-  Building2, Scissors, Package, MessageSquare,
-  UserCheck, Camera, ImagePlus, Loader2, Star, CreditCard, ShoppingBag,
-  Plus, Search, Store, MapPin, Phone, Check,
+  ChevronRight,
+  ChevronDown,
+  Camera,
+  Loader2,
+  Plus,
+  Store,
+  Image as ImageIcon,
 } from "lucide-react";
 import { BarberContext } from "@/pages/Barbeiro";
+import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import AdminHorarios from "@/components/admin/AdminHorarios";
 import { AdminPlanos } from "@/components/admin/AdminPlanos";
 import { BarberClientes } from "@/components/barber/BarberClientes";
@@ -30,17 +34,11 @@ import { cn } from "@/lib/utils";
 
 /**
  * Hub de Configurações da Barbearia — exclusivo do Administrador / Dono.
- * 100% sério, minimalista e estratégico:
- *   - Banner no topo edge-to-edge com a setinha curvada padrão do sistema sobre o banner
- *   - Botão de trocar banner sobre o banner
- *   - Carrossel horizontal de perfis das Barbearias (unidades) sobrepondo 50/50 o banner:
- *       • Até 6 unidades exibidas diretamente no carrossel
- *       • Botão circular com "+" ao lado da foto para cadastrar nova unidade (abre o wizard)
- *       • Opção "Ver todas" caso tenha mais unidades (abre tela inteira com barra de pesquisa)
- *       • Ao arrastar/trocar de unidade no carrossel, atualiza dinamicamente todos os dados da barbearia
- *   - Logo e nome da barbearia garantidos com fallback em "Barbearia DUB" e logo oficial
- *   - 4 Cards estratégicos principais com efeito watermark (Barbeiros, Serviços, Horários, Clientes)
- *   - Lista minimalista sem fundos de ícones (Dados da Barbearia, Planos, Avaliações, Pagamento, Loja)
+ * Padrão 100% sério, minimalista, institucional e estratégico (Alinhado a Atendimento & Notificações):
+ *   - ScheduleHeader institucional no topo
+ *   - Card compacto de identidade visual (Banner + Foto da Barbearia), onde clicar abre a personalização de foto e banner
+ *   - Lista unificada única de configurações em um único bloco clean que cabe confortavelmente na tela
+ *   - Gaveta (drawer) de baixo para cima para troca rápida de filiais e cadastro
  */
 
 type HubScreen =
@@ -56,70 +54,6 @@ type HubScreen =
   | "barbeiros"
   | "clientes"
   | "todas-unidades";
-
-interface HubSection {
-  label: string;
-  items: HubItem[];
-}
-
-interface HubItem {
-  key: HubScreen;
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  badge?: string;
-}
-
-const hubSections: HubSection[] = [
-  {
-    label: "Configurações da Empresa",
-    items: [
-      {
-        key: "dados-empresa",
-        icon: Building2,
-        title: "Dados da Barbearia",
-        description: "Nome, WhatsApp, endereço e redes sociais",
-      },
-      {
-        key: "whatsapp",
-        icon: MessageSquare,
-        title: "WhatsApp da Barbearia",
-        description: "Instância, agente e notificações desta unidade",
-      },
-      {
-        key: "clientes",
-        icon: Users,
-        title: "Clientes da Barbearia",
-        description: "Base de contatos, histórico e fidelidade",
-      },
-      {
-        key: "avaliacoes",
-        icon: Star,
-        title: "Avaliações da Barbearia",
-        description: "Feedbacks e notas dos clientes sobre a barbearia",
-      },
-    ],
-  },
-  {
-    label: "Comercial & Financeiro",
-    items: [
-      {
-        key: "formas-pagamento",
-        icon: CreditCard,
-        title: "Formas de Pagamento",
-        description: "PIX, cartões e dinheiro aceitos na barbearia",
-        badge: "Em manutenção",
-      },
-      {
-        key: "loja",
-        icon: ShoppingBag,
-        title: "Loja de Produtos",
-        description: "Catálogo de pomadas, cosméticos e controle de estoque",
-        badge: "Em manutenção",
-      },
-    ],
-  },
-];
 
 const DEFAULT_COMPANY_NAME = "Barbearia DUB";
 const DEFAULT_COMPANY_LOGO = "https://djtpzvujzmrrslirzwun.supabase.co/storage/v1/object/public/logos/global/logo-global-1772648853243.png";
@@ -142,33 +76,21 @@ export function BarberConfigBarbearia({
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(barberContext.tenantId || null);
 
-  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   // Unidades da Barbearia
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [selectedUnidadeId, setSelectedUnidadeId] = useState<string>("todas");
-  const [activeUnitIndex, setActiveUnitIndex] = useState<number>(0);
-  const [activeCarouselIndex, setActiveCarouselIndex] = useState<number>(0);
   const [loadingUnidades, setLoadingUnidades] = useState(true);
 
-  // Modais de Criação e Detalhes de Unidade
+  // Modais
+  const [showSelectUnitDrawer, setShowSelectUnitDrawer] = useState(false);
+  const [showImageEditModal, setShowImageEditModal] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [detailUnidade, setDetailUnidade] = useState<Unidade | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-
-  // Referência do carrossel horizontal de unidades
-  const carouselRef = useRef<HTMLDivElement>(null);
-
-  // Lista de itens do carrossel: unidades + botão de adicionar
-  const carouselItems = useMemo(() => {
-    return [
-      ...unidades.map((u, i) => ({ type: "unit" as const, unit: u, id: u.id, index: i })),
-      { type: "add" as const, id: "add-new-unit", index: unidades.length },
-    ];
-  }, [unidades]);
 
   useStatusBarColor("app-background");
 
@@ -181,7 +103,7 @@ export function BarberConfigBarbearia({
       let resolvedBanner: string | null = null;
       let tId = barberContext.tenantId || resolvedTenantId;
 
-      // 1. Buscar em informacoes_empresa (onde Barbearia DUB e logo estão salvos)
+      // 1. Buscar em informacoes_empresa (onde Barbearia DUB, banner e logo estão salvos)
       try {
         const { data: infoRows } = await supabase
           .from("informacoes_empresa")
@@ -209,7 +131,7 @@ export function BarberConfigBarbearia({
         try {
           const { data: tenantData } = await supabase
             .from("tenants")
-            .select("id, nome, banner_url, logo_url")
+            .select("id, nome, logo_url, banner_url")
             .eq("id", tId)
             .maybeSingle();
 
@@ -224,7 +146,7 @@ export function BarberConfigBarbearia({
       }
 
       // 3. Fallback para vínculo de barbeiro
-      if ((!resolvedLogo || !resolvedName) && barberContext.barbeiroId) {
+      if ((!resolvedLogo || !resolvedName || !resolvedBanner) && barberContext.barbeiroId) {
         try {
           const { data: barb } = await supabase
             .from("barbeiros")
@@ -245,11 +167,11 @@ export function BarberConfigBarbearia({
       }
 
       // 4. Fallback para dono mais antigo
-      if (!resolvedLogo || !resolvedName) {
+      if (!resolvedLogo || !resolvedName || !resolvedBanner) {
         try {
-          const { data: ownerTenant } = await resolveOldestOwnedTenant<{ id: string; nome: string; banner_url?: string; logo_url?: string }>(
+          const { data: ownerTenant } = await resolveOldestOwnedTenant<{ id: string; nome: string; logo_url?: string; banner_url?: string }>(
             barberContext.userId,
-            "id, nome, banner_url, logo_url"
+            "id, nome, logo_url, banner_url"
           );
           if (ownerTenant) {
             if (!tId && ownerTenant.id) {
@@ -262,16 +184,6 @@ export function BarberConfigBarbearia({
           }
         } catch {}
       }
-
-      // 5. Banner RPC fallback
-      try {
-        if (!resolvedBanner && barberContext.barbeiroId) {
-          const { data } = await supabase.rpc("get_admin_banner_for_barber", {
-            p_barbeiro_id: barberContext.barbeiroId,
-          });
-          if (data) resolvedBanner = data as string;
-        }
-      } catch {}
 
       if (mounted) {
         setTenantNome(resolvedName || DEFAULT_COMPANY_NAME);
@@ -312,8 +224,6 @@ export function BarberConfigBarbearia({
         // Se nenhuma unidade selecionada ou selecionada for "todas", ativa a primeira
         if (selectedUnidadeId === "todas" || !selectedUnidadeId) {
           setSelectedUnidadeId(mapped[0].id);
-          setActiveUnitIndex(0);
-          setActiveCarouselIndex(0);
           if (mapped[0].nome) setTenantNome(mapped[0].nome);
           if (mapped[0].logo_url) setTenantLogoUrl(mapped[0].logo_url);
         }
@@ -345,8 +255,6 @@ export function BarberConfigBarbearia({
         };
         setUnidades([fallbackUnit]);
         setSelectedUnidadeId(fallbackUnit.id);
-        setActiveUnitIndex(0);
-        setActiveCarouselIndex(0);
       }
     } catch (err) {
       console.error("Erro ao carregar unidades:", err);
@@ -359,77 +267,82 @@ export function BarberConfigBarbearia({
     loadUnidades();
   }, [resolvedTenantId, barberContext.tenantId]);
 
-  /** Sincroniza o carrossel durante o scroll no dedo */
-  const handleCarouselScroll = () => {
-    if (!carouselRef.current) return;
-    const container = carouselRef.current;
-    const center = container.scrollLeft + container.clientWidth / 2;
-    const children = Array.from(container.children) as HTMLElement[];
-    let closestIndex = 0;
-    let minDistance = Infinity;
-
-    children.forEach((child, i) => {
-      const childCenter = child.offsetLeft + child.offsetWidth / 2;
-      const distance = Math.abs(center - childCenter);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = i;
-      }
-    });
-
-    if (closestIndex !== activeCarouselIndex) {
-      setActiveCarouselIndex(closestIndex);
-      if (closestIndex < unidades.length) {
-        const u = unidades[closestIndex];
-        setSelectedUnidadeId(u.id);
-        setActiveUnitIndex(closestIndex);
-        setTenantNome(u.nome || DEFAULT_COMPANY_NAME);
-        setTenantLogoUrl(u.logo_url || DEFAULT_COMPANY_LOGO);
-        if (u.tenant_id) setResolvedTenantId(u.tenant_id);
-      }
-    }
-  };
-
-  /** Centraliza o círculo selecionado e atualiza a unidade ativa */
-  const handleSelectCircle = (index: number) => {
-    if (!carouselRef.current) return;
-    const child = carouselRef.current.children[index] as HTMLElement;
-    if (child) {
-      child.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-    }
-    setActiveCarouselIndex(index);
-    if (index < unidades.length) {
-      const u = unidades[index];
-      setSelectedUnidadeId(u.id);
-      setActiveUnitIndex(index);
-      setTenantNome(u.nome || DEFAULT_COMPANY_NAME);
-      setTenantLogoUrl(u.logo_url || DEFAULT_COMPANY_LOGO);
-      if (u.tenant_id) setResolvedTenantId(u.tenant_id);
-    } else {
-      if (activeCarouselIndex === index) {
-        setWizardOpen(true);
-      }
-    }
-  };
-
   /** Unidade atualmente ativa em exibição */
   const activeUnit = useMemo(() => {
-    return unidades.find((u) => u.id === selectedUnidadeId) || unidades[activeUnitIndex] || unidades[0];
-  }, [unidades, selectedUnidadeId, activeUnitIndex]);
+    return unidades.find((u) => u.id === selectedUnidadeId) || unidades[0];
+  }, [unidades, selectedUnidadeId]);
 
-  /** Unidades filtradas pela barra de pesquisa */
-  const filteredUnidades = useMemo(() => {
-    if (!searchTerm.trim()) return unidades;
-    const term = searchTerm.toLowerCase();
-    return unidades.filter(
-      (u) =>
-        u.nome?.toLowerCase().includes(term) ||
-        u.bairro?.toLowerCase().includes(term) ||
-        u.cidade?.toLowerCase().includes(term) ||
-        u.rua?.toLowerCase().includes(term) ||
-        u.telefone?.includes(term)
-    );
-  }, [unidades, searchTerm]);
+  /** Seleciona uma unidade pelo Drawer */
+  const handleSelectUnit = (unit: Unidade) => {
+    setSelectedUnidadeId(unit.id);
+    if (unit.nome) setTenantNome(unit.nome);
+    if (unit.logo_url) setTenantLogoUrl(unit.logo_url);
+    if (unit.tenant_id) setResolvedTenantId(unit.tenant_id);
+    setShowSelectUnitDrawer(false);
+    toast.success(`Gerenciando ${unit.nome}`);
+  };
+
+  /** Upload da Logo da Barbearia */
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const tid = resolvedTenantId || barberContext.tenantId;
+    if (!file || !tid) return;
+    if (!file.type.startsWith("image/")) { toast.error("Selecione apenas imagens"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Máximo 5MB"); return; }
+
+    setUploadingLogo(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const filePath = `logos/${tid}/logo-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("logos")
+        .upload(filePath, file, { upsert: true, contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("logos")
+        .getPublicUrl(filePath);
+
+      const newLogoUrl = urlData.publicUrl;
+
+      // 1. Atualizar em tenants
+      await supabase
+        .from("tenants")
+        .update({ logo_url: newLogoUrl })
+        .eq("id", tid);
+
+      // 2. Atualizar em informacoes_empresa
+      await supabase
+        .from("informacoes_empresa")
+        .upsert({
+          tenant_id: tid,
+          chave: "logo_url",
+          valor: newLogoUrl,
+        } as any, { onConflict: "tenant_id,chave" });
+
+      // 3. Atualizar na unidade ativa caso seja específica
+      if (activeUnit?.id) {
+        await supabase
+          .from("tenant_unidades")
+          .update({ logo_url: newLogoUrl })
+          .eq("id", activeUnit.id);
+      }
+
+      setTenantLogoUrl(newLogoUrl);
+      setUnidades((prev) =>
+        prev.map((u) => (u.id === activeUnit?.id ? { ...u, logo_url: newLogoUrl } : u))
+      );
+      toast.success("Foto da barbearia atualizada com sucesso!");
+    } catch (err) {
+      console.error("Erro ao enviar logo:", err);
+      toast.error("Erro ao enviar imagem");
+    } finally {
+      setUploadingLogo(false);
+      e.target.value = "";
+    }
+  };
 
   /** Upload do Banner da Barbearia */
   const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -443,240 +356,76 @@ export function BarberConfigBarbearia({
     try {
       const ext = file.name.split(".").pop() || "webp";
       const filePath = `tenants/banner-${tid}-${Date.now()}.${ext}`;
+
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(filePath, file, { upsert: true, contentType: file.type });
+
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(filePath);
-      const publicUrl = urlData.publicUrl;
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
 
-      await supabase.from("tenants").update({ banner_url: publicUrl }).eq("id", tid);
-      setBannerUrl(publicUrl);
-      toast.success("Banner da barbearia atualizado!");
+      const newBannerUrl = urlData.publicUrl;
+
+      // 1. Atualizar em tenants
+      await supabase
+        .from("tenants")
+        .update({ banner_url: newBannerUrl })
+        .eq("id", tid);
+
+      // 2. Atualizar em informacoes_empresa
+      await supabase
+        .from("informacoes_empresa")
+        .upsert({
+          tenant_id: tid,
+          chave: "banner_url",
+          valor: newBannerUrl,
+        } as any, { onConflict: "tenant_id,chave" });
+
+      setBannerUrl(newBannerUrl);
+      toast.success("Banner da barbearia atualizado com sucesso!");
     } catch (err) {
       console.error("Erro ao enviar banner:", err);
-      toast.error("Erro ao atualizar banner da barbearia");
+      toast.error("Erro ao enviar banner");
     } finally {
       setUploadingBanner(false);
       e.target.value = "";
     }
   };
 
-  /** Upload do Logo / Foto de Perfil da Barbearia Ativa */
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  /** Remove banner customizado (volta para padrão) */
+  const handleRemoveBanner = async () => {
     const tid = resolvedTenantId || barberContext.tenantId;
-    if (!file || !tid) return;
-    if (!file.type.startsWith("image/")) { toast.error("Selecione apenas imagens"); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error("Máximo 5MB"); return; }
-
-    setUploadingLogo(true);
+    if (!tid) return;
     try {
-      const ext = file.name.split(".").pop() || "webp";
-      const filePath = `tenants/logo-${tid}-${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(filePath, file, { upsert: true, contentType: file.type });
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(filePath);
-      const publicUrl = urlData.publicUrl;
-
-      // Atualiza no tenant e na unidade ativa
-      await supabase.from("tenants").update({ logo_url: publicUrl }).eq("id", tid);
-      if (activeUnit?.id) {
-        await supabase.from("tenant_unidades").update({ logo_url: publicUrl }).eq("id", activeUnit.id);
-      }
-      setTenantLogoUrl(publicUrl);
-      // Atualiza também na lista local de unidades
-      setUnidades((prev) =>
-        prev.map((u) => (u.id === activeUnit?.id ? { ...u, logo_url: publicUrl } : u))
-      );
-      toast.success("Logo da barbearia atualizado!");
+      await supabase.from("tenants").update({ banner_url: null }).eq("id", tid);
+      await supabase.from("informacoes_empresa").delete().eq("tenant_id", tid).eq("chave", "banner_url");
+      setBannerUrl(null);
+      toast.success("Banner removido");
     } catch (err) {
-      console.error("Erro ao enviar logo:", err);
-      toast.error("Erro ao atualizar logo da barbearia");
-    } finally {
-      setUploadingLogo(false);
-      e.target.value = "";
+      console.error("Erro ao remover banner:", err);
     }
   };
-
-  /** Setinha de voltar — padrão tradicional em V do sistema (ChevronLeft com traço 2.2) */
-  const BackArrow = ({ className = "" }: { className?: string }) => (
-    <ChevronLeft className={cn("w-5 h-5 stroke-[2.2]", className)} />
-  );
 
   /** Renderiza sub-telas selecionadas */
   const renderSubScreen = () => {
     const tenantId = resolvedTenantId || barberContext.tenantId || undefined;
     switch (activeScreen) {
-      case "todas-unidades":
+      case "dados-empresa":
         return (
-          <div className="min-h-[var(--app-height,100dvh)] bg-background px-4 py-3 max-w-xl mx-auto pb-24">
-            {/* Header da tela todas as unidades */}
-            <div className="flex items-center justify-between gap-3 mb-5 pt-2">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveScreen("hub")}
-                  className="w-9 h-9 rounded-full bg-secondary text-foreground flex items-center justify-center hover:bg-secondary/80 active:scale-95 transition-all shadow-xs"
-                  aria-label="Voltar para configurações"
-                >
-                  <BackArrow />
-                </button>
-                <div>
-                  <h1 className="text-[19px] font-bold text-foreground leading-tight">
-                    Todas as Barbearias
-                  </h1>
-                  <p className="text-[12px] text-muted-foreground">
-                    {unidades.length} {unidades.length === 1 ? "unidade cadastrada" : "unidades cadastradas"}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setWizardOpen(true)}
-                className="px-3.5 py-2 rounded-xl bg-foreground text-background text-xs font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform"
-              >
-                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Nova Unidade</span>
-              </button>
-            </div>
-
-            {/* Barra de pesquisa */}
-            <div className="relative mb-4">
-              <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Pesquisar por nome, bairro, cidade..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-card border border-border/70 text-foreground text-[13px] placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary shadow-xs"
-              />
-            </div>
-
-            {/* Lista de cards das unidades */}
-            <div className="space-y-3">
-              {filteredUnidades.map((u, idx) => {
-                const isCurrentActive = selectedUnidadeId === u.id || (selectedUnidadeId === "todas" && idx === 0);
-                const logo = u.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO;
-
-                return (
-                  <div
-                    key={u.id}
-                    className={cn(
-                      "p-4 rounded-2xl bg-card border transition-all flex flex-col gap-3 shadow-xs",
-                      isCurrentActive ? "border-primary/60 ring-1 ring-primary/40" : "border-border/60 hover:border-foreground/30"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="h-12 w-12 rounded-xl border border-border/50 shrink-0 overflow-hidden bg-secondary flex items-center justify-center"
-                          style={{ width: 48, height: 48, minWidth: 48, minHeight: 48 }}
-                        >
-                          {logo ? (
-                            <img src={logo} alt={u.nome} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-foreground font-bold text-base">
-                              {(u.nome || "B").charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-[15px] font-bold text-foreground">
-                              {u.nome}
-                            </h3>
-                            {u.is_sede && (
-                              <span className="text-[9.5px] uppercase font-semibold px-2 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40">
-                                Sede
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[12px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <MapPin className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-                            <span className="truncate">
-                              {[u.rua, u.numero, u.bairro, u.cidade].filter(Boolean).join(", ") || "Endereço não informado"}
-                            </span>
-                          </p>
-                          {u.telefone && (
-                            <p className="text-[11.5px] text-muted-foreground/80 flex items-center gap-1 mt-0.5">
-                              <Phone className="w-3 h-3 shrink-0" />
-                              <span>{u.telefone}</span>
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/30">
-                      <button
-                        type="button"
-                        onClick={() => setDetailUnidade(u)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground bg-secondary/60 hover:bg-secondary transition-colors"
-                      >
-                        Editar dados
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleSelectCircle(idx);
-                          setActiveScreen("hub");
-                        }}
-                        className={cn(
-                          "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                          isCurrentActive
-                            ? "bg-secondary text-foreground border border-border/80"
-                            : "bg-foreground text-background hover:bg-foreground/90 active:scale-95"
-                        )}
-                      >
-                        {isCurrentActive ? "Em gerenciamento" : "Gerenciar"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {filteredUnidades.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Store className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
-                  <p className="text-sm font-medium text-foreground">Nenhuma barbearia encontrada</p>
-                  <p className="text-xs mt-1">Tente pesquisar por outro termo ou cadastre uma nova unidade.</p>
-                </div>
-              )}
+          <div className="pb-10">
+            <ScheduleHeader title="Dados da Barbearia" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-2">
+              <AdminDadosEmpresa basePath={appBasePath} tenantId={tenantId} />
             </div>
           </div>
         );
-      case "dados-empresa":
-        return <AdminDadosEmpresa basePath={appBasePath} tenantId={tenantId} />;
       case "whatsapp":
         return (
-          <div className="pb-10 -mx-3 -mt-2">
-            <div className="px-4 py-3 flex items-center gap-3 border-b border-border/40 mb-3 bg-background sticky top-0 z-30">
-              <button
-                type="button"
-                onClick={() => setActiveScreen("hub")}
-                className="w-9 h-9 rounded-full bg-secondary text-foreground flex items-center justify-center hover:bg-secondary/80 active:scale-95 transition-all shadow-xs"
-                aria-label="Voltar para configurações"
-              >
-                <BackArrow />
-              </button>
-              <div>
-                <h1 className="text-[17px] font-bold text-foreground leading-tight">
-                  WhatsApp
-                </h1>
-                <p className="text-[12px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                  <Store className="w-3.5 h-3.5 text-muted-foreground/70" />
-                  <span>{activeUnit?.nome || tenantNome}</span>
-                </p>
-              </div>
-            </div>
+          <div className="pb-10">
             <WhatsAppConnectionPage
-              hideHeader
               barbeiroId={barberContext.barbeiroId}
               userId={barberContext.userId}
               tenantId={resolvedTenantId || barberContext.tenantId}
@@ -684,80 +433,67 @@ export function BarberConfigBarbearia({
               unidadeNome={activeUnit?.nome}
               tenantNome={activeUnit?.nome || tenantNome}
               barberName={barberContext.apelido}
-              onUnitChange={(newId) => {
-                setSelectedUnidadeId(newId);
-                const found = unidades.find((u) => u.id === newId);
-                if (found) {
-                  setTenantNome(found.nome || DEFAULT_COMPANY_NAME);
-                  setTenantLogoUrl(found.logo_url || DEFAULT_COMPANY_LOGO);
-                }
-              }}
+              onBackProp={() => setActiveScreen("hub")}
             />
           </div>
         );
       case "horarios":
         return (
-          <div className="px-4 py-2">
-            <AdminHorarios hideTitle companyMode tenantId={tenantId} />
+          <div className="pb-10">
+            <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto">
+              <AdminHorarios hideTitle companyMode tenantId={tenantId} />
+            </div>
           </div>
         );
       case "servicos":
-        return <AdminCortes tenantId={tenantId} basePath={appBasePath} hideHeader />;
-      case "planos":
-        return <AdminPlanos tenantId={tenantId} basePath={appBasePath} hideHeader />;
-      case "avaliacoes":
-        return <AdminAvaliacoes tenantId={tenantId} basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />;
-      case "barbeiros":
-        return <AdminBarbeiros basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />;
-      case "clientes":
         return (
-          <BarberClientes
-            barberContext={barberContext}
-            forceViewMode="todos"
-            initialUnitId={selectedUnidadeId === "todas" ? undefined : selectedUnidadeId}
-            hideHeader
-          />
-        );
-      case "formas-pagamento":
-        return (
-          <div className="flex flex-col items-center justify-center text-center px-6 py-16 max-w-md mx-auto">
-            <div className="w-14 h-14 rounded-2xl bg-foreground/[0.05] dark:bg-white/[0.06] text-foreground flex items-center justify-center mb-4">
-              <CreditCard className="w-7 h-7 stroke-[1.7]" />
+          <div className="pb-10">
+            <ScheduleHeader title="Serviços & Cortes" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto">
+              <AdminCortes tenantId={tenantId} basePath={appBasePath} hideHeader />
             </div>
-            <span className="text-[10px] font-medium uppercase tracking-wider px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border/40 mb-3">
-              Em manutenção
-            </span>
-            <h2 className="text-[18px] font-bold text-foreground mb-2">Formas de Pagamento</h2>
-            <p className="text-[13px] text-muted-foreground leading-relaxed mb-6">
-              Em breve você poderá configurar diretamente as formas de recebimento aceitas na sua barbearia (PIX, Cartão e Dinheiro) com regras de taxas e repasses.
-            </p>
-            <button
-              onClick={() => setActiveScreen("hub")}
-              className="px-5 py-2.5 rounded-xl bg-secondary text-foreground text-[13px] font-medium hover:bg-secondary/80 active:scale-95 transition-all"
-            >
-              Voltar para configurações
-            </button>
           </div>
         );
-      case "loja":
+      case "planos":
         return (
-          <div className="flex flex-col items-center justify-center text-center px-6 py-16 max-w-md mx-auto">
-            <div className="w-14 h-14 rounded-2xl bg-foreground/[0.05] dark:bg-white/[0.06] text-foreground flex items-center justify-center mb-4">
-              <ShoppingBag className="w-7 h-7 stroke-[1.7]" />
+          <div className="pb-10">
+            <ScheduleHeader title="Planos da Barbearia" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto">
+              <AdminPlanos tenantId={tenantId} basePath={appBasePath} hideHeader />
             </div>
-            <span className="text-[10px] font-medium uppercase tracking-wider px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border/40 mb-3">
-              Em manutenção
-            </span>
-            <h2 className="text-[18px] font-bold text-foreground mb-2">Loja de Produtos</h2>
-            <p className="text-[13px] text-muted-foreground leading-relaxed mb-6">
-              O catálogo de produtos para venda no balcão (pomadas, óleos para barba e cosméticos) com controle de estoque e comissão está sendo preparado.
-            </p>
-            <button
-              onClick={() => setActiveScreen("hub")}
-              className="px-5 py-2.5 rounded-xl bg-secondary text-foreground text-[13px] font-medium hover:bg-secondary/80 active:scale-95 transition-all"
-            >
-              Voltar para configurações
-            </button>
+          </div>
+        );
+      case "avaliacoes":
+        return (
+          <div className="pb-10">
+            <ScheduleHeader title="Avaliações da Barbearia" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto">
+              <AdminAvaliacoes tenantId={tenantId} basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />
+            </div>
+          </div>
+        );
+      case "barbeiros":
+        return (
+          <div className="pb-10">
+            <ScheduleHeader title="Barbeiros & Equipe" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto">
+              <AdminBarbeiros basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />
+            </div>
+          </div>
+        );
+      case "clientes":
+        return (
+          <div className="pb-10">
+            <ScheduleHeader title="Clientes da Barbearia" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto">
+              <BarberClientes
+                barberContext={barberContext}
+                forceViewMode="todos"
+                initialUnitId={selectedUnidadeId === "todas" ? undefined : selectedUnidadeId}
+                hideHeader
+              />
+            </div>
           </div>
         );
       default:
@@ -765,349 +501,13 @@ export function BarberConfigBarbearia({
     }
   };
 
-  /** Hub principal — 100% sério, minimalista e estratégico */
-  if (activeScreen === "hub") {
+  /** Se uma sub-tela estiver ativa, renderiza a sub-tela correspondente */
+  if (activeScreen !== "hub") {
     return (
-      <div className="min-h-[var(--app-height,100dvh)] bg-background pb-28 -mx-3 sm:-mx-4 -mt-2">
-        {/* Inputs de arquivo ocultos para upload */}
-        <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
-        <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+      <div className="min-h-app bg-background">
+        {renderSubScreen()}
 
-        {/* ═══ BANNER DA BARBEARIA (edge-to-edge) COM SETINHA E BOTÃO SOBREPOSTOS ═══ */}
-        <div className="relative isolate bg-background">
-          <div
-            className="relative w-full overflow-hidden bg-muted h-44 sm:h-52"
-            style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
-          >
-            {bannerUrl ? (
-              <img
-                src={bannerUrl}
-                alt="Banner da barbearia"
-                className="w-full h-full object-cover"
-                style={{ objectPosition: "center" }}
-              />
-            ) : (
-              <img
-                src={profileBannerDefault}
-                alt="Banner padrão"
-                className="w-full h-full object-cover"
-                style={{ objectPosition: "center" }}
-              />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/15 to-background" />
-
-            {/* Setinha padrão do sistema (em V) SOBRE o banner */}
-            <button
-              type="button"
-              onClick={() => navigate(`${appBasePath}/perfil`)}
-              aria-label="Voltar para perfil"
-              className="absolute left-4 z-20 w-9 h-9 rounded-full bg-black/50 backdrop-blur-md text-white border border-white/10 flex items-center justify-center hover:bg-black/70 active:scale-95 transition-all shadow-lg"
-              style={{ top: "calc(0.75rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }}
-            >
-              <BackArrow />
-            </button>
-
-            {/* Botão Trocar banner SOBRE o banner */}
-            <button
-              type="button"
-              onClick={() => bannerInputRef.current?.click()}
-              disabled={uploadingBanner}
-              className="absolute right-4 z-20 h-8 px-3 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white/95 hover:bg-black/70 active:scale-95 transition-all flex items-center gap-1.5 shadow-lg"
-              style={{ top: "calc(0.75rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }}
-              aria-label="Trocar banner da barbearia"
-            >
-              {uploadingBanner ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <ImagePlus className="h-3.5 w-3.5" />
-              )}
-              <span className="text-[11.5px] font-medium">Trocar banner</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ═══ CARROSSEL DE CÍRCULOS DAS BARBEARIAS (SOBREPOSTO AO BANNER) ═══ */}
-        <div className="relative px-0 pt-0 pb-1 -mt-12 sm:-mt-14 flex flex-col items-center select-none overflow-hidden z-10">
-          <div
-            ref={carouselRef}
-            onScroll={handleCarouselScroll}
-            className="flex items-center gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory px-[calc(50%-55px)] py-2 touch-pan-x select-none w-full"
-            style={{ WebkitOverflowScrolling: "touch" }}
-          >
-            {carouselItems.map((item, index) => {
-              const isSelected = activeCarouselIndex === index;
-
-              if (item.type === "unit") {
-                const u = item.unit;
-                const uLogo = u.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO;
-
-                return (
-                  <div
-                    key={u.id}
-                    onClick={() => handleSelectCircle(index)}
-                    className="relative w-[110px] h-[110px] shrink-0 snap-center flex items-center justify-center cursor-pointer select-none"
-                  >
-                    <div className="relative">
-                      <div
-                        className={cn(
-                          "rounded-full overflow-hidden transition-all duration-200 flex items-center justify-center shrink-0",
-                          isSelected
-                            ? "w-[96px] h-[96px] border-[3.5px] border-background bg-secondary shadow-xl ring-2 ring-foreground/15 scale-100"
-                            : "w-[72px] h-[72px] border-2 border-background bg-secondary shadow-xs opacity-50 scale-95 hover:opacity-80"
-                        )}
-                      >
-                        {uLogo ? (
-                          <img
-                            src={uLogo}
-                            alt={u.nome}
-                            className="w-full h-full object-cover pointer-events-none rounded-full select-none"
-                            draggable={false}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-foreground font-bold text-2xl select-none">
-                            {(u.nome || "B").charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Símbolo da câmera PARA FORA do círculo da imagem (estilo profile badge destacado) */}
-                      {isSelected && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            logoInputRef.current?.click();
-                          }}
-                          disabled={uploadingLogo}
-                          className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-foreground text-background shadow-xl border-2 border-background flex items-center justify-center hover:opacity-90 active:scale-95 transition-all z-20 cursor-pointer"
-                          aria-label="Trocar logo da barbearia"
-                        >
-                          {uploadingLogo ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Camera className="w-4 h-4 stroke-[2]" />
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              } else {
-                return (
-                  <div
-                    key="add-new-unit"
-                    onClick={() => handleSelectCircle(index)}
-                    className="relative w-[110px] h-[110px] shrink-0 snap-center flex items-center justify-center cursor-pointer select-none"
-                  >
-                    <div
-                      className={cn(
-                        "rounded-full border-2 border-dashed transition-all duration-200 flex items-center justify-center shrink-0 bg-card select-none",
-                        isSelected
-                          ? "w-[96px] h-[96px] border-foreground/80 shadow-md ring-2 ring-foreground/15 scale-100"
-                          : "w-[72px] h-[72px] border-foreground/35 shadow-xs opacity-50 scale-95 hover:opacity-80"
-                      )}
-                    >
-                      <Plus
-                        className={cn(
-                          "stroke-[2] text-foreground transition-transform",
-                          isSelected ? "w-7 h-7" : "w-5 h-5"
-                        )}
-                      />
-                    </div>
-                  </div>
-                );
-              }
-            })}
-          </div>
-        </div>
-
-        {/* ═══ NOME E ENDEREÇO DA BARBEARIA CENTRALIZADOS (100% SÉRIO & MINIMALISTA, SUBIDO) ═══ */}
-        <div className="flex flex-col items-center text-center px-5 mt-2 mb-3.5 select-none">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeCarouselIndex < unidades.length ? unidades[activeCarouselIndex]?.id || "active" : "nova"}
-              initial={{ opacity: 0, y: 3 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -3 }}
-              transition={{ duration: 0.15 }}
-              className="flex flex-col items-center"
-            >
-              <h2 className="text-[23px] font-bold text-foreground leading-tight tracking-tight">
-                {activeCarouselIndex < unidades.length 
-                  ? (unidades[activeCarouselIndex]?.nome || tenantNome || DEFAULT_COMPANY_NAME) 
-                  : "Nova Barbearia"}
-              </h2>
-              <div className="text-[13px] text-muted-foreground mt-1">
-                {activeCarouselIndex < unidades.length ? (
-                  unidades[activeCarouselIndex]?.bairro
-                    ? `${unidades[activeCarouselIndex].bairro}${unidades[activeCarouselIndex].cidade ? `, ${unidades[activeCarouselIndex].cidade}` : ""}`
-                    : "São Paulo, SP"
-                ) : (
-                  "Toque no botão + para cadastrar"
-                )}
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {/* ═══ CONTEÚDO: SE FOR UNIDADE ATIVA, EXIBE OS CARDS. SE FOR NOVA BARBEARIA, EXIBE O BOTÃO PRETO MINIMALISTA ═══ */}
-        {activeCarouselIndex < unidades.length ? (
-          <>
-            {/* ═══ ACESSOS ESTRATÉGICOS PRINCIPAIS (4 CARDS: SERVIÇOS, PLANOS, HORÁRIOS, BARBEIROS) ═══ */}
-            <div className="grid grid-cols-2 gap-3 mx-5 mt-2">
-              {/* Card 1: Serviços */}
-              <button
-                type="button"
-                onClick={() => setActiveScreen("servicos")}
-                className="flex flex-col justify-between p-4 rounded-2xl bg-card border border-border/70 dark:border-white/[0.08] hover:border-foreground/30 active:scale-[0.98] transition-all shadow-xs group text-left min-h-[96px]"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center text-foreground group-hover:bg-foreground group-hover:text-background transition-colors">
-                    <Scissors className="w-4 h-4 stroke-[2]" />
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-foreground transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <span className="text-[14px] font-bold text-foreground block leading-tight">
-                    Serviços
-                  </span>
-                  <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 font-normal">
-                    Cortes & catálogo
-                  </span>
-                </div>
-              </button>
-
-              {/* Card 2: Planos da Barbearia */}
-              <button
-                type="button"
-                onClick={() => setActiveScreen("planos")}
-                className="flex flex-col justify-between p-4 rounded-2xl bg-card border border-border/70 dark:border-white/[0.08] hover:border-foreground/30 active:scale-[0.98] transition-all shadow-xs group text-left min-h-[96px]"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center text-foreground group-hover:bg-foreground group-hover:text-background transition-colors">
-                    <Package className="w-4 h-4 stroke-[2]" />
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-foreground transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <span className="text-[14px] font-bold text-foreground block leading-tight">
-                    Planos da Barbearia
-                  </span>
-                  <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 font-normal">
-                    Fidelidade & assinaturas
-                  </span>
-                </div>
-              </button>
-
-              {/* Card 3: Horários */}
-              <button
-                type="button"
-                onClick={() => setActiveScreen("horarios")}
-                className="flex flex-col justify-between p-4 rounded-2xl bg-card border border-border/70 dark:border-white/[0.08] hover:border-foreground/30 active:scale-[0.98] transition-all shadow-xs group text-left min-h-[96px]"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center text-foreground group-hover:bg-foreground group-hover:text-background transition-colors">
-                    <Clock className="w-4 h-4 stroke-[2]" />
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-foreground transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <span className="text-[14px] font-bold text-foreground block leading-tight">
-                    Horários
-                  </span>
-                  <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 font-normal">
-                    Expediente oficial
-                  </span>
-                </div>
-              </button>
-
-              {/* Card 4: Barbeiros */}
-              <button
-                type="button"
-                onClick={() => setActiveScreen("barbeiros")}
-                className="flex flex-col justify-between p-4 rounded-2xl bg-card border border-border/70 dark:border-white/[0.08] hover:border-foreground/30 active:scale-[0.98] transition-all shadow-xs group text-left min-h-[96px]"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center text-foreground group-hover:bg-foreground group-hover:text-background transition-colors">
-                    <UserCheck className="w-4 h-4 stroke-[2]" />
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-foreground transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <span className="text-[14px] font-bold text-foreground block leading-tight">
-                    Barbeiros
-                  </span>
-                  <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 font-normal">
-                    Equipe & cadastro
-                  </span>
-                </div>
-              </button>
-            </div>
-
-            {/* ═══ ITENS — LAYOUT AGRUPADO, 100% SÉRIO E MINIMALISTA (SEM FUNDOS EM ÍCONES) ═══ */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, delay: 0.1 }}
-              className="mx-5 space-y-4 mt-6"
-            >
-              {hubSections.map((sec) => (
-                <div key={sec.label}>
-                  <p className="text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">
-                    {sec.label}
-                  </p>
-                  <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] overflow-hidden divide-y divide-border/25 shadow-xs">
-                    {sec.items.map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => setActiveScreen(item.key)}
-                        className="w-full flex items-center justify-between gap-3.5 px-4 py-3.5 text-left hover:bg-muted/20 active:bg-muted/40 transition-colors group"
-                      >
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          <item.icon className="w-5 h-5 text-muted-foreground/80 group-hover:text-foreground transition-colors shrink-0 stroke-[1.6]" />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[14.5px] font-semibold text-foreground truncate block leading-tight">
-                                {item.title}
-                              </span>
-                              {item.badge && (
-                                <span className="text-[9.5px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/40 shrink-0">
-                                  {item.badge}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 font-normal">
-                              {item.description}
-                            </span>
-                          </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </motion.div>
-          </>
-        ) : (
-          /* ESTADO EXCLUSIVO DE NOVA BARBEARIA: BOTÃO PRETO SÉRIO E MINIMALISTA */
-          <div className="flex flex-col items-center justify-center text-center px-6 py-12 max-w-sm mx-auto">
-            <button
-              type="button"
-              onClick={() => setWizardOpen(true)}
-              className="h-12 px-7 rounded-2xl bg-foreground text-background text-[14px] font-semibold flex items-center gap-2.5 shadow-md active:scale-95 transition-all hover:opacity-90"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Cadastrar Nova Barbearia</span>
-            </button>
-            <p className="text-[12px] text-muted-foreground mt-3 max-w-xs leading-relaxed">
-              Adicione uma nova unidade para gerenciar equipe, serviços e horários de forma independente.
-            </p>
-          </div>
-        )}
-
-        {/* Modal Wizard de Criação de Unidade (acionado pelo botão + do carrossel) */}
+        {/* Modal Wizard se acionado na sub-tela */}
         <UnidadeWizardSheet
           open={wizardOpen}
           onOpenChange={setWizardOpen}
@@ -1118,7 +518,7 @@ export function BarberConfigBarbearia({
           }}
         />
 
-        {/* Modal de Detalhes da Unidade */}
+        {/* Modal de Detalhes da Unidade se acionado */}
         {detailUnidade && (
           <UnidadeDetailScreen
             open={!!detailUnidade}
@@ -1135,29 +535,423 @@ export function BarberConfigBarbearia({
     );
   }
 
-  /* ═══ MODO SUB-TELA (SUB-ROTA) ═══ */
+  /** Hub principal — 100% sério, minimalista, institucional e estratégico (Padrão Atendimento & Notificações) */
   return (
-    <div className="min-h-[var(--app-height,100dvh)] bg-background pb-20">
-      {/* Botão voltar para o Hub se for sub-tela interna */}
-      {activeScreen !== "todas-unidades" && (
-        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/40 px-4 py-2.5 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveScreen("hub")}
-            className="w-8 h-8 rounded-full bg-secondary text-foreground flex items-center justify-center hover:bg-secondary/80 active:scale-95 transition-all"
-            aria-label="Voltar para configurações da barbearia"
-          >
-            <BackArrow />
-          </button>
-          <span className="text-[14px] font-semibold text-foreground">
-            {flatItems.find((i) => i.key === activeScreen)?.title || "Configurações"}
-          </span>
+    <div className="pb-10 min-h-app bg-background">
+      {/* Inputs ocultos para upload de foto e banner */}
+      <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+      <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+
+      {/* Header Institucional Padrão do Sistema */}
+      <ScheduleHeader
+        title="Configurações da Barbearia"
+        onBack={() => navigate(`${appBasePath}/perfil`)}
+      />
+
+      <div className="px-4 pt-3 max-w-md mx-auto space-y-3.5">
+        {/* Seletor Minimalista de Filial Ativa (quando houver mais de uma unidade) */}
+        {unidades.length > 1 && (
+          <div className="flex items-center justify-between px-1 py-0.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[14px] font-semibold text-foreground truncate">
+                {activeUnit?.nome || tenantNome}
+              </span>
+              {activeUnit?.is_sede && (
+                <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
+                  Sede
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSelectUnitDrawer(true)}
+              className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all shrink-0 flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40"
+            >
+              <Store className="w-3.5 h-3.5 opacity-70" />
+              <span>Trocar barbearia</span>
+              <ChevronDown className="w-3 h-3 opacity-60" />
+            </button>
+          </div>
+        )}
+
+        {/* ═══ CARD DE IDENTIDADE VISUAL: FOTO E BANNER DA BARBEARIA ═══ */}
+        <div
+          onClick={() => setShowImageEditModal(true)}
+          className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card overflow-hidden shadow-xs cursor-pointer group hover:border-foreground/30 transition-all"
+        >
+          {/* Banner Preview Compacto e Elegante */}
+          <div className="relative w-full h-24 bg-muted overflow-hidden">
+            <img
+              src={bannerUrl || profileBannerDefault}
+              alt="Banner da barbearia"
+              className="w-full h-full object-cover group-hover:scale-[1.01] transition-transform duration-300"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                bannerInputRef.current?.click();
+              }}
+              disabled={uploadingBanner}
+              className="absolute top-2.5 right-2.5 h-6 px-2.5 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white text-[11px] font-medium flex items-center gap-1.5 hover:bg-black/80 active:scale-95 transition-all shadow-xs"
+              title="Trocar banner"
+            >
+              {uploadingBanner ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Camera className="w-3 h-3" />
+              )}
+              <span>Trocar banner</span>
+            </button>
+          </div>
+
+          {/* Logo e Nome da Barbearia */}
+          <div className="p-3.5 pt-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative -mt-6 shrink-0">
+                <Avatar className="w-13 h-13 rounded-2xl border-2 border-card bg-secondary overflow-hidden shadow-md">
+                  <AvatarImage src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO} className="object-cover" />
+                  <AvatarFallback className="rounded-2xl font-bold text-base bg-secondary text-foreground">
+                    {(activeUnit?.nome || tenantNome || "B").charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    logoInputRef.current?.click();
+                  }}
+                  disabled={uploadingLogo}
+                  className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-foreground text-background flex items-center justify-center border border-card shadow-xs hover:opacity-90 active:scale-95 transition-all"
+                  title="Trocar foto/logo"
+                >
+                  {uploadingLogo ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Camera className="w-2.5 h-2.5 stroke-[2]" />}
+                </button>
+              </div>
+
+              <div className="min-w-0 pt-0.5">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[13.5px] font-semibold text-foreground truncate">
+                    {activeUnit?.nome || tenantNome || DEFAULT_COMPANY_NAME}
+                  </p>
+                  {activeUnit?.is_sede && (
+                    <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
+                      Sede
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
+                  Foto de perfil e banner da barbearia
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowImageEditModal(true);
+              }}
+              className="shrink-0 flex items-center gap-1 active:scale-95 transition-all px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium border border-border/40"
+            >
+              <span>Editar</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
-      )}
 
-      {renderSubScreen()}
+        {/* ═══ LISTA UNIFICADA ÚNICA (PADRÃO ATENDIMENTO & NOTIFICAÇÕES) ═══ */}
+        {/* Fica confortavelmente na tela, sem blocos separados ou poluição visual */}
+        <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] divide-y divide-border/25 dark:divide-white/[0.06] overflow-hidden shadow-xs">
+          <ConfigMenuItem
+            label="Dados da Barbearia"
+            description="Nome, WhatsApp, endereço e redes sociais"
+            onClick={() => setActiveScreen("dados-empresa")}
+          />
+          <ConfigMenuItem
+            label="Atendimento & Notificações"
+            description="WhatsApp conectado, agente de IA e lembretes automáticos"
+            onClick={() => setActiveScreen("whatsapp")}
+          />
+          <ConfigMenuItem
+            label="Horário de funcionamento"
+            description="Expediente oficial e dias de atendimento da barbearia"
+            onClick={() => setActiveScreen("horarios")}
+          />
+          <ConfigMenuItem
+            label="Barbeiros & Cadeiras"
+            description="Equipe de profissionais cadastrados nesta unidade"
+            onClick={() => setActiveScreen("barbeiros")}
+          />
+          <ConfigMenuItem
+            label="Serviços & Cortes"
+            description="Catálogo de cortes, barbas, durações e valores"
+            onClick={() => setActiveScreen("servicos")}
+          />
+          <ConfigMenuItem
+            label="Planos da Barbearia"
+            description="Clubes de fidelidade e assinaturas recorrentes"
+            onClick={() => setActiveScreen("planos")}
+          />
+          <ConfigMenuItem
+            label="Clientes da Barbearia"
+            description="Base de contatos, histórico e fidelidade"
+            onClick={() => setActiveScreen("clientes")}
+          />
+          <ConfigMenuItem
+            label="Avaliações da Barbearia"
+            description="Feedbacks e notas dos clientes sobre a barbearia"
+            onClick={() => setActiveScreen("avaliacoes")}
+          />
+          <ConfigMenuItem
+            label="Filiais da Barbearia"
+            description={`${unidades.length} ${unidades.length === 1 ? "unidade cadastrada" : "unidades cadastradas"} · Matriz e filiais`}
+            onClick={() => setShowSelectUnitDrawer(true)}
+          />
+        </div>
+      </div>
 
-      {/* Modal Wizard se acionado na sub-tela */}
+      {/* ═══ DRAWER DE FOTO E BANNER DA BARBEARIA (100% MINIMALISTA) ═══ */}
+      <AnimatePresence>
+        {showImageEditModal && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-0" onClick={() => setShowImageEditModal(false)} />
+            <motion.div
+              initial={{ y: "100%", opacity: 0.5 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 28, stiffness: 320 }}
+              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-border/70 dark:border-white/[0.1] bg-card p-5 pb-8 sm:pb-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-[16px] font-bold text-foreground tracking-tight">
+                    Foto e Banner da Barbearia
+                  </h3>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">
+                    Personalize a imagem de perfil e a capa da sua barbearia
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowImageEditModal(false)}
+                  className="w-8 h-8 rounded-full bg-secondary hover:bg-secondary/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0 text-xs font-semibold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Pré-visualização combinada */}
+              <div className="rounded-2xl border border-border/60 bg-muted/30 overflow-hidden">
+                {/* Banner */}
+                <div className="relative w-full h-32 bg-muted overflow-hidden">
+                  <img
+                    src={bannerUrl || profileBannerDefault}
+                    alt="Banner da barbearia"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                  <button
+                    type="button"
+                    onClick={() => bannerInputRef.current?.click()}
+                    disabled={uploadingBanner}
+                    className="absolute top-3 right-3 h-8 px-3 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white text-[11.5px] font-medium flex items-center gap-1.5 hover:bg-black/80 active:scale-95 transition-all shadow-sm"
+                  >
+                    {uploadingBanner ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                    <span>Trocar banner</span>
+                  </button>
+                </div>
+
+                {/* Logo sobreposto */}
+                <div className="p-4 pt-0 flex items-end justify-between gap-3">
+                  <div className="relative -mt-9 shrink-0">
+                    <div className="w-18 h-18 rounded-2xl border-3 border-card bg-secondary overflow-hidden shadow-lg">
+                      <img
+                        src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
+                        alt={tenantNome}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={uploadingLogo}
+                      className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-foreground text-background flex items-center justify-center border-2 border-card shadow-sm hover:opacity-90 active:scale-95 transition-all"
+                      title="Trocar logo"
+                    >
+                      {uploadingLogo ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3 stroke-[2]" />}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 pb-1">
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={uploadingLogo}
+                      className="px-3.5 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium border border-border/40 transition-colors"
+                    >
+                      {uploadingLogo ? "Enviando..." : "Trocar foto"}
+                    </button>
+                    {bannerUrl && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveBanner}
+                        className="px-3 py-1.5 rounded-xl text-muted-foreground hover:text-destructive text-[12px] font-medium transition-colors"
+                      >
+                        Remover banner
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Informações de recomendação */}
+              <div className="p-3.5 rounded-xl bg-muted/40 border border-border/40 space-y-1.5">
+                <p className="text-[12px] text-foreground font-semibold flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 opacity-70" />
+                  <span>Formatos recomendados</span>
+                </p>
+                <ul className="text-[11.5px] text-muted-foreground space-y-1 leading-relaxed">
+                  <li>• <strong className="text-foreground/90 font-medium">Foto da barbearia:</strong> formato quadrado (1:1), 500x500px ou superior.</li>
+                  <li>• <strong className="text-foreground/90 font-medium">Banner de capa:</strong> formato horizontal (16:9 ou 3:1), 1920x640px ou superior.</li>
+                </ul>
+              </div>
+
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowImageEditModal(false)}
+                  className="w-full h-11 rounded-xl bg-foreground text-background text-[13px] font-semibold active:scale-[0.98] transition-transform shadow-xs"
+                >
+                  Concluir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══ DRAWER DE SELEÇÃO DE BARBEARIA / FILIAL (GAVETA DE BAIXO PARA CIMA) ═══ */}
+      <AnimatePresence>
+        {showSelectUnitDrawer && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-0" onClick={() => setShowSelectUnitDrawer(false)} />
+            <motion.div
+              initial={{ y: "100%", opacity: 0.5 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 28, stiffness: 320 }}
+              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-border/70 dark:border-white/[0.1] bg-card p-5 pb-8 sm:pb-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto"
+            >
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-[16px] font-bold text-foreground tracking-tight">
+                    Filiais da Barbearia
+                  </h3>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">
+                    Selecione a unidade para gerenciar
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSelectUnitDrawer(false)}
+                  className="w-8 h-8 rounded-full bg-secondary hover:bg-secondary/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0 text-xs font-semibold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                {unidades.map((u) => {
+                  const isCurrent = activeUnit?.id === u.id;
+                  const uLogo = u.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO;
+
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => handleSelectUnit(u)}
+                      className={cn(
+                        "w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between gap-3 active:scale-[0.99] group",
+                        isCurrent
+                          ? "bg-secondary/40 border-foreground/30 shadow-xs ring-1 ring-foreground/20"
+                          : "bg-card border-border/70 dark:border-white/[0.08] hover:border-foreground/30 hover:bg-secondary/20"
+                      )}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-bold text-sm transition-colors overflow-hidden",
+                            isCurrent
+                              ? "bg-foreground text-background"
+                              : "bg-secondary text-foreground group-hover:bg-secondary/80"
+                          )}
+                        >
+                          {uLogo ? (
+                            <img src={uLogo} alt={u.nome} className="w-full h-full object-cover" />
+                          ) : (
+                            <Store className="w-5 h-5 stroke-[1.8]" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-bold text-foreground truncate block leading-tight">
+                              {u.nome}
+                            </span>
+                            {u.is_sede && (
+                              <span className="text-[9.5px] font-semibold uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
+                                Sede
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11.5px] text-muted-foreground truncate mt-1">
+                            {[u.bairro, u.cidade].filter(Boolean).join(", ") || u.telefone || "Endereço não informado"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 pl-2">
+                        {isCurrent ? (
+                          <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                            Gerenciando
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground transition-colors flex items-center gap-0.5">
+                            Selecionar
+                            <ChevronRight className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSelectUnitDrawer(false);
+                    setWizardOpen(true);
+                  }}
+                  className="w-full h-11 rounded-xl bg-foreground text-background text-[13px] font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all hover:opacity-90 shadow-sm"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Cadastrar Nova Barbearia</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Wizard de Criação de Unidade */}
       <UnidadeWizardSheet
         open={wizardOpen}
         onOpenChange={setWizardOpen}
@@ -1168,7 +962,7 @@ export function BarberConfigBarbearia({
         }}
       />
 
-      {/* Modal de Detalhes da Unidade se acionado */}
+      {/* Modal de Detalhes da Unidade */}
       {detailUnidade && (
         <UnidadeDetailScreen
           open={!!detailUnidade}
@@ -1182,5 +976,45 @@ export function BarberConfigBarbearia({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Subcomponente de item de menu 100% sério, alinhado à tipografia do Atendimento & Notificações
+ */
+function ConfigMenuItem({
+  label,
+  description,
+  badge,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  badge?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/20 active:bg-muted/40 transition-colors group"
+    >
+      <div className="min-w-0 pr-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[13.5px] font-semibold text-foreground block truncate leading-tight group-hover:text-foreground transition-colors">
+            {label}
+          </span>
+          {badge && (
+            <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
+              {badge}
+            </span>
+          )}
+        </div>
+        <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 leading-snug font-normal">
+          {description}
+        </span>
+      </div>
+      <ChevronRight className="w-4 h-4 text-muted-foreground/35 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+    </button>
   );
 }
