@@ -150,42 +150,26 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
   }, []);
 
   // Determina se o horário deve piscar verde ou permanecer estático
+  // Regra solicitada: pisca exclusivamente enquanto o corte estiver em andamento (ex: 18:00 até 18:30).
+  // Antes das 18:00 NÃO pisca. Após as 18:30 para de piscar até começar o próximo corte às 19:00.
   const isBlinking = useMemo(() => {
     if (typeof propIsBlinking === "boolean") return propIsBlinking;
-    if (typeof appointment?.isBlinking === "boolean") return appointment.isBlinking;
-
-    // Se temos a informação direta de qual agendamento está piscando na Agenda
-    if (activeBlinkingState) {
-      if (activeBlinkingState.id && appointment?.id) {
-        return activeBlinkingState.id === appointment.id;
-      }
-      if (activeBlinkingState.hora && appointment?.hora) {
-        return activeBlinkingState.hora === appointment.hora.slice(0, 5);
-      }
+    if (!appointment?.hora) return false;
+    if (appointment.status === "completed" || appointment.status === "no_show" || appointment.status === "cancelled") {
+      return false;
     }
 
-    // Fallback: cálculo baseado no horário do agendamento
-    if (!appointment?.hora) return false;
     const [h, m] = appointment.hora.split(":").map(Number);
     const startMin = (h || 0) * 60 + (m || 0);
     const dur = appointment.duracao || 30;
     const endMin = startMin + dur;
 
-    // Se o agendamento ainda está no futuro (ex: faltam mais de 5 minutos para 13:30),
-    // NÃO pisca (quem pisca na agenda é o corte atual das 12:30).
-    if (currentTimeMinutes < (startMin - 5)) {
-      return false;
-    }
-
-    // Pisca quando já está no horário (ou iminente) e ainda dentro da duração
-    return currentTimeMinutes < endMin;
+    return currentTimeMinutes >= startMin && currentTimeMinutes < endMin;
   }, [
     propIsBlinking,
-    appointment?.isBlinking,
-    appointment?.id,
     appointment?.hora,
     appointment?.duracao,
-    activeBlinkingState,
+    appointment?.status,
     currentTimeMinutes,
   ]);
 

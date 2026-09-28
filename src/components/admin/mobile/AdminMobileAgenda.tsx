@@ -187,52 +187,56 @@ export function AdminMobileAgenda({
     return eachDayOfInterval({ start, end });
   }, [selectedMonth]);
 
-  // Identifica o próximo corte de hoje para destacar os números do horário em verde
-  const nextAppointmentId = useMemo(() => {
+  // Relógio do sistema em minutos atualizado em tempo real a cada 5s
+  const [currentMinutesNow, setCurrentMinutesNow] = useState(() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const d = new Date();
+      setCurrentMinutesNow(d.getHours() * 60 + d.getMinutes());
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Agendamento que está CORTANDO AGORA no dia de hoje (dentro do horário de início até o fim da duração)
+  const currentlyCuttingApt = useMemo(() => {
     if (!isToday(selectedDate) || appointments.length === 0) return null;
 
-    const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-    // Agendamentos ativos (não concluídos, não faltas e não cancelados)
-    const activeAppointments = appointments.filter(
-      (apt) => apt.status !== "completed" && apt.status !== "no_show" && (apt as any).status !== "cancelled"
-    );
-
-    if (activeAppointments.length === 0) return null;
-
-    // Procura o primeiro agendamento cujo horário de término ainda não passou
-    const upcoming = activeAppointments.find((apt) => {
+    return appointments.find((apt) => {
+      if (apt.status === "completed" || apt.status === "no_show" || (apt as any).status === "cancelled") {
+        return false;
+      }
       const [h, m] = apt.hora.split(":").map(Number);
-      const startMin = h * 60 + m;
+      const startMin = (h || 0) * 60 + (m || 0);
       const dur = apt.duracao || apt.servico?.duracao_minutos || 30;
-      return (startMin + dur) > nowMinutes;
-    });
+      return currentMinutesNow >= startMin && currentMinutesNow < (startMin + dur);
+    }) || null;
+  }, [appointments, selectedDate, currentMinutesNow]);
 
-    if (upcoming) return upcoming.id;
-
-    // Se todos os ativos já passaram do horário teórico, destaca o primeiro não concluído
-    return activeAppointments[0]?.id || null;
-  }, [appointments, selectedDate]);
-
-  // Sincroniza em tempo real o agendamento ativo com o Dashboard ("Próximo corte")
+  // Sincroniza em tempo real o agendamento em corte ativo com o Dashboard ("Próximo corte")
   useEffect(() => {
     if (!isToday(selectedDate)) return;
-    const activeApt = appointments.find((a) => a.id === nextAppointmentId);
-    const activeHora = activeApt ? (activeApt.hora || "").slice(0, 5) : null;
 
     writeSyncCache("agenda:activeBlinkingApt", {
-      id: nextAppointmentId,
-      hora: activeHora,
+      id: currentlyCuttingApt?.id || null,
+      hora: currentlyCuttingApt ? (currentlyCuttingApt.hora || "").slice(0, 5) : null,
+      isCuttingNow: !!currentlyCuttingApt,
       updatedAt: Date.now(),
     });
 
     window.dispatchEvent(
       new CustomEvent("agenda-active-blinking-changed", {
-        detail: { id: nextAppointmentId, hora: activeHora },
+        detail: {
+          id: currentlyCuttingApt?.id || null,
+          hora: currentlyCuttingApt ? (currentlyCuttingApt.hora || "").slice(0, 5) : null,
+          isCuttingNow: !!currentlyCuttingApt,
+        },
       })
     );
-  }, [nextAppointmentId, selectedDate, appointments]);
+  }, [currentlyCuttingApt, selectedDate]);
 
   const shortDayName = (date: Date) => {
     const names = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
@@ -786,12 +790,11 @@ export function AdminMobileAgenda({
               const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
               const horaFormatted = apt.hora.substring(0, 5);
 
-              const now = new Date();
               const isViewingToday = isToday(selectedDate);
               const [h, m] = apt.hora.split(':').map(Number);
-              const endMinutes = (h * 60 + m) + duration;
-              const nowMinutes = now.getHours() * 60 + now.getMinutes();
-              const isPast = isViewingToday && endMinutes <= nowMinutes && (apt.status === 'completed' || apt.status === 'no_show');
+              const startMinutes = (h || 0) * 60 + (m || 0);
+              const endMinutes = startMinutes + duration;
+              const isPast = isViewingToday && endMinutes <= currentMinutesNow && (apt.status === 'completed' || apt.status === 'no_show');
 
               const clientName = apt.profile?.nome || "Cliente";
               const serviceName = (() => {
@@ -813,8 +816,14 @@ export function AdminMobileAgenda({
                 ? `${apt.planUsage.used}/${apt.planUsage.limit}`
                 : "2/4";
 
-              // Próximo corte do dia (destaca somente os números do horário em verde)
-              const isNextAppointment = apt.id === nextAppointmentId;
+              // Pisca o horário SE E SOMENTE SE estiver cortando agora (dentro da duração do corte no dia de hoje)
+              const isCuttingNow =
+                isViewingToday &&
+                apt.status !== 'completed' &&
+                apt.status !== 'no_show' &&
+                (apt as any).status !== 'cancelled' &&
+                currentMinutesNow >= startMinutes &&
+                currentMinutesNow < endMinutes;
 
               return (
                 <div
@@ -830,7 +839,7 @@ export function AdminMobileAgenda({
                   <div className="w-12 shrink-0 flex flex-col items-center justify-center text-center">
                     <span
                       style={
-                        isNextAppointment
+                        isCuttingNow
                           ? {
                               animation: "soft-pulse-blink 1.8s ease-in-out infinite",
                               willChange: "opacity",
@@ -839,8 +848,8 @@ export function AdminMobileAgenda({
                       }
                       className={cn(
                         "agenda-strong font-mono text-[14.5px] tabular-nums tracking-tight inline-block",
-                        isNextAppointment
-                          ? "text-emerald-600 dark:text-emerald-400/75 font-semibold animate-soft-blink"
+                        isCuttingNow
+                          ? "text-emerald-600 dark:text-emerald-400 font-bold animate-soft-blink"
                           : "text-foreground font-bold"
                       )}
                     >

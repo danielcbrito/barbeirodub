@@ -78,7 +78,7 @@ const parseDashboardData = (value: unknown): DashboardData => {
           const dur = typeof nextRaw.duracao === "number" ? nextRaw.duracao : 30;
           const now = new Date();
           const nowMin = now.getHours() * 60 + now.getMinutes();
-          return nowMin >= (sMin - 5) && nowMin < (sMin + dur);
+          return nowMin >= sMin && nowMin < (sMin + dur);
         })(),
       }
     : null;
@@ -162,7 +162,7 @@ const buildFallbackFromAgendaCache = (barbeiroId: string): { data: DashboardData
               const [h, m] = toStringValue(nextRaw.hora).split(":").map(Number);
               const sMin = (h || 0) * 60 + (m || 0);
               const dur = toNumber(nextRaw.duracao) || 30;
-              return nowMinutes >= (sMin - 5) && nowMinutes < (sMin + dur);
+              return nowMinutes >= sMin && nowMinutes < (sMin + dur);
             })(),
           }
         : null,
@@ -220,7 +220,7 @@ export async function fetchBarberDashboard(barbeiroId: string): Promise<Dashboar
     const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
     const uStartMin = (uh || 0) * 60 + (um || 0);
     const uDur = upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30;
-    const isBlinkingNow = nowMinutes >= (uStartMin - 5) && nowMinutes < (uStartMin + uDur);
+    const isBlinkingNow = nowMinutes >= uStartMin && nowMinutes < (uStartMin + uDur);
 
     parsed.nextAppointment = {
       id: upcoming.id,
