@@ -25,7 +25,6 @@ import type { Unidade } from "@/components/admin/unidades/AdminUnidades";
 
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import profileBannerDefault from "@/assets/profile-banner-default.jpg";
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
 import { resolveOldestOwnedTenant } from "@/lib/tenantOwnership";
@@ -34,11 +33,13 @@ import { cn } from "@/lib/utils";
 
 /**
  * Hub de Configurações da Barbearia — exclusivo do Administrador / Dono.
- * Padrão 100% sério, minimalista, institucional e estratégico (Alinhado a Atendimento & Notificações):
+ * Padrão 100% sério, minimalista e institucional (Alinhado rigorosamente a Atendimento & Notificações):
  *   - ScheduleHeader institucional no topo
- *   - Card compacto de identidade visual (Banner + Foto da Barbearia), onde clicar abre a personalização de foto e banner
- *   - Lista unificada única de configurações em um único bloco clean que cabe confortavelmente na tela
- *   - Gaveta (drawer) de baixo para cima para troca rápida de filiais e cadastro
+ *   - Barra superior com nome da unidade, botão [+] de cadastrar filial e botão [Trocar barbearia v]
+ *   - Card visual compacto (Banner + Foto da Barbearia) com dimensões rigorosamente fixadas
+ *   - Ao clicar no card ou em 'Editar', abre gaveta exclusiva de configuração de Foto e Banner
+ *   - Lista unificada diretamente na tela de fundo (divide-y divide-border/25), sem quadradinhos/caixas em volta
+ *   - Gaveta (drawer) de baixo para cima para troca e cadastro de filiais
  */
 
 type HubScreen =
@@ -548,43 +549,57 @@ export function BarberConfigBarbearia({
         onBack={() => navigate(`${appBasePath}/perfil`)}
       />
 
-      <div className="px-4 pt-3 max-w-md mx-auto space-y-3.5">
-        {/* Seletor Minimalista de Filial Ativa (quando houver mais de uma unidade) */}
-        {unidades.length > 1 && (
-          <div className="flex items-center justify-between px-1 py-0.5">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[14px] font-semibold text-foreground truncate">
-                {activeUnit?.nome || tenantNome}
+      <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
+        {/* Barra Superior: Barbearia Ativa + Botões de Ação */}
+        <div className="flex items-center justify-between px-1 py-0.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[14px] font-semibold text-foreground truncate">
+              {activeUnit?.nome || tenantNome}
+            </span>
+            {activeUnit?.is_sede && (
+              <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
+                Sede
               </span>
-              {activeUnit?.is_sede && (
-                <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
-                  Sede
-                </span>
-              )}
-            </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Botão + para adicionar outra barbearia */}
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="w-8 h-8 rounded-lg bg-secondary/80 hover:bg-secondary text-foreground flex items-center justify-center border border-border/40 active:scale-95 transition-all shadow-xs"
+              title="Cadastrar nova barbearia"
+              aria-label="Cadastrar nova barbearia"
+            >
+              <Plus className="w-4 h-4 stroke-[2.2]" />
+            </button>
+
+            {/* Botão Trocar Barbearia */}
             <button
               type="button"
               onClick={() => setShowSelectUnitDrawer(true)}
-              className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all shrink-0 flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40"
+              className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40 shadow-xs"
             >
               <Store className="w-3.5 h-3.5 opacity-70" />
               <span>Trocar barbearia</span>
               <ChevronDown className="w-3 h-3 opacity-60" />
             </button>
           </div>
-        )}
+        </div>
 
         {/* ═══ CARD DE IDENTIDADE VISUAL: FOTO E BANNER DA BARBEARIA ═══ */}
         <div
           onClick={() => setShowImageEditModal(true)}
           className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card overflow-hidden shadow-xs cursor-pointer group hover:border-foreground/30 transition-all"
         >
-          {/* Banner Preview Compacto e Elegante */}
-          <div className="relative w-full h-24 bg-muted overflow-hidden">
+          {/* Banner Preview Compacto com altura controlada (110px) */}
+          <div className="relative w-full h-[110px] bg-muted overflow-hidden" style={{ height: 110, maxHeight: 110 }}>
             <img
               src={bannerUrl || profileBannerDefault}
               alt="Banner da barbearia"
               className="w-full h-full object-cover group-hover:scale-[1.01] transition-transform duration-300"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
@@ -607,16 +622,26 @@ export function BarberConfigBarbearia({
             </button>
           </div>
 
-          {/* Logo e Nome da Barbearia */}
-          <div className="p-3.5 pt-2 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="relative -mt-6 shrink-0">
-                <Avatar className="w-13 h-13 rounded-2xl border-2 border-card bg-secondary overflow-hidden shadow-md">
-                  <AvatarImage src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO} className="object-cover" />
-                  <AvatarFallback className="rounded-2xl font-bold text-base bg-secondary text-foreground">
-                    {(activeUnit?.nome || tenantNome || "B").charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+          {/* Logo e Nome da Barbearia com dimensões estritamente fixadas (nunca expande em tela cheia) */}
+          <div className="px-4 pb-3.5 pt-0 flex items-end justify-between gap-3">
+            <div className="flex items-end gap-3 min-w-0">
+              {/* Avatar da Logo da Barbearia (60px x 60px fixo) */}
+              <div
+                className="relative -mt-7 shrink-0 rounded-2xl border-2 border-card bg-secondary overflow-hidden shadow-md flex items-center justify-center"
+                style={{ width: 60, height: 60, minWidth: 60, minHeight: 60, maxWidth: 60, maxHeight: 60 }}
+              >
+                {activeUnit?.logo_url || tenantLogoUrl ? (
+                  <img
+                    src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
+                    alt={tenantNome}
+                    className="w-full h-full object-cover rounded-2xl"
+                    style={{ width: 60, height: 60, objectFit: "cover" }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center font-bold text-foreground text-lg">
+                    {(tenantNome || "B").charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -624,16 +649,16 @@ export function BarberConfigBarbearia({
                     logoInputRef.current?.click();
                   }}
                   disabled={uploadingLogo}
-                  className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-foreground text-background flex items-center justify-center border border-card shadow-xs hover:opacity-90 active:scale-95 transition-all"
+                  className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-foreground text-background flex items-center justify-center border border-card shadow-xs hover:opacity-90 active:scale-95 transition-all"
                   title="Trocar foto/logo"
                 >
                   {uploadingLogo ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Camera className="w-2.5 h-2.5 stroke-[2]" />}
                 </button>
               </div>
 
-              <div className="min-w-0 pt-0.5">
+              <div className="min-w-0 pb-0.5">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-[13.5px] font-semibold text-foreground truncate">
+                  <p className="text-[14px] font-semibold text-foreground truncate leading-tight">
                     {activeUnit?.nome || tenantNome || DEFAULT_COMPANY_NAME}
                   </p>
                   {activeUnit?.is_sede && (
@@ -654,7 +679,7 @@ export function BarberConfigBarbearia({
                 e.stopPropagation();
                 setShowImageEditModal(true);
               }}
-              className="shrink-0 flex items-center gap-1 active:scale-95 transition-all px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium border border-border/40"
+              className="shrink-0 mb-0.5 flex items-center gap-1 active:scale-95 transition-all px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium border border-border/40 shadow-xs"
             >
               <span>Editar</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -662,50 +687,50 @@ export function BarberConfigBarbearia({
           </div>
         </div>
 
-        {/* ═══ LISTA UNIFICADA ÚNICA (PADRÃO ATENDIMENTO & NOTIFICAÇÕES) ═══ */}
-        {/* Fica confortavelmente na tela, sem blocos separados ou poluição visual */}
-        <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] divide-y divide-border/25 dark:divide-white/[0.06] overflow-hidden shadow-xs">
-          <ConfigMenuItem
+        {/* ═══ LISTA UNIFICADA DIRETO NA TELA DE FUNDO (PADRÃO ATENDIMENTO & NOTIFICAÇÕES) ═══ */}
+        {/* Fica 100% sério, limpo, sem quadradinhos ou caixas em volta */}
+        <div className="divide-y divide-border/25 dark:divide-white/[0.08] pt-1">
+          <ConfigListItem
             label="Dados da Barbearia"
             description="Nome, WhatsApp, endereço e redes sociais"
             onClick={() => setActiveScreen("dados-empresa")}
           />
-          <ConfigMenuItem
+          <ConfigListItem
             label="Atendimento & Notificações"
             description="WhatsApp conectado, agente de IA e lembretes automáticos"
             onClick={() => setActiveScreen("whatsapp")}
           />
-          <ConfigMenuItem
+          <ConfigListItem
             label="Horário de funcionamento"
             description="Expediente oficial e dias de atendimento da barbearia"
             onClick={() => setActiveScreen("horarios")}
           />
-          <ConfigMenuItem
+          <ConfigListItem
             label="Barbeiros & Cadeiras"
             description="Equipe de profissionais cadastrados nesta unidade"
             onClick={() => setActiveScreen("barbeiros")}
           />
-          <ConfigMenuItem
+          <ConfigListItem
             label="Serviços & Cortes"
             description="Catálogo de cortes, barbas, durações e valores"
             onClick={() => setActiveScreen("servicos")}
           />
-          <ConfigMenuItem
+          <ConfigListItem
             label="Planos da Barbearia"
             description="Clubes de fidelidade e assinaturas recorrentes"
             onClick={() => setActiveScreen("planos")}
           />
-          <ConfigMenuItem
+          <ConfigListItem
             label="Clientes da Barbearia"
             description="Base de contatos, histórico e fidelidade"
             onClick={() => setActiveScreen("clientes")}
           />
-          <ConfigMenuItem
+          <ConfigListItem
             label="Avaliações da Barbearia"
             description="Feedbacks e notas dos clientes sobre a barbearia"
             onClick={() => setActiveScreen("avaliacoes")}
           />
-          <ConfigMenuItem
+          <ConfigListItem
             label="Filiais da Barbearia"
             description={`${unidades.length} ${unidades.length === 1 ? "unidade cadastrada" : "unidades cadastradas"} · Matriz e filiais`}
             onClick={() => setShowSelectUnitDrawer(true)}
@@ -748,11 +773,12 @@ export function BarberConfigBarbearia({
               {/* Pré-visualização combinada */}
               <div className="rounded-2xl border border-border/60 bg-muted/30 overflow-hidden">
                 {/* Banner */}
-                <div className="relative w-full h-32 bg-muted overflow-hidden">
+                <div className="relative w-full h-32 bg-muted overflow-hidden" style={{ height: 128 }}>
                   <img
                     src={bannerUrl || profileBannerDefault}
                     alt="Banner da barbearia"
                     className="w-full h-full object-cover"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
                   <button
@@ -766,14 +792,18 @@ export function BarberConfigBarbearia({
                   </button>
                 </div>
 
-                {/* Logo sobreposto */}
+                {/* Logo sobreposto com dimensões estritamente fixadas */}
                 <div className="p-4 pt-0 flex items-end justify-between gap-3">
                   <div className="relative -mt-9 shrink-0">
-                    <div className="w-18 h-18 rounded-2xl border-3 border-card bg-secondary overflow-hidden shadow-lg">
+                    <div
+                      className="rounded-2xl border-3 border-card bg-secondary overflow-hidden shadow-lg flex items-center justify-center"
+                      style={{ width: 72, height: 72, minWidth: 72, minHeight: 72, maxWidth: 72, maxHeight: 72 }}
+                    >
                       <img
                         src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
                         alt={tenantNome}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover rounded-2xl"
+                        style={{ width: 72, height: 72, objectFit: "cover" }}
                       />
                     </div>
                     <button
@@ -855,7 +885,7 @@ export function BarberConfigBarbearia({
                     Filiais da Barbearia
                   </h3>
                   <p className="text-[12px] text-muted-foreground mt-0.5">
-                    Selecione a unidade para gerenciar
+                    Selecione a unidade que deseja configurar
                   </p>
                 </div>
                 <button
@@ -980,9 +1010,9 @@ export function BarberConfigBarbearia({
 }
 
 /**
- * Subcomponente de item de menu 100% sério, alinhado à tipografia do Atendimento & Notificações
+ * Subcomponente de item de menu direto na tela de fundo (Padrão Atendimento & Notificações)
  */
-function ConfigMenuItem({
+function ConfigListItem({
   label,
   description,
   badge,
@@ -997,11 +1027,11 @@ function ConfigMenuItem({
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/20 active:bg-muted/40 transition-colors group"
+      className="w-full py-3.5 px-1 flex items-center justify-between text-left hover:opacity-80 active:opacity-60 transition-opacity group"
     >
       <div className="min-w-0 pr-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13.5px] font-semibold text-foreground block truncate leading-tight group-hover:text-foreground transition-colors">
+          <span className="text-[13.5px] font-semibold text-foreground block truncate leading-tight">
             {label}
           </span>
           {badge && (
