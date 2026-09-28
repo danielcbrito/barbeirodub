@@ -16,6 +16,7 @@ import { useBarberAvaliacoes } from "@/hooks/useBarberAvaliacoes";
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
 import { ThemeSegmentedToggle } from "@/components/profile/ThemeSegmentedToggle";
 import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
+import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
 
 interface BarberMobileProfileProps {
   barberContext: BarberContext;
@@ -82,6 +83,7 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
   const [tenantSlug, setTenantSlug] = useState<string | null>(cached?.tenantSlug ?? null);
   const [avatarEditOpen, setAvatarEditOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [barbeariaDrawerOpen, setBarbeariaDrawerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -351,7 +353,7 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
           <div className="mt-4 mx-5">
             <button
               type="button"
-              onClick={() => navigate(`${basePath}/config-barbearia`)}
+              onClick={() => setBarbeariaDrawerOpen(true)}
               className="w-full relative overflow-hidden rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 text-left active:scale-[0.99] transition-all group shadow-xs hover:border-foreground/30 flex items-center justify-between gap-4"
             >
               <div className="min-w-0 flex-1">
@@ -461,6 +463,16 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
         onClose={() => setShowWhenToSend(false)}
         onSelectNow={() => navigate(`${basePath}/disparo`)}
         onSelectSchedule={() => navigate(`${basePath}/disparo?mode=schedule`)}
+      />
+
+      <SelectBarbeariaDrawer
+        open={barbeariaDrawerOpen}
+        onClose={() => setBarbeariaDrawerOpen(false)}
+        tenantId={barberContext.tenantId}
+        onSelectUnit={(unit) => {
+          setBarbeariaDrawerOpen(false);
+          navigate(`${basePath}/config-barbearia?unidade=${unit.id}`);
+        }}
       />
     </>
   );
