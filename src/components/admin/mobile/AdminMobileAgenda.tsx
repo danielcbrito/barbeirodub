@@ -711,10 +711,10 @@ export function AdminMobileAgenda({
                 setManualBookingOpen(true);
               }
             }}
-            className="agenda-strong h-8.5 sm:h-9 px-3 sm:px-3.5 rounded-xl bg-foreground text-background text-[12px] sm:text-[13px] font-semibold flex items-center gap-1.5 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
+            className="agenda-strong h-10 px-4 rounded-xl bg-foreground text-background text-[13px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
             aria-label="Novo Encaixe"
           >
-            <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
+            <Plus className="w-4 h-4 stroke-[2.2]" />
             <span>Novo Encaixe</span>
           </button>
         </div>
