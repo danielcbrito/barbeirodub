@@ -37,8 +37,7 @@ export function SelectBarbeariaDrawer({
     try {
       let query = supabase
         .from("tenant_unidades")
-        .select("id, tenant_id, nome, slogan, logo_url, is_sede, ativo, rua, numero, complemento, bairro, cidade, estado, telefone, whatsapp, cep, cnpj, cpf, email, site, slug, created_at")
-        .eq("ativo", true);
+        .select("id, tenant_id, nome, slogan, logo_url, is_sede, ativo, rua, numero, complemento, bairro, cidade, estado, telefone, whatsapp, cep, cnpj, cpf, email, site, slug, created_at");
 
       if (tenantId) {
         query = query.eq("tenant_id", tenantId);
@@ -176,6 +175,11 @@ export function SelectBarbeariaDrawer({
                               <span className="text-[14px] font-bold text-foreground truncate block leading-tight">
                                 {u.nome}
                               </span>
+                              {!u.ativo && (
+                                <span className="text-[9.5px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 shrink-0">
+                                  Pausada
+                                </span>
+                              )}
                             </div>
                             <p className="text-[11.5px] text-muted-foreground truncate mt-1">
                               {[u.bairro, u.cidade].filter(Boolean).join(", ") || u.telefone || "Endereço não informado"}

@@ -8,6 +8,12 @@ import {
   Plus,
   Store,
   Image as ImageIcon,
+  PauseCircle,
+  PlayCircle,
+  Trash2,
+  AlertTriangle,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { BarberContext } from "@/pages/Barbeiro";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
@@ -96,6 +102,13 @@ export function BarberConfigBarbearia({
   const [showSelectUnitDrawer, setShowSelectUnitDrawer] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [detailUnidade, setDetailUnidade] = useState<Unidade | null>(null);
+
+  // Estados para Gerenciamento Operacional da Barbearia (Pausar / Excluir)
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isPausing, setIsPausing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useStatusBarColor("app-background");
 
@@ -208,8 +221,7 @@ export function BarberConfigBarbearia({
 
       let query = supabase
         .from("tenant_unidades")
-        .select("id, tenant_id, nome, slogan, logo_url, is_sede, ativo, rua, numero, complemento, bairro, cidade, estado, telefone, whatsapp, cep, cnpj, cpf, email, site, slug, created_at")
-        .eq("ativo", true);
+        .select("id, tenant_id, nome, slogan, logo_url, is_sede, ativo, rua, numero, complemento, bairro, cidade, estado, telefone, whatsapp, cep, cnpj, cpf, email, site, slug, created_at");
 
       if (tid) {
         query = query.eq("tenant_id", tid);
@@ -301,6 +313,115 @@ export function BarberConfigBarbearia({
     if (unit.tenant_id) setResolvedTenantId(unit.tenant_id);
     setShowSelectUnitDrawer(false);
     toast.success(`Gerenciando ${unit.nome}`);
+  };
+
+  /** Pausar ou reativar a barbearia/unidade ativa */
+  const handleToggleAtivo = async () => {
+    if (!activeUnit?.id) return;
+    const nextAtivo = activeUnit.ativo === false ? true : false;
+    setIsPausing(true);
+    try {
+      const { error } = await supabase
+        .from("tenant_unidades")
+        .update({ ativo: nextAtivo })
+        .eq("id", activeUnit.id);
+
+      if (error) throw error;
+
+      // Atualiza o estado local imediatamente
+      setUnidades((prev) =>
+        prev.map((u) => (u.id === activeUnit.id ? { ...u, ativo: nextAtivo } : u))
+      );
+
+      if (nextAtivo) {
+        toast.success(`Barbearia "${activeUnit.nome}" reativada com sucesso!`);
+      } else {
+        toast.success(`Barbearia "${activeUnit.nome}" pausada temporariamente.`);
+      }
+      setShowPauseModal(false);
+    } catch (err: any) {
+      console.error("[handleToggleAtivo]", err);
+      toast.error("Erro ao alterar status da barbearia. Tente novamente.");
+    } finally {
+      setIsPausing(false);
+    }
+  };
+
+  /** Excluir barbearia permanentemente com confirmação rigorosa e cascade seguro */
+  const handleDeleteUnit = async () => {
+    if (!activeUnit?.id) return;
+    if (deleteConfirmText.trim().toUpperCase() !== "EXCLUIR") {
+      toast.error('Digite "EXCLUIR" em maiúsculas para confirmar a exclusão.');
+      return;
+    }
+
+    const unitIdToDelete = activeUnit.id;
+    const unitNameToDelete = activeUnit.nome || "Barbearia";
+    setIsDeleting(true);
+
+    try {
+      // 1. Tenta invocar a Edge Function atômica delete-unit
+      let deletedViaEdge = false;
+      try {
+        const { data, error } = await supabase.functions.invoke("delete-unit", {
+          body: { unidadeId: unitIdToDelete },
+        });
+        if (!error && !data?.error) {
+          deletedViaEdge = true;
+        }
+      } catch (edgeErr) {
+        console.warn("[handleDeleteUnit] Edge function falhou ou inacessível, aplicando cascade direto:", edgeErr);
+      }
+
+      // 2. Se a Edge Function não concluiu, executa fallback seguro direto
+      if (!deletedViaEdge) {
+        await supabase.from("barbeiro_unidades").delete().eq("unidade_id", unitIdToDelete);
+        await supabase.from("agendamentos").update({ unidade_id: null }).eq("unidade_id", unitIdToDelete);
+        await supabase.from("barbeiros").update({ unidade_id: null }).eq("unidade_id", unitIdToDelete);
+
+        try {
+          await supabase.from("configuracoes_horario_unidade").delete().eq("unidade_id", unitIdToDelete);
+          await supabase.from("horarios_excepcionais").delete().eq("unidade_id", unitIdToDelete);
+          await supabase.from("client_booking_blocks").delete().eq("unidade_id", unitIdToDelete);
+          await supabase.from("barber_unit_roles").delete().eq("unidade_id", unitIdToDelete);
+        } catch {
+          // limpeza não-fatal
+        }
+
+        const { error: delError } = await supabase
+          .from("tenant_unidades")
+          .delete()
+          .eq("id", unitIdToDelete);
+
+        if (delError) throw delError;
+      }
+
+      toast.success(`Barbearia "${unitNameToDelete}" excluída com sucesso.`);
+      setShowDeleteModal(false);
+      setDeleteConfirmText("");
+
+      const remainingUnits = unidades.filter((u) => u.id !== unitIdToDelete);
+      setUnidades(remainingUnits);
+
+      if (remainingUnits.length > 0) {
+        setSelectedUnidadeId(remainingUnits[0].id);
+        if (remainingUnits[0].nome) setTenantNome(remainingUnits[0].nome);
+        if (remainingUnits[0].logo_url) setTenantLogoUrl(remainingUnits[0].logo_url);
+      } else {
+        setSelectedUnidadeId(null);
+      }
+
+      await loadUnidades();
+    } catch (err: any) {
+      console.error("[handleDeleteUnit]", err);
+      toast.error(
+        err?.message?.includes("foreign")
+          ? "Não foi possível excluir: existem registros vinculados a esta unidade."
+          : "Erro ao excluir a barbearia. Tente novamente."
+      );
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   /** Upload da Logo da Barbearia */
@@ -694,10 +815,15 @@ export function BarberConfigBarbearia({
       <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
         {/* Barra Superior: Barbearia Ativa + Botão Trocar Barbearia */}
         <div className="flex items-center justify-between gap-3 px-1 py-1">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 flex items-center gap-2">
             <span className="text-[14.5px] font-semibold text-foreground truncate block">
               {activeUnit?.nome || tenantNome}
             </span>
+            {activeUnit?.ativo === false && (
+              <span className="text-[9.5px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 shrink-0">
+                Pausada
+              </span>
+            )}
           </div>
 
           {/* Botão Trocar Barbearia */}
@@ -711,6 +837,27 @@ export function BarberConfigBarbearia({
             <ChevronDown className="w-3 h-3 opacity-60" />
           </button>
         </div>
+
+        {/* Banner de Alerta se a barbearia selecionada estiver pausada */}
+        {activeUnit && activeUnit.ativo === false && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-2.5 text-amber-600 dark:text-amber-400 shadow-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12.5px] font-semibold leading-tight">Barbearia Pausada Temporariamente</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                Esta filial não está recebendo novos agendamentos no momento. Todos os dados e cadastros permanecem 100% seguros e salvos.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleAtivo}
+              disabled={isPausing}
+              className="shrink-0 text-[11.5px] font-semibold underline underline-offset-2 hover:opacity-80 active:opacity-60"
+            >
+              {isPausing ? "Reativando..." : "Reativar"}
+            </button>
+          </div>
+        )}
 
         {/* ═══ CARD DE IDENTIDADE VISUAL: FOTO E BANNER DA BARBEARIA ═══ */}
         <div
@@ -862,6 +1009,85 @@ export function BarberConfigBarbearia({
             onClick={() => setShowSelectUnitDrawer(true)}
           />
         </div>
+
+        {/* ═══ GERENCIAMENTO OPERACIONAL DA BARBEARIA (PAUSAR / EXCLUIR) ═══ */}
+        <div className="pt-4 pb-4 space-y-3">
+          <div className="px-1 flex items-center justify-between">
+            <span className="text-[11.5px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Gerenciamento da Barbearia
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border",
+                activeUnit?.ativo !== false
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+              )}
+            >
+              <span
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full",
+                  activeUnit?.ativo !== false ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                )}
+              />
+              {activeUnit?.ativo !== false ? "Operação Ativa" : "Pausada Temporariamente"}
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-border/70 dark:border-white/[0.08] bg-card p-4 space-y-3.5 shadow-xs">
+            <div className="space-y-1">
+              <h4 className="text-[14px] font-semibold text-foreground">
+                {activeUnit?.nome || tenantNome}
+              </h4>
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                {activeUnit?.ativo !== false
+                  ? "Esta filial está ativa e recebendo agendamentos normalmente. Você pode pausá-la temporariamente para suspender o fluxo sem apagar dados, ou excluí-la definitivamente caso não vá mais operar nesta unidade."
+                  : "Esta filial está pausada temporariamente e não aparece para clientes. Os dados e históricos continuam preservados. Você pode reativá-la a qualquer momento."}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {/* Botão Pausar / Reativar */}
+              {activeUnit?.ativo !== false ? (
+                <button
+                  type="button"
+                  onClick={() => setShowPauseModal(true)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[12.5px] font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <PauseCircle className="w-4 h-4 shrink-0" />
+                  <span>Pausar barbearia</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleToggleAtivo}
+                  disabled={isPausing}
+                  className="w-full h-11 px-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[12.5px] font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  {isPausing ? (
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  ) : (
+                    <PlayCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>Reativar barbearia</span>
+                </button>
+              )}
+
+              {/* Botão Excluir Barbearia */}
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteConfirmText("");
+                  setShowDeleteModal(true);
+                }}
+                className="w-full h-11 px-3.5 rounded-xl border border-destructive/30 bg-destructive/10 hover:bg-destructive/15 text-destructive text-[12.5px] font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <span>Excluir barbearia</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
 
@@ -898,6 +1124,193 @@ export function BarberConfigBarbearia({
           }}
         />
       )}
+
+      {/* ═══ MODAL DE PAUSAR / CONFIRMAR PAUSA ═══ */}
+      <AnimatePresence>
+        {showPauseModal && (
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-0" onClick={() => !isPausing && setShowPauseModal(false)} />
+            <motion.div
+              initial={{ y: "100%", opacity: 0.5 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-border/70 dark:border-white/[0.1] bg-card p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
+            >
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
+
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0 text-amber-500">
+                  <PauseCircle className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-[16px] font-bold text-foreground leading-tight">
+                    Pausar barbearia temporariamente?
+                  </h3>
+                  <p className="text-[12px] text-muted-foreground mt-1">
+                    Unidade: <strong className="text-foreground">{activeUnit?.nome || tenantNome}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !isPausing && setShowPauseModal(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 space-y-2 text-[12px] text-muted-foreground">
+                <p className="font-medium text-foreground">
+                  O que acontece ao pausar a unidade:
+                </p>
+                <ul className="space-y-1.5 list-disc list-inside text-muted-foreground">
+                  <li>A barbearia fica oculta no fluxo de agendamento de clientes.</li>
+                  <li>Não haverá acúmulo de novos agendamentos no banco de dados.</li>
+                  <li><strong>Seus dados não são perdidos:</strong> barbeiros, serviços, faturamento e cadastros ficam 100% seguros e intactos.</li>
+                  <li>Você pode reativar a operação a qualquer instante com apenas 1 clique.</li>
+                </ul>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPauseModal(false)}
+                  disabled={isPausing}
+                  className="h-11 rounded-xl border border-border/80 bg-secondary/60 hover:bg-secondary text-foreground text-[13px] font-medium transition-all active:scale-[0.98]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleAtivo}
+                  disabled={isPausing}
+                  className="h-11 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[13px] transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xs"
+                >
+                  {isPausing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <PauseCircle className="w-4 h-4" />
+                  )}
+                  <span>{isPausing ? "Pausando..." : "Confirmar pausa"}</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══ MODAL DE EXCLUIR BARBEARIA (AÇÃO CRÍTICA DE ALTA SEGURANÇA) ═══ */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm">
+            <div className="absolute inset-0" onClick={() => !isDeleting && setShowDeleteModal(false)} />
+            <motion.div
+              initial={{ y: "100%", opacity: 0.5 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-destructive/40 bg-card p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
+            >
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
+
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-destructive/15 border border-destructive/25 flex items-center justify-center shrink-0 text-destructive">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-[16px] font-bold text-foreground leading-tight">
+                    Excluir barbearia definitivamente?
+                  </h3>
+                  <p className="text-[12px] text-muted-foreground mt-1">
+                    Unidade: <strong className="text-destructive font-semibold">{activeUnit?.nome || tenantNome}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !isDeleting && setShowDeleteModal(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Alerta de Perigo Crítico */}
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 space-y-2 text-[12px]">
+                <p className="font-semibold text-destructive flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Atenção: Ação permanente e irreversível!</span>
+                </p>
+                <p className="text-muted-foreground leading-relaxed">
+                  Esta operação apagará todos os dados exclusivos vinculados a esta unidade (<strong className="text-foreground">{activeUnit?.nome || tenantNome}</strong>) do banco de dados:
+                </p>
+                <ul className="space-y-1 list-disc list-inside text-muted-foreground">
+                  <li>Os vínculos de barbeiros com esta unidade serão desfeitos.</li>
+                  <li>As referências de agendamentos desta filial serão desvinculadas.</li>
+                  <li>A unidade será apagada permanentemente do cadastro.</li>
+                  <li><strong>As outras barbearias e filiais não serão afetadas.</strong></li>
+                </ul>
+              </div>
+
+              {/* Dica estratégica antes da exclusão */}
+              <div className="rounded-xl border border-border/60 bg-secondary/30 p-3 flex items-start gap-2.5">
+                <Store className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+                  Se você quer apenas suspender a unidade temporariamente sem perder seus dados, use a opção <strong className="text-foreground">Pausar barbearia</strong>.
+                </p>
+              </div>
+
+              {/* Confirmação por digitação */}
+              <div className="space-y-2 pt-1">
+                <label className="text-[12px] font-medium text-foreground block">
+                  Para confirmar, digite <span className="font-mono font-bold text-destructive">EXCLUIR</span> no campo abaixo:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="Digite EXCLUIR"
+                  disabled={isDeleting}
+                  className="w-full h-11 px-3.5 rounded-xl border border-border/80 bg-background text-foreground text-[13px] placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-destructive/40 focus:border-destructive transition-all"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="grid grid-cols-2 gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={isDeleting}
+                  className="h-11 rounded-xl border border-border/80 bg-secondary/60 hover:bg-secondary text-foreground text-[13px] font-medium transition-all active:scale-[0.98]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteUnit}
+                  disabled={isDeleting || deleteConfirmText.trim().toUpperCase() !== "EXCLUIR"}
+                  className={cn(
+                    "h-11 rounded-xl text-white font-semibold text-[13px] transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xs",
+                    deleteConfirmText.trim().toUpperCase() === "EXCLUIR" && !isDeleting
+                      ? "bg-destructive hover:bg-destructive/90 cursor-pointer"
+                      : "bg-destructive/40 text-white/50 cursor-not-allowed opacity-60"
+                  )}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  <span>{isDeleting ? "Excluindo..." : "Excluir Definitivamente"}</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
