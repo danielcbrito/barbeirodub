@@ -813,8 +813,8 @@ export function BarberConfigBarbearia({
       />
 
       <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
-        {/* Barra Superior: Barbearia Ativa + Botão Trocar Barbearia */}
-        <div className="flex items-center justify-between gap-3 px-1 py-1">
+        {/* Barra Superior: Barbearia Ativa + Botões de Ação */}
+        <div className="flex items-center justify-between gap-2 px-1 py-1">
           <div className="min-w-0 flex-1 flex items-center gap-2">
             <span className="text-[14.5px] font-semibold text-foreground truncate block">
               {activeUnit?.nome || tenantNome}
@@ -826,16 +826,31 @@ export function BarberConfigBarbearia({
             )}
           </div>
 
-          {/* Botão Trocar Barbearia */}
-          <button
-            type="button"
-            onClick={() => setShowSelectUnitDrawer(true)}
-            className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40 shadow-xs shrink-0"
-          >
-            <Store className="w-3.5 h-3.5 opacity-70" />
-            <span>Trocar barbearia</span>
-            <ChevronDown className="w-3 h-3 opacity-60" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Se houver mais de 1 barbearia cadastrada, exibe o botão Trocar Barbearia */}
+            {unidades.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowSelectUnitDrawer(true)}
+                className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40 shadow-xs"
+              >
+                <Store className="w-3.5 h-3.5 opacity-70" />
+                <span>Trocar barbearia</span>
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </button>
+            )}
+
+            {/* Botão de Adicionar Nova Barbearia no topo */}
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="text-[12px] font-medium text-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40 shadow-xs"
+              title="Adicionar nova barbearia"
+            >
+              <Plus className="w-3.5 h-3.5 text-foreground stroke-[2.2]" />
+              <span>Nova barbearia</span>
+            </button>
+          </div>
         </div>
 
         {/* Banner de Alerta se a barbearia selecionada estiver pausada */}
@@ -1005,9 +1020,41 @@ export function BarberConfigBarbearia({
           />
           <ConfigListItem
             label="Filiais da Barbearia"
-            description={`${unidades.length} ${unidades.length === 1 ? "unidade cadastrada" : "unidades cadastradas"} · Matriz e filiais`}
-            onClick={() => setShowSelectUnitDrawer(true)}
+            description={`${unidades.length} ${unidades.length === 1 ? "1 unidade cadastrada · Matriz" : `${unidades.length} unidades cadastradas · Matriz e filiais`}`}
+            onClick={() => {
+              if (unidades.length <= 1) {
+                setWizardOpen(true);
+              } else {
+                setShowSelectUnitDrawer(true);
+              }
+            }}
           />
+        </div>
+
+        {/* ═══ ADICIONAR UMA NOVA BARBEARIA (SIMPLES, TRADICIONAL & DIRETO) ═══ */}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setWizardOpen(true)}
+            className="w-full p-3.5 rounded-2xl border border-dashed border-border/80 dark:border-white/[0.15] bg-card/50 hover:bg-secondary/40 active:scale-[0.99] transition-all flex items-center justify-between gap-3 text-left group shadow-xs"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center shrink-0 border border-border/40 group-hover:scale-105 transition-transform text-foreground">
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[13.5px] font-semibold text-foreground block truncate">
+                  Adicionar uma nova barbearia
+                </span>
+                <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5">
+                  Cadastrar uma nova filial ou unidade para o seu negócio
+                </span>
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-full bg-secondary/60 flex items-center justify-center shrink-0 text-muted-foreground group-hover:text-foreground group-hover:bg-secondary transition-colors">
+              <ChevronRight className="w-4 h-4" />
+            </div>
+          </button>
         </div>
 
         {/* ═══ GERENCIAMENTO OPERACIONAL DA BARBEARIA (PAUSAR / EXCLUIR) ═══ */}

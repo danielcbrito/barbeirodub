@@ -267,6 +267,32 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
     setScopeOpen(true);
   };
 
+  const handleConfigBarbeariaClick = async () => {
+    const tid = tenantId;
+    if (!tid) {
+      navigate(`${basePath}/config-barbearia`);
+      return;
+    }
+
+    try {
+      const { data: units } = await supabase
+        .from("tenant_unidades")
+        .select("id, nome")
+        .eq("tenant_id", tid);
+
+      // Se só existir uma barbearia (ou nenhuma cadastrada ainda), entra DIRETO sem subir a gaveta!
+      if (!units || units.length <= 1) {
+        const singleId = units?.[0]?.id;
+        navigate(singleId ? `${basePath}/config-barbearia?unidade=${singleId}` : `${basePath}/config-barbearia`);
+      } else {
+        // Se houver mais de uma barbearia, aí sim abre a gaveta de escolha
+        setBarbeariaDrawerOpen(true);
+      }
+    } catch {
+      navigate(`${basePath}/config-barbearia`);
+    }
+  };
+
   const initials = email ? email.charAt(0).toUpperCase() : "A";
 
   useStatusBarColor("app-background");
@@ -495,7 +521,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
         >
           <button
             type="button"
-            onClick={() => setBarbeariaDrawerOpen(true)}
+            onClick={handleConfigBarbeariaClick}
             className="w-full relative overflow-hidden rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 text-left active:scale-[0.99] transition-all group shadow-xs hover:border-foreground/30 flex items-center justify-between gap-4"
           >
             <div className="min-w-0 flex-1">
