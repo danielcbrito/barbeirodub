@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 
 interface Barbeiro {
   id: string;
@@ -148,27 +149,13 @@ export function AdminEfiCredenciais() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          aria-label="Voltar"
-          className="h-10 w-10 rounded-full flex items-center justify-center text-foreground/85 active:scale-95 transition-transform"
-        >
-          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-semibold flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" />
-            Credenciais Efí Bank
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Cadastro seguro das credenciais individuais de cada barbeiro na Efí Bank.
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <ScheduleHeader
+        title="Credenciais Efí Bank"
+        subtitle="Cadastro seguro das credenciais individuais de cada barbeiro na Efí Bank"
+        onBack={() => navigate(-1)}
+      />
+      <div className="space-y-6 max-w-4xl mx-auto px-4 md:px-0">
 
       {/* Aviso de segurança */}
       <Card className="p-4 border-primary/30 bg-primary/5">
@@ -355,6 +342,7 @@ export function AdminEfiCredenciais() {
           </div>
         </form>
       </Card>
+      </div>
     </div>
   );
 }

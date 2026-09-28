@@ -602,7 +602,7 @@ export function BarberConfigBarbearia({
                       {activeUnit?.nome || tenantNome || DEFAULT_COMPANY_NAME}
                     </p>
                     <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
-                      {activeUnit?.is_sede ? "Unidade Principal (Sede)" : "Filial da barbearia"}
+                      Unidade da barbearia
                     </p>
                   </div>
                 </div>
@@ -631,16 +631,6 @@ export function BarberConfigBarbearia({
                 <p className="text-[11.5px] text-muted-foreground leading-relaxed">
                   Para máxima nitidez, use imagem quadrada (1:1) para a foto de perfil e formato horizontal panorâmico (16:9) para o banner.
                 </p>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveScreen("hub")}
-                  className="w-full h-11 rounded-xl bg-foreground text-background text-[13px] font-semibold active:scale-[0.98] transition-transform shadow-xs"
-                >
-                  Salvar e Voltar
-                </button>
               </div>
             </div>
           </div>
@@ -702,42 +692,24 @@ export function BarberConfigBarbearia({
       />
 
       <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
-        {/* Barra Superior: Barbearia Ativa + Botões de Ação */}
-        <div className="flex items-center justify-between px-1 py-0.5">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[14px] font-semibold text-foreground truncate">
+        {/* Barra Superior: Barbearia Ativa + Botão Trocar Barbearia */}
+        <div className="flex items-center justify-between gap-3 px-1 py-1">
+          <div className="min-w-0 flex-1">
+            <span className="text-[14.5px] font-semibold text-foreground truncate block">
               {activeUnit?.nome || tenantNome}
             </span>
-            {activeUnit?.is_sede && (
-              <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
-                Sede
-              </span>
-            )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            {/* Botão + para adicionar outra barbearia */}
-            <button
-              type="button"
-              onClick={() => setWizardOpen(true)}
-              className="w-8 h-8 rounded-lg bg-secondary/80 hover:bg-secondary text-foreground flex items-center justify-center border border-border/40 active:scale-95 transition-all shadow-xs"
-              title="Cadastrar nova barbearia"
-              aria-label="Cadastrar nova barbearia"
-            >
-              <Plus className="w-4 h-4 stroke-[2.2]" />
-            </button>
-
-            {/* Botão Trocar Barbearia */}
-            <button
-              type="button"
-              onClick={() => setShowSelectUnitDrawer(true)}
-              className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40 shadow-xs"
-            >
-              <Store className="w-3.5 h-3.5 opacity-70" />
-              <span>Trocar barbearia</span>
-              <ChevronDown className="w-3 h-3 opacity-60" />
-            </button>
-          </div>
+          {/* Botão Trocar Barbearia */}
+          <button
+            type="button"
+            onClick={() => setShowSelectUnitDrawer(true)}
+            className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40 shadow-xs shrink-0"
+          >
+            <Store className="w-3.5 h-3.5 opacity-70" />
+            <span>Trocar barbearia</span>
+            <ChevronDown className="w-3 h-3 opacity-60" />
+          </button>
         </div>
 
         {/* ═══ CARD DE IDENTIDADE VISUAL: FOTO E BANNER DA BARBEARIA ═══ */}
@@ -818,16 +790,9 @@ export function BarberConfigBarbearia({
               </div>
 
               <div className="min-w-0 pb-0.5">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-[14px] font-semibold text-foreground truncate leading-tight">
-                    {activeUnit?.nome || tenantNome || DEFAULT_COMPANY_NAME}
-                  </p>
-                  {activeUnit?.is_sede && (
-                    <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
-                      Sede
-                    </span>
-                  )}
-                </div>
+                <p className="text-[14px] font-semibold text-foreground truncate leading-tight">
+                  {activeUnit?.nome || tenantNome || DEFAULT_COMPANY_NAME}
+                </p>
                 <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
                   Foto de perfil e banner da barbearia
                 </p>

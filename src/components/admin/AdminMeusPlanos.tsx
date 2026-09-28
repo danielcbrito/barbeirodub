@@ -10,6 +10,7 @@ import { ChevronLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveOldestOwnedTenant } from "@/lib/tenantOwnership";
 import { useAdminBarbeiroId } from "@/hooks/useAdminBarbeiroId";
+import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import { AdminAssinaturas } from "./AdminAssinaturas";
 
 interface Props {
@@ -58,25 +59,12 @@ export function AdminMeusPlanos({ basePath = "/admin" }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate(`${basePath}/perfil`)}
-          aria-label="Voltar"
-          className="h-10 w-10 rounded-full flex items-center justify-center text-foreground/85 active:scale-95 transition-transform"
-        >
-          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
-        </button>
-        <div>
-          <h1 className="text-[15px] font-semibold tracking-tight text-foreground">
-            Meus Planos
-          </h1>
-          <p className="text-[11px] text-muted-foreground/60">
-            Clientes com plano vinculados a você
-          </p>
-        </div>
-      </div>
+      {/* Header Institucional Padronizado (Sticky com barra sólida atrás) */}
+      <ScheduleHeader
+        title="Meus Planos"
+        subtitle="Clientes com plano vinculados a você"
+        onBack={() => navigate(`${basePath}/perfil`)}
+      />
 
       <AdminAssinaturas
         tenantId={tenantId}

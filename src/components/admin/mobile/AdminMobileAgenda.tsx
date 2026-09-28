@@ -537,8 +537,13 @@ export function AdminMobileAgenda({
   const selectedDateKey = getDateKey(selectedDate);
   const isShowingSelectedDate = appointmentsDateKey === selectedDateKey;
 
-  const rawDateTitle = format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR });
-  const formattedDateTitle = rawDateTitle.charAt(0).toUpperCase() + rawDateTitle.slice(1);
+  const isSelectedToday = isToday(selectedDate);
+  const weekdayName = isSelectedToday
+    ? "Hoje"
+    : format(selectedDate, "EEEE", { locale: ptBR }).replace("-feira", "");
+  const capitalizedWeekday = weekdayName.charAt(0).toUpperCase() + weekdayName.slice(1);
+  const dayAndMonth = format(selectedDate, "d 'de' MMMM", { locale: ptBR });
+  const formattedDateTitle = `${capitalizedWeekday}, ${dayAndMonth}`;
 
   return (
     <div className="admin-mobile-agenda flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
@@ -681,12 +686,12 @@ export function AdminMobileAgenda({
       {/* ══════ ÁREA SCROLLÁVEL: DATA, CONTAGEM E BOTÃO SOBEM JUNTOS AO ROLAR A TELA ══════ */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-28 pt-2">
         {/* Barra de Ação (Data + Contagem + Botão Novo Encaixe) — sobe junto com os agendamentos */}
-        <div className="px-4 pt-1 pb-3 flex items-center justify-between">
-          <div className="min-w-0 pr-2">
-            <h3 className="agenda-strong text-[15px] font-bold text-foreground tracking-tight truncate">
+        <div className="px-4 pt-1 pb-3 flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1 pr-1">
+            <h3 className="agenda-strong text-[14px] sm:text-[15px] font-bold text-foreground tracking-tight truncate">
               {formattedDateTitle}
             </h3>
-            <p className="agenda-subtle text-[12px] font-medium text-muted-foreground mt-0.5">
+            <p className="agenda-subtle text-[11.5px] sm:text-[12px] font-medium text-muted-foreground mt-0.5 truncate">
               {appointments.length === 0
                 ? "Nenhum agendamento"
                 : appointments.length === 1
@@ -706,7 +711,7 @@ export function AdminMobileAgenda({
                 setManualBookingOpen(true);
               }
             }}
-            className="agenda-strong h-9 px-4 rounded-xl bg-foreground text-background text-[13px] font-semibold flex items-center gap-1.5 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-xs shrink-0"
+            className="agenda-strong h-8.5 sm:h-9 px-3 sm:px-3.5 rounded-xl bg-foreground text-background text-[12px] sm:text-[13px] font-semibold flex items-center gap-1.5 active:scale-95 hover:opacity-90 transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
             aria-label="Novo Encaixe"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
@@ -852,15 +857,15 @@ export function AdminMobileAgenda({
                   {/* Conteúdo Principal do Agendamento */}
                   <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
                     {/* Linha Superior: Nome do Cliente + Preço / Plano */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="agenda-strong text-[15px] font-semibold text-foreground tracking-tight truncate">
+                    <div className="flex items-center justify-between gap-2 overflow-hidden w-full">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+                        <span className="agenda-strong text-[14px] sm:text-[15px] font-semibold text-foreground tracking-tight truncate block">
                           {clientName}
                         </span>
                         {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       </div>
 
-                      <span className="agenda-strong text-[14px] font-bold tabular-nums text-foreground shrink-0">
+                      <span className="agenda-strong text-[13.5px] sm:text-[14px] font-bold tabular-nums text-foreground shrink-0 text-right">
                         {isPlan
                           ? "Plano"
                           : isFree
@@ -870,20 +875,22 @@ export function AdminMobileAgenda({
                     </div>
 
                     {/* Linha Inferior: Tesourinha + Serviço à esquerda | Forma de Pagamento com ícone (ou contagem X/Y do Plano) à direita */}
-                    <div className="flex items-center justify-between gap-2 text-[12px]">
+                    <div className="flex items-center justify-between gap-2 overflow-hidden w-full text-[12px]">
                       {/* Esquerda: Tesourinha + Nome do Serviço */}
-                      <div className="flex items-center gap-1.5 min-w-0 truncate font-medium text-muted-foreground">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden font-medium text-muted-foreground">
                         <Scissors className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                        <span className="agenda-subtle truncate text-foreground/80">{serviceName}</span>
+                        <span className="agenda-subtle truncate text-foreground/80 text-[11.5px] sm:text-[12px] block">
+                          {serviceName}
+                        </span>
                       </div>
 
                       {/* Direita: Abaixo do Preço ou Abaixo do Plano */}
                       {isPlan ? (
-                        <div className="flex items-center gap-1 shrink-0 font-semibold tabular-nums text-[12px] text-muted-foreground/80">
+                        <div className="flex items-center gap-1 shrink-0 font-semibold tabular-nums text-[12px] text-muted-foreground/80 text-right">
                           <span className="agenda-subtle">{planUsageCount}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-medium">
+                        <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-medium text-right">
                           <PayIcon className={cn("w-3.5 h-3.5 shrink-0", paymentBadge.iconColor)} />
                           <span className="agenda-subtle text-muted-foreground/85">{paymentBadge.label}</span>
                         </div>

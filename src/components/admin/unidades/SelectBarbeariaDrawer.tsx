@@ -101,7 +101,8 @@ export function SelectBarbeariaDrawer({
               initial={{ y: "100%", opacity: 0.5 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
-              transition={{ type: "spring", damping: 28, stiffness: 320 }}
+              transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+              style={{ willChange: "transform" }}
               className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-border/70 dark:border-white/[0.1] bg-card p-5 pb-8 sm:pb-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
             >
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
@@ -175,11 +176,6 @@ export function SelectBarbeariaDrawer({
                               <span className="text-[14px] font-bold text-foreground truncate block leading-tight">
                                 {u.nome}
                               </span>
-                              {u.is_sede && (
-                                <span className="text-[9.5px] font-semibold uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
-                                  Sede
-                                </span>
-                              )}
                             </div>
                             <p className="text-[11.5px] text-muted-foreground truncate mt-1">
                               {[u.bairro, u.cidade].filter(Boolean).join(", ") || u.telefone || "Endereço não informado"}

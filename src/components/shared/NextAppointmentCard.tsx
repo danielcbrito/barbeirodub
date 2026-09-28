@@ -288,36 +288,36 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
         {/* Conteúdo Principal do Agendamento */}
         <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
           {/* Linha Superior: Nome do Cliente + Preço / Plano */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="agenda-strong text-[15px] font-semibold text-foreground tracking-tight truncate">
+          <div className="flex items-center justify-between gap-2 overflow-hidden w-full">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+              <span className="agenda-strong text-[14px] sm:text-[15px] font-semibold text-foreground tracking-tight truncate block">
                 {appointment.clientName || "Cliente"}
               </span>
               {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
             </div>
 
-            <span className="agenda-strong text-[14px] font-bold tabular-nums text-foreground shrink-0">
+            <span className="agenda-strong text-[13.5px] sm:text-[14px] font-bold tabular-nums text-foreground shrink-0 text-right">
               {isPlan ? "Plano" : isFree ? "Grátis" : priceFormatted}
             </span>
           </div>
 
           {/* Linha Inferior: Tesourinha + Serviço à esquerda | Forma de Pagamento com ícone (ou contagem X/Y do Plano) à direita */}
-          <div className="flex items-center justify-between gap-2 text-[12px]">
+          <div className="flex items-center justify-between gap-2 overflow-hidden w-full text-[12px]">
             {/* Esquerda: Tesourinha + Nome do Serviço */}
-            <div className="flex items-center gap-1.5 min-w-0 truncate font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden font-medium text-muted-foreground">
               <Scissors className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-              <span className="agenda-subtle truncate text-foreground/80">
+              <span className="agenda-subtle truncate text-foreground/80 text-[11.5px] sm:text-[12px] block">
                 {appointment.serviceName || "Atendimento"}
               </span>
             </div>
 
             {/* Direita: Abaixo do Preço ou Abaixo do Plano */}
             {isPlan ? (
-              <div className="flex items-center gap-1 shrink-0 font-semibold tabular-nums text-[12px] text-muted-foreground/80">
+              <div className="flex items-center gap-1 shrink-0 font-semibold tabular-nums text-[12px] text-muted-foreground/80 text-right">
                 <span className="agenda-subtle">{planUsageCount}</span>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-medium">
+              <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-medium text-right">
                 <PayIcon className={cn("w-3.5 h-3.5 shrink-0", paymentBadge.iconColor)} />
                 <span className="agenda-subtle text-muted-foreground/85">{paymentBadge.label}</span>
               </div>
