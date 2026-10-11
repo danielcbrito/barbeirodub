@@ -188,8 +188,9 @@ export function AdminCupons({ tenantId }: AdminCuponsProps = {}) {
 
   // Realtime invalidation
   useEffect(() => {
+    const channelId = `admin-cupons-${tenantId || 'global'}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`admin-cupons-${tenantId || 'global'}`)
+      .channel(channelId)
       .on("postgres_changes", {
         event: "*",
         schema: "public",

@@ -19,8 +19,9 @@ export function NotificationBell({ userId, className, iconClassName }: Notificat
     loadUnreadCount();
 
     // Real-time subscription
+    const channelId = `notification-count-${userId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`notification-count-${userId}`)
+      .channel(channelId)
       .on(
         'postgres_changes',
         {

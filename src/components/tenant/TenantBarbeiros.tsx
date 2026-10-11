@@ -139,7 +139,7 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
     loadBarbeiros();
 
     const channel = supabase
-      .channel("tenant-barbeiros")
+      .channel(`tenant-barbeiros-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "barbeiros" }, () => {
         loadBarbeiros();
       })

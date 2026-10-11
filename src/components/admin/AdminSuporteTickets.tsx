@@ -37,7 +37,7 @@ export function AdminSuporteTickets() {
 
     // Real-time updates
     const channel = supabase
-      .channel(`support-tickets-changes-${Date.now()}`)
+      .channel(`support-tickets-changes-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`)
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'support_tickets' },
         () => loadTickets()

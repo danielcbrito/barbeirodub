@@ -136,10 +136,10 @@ const Admin = () => {
     loadPendingCount();
 
     // Configurar subscription com filtro apropriado
-    const channelId = adminContext.barbeiroId || 'global';
+    const uniqueChannelName = `admin-pending-count-${channelId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = adminContext.barbeiroId
       ? supabase
-          .channel(`admin-pending-count-${channelId}`)
+          .channel(uniqueChannelName)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos', filter: `barbeiro_id=eq.${adminContext.barbeiroId}` } as const, (payload) => {
             loadPendingCount();
             if (payload.eventType === 'INSERT') {
@@ -151,7 +151,7 @@ const Admin = () => {
             }
           })
       : supabase
-          .channel(`admin-pending-count-${channelId}`)
+          .channel(uniqueChannelName)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' } as const, (payload) => {
             loadPendingCount();
             if (payload.eventType === 'INSERT') {

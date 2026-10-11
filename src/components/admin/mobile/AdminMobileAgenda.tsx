@@ -587,8 +587,9 @@ export function AdminMobileAgenda({
       }, 250);
     };
 
+    const channelId = `mobile-agenda-v6-${barbeiroId || 'all'}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`mobile-agenda-v6-${barbeiroId || 'all'}`)
+      .channel(channelId)
       .on('postgres_changes', channelConfig as any, scheduleSilentRefresh)
       .subscribe();
 

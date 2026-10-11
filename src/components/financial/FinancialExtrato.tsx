@@ -51,8 +51,9 @@ export function FinancialExtrato({ role, userId, barbeiroId }: Props) {
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.financeiro.extrato(userId, barbeiroId, pagina) });
       }, 1500);
     };
+    const channelId = `extrato-realtime-sync-${userId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`extrato-realtime-sync-${userId}`)
+      .channel(channelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pagamentos', filter: `user_id=eq.${userId}` }, invalidate)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'agendamentos', filter: `user_id=eq.${userId}` }, (payload) => {
         if ((payload.new as Record<string, unknown>)?.status === 'completed') invalidate();

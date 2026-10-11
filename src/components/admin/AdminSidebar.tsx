@@ -145,7 +145,7 @@ export function AdminSidebar({ basePath = "/admin", tenantNome, pendingCount: ex
     };
     loadPendingCount();
     const channel = supabase
-      .channel(`admin-sidebar-pending-${Date.now()}`)
+      .channel(`admin-sidebar-pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assinaturas' }, () => {
         loadPendingCount();
       })

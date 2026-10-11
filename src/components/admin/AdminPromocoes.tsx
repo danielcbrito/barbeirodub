@@ -145,8 +145,9 @@ export function AdminPromocoes({ tenantId, basePath = "/admin", initialTab = "cu
 
   // Realtime subscription for invalidation
   useEffect(() => {
+    const channelId = `admin-promocoes-${resolvedTenantId || 'global'}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`admin-promocoes-${resolvedTenantId || 'global'}`)
+      .channel(channelId)
       .on("postgres_changes", {
         event: "*",
         schema: "public",

@@ -139,7 +139,7 @@ function ensureRealtime() {
   if (realtimeStarted || typeof window === 'undefined') return;
   realtimeStarted = true;
   const channel = supabase
-    .channel('global-config-shared')
+    .channel(`global-config-shared-${Math.random().toString(36).slice(2, 9)}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'webhook_config' },

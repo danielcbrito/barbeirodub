@@ -124,7 +124,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   const navigate = useNavigate();
   const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
   const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
-  const overdueState = useOverdueAppointments(effectiveBarbeiroId);
+  const overdueState = useOverdueAppointments(effectiveBarbeiroId, { enabled: !isMobile });
   const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const now = new Date();
@@ -398,8 +398,10 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       ? { event: '*' as const, schema: 'public' as const, table: 'agendamentos' as const, filter: `barbeiro_id=eq.${adminContext.barbeiroId}` }
       : { event: '*' as const, schema: 'public' as const, table: 'agendamentos' as const };
 
+    if (isMobile) return;
+    const channelId = `admin-agenda-desktop-v3-${isTenantScope ? tenantId : (adminContext.barbeiroId || 'all')}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`admin-agenda-desktop-v3-${isTenantScope ? tenantId : (adminContext.barbeiroId || 'all')}`)
+      .channel(channelId)
       .on('postgres_changes', channelConfig as any, (payload) => {
         loadAppointments(selectedDate, true);
         if (payload.eventType === 'INSERT') {

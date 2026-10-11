@@ -103,7 +103,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   const [selectedEmptySlot, setSelectedEmptySlot] = useState({ date: "", time: "" });
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const overdueState = useOverdueAppointments(barberContext.barbeiroId);
+  const overdueState = useOverdueAppointments(barberContext.barbeiroId, { enabled: !isMobile });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -150,10 +150,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     });
   }, [queryClient, barberContext.barbeiroId, selectedDate]);
 
-  /* ── Realtime: ouvir mudanças de agendamentos ── */
+  /* ── Realtime: ouvir mudanças de agendamentos (somente no desktop, mobile tem seu próprio) ── */
   useEffect(() => {
+    if (isMobile || !barberContext.barbeiroId) return;
+    const channelId = `barber-agenda-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`barber-agenda-${barberContext.barbeiroId}`)
+      .channel(channelId)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
@@ -170,7 +172,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [barberContext.barbeiroId, invalidateAgenda]);
+  }, [barberContext.barbeiroId, invalidateAgenda, isMobile]);
 
   // Estabilizar array de dias — hoje SEMPRE no fuso local
   const today = useMemo(() => {

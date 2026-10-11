@@ -63,8 +63,9 @@ export function WooviPixSheet({ open, onOpenChange, agendamentoId, onPaid }: Pro
   /* ─── Realtime: monitora webhook que atualiza status para COMPLETED ─── */
   useEffect(() => {
     if (!charge?.correlation_id) return;
+    const channelId = `woovi-${charge.correlation_id}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`woovi-${charge.correlation_id}`)
+      .channel(channelId)
       .on(
         "postgres_changes",
         {

@@ -49,7 +49,7 @@ export function PendingPlanPayments({ barbeiroId }: PendingPlanPaymentsProps) {
     loadPendingSubscriptions();
 
     const channel = supabase
-      .channel(`pending-plan-payments-${barbeiroId}`)
+      .channel(`pending-plan-payments-${barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "assinaturas", filter: `barbeiro_id=eq.${barbeiroId}` },

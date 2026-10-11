@@ -194,10 +194,11 @@ export function useOverdueAppointments(
 
   // Escutar Realtime de agendamentos para manter atualizado instantaneamente
   useEffect(() => {
-    if (!targetBarbeiroId) return;
+    if (!targetBarbeiroId || !isEnabled) return;
 
+    const channelId = `overdue-watcher-${targetBarbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`overdue-watcher-${targetBarbeiroId}`)
+      .channel(channelId)
       .on(
         "postgres_changes",
         {
@@ -215,7 +216,7 @@ export function useOverdueAppointments(
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [targetBarbeiroId, queryClient, queryKey]);
+  }, [targetBarbeiroId, isEnabled, queryClient, queryKey]);
 
   /** Confirmação em lote de agendamentos */
   const completeBulk = useCallback(

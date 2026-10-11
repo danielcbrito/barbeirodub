@@ -301,7 +301,7 @@ const TenantAdmin = () => {
     loadPendingCount();
 
     const ch1 = supabase
-      .channel("tenant-pending-count-agendamentos")
+      .channel(`tenant-pending-count-agendamentos-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", {
         event: "*", schema: "public", table: "agendamentos",
       }, (payload: any) => {
@@ -316,7 +316,7 @@ const TenantAdmin = () => {
       }).subscribe();
 
     const ch2 = supabase
-      .channel("tenant-pending-count-planos")
+      .channel(`tenant-pending-count-planos-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", {
         event: "*", schema: "public", table: "assinaturas",
       }, (payload: any) => {

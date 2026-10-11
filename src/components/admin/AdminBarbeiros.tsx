@@ -155,7 +155,7 @@ export function AdminBarbeiros({
     loadBarbeiros();
 
     const channel = supabase
-      .channel("admin-barbeiros")
+      .channel(`admin-barbeiros-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "barbeiros" }, () => {
         loadBarbeiros();
       })

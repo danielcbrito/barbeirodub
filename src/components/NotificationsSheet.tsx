@@ -122,8 +122,9 @@ export function NotificationsSheet({ open, onOpenChange, userId }: Notifications
     if (!userId) return;
     
     // Real-time subscription for new notifications
+    const channelId = `user-notifications-${userId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`user-notifications-${userId}`)
+      .channel(channelId)
       .on(
         'postgres_changes',
         {

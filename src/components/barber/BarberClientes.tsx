@@ -396,7 +396,7 @@ export function BarberClientes({
     };
 
     const channel = supabase
-      .channel(`barber-clientes-realtime-${barberContext.barbeiroId}`)
+      .channel(`barber-clientes-realtime-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "assinaturas" }, handleChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "plano_agendamentos_usos" }, handleChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "tenant_clientes" }, handleChange)

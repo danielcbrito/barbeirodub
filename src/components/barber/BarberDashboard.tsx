@@ -170,8 +170,9 @@ export function BarberDashboard({
 
   /* Realtime — invalida cache quando agendamentos mudam */
   useEffect(() => {
+    const channelId = `barber-dash-realtime-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`barber-dash-realtime-${barberContext.barbeiroId}`)
+      .channel(channelId)
       .on(
         "postgres_changes",
         {

@@ -157,7 +157,7 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
   useEffect(() => {
     loadClients();
     const channel = supabase
-      .channel(`admin-clients-${tenantId || "global"}`)
+      .channel(`admin-clients-${tenantId || "global"}-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => loadClients())
       // Realtime: assinaturas + usos — reflete em tempo real quando um cliente assina,
       // cancela o plano ou tem um uso de corte registrado.

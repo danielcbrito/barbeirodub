@@ -459,8 +459,9 @@ export function PortfolioManager({
 
   useEffect(() => {
     loadImages();
+    const channelId = `portfolio-${barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`portfolio-${barbeiroId}`)
+      .channel(channelId)
       .on("postgres_changes", { event: "*", schema: "public", table: "portfolio_images", filter: `barbeiro_id=eq.${barbeiroId}` }, () => loadImages())
       .subscribe();
     return () => { supabase.removeChannel(channel); };

@@ -109,7 +109,7 @@ export function AdminAvaliacoes({
   // Realtime — invalida cache quando avaliações mudam
   useEffect(() => {
     const channel = supabase
-      .channel(`admin-all-reviews-${Date.now()}`)
+      .channel(`admin-all-reviews-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "barbeiro_avaliacoes" }, () => {
         queryClient.invalidateQueries({ queryKey });
       })

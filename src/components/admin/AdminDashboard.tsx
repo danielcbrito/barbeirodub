@@ -283,7 +283,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
     const channelId = adminContext.barbeiroId || tenantId || 'global';
     const channel = supabase
-      .channel(`admin-dash-realtime-${channelId}`)
+      .channel(`admin-dash-realtime-${channelId}-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", channelConfig as any, () => loadData())
       .subscribe();
 

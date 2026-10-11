@@ -127,7 +127,7 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
   // Subscription em tempo real para atualizar badges quando houver novos agendamentos ou pagamentos
   useEffect(() => {
     const channel = supabase
-      .channel(`bottom-bar-badges-${barbeiroId || "global"}`)
+      .channel(`bottom-bar-badges-${barbeiroId || "global"}-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "agendamentos" }, () => {
         queryClient.invalidateQueries({ queryKey: ["day-appointments-count"] });
         if (barbeiroId) {

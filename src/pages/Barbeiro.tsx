@@ -363,7 +363,7 @@ const Barbeiro = () => {
     };
 
     const ch1 = supabase
-      .channel(`barber-pending-agendamentos-${barberContext.barbeiroId}`)
+      .channel(`barber-pending-agendamentos-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'agendamentos',
         filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
@@ -392,7 +392,7 @@ const Barbeiro = () => {
       }).subscribe();
 
     const ch2 = supabase
-      .channel(`barber-pending-planos-${barberContext.barbeiroId}`)
+      .channel(`barber-pending-planos-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'assinaturas',
         filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
