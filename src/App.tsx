@@ -6,7 +6,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import { useEffect, lazy, Suspense } from "react";
+import { useEffect, lazy as reactLazy, Suspense } from "react";
 import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { MaintenanceWarningBanner } from "@/components/MaintenanceWarningBanner";
@@ -24,6 +24,23 @@ import Auth from "./pages/Auth";
 
 // Todas as demais rotas são lazy: reduz drasticamente o bundle inicial
 // (Admin/Barbeiro/Cliente carregam só quando o usuário navega até elas).
+// Após uma publicação, arquivos antigos deixam de existir: recarrega 1x em silêncio.
+const lazyRetry = <T,>(fn: () => Promise<T>) => async () => {
+  try {
+    const mod = await fn();
+    sessionStorage.removeItem("dub-chunk-reload");
+    return mod;
+  } catch (err) {
+    if (!sessionStorage.getItem("dub-chunk-reload")) {
+      sessionStorage.setItem("dub-chunk-reload", "1");
+      window.location.reload();
+      return new Promise<T>(() => {});
+    }
+    throw err;
+  }
+};
+const lazy = <T extends React.ComponentType<any>>(fn: () => Promise<{ default: T }>) =>
+  reactLazy(lazyRetry(fn));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));

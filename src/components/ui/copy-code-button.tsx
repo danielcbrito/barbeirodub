@@ -15,7 +15,7 @@ interface CopyCodeProps {
  */
 function CopyCode({ code, label, className }: CopyCodeProps) {
   const [copied, setCopied] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleCopy = async () => {
     try {

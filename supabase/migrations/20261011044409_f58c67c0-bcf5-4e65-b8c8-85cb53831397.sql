@@ -1,0 +1,1 @@
+UPDATE public.webhook_config SET refresh_barber_required_at = NULL WHERE id = 'ad72a024-fac7-44f4-b476-03f278ed3a3e';
