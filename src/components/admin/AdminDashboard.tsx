@@ -64,6 +64,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
+import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
 
 
 interface AdminDashboardProps {
@@ -145,6 +147,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
   }, [propTenantNome, tenantId, adminContext.tenantId]);
   const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
   const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
+  const overdueState = useOverdueAppointments(effectiveBarbeiroId);
 
 
   const { isConnected: whatsAppConnected, isLoading: whatsAppLoading } = useWhatsAppStatus(effectiveBarbeiroId);
@@ -800,6 +803,15 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
 
 
+        {/* Notificação estratégica de atendimentos para finalizar na tela inicial */}
+        {overdueState.count > 0 && (
+          <OverdueAppointmentsBanner
+            count={overdueState.count}
+            hasPastDays={overdueState.hasOverduePastDays}
+            onOpenModal={() => navigate(`${basePath}/agenda`)}
+          />
+        )}
+
         {/* 2. Barra de Busca Arredondada Confortável e Larga (Fiel ao Mockup) */}
         <div
           onClick={() => setIsGlobalSearchOpen(true)}
@@ -811,13 +823,15 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           </span>
         </div>
 
-        {/* 3. Grid Acesso Rápido — 4 Itens (Barbearia, Horários, Clientes, Serviços) */}
+        {/* 3. Grid Acesso Rápido — 4 Itens (Barbearia, Horários, Clientes, Serviços) com Toques Sutis Apple */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <button
             onClick={() => navigate(`${basePath}/dados-empresa`)}
-            className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
+            className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-amber-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
           >
-            <IconBarbearia3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+            <div className="w-10 h-10 rounded-xl bg-amber-500/[0.08] dark:bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <IconBarbearia3D className="w-6 h-6 object-contain" />
+            </div>
             <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
               Barbearia
             </span>
@@ -825,9 +839,11 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
           <button
             onClick={() => navigate(`${basePath}/horarios`)}
-            className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
+            className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-sky-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
           >
-            <IconHorarios3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+            <div className="w-10 h-10 rounded-xl bg-sky-500/[0.08] dark:bg-sky-500/15 border border-sky-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <IconHorarios3D className="w-6 h-6 object-contain" />
+            </div>
             <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
               Horários
             </span>
@@ -835,9 +851,11 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
           <button
             onClick={() => navigate(`${basePath}/clientes`)}
-            className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
+            className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-emerald-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
           >
-            <IconClientes3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/[0.08] dark:bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <IconClientes3D className="w-6 h-6 object-contain" />
+            </div>
             <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
               Clientes
             </span>
@@ -845,9 +863,11 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
           <button
             onClick={() => navigate(`${basePath}/servicos/cortes`)}
-            className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
+            className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-violet-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
           >
-            <IconServicos3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+            <div className="w-10 h-10 rounded-xl bg-violet-500/[0.08] dark:bg-violet-500/15 border border-violet-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <IconServicos3D className="w-6 h-6 object-contain" />
+            </div>
             <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
               Serviços
             </span>

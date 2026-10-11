@@ -37,7 +37,6 @@ import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment } from "@
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
-import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 
 interface MobileAppointment {
@@ -814,34 +813,38 @@ export function AdminMobileAgenda({
             </p>
           </div>
 
-          {/* Botão Novo Encaixe — Cápsula nativa Apple Preto Elegante */}
-          <button
-            type="button"
-            onClick={() => {
-              if (onAddClick) {
-                onAddClick(selectedDateKey, "09:00");
-              } else {
-                setSelectedSlotTime("09:00");
-                setManualBookingOpen(true);
-              }
-            }}
-            className="h-9 px-4 rounded-full bg-foreground text-background text-[13px] font-semibold flex items-center justify-center gap-1.5 active:opacity-70 hover:opacity-90 transition-opacity cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
-            aria-label="Novo Encaixe"
-          >
-            <Plus className="w-4 h-4 stroke-[2.2]" />
-            <span>Novo Encaixe</span>
-          </button>
-        </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {overdueState.count > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsOverdueModalOpen(true)}
+                className="h-9 px-3.5 rounded-full bg-secondary/80 hover:bg-secondary text-foreground border border-border/40 text-[12.5px] font-semibold flex items-center justify-center gap-1.5 active:opacity-70 transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
+                aria-label="Finalizar atendimentos pendentes"
+              >
+                <Check className="w-3.5 h-3.5 stroke-[2.4]" />
+                <span>Finalizar ({overdueState.count})</span>
+              </button>
+            )}
 
-        {overdueState.count > 0 && (
-          <div className="px-4 mb-3">
-            <OverdueAppointmentsBanner
-              count={overdueState.count}
-              hasPastDays={overdueState.hasOverduePastDays}
-              onOpenModal={() => setIsOverdueModalOpen(true)}
-            />
+            {/* Botão Novo Encaixe — Cápsula nativa Apple Preto Elegante */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onAddClick) {
+                  onAddClick(selectedDateKey, "09:00");
+                } else {
+                  setSelectedSlotTime("09:00");
+                  setManualBookingOpen(true);
+                }
+              }}
+              className="h-9 px-4 rounded-full bg-foreground text-background text-[13px] font-semibold flex items-center justify-center gap-1.5 active:opacity-70 hover:opacity-90 transition-opacity cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
+              aria-label="Novo Encaixe"
+            >
+              <Plus className="w-4 h-4 stroke-[2.2]" />
+              <span>Novo Encaixe</span>
+            </button>
           </div>
-        )}
+        </div>
 
         {!isShowingSelectedDate ? (
           <div className="px-4 space-y-2.5 animate-pulse">
@@ -1075,7 +1078,26 @@ export function AdminMobileAgenda({
               );
             })}
 
-              {/* Espaçamento inferior elegante para rolagem (botão de baixo removido a pedido) */}
+              {/* Botão estratégico inferior para finalizar todos ao final dos atendimentos */}
+              {overdueState.count > 0 && (
+                <div className="pt-6 pb-6 flex flex-col items-center gap-2 px-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsOverdueModalOpen(true)}
+                    className="w-full max-w-sm h-12 rounded-full bg-foreground text-background text-[14px] font-semibold flex items-center justify-center gap-2 active:opacity-70 hover:opacity-90 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>Finalizar todos ({overdueState.count})</span>
+                  </button>
+                  <p className="text-[12px] text-muted-foreground font-normal">
+                    {overdueState.count === 1
+                      ? "1 atendimento pendente de confirmação"
+                      : `${overdueState.count} atendimentos pendentes de confirmação`}
+                  </p>
+                </div>
+              )}
+
+              {/* Espaçamento inferior elegante para rolagem */}
               <div className="pb-8" />
             </div>
           )}

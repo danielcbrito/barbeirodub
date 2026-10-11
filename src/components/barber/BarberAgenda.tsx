@@ -17,6 +17,7 @@ import {
   QrCode,
   Filter,
   ExternalLink,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarberContext } from "@/pages/Barbeiro";
@@ -33,7 +34,6 @@ import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { toast } from "sonner";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
-import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 
 interface BarberAgendaProps {
@@ -335,16 +335,6 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     <div className="flex flex-col animate-fade-in pb-16 relative">
       {/* ══════ HEADER SECTION ══════ */}
       <div className="flex-shrink-0 px-6 pt-2 pb-4">
-        {overdueState.count > 0 && (
-          <div className="mb-4">
-            <OverdueAppointmentsBanner
-              count={overdueState.count}
-              hasPastDays={overdueState.hasOverduePastDays}
-              onOpenModal={() => setIsOverdueModalOpen(true)}
-            />
-          </div>
-        )}
-
         {/* Title + Controls */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
@@ -369,6 +359,17 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            {overdueState.count > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsOverdueModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold bg-foreground text-background hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-xs"
+              >
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>Finalizar ({overdueState.count})</span>
+              </button>
+            )}
+
             <button
               onClick={() => window.open("/agenda", "_blank")}
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium bg-secondary/50 text-muted-foreground hover:bg-secondary/70 transition-all"
@@ -650,6 +651,24 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                 );
               })}
 
+              {/* Botão estratégico inferior para finalizar todos ao final dos atendimentos */}
+              {overdueState.count > 0 && (
+                <div className="pt-8 pb-4 flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsOverdueModalOpen(true)}
+                    className="h-12 px-8 rounded-full bg-foreground text-background text-[14px] font-semibold flex items-center justify-center gap-2 active:opacity-70 hover:opacity-90 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>Finalizar todos ({overdueState.count})</span>
+                  </button>
+                  <p className="text-[12px] text-muted-foreground font-normal">
+                    {overdueState.count === 1
+                      ? "1 atendimento pendente de confirmação"
+                      : `${overdueState.count} atendimentos pendentes de confirmação`}
+                  </p>
+                </div>
+              )}
             </div>
           </>
         )}

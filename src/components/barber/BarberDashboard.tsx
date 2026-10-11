@@ -29,6 +29,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { useBarberDashboard, type DashboardData } from "@/hooks/useBarberDashboard";
+import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
+import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
 
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -87,6 +89,7 @@ export function BarberDashboard({
 
   const [revenueVisible, setRevenueVisible] = useState(true);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const overdueState = useOverdueAppointments(barberContext.barbeiroId);
 
 
   const setup = useSetupCompletion({
@@ -250,7 +253,7 @@ export function BarberDashboard({
           Olá, {barberContext.apelido || "Barbeiro"}
         </h1>
         <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground mt-0.5">
-          <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <span className="font-semibold text-foreground/90 truncate">
             {tenantNome || "Barbearia DUB"}
           </span>
@@ -297,14 +300,16 @@ export function BarberDashboard({
     </div>
   );
 
-  /* ─── 3. Grid Acesso Rápido — 4 Itens (Barbearia, Horários, Clientes, Serviços) ─── */
+  /* ─── 3. Grid Acesso Rápido — 4 Itens (Barbearia, Horários, Clientes, Serviços) com Toques Sutis Apple ─── */
   const QuickAccessSquares = () => (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
       <button
         onClick={() => navigate(`${basePath}/config-barbearia`)}
-        className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
+        className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-amber-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
       >
-        <IconBarbearia3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+        <div className="w-10 h-10 rounded-xl bg-amber-500/[0.08] dark:bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <IconBarbearia3D className="w-6 h-6 object-contain" />
+        </div>
         <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
           Barbearia
         </span>
@@ -312,9 +317,11 @@ export function BarberDashboard({
 
       <button
         onClick={() => navigate(`${basePath}/horarios`)}
-        className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
+        className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-sky-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
       >
-        <IconHorarios3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+        <div className="w-10 h-10 rounded-xl bg-sky-500/[0.08] dark:bg-sky-500/15 border border-sky-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <IconHorarios3D className="w-6 h-6 object-contain" />
+        </div>
         <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
           Horários
         </span>
@@ -322,9 +329,11 @@ export function BarberDashboard({
 
       <button
         onClick={() => navigate(`${basePath}/clientes`)}
-        className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
+        className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-emerald-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
       >
-        <IconClientes3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+        <div className="w-10 h-10 rounded-xl bg-emerald-500/[0.08] dark:bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <IconClientes3D className="w-6 h-6 object-contain" />
+        </div>
         <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
           Clientes
         </span>
@@ -332,9 +341,11 @@ export function BarberDashboard({
 
       <button
         onClick={() => navigate(`${basePath}/servicos`)}
-        className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
+        className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-violet-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
       >
-        <IconServicos3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+        <div className="w-10 h-10 rounded-xl bg-violet-500/[0.08] dark:bg-violet-500/15 border border-violet-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <IconServicos3D className="w-6 h-6 object-contain" />
+        </div>
         <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
           Serviços
         </span>
@@ -363,17 +374,22 @@ export function BarberDashboard({
     );
   };
 
-  /* ─── 5. Card Faturamento do Mês — Estratégico, Simples e 100% Funcional ─── */
+  /* ─── 5. Card Faturamento do Mês — Estratégico Apple Financial ─── */
   const RevenueCard = () => {
     return (
       <div
         onClick={() => navigate(`${basePath}/carteira`)}
-        className="w-full rounded-2xl border border-border/40 dark:border-white/[0.08] bg-card p-4 sm:p-5 shadow-xs hover:border-border transition-all cursor-pointer group"
+        className="w-full rounded-2xl border border-border/40 dark:border-white/[0.08] bg-card p-4 sm:p-5 shadow-xs hover:border-emerald-500/30 transition-all cursor-pointer group relative overflow-hidden"
       >
         <div className="flex items-center justify-between pb-2">
-          <span className="text-[12.5px] font-medium text-muted-foreground">
-            Faturamento deste mês
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[12.5px] font-medium text-muted-foreground">
+              Faturamento deste mês
+            </span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+              Mês atual
+            </span>
+          </div>
           <div className="flex items-center gap-2.5">
             <button
               type="button"
@@ -397,9 +413,20 @@ export function BarberDashboard({
           <p className="text-[32px] sm:text-[38px] font-extrabold tracking-tight text-foreground tabular-nums leading-tight">
             {revenueVisible ? formatBRL(data.monthRevenue || 0) : "R$\u00A0••••"}
           </p>
-          <p className="text-[13px] text-muted-foreground mt-1 font-medium">
-            {(data.monthCuts || 0)} {(data.monthCuts || 0) === 1 ? "corte concluído" : "cortes concluídos"}
-          </p>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <p className="text-[13px] text-muted-foreground font-medium">
+              {(data?.monthCuts || 0)} {(data?.monthCuts || 0) === 1 ? "corte concluído" : "cortes concluídos"}
+            </p>
+            {(data?.monthRevenue || 0) > 0 && (
+              <>
+                <span className="text-muted-foreground/30">•</span>
+                <span className="text-[11.5px] font-semibold text-emerald-500 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  Carteira ativa
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -416,7 +443,7 @@ export function BarberDashboard({
         <button
           type="button"
           onClick={() => navigate(`${basePath}/perfil`)}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-secondary/50 dark:bg-white/[0.04] border border-border/40 dark:border-white/[0.08] text-xs hover:bg-secondary/70 active:scale-[0.99] transition-all group shadow-xs"
+          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-amber-500/[0.06] dark:bg-amber-500/[0.1] border border-amber-500/20 text-xs hover:bg-amber-500/[0.12] active:scale-[0.99] transition-all group shadow-xs"
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-pulse" />
@@ -429,6 +456,15 @@ export function BarberDashboard({
             <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </button>
+      )}
+
+      {/* Notificação estratégica de atendimentos para finalizar na tela inicial */}
+      {overdueState.count > 0 && (
+        <OverdueAppointmentsBanner
+          count={overdueState.count}
+          hasPastDays={overdueState.hasOverduePastDays}
+          onOpenModal={() => navigate(`${basePath}/agenda`)}
+        />
       )}
 
 
