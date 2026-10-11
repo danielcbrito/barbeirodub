@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { useEffect, Suspense, useState, useRef, lazy } from "react";
 import { useNavigate, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -89,6 +90,7 @@ export interface AdminContext {
   userId: string;
   isAdmin: boolean;
   tenantId?: string | null;
+  tenantBarberIds?: string[];
 }
 
 
