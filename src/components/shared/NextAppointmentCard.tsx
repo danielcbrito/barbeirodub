@@ -196,11 +196,11 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
       <div
         onClick={handleCardClick}
         className={cn(
-          "w-full rounded-xl border border-border/50 dark:border-white/[0.07] bg-card dark:bg-[#141414] p-3.5 sm:p-4 flex items-center gap-3.5 shadow-2xs hover:border-foreground/25 active:scale-[0.99] transition-all cursor-pointer",
+          "group relative w-full rounded-2xl border border-border/60 dark:border-white/[0.10] bg-card p-3.5 sm:p-4 flex items-center gap-3.5 shadow-xs hover:border-border active:scale-[0.99] transition-all cursor-pointer overflow-hidden",
           className
         )}
       >
-        <div className="w-10 h-10 rounded-xl bg-secondary/80 dark:bg-secondary/60 border border-border/50 flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-secondary/80 dark:bg-white/[0.06] border border-border/40 dark:border-white/10 flex items-center justify-center shrink-0">
           <Calendar className="w-4 h-4 text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">
@@ -236,11 +236,16 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
       <div
         onClick={handleCardClick}
         className={cn(
-          "w-full rounded-xl border border-border/50 dark:border-white/[0.07] bg-card dark:bg-[#141414] p-3 sm:p-3.5",
-          "flex items-center gap-3 active:scale-[0.99] hover:border-foreground/25 transition-all cursor-pointer shadow-2xs",
+          "group relative w-full rounded-2xl border border-border/60 dark:border-white/[0.10] bg-card p-3.5 sm:p-4 overflow-hidden",
+          "flex items-center gap-3 active:scale-[0.99] hover:border-border transition-all cursor-pointer shadow-xs",
           className
         )}
       >
+        {/* Apple Liquid Glass Rim Reflection */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 dark:via-white/20 to-transparent"
+        />
         {/* Coluna de Horário da Agenda (Esquerda) com sincronização precisa do efeito piscante */}
         <div className="w-12 shrink-0 flex flex-col items-center justify-center text-center">
           <span
@@ -256,7 +261,7 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
               "agenda-strong font-mono text-[14.5px] tabular-nums tracking-tight inline-block",
               isBlinking
                 ? "text-emerald-600 dark:text-emerald-400/75 font-semibold animate-soft-blink"
-                : "text-foreground font-bold"
+                : "text-foreground font-semibold"
             )}
           >
             {horaFormatted}
@@ -280,7 +285,7 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
               {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
             </div>
 
-            <span className="agenda-strong text-[13.5px] sm:text-[14px] font-bold tabular-nums text-foreground shrink-0 text-right">
+            <span className="agenda-strong text-[13.5px] sm:text-[14px] font-semibold tabular-nums text-foreground shrink-0 text-right">
               {isPlan ? "Plano" : isFree ? "Grátis" : priceFormatted}
             </span>
           </div>

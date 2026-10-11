@@ -332,9 +332,10 @@ const Admin = () => {
   const isAppointmentRoute = location.pathname.includes("/admin/agendamento");
   const isUnidadesRoute = location.pathname.includes("/admin/unidades");
   const isAgendaRoute = location.pathname.includes("/admin/agenda");
-  const isDisparoRoute = location.pathname.includes("/admin/disparo");
-  const isConfigBarbeariaRoute = location.pathname.includes("/admin/config-barbearia");
-  const isImmersiveRoute = isPromocoesRoute || isProfileRoute || isCarteiraRoute || isAppointmentRoute || isAgendaRoute || isDisparoRoute || isConfigBarbeariaRoute;
+  const isDisparoRoute = location.pathname.includes("/disparo");
+  const isConfigBarbeariaRoute = location.pathname.includes("/config-barbearia");
+  const isWhatsAppRoute = location.pathname.includes("/whatsapp");
+  const isImmersiveRoute = isPromocoesRoute || isProfileRoute || isCarteiraRoute || isAppointmentRoute || isAgendaRoute || isDisparoRoute || isConfigBarbeariaRoute || isWhatsAppRoute;
 
   // Layout Loading
   const LoadingFallback = () => (
@@ -373,7 +374,7 @@ const Admin = () => {
         <main
           className={cn(
             "relative min-h-[calc(100dvh-56px)]",
-            isImmersiveRoute && "pb-0 overflow-hidden"
+            isImmersiveRoute && "pb-0"
           )}
           style={
             isImmersiveRoute
@@ -382,7 +383,7 @@ const Admin = () => {
           }
         >
           <div
-            className={cn("px-4 py-4 lg:px-8", isImmersiveRoute && "h-full p-0", isUnidadesRoute && "h-full p-0", location.pathname.includes("/whatsapp") && "p-0", location.pathname.includes("/promocoes") && "p-0")}
+            className={cn("px-4 py-4 lg:px-8", isImmersiveRoute && "p-0", isUnidadesRoute && "p-0", location.pathname.includes("/whatsapp") && "p-0", location.pathname.includes("/promocoes") && "p-0")}
             style={
               isImmersiveRoute || isUnidadesRoute || location.pathname.includes("/whatsapp") || location.pathname.includes("/promocoes")
                 ? undefined
@@ -467,7 +468,7 @@ const Admin = () => {
         {/* Bottom Navigation Mobile — esconder nas configurações, edição de serviços, horários, financeiro e disparo */}
         {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("financeiro") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("meus-clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
           <div className="lg:hidden">
-            <AdminMobileNavigation />
+            <AdminMobileNavigation barbeiroId={adminContext?.barbeiroId} />
           </div>
         )}
         <SupportChatBubble />
@@ -486,7 +487,12 @@ const Admin = () => {
         {/* Conteúdo principal */}
         <main className="relative z-10 flex-1 flex flex-col h-screen overflow-hidden transition-all duration-300">
           <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-            <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+            <div className={cn(
+              "max-w-[1600px] mx-auto",
+              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/perfil"))
+                ? "p-0"
+                : "p-6 lg:p-8"
+            )}>
               <Suspense fallback={<LoadingFallback />}>
                 <Routes>
                   <Route index element={<AdminDashboard adminContext={adminContext} />} />

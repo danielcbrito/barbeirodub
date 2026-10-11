@@ -32,6 +32,8 @@ import { isWhatsAppAppointment } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { toast } from "sonner";
+import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
+import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
 
 interface BarberAgendaProps {
   barberContext: BarberContext;
@@ -101,6 +103,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   const [selectedEmptySlot, setSelectedEmptySlot] = useState({ date: "", time: "" });
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const overdueState = useOverdueAppointments(barberContext.barbeiroId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -306,6 +309,16 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     <div className="flex flex-col animate-fade-in pb-16 relative">
       {/* ══════ HEADER SECTION ══════ */}
       <div className="flex-shrink-0 px-6 pt-2 pb-4">
+        {overdueState.count > 0 && (
+          <div className="mb-4">
+            <OverdueAppointmentsBanner
+              count={overdueState.count}
+              hasPastDays={overdueState.hasOverduePastDays}
+              onOpenModal={() => window.dispatchEvent(new CustomEvent("open-overdue-modal"))}
+            />
+          </div>
+        )}
+
         {/* Title + Controls */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
@@ -379,7 +392,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
               scrollToDate(today);
             }}
             className={cn(
-              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-opacity duration-200",
+              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200",
               isToday(selectedDate) ? "opacity-0 pointer-events-none" : "opacity-100"
             )}
           >
@@ -415,39 +428,35 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                           setSelectedDate(day);
                           scrollToDate(day);
                         }}
-                        className="w-full flex flex-col items-center gap-1.5 py-1.5 hover:opacity-80 transition-all"
+                        className={cn(
+                          "w-full flex flex-col items-center gap-1 py-1 transition-all duration-200 select-none cursor-pointer",
+                          isSelected ? "opacity-100 scale-105" : "opacity-40 hover:opacity-75 scale-95"
+                        )}
                       >
                         <span className={cn(
-                          "text-[10px] font-semibold uppercase leading-none tracking-wider transition-colors duration-150",
-                          isSelected ? "text-foreground" : "text-muted-foreground/40"
+                          "text-[11px] uppercase leading-none tracking-tight transition-colors duration-200",
+                          isSelected ? "text-foreground font-semibold" : "text-muted-foreground/70 font-medium"
                         )}>
                           {shortDayName(day)}
                         </span>
 
                         <div
                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full will-change-transform",
-                            isSelected && "bg-foreground shadow-md shadow-foreground/20",
-                            dayIsToday && !isSelected && "ring-1 ring-primary/30"
+                            "w-10 h-10 flex items-center justify-center rounded-full will-change-transform transition-all duration-200 ease-out",
+                            isSelected
+                              ? "bg-foreground text-background shadow-xs font-semibold"
+                              : dayIsToday
+                                ? "text-foreground font-semibold ring-1.5 ring-foreground/40 bg-transparent"
+                                : "text-foreground font-normal bg-transparent hover:bg-secondary/40"
                           )}
-                          style={{
-                            transform: isSelected ? "scale(1.08)" : "scale(1)",
-                            transition: "transform 200ms ease-out, background-color 200ms ease-out",
-                          }}
                         >
                           <span className={cn(
-                            "font-bold leading-none",
-                            isSelected ? "text-[17px] text-background" : "text-[15px] text-foreground"
-                          )}
-                          style={{ transition: "font-size 200ms ease-out" }}
-                          >
+                            "leading-none tabular-nums transition-all duration-200",
+                            isSelected ? "text-[16px] text-background font-semibold" : dayIsToday ? "text-[15px] font-semibold" : "text-[15px] font-normal"
+                          )}>
                             {format(day, "d")}
                           </span>
                         </div>
-
-                        {isSelected && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                        )}
                       </button>
                     </div>
                   );
@@ -468,12 +477,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Calendar className="w-7 h-7 text-muted-foreground/30 mb-3" strokeWidth={1.5} />
             <p className="text-[15px] font-semibold text-muted-foreground">
-              {isToday(selectedDate) ? "Nenhum agendamento para hoje." : "Nenhum agendamento neste dia."}
-            </p>
-            <p className="text-[13px] text-[#4B5563] mt-1.5 max-w-[280px]">
-              {isToday(selectedDate)
-                ? "Seus horários livres estão visíveis para clientes e podem ser reservados a qualquer momento."
-                : "Navegue pelo calendário ou adicione um agendamento manual."}
+              Sem agendamentos
             </p>
           </div>
         ) : (
@@ -505,8 +509,10 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                   return (h * 60 + m) + duration;
                 })();
                 const nowMinutes = now.getHours() * 60 + now.getMinutes();
-                const isPast = isViewingToday && aptEndMinutes <= nowMinutes && (apt.status === "completed" || apt.status === "no_show");
-                const isNextUp = isViewingToday && !isPast && apt.hora >= currentTimeStr
+                const isCompleted = apt.status === "completed" || apt.status === "no_show";
+                const isPastTime = isViewingToday && aptEndMinutes <= nowMinutes;
+                const isDone = isCompleted || isPastTime;
+                const isNextUp = isViewingToday && !isDone && apt.hora >= currentTimeStr
                   && apt.status !== "completed" && apt.status !== "no_show"
                   && idx === filteredAppointments.findIndex(a =>
                     a.hora >= currentTimeStr
@@ -537,11 +543,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                         staleTime: STALE_TIMES.CLIENTES,
                       });
                     }}
-                    style={{ opacity: isPast ? 0.4 : 1 }}
+                    style={{ opacity: isDone ? 0.48 : 1 }}
                     className={cn(
-                      "group relative rounded-2xl p-4 cursor-pointer",
-                      "border border-border/60 bg-card",
-                      "transition-colors hover:border-border",
+                      "group relative rounded-2xl p-4 cursor-pointer transition-all duration-200",
+                      isDone
+                        ? "border border-border/30 bg-muted/20 dark:bg-white/[0.015]"
+                        : "border border-border/60 bg-card hover:border-border",
                       isNextUp && "ring-1 ring-foreground/20"
                     )}
                   >

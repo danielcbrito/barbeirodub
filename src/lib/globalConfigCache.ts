@@ -71,6 +71,12 @@ export function getGlobalConfigSync(): GlobalConfigSnapshot | null {
 
 export function invalidateGlobalConfig() {
   fetchedAt = 0;
+  memoryCache = null;
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+  }
 }
 
 export function isGlobalConfigFresh(): boolean {

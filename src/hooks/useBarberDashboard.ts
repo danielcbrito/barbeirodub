@@ -9,6 +9,9 @@ export interface DashboardData {
   todayCount: number;
   yesterdayCount: number;
   pendingCount: number;
+  todayRevenue: number;
+  todayCompletedCount: number;
+  todayWaitingCount: number;
   nextAppointment: NextAppointmentData | null;
   monthRevenue: number;
   lastMonthRevenue: number;
@@ -28,6 +31,9 @@ const emptyDashboardData: DashboardData = {
   todayCount: 0,
   yesterdayCount: 0,
   pendingCount: 0,
+  todayRevenue: 0,
+  todayCompletedCount: 0,
+  todayWaitingCount: 0,
   nextAppointment: null,
   monthRevenue: 0,
   lastMonthRevenue: 0,
@@ -98,6 +104,9 @@ const parseDashboardData = (value: unknown): DashboardData => {
     todayCount: toNumber(value.todayCount),
     yesterdayCount: toNumber(value.yesterdayCount),
     pendingCount: toNumber(value.pendingCount),
+    todayRevenue: toNumber(value.todayRevenue),
+    todayCompletedCount: toNumber(value.todayCompletedCount),
+    todayWaitingCount: toNumber(value.todayWaitingCount),
     nextAppointment,
     monthRevenue: toNumber(value.monthRevenue),
     lastMonthRevenue: toNumber(value.lastMonthRevenue),
@@ -116,16 +125,29 @@ const buildFallbackFromAgendaCache = (barbeiroId: string): { data: DashboardData
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const activeRows = cachedAgenda.data.filter((apt) => {
     const status = toStringValue(apt.status);
-    return status !== "cancelled_by_admin" && status !== "cancelled_by_user" && status !== "no_show" && status !== "completed";
+    return status !== "cancelled_by_admin" && status !== "cancelled_by_user";
   });
+
+  const completedToday = activeRows.filter((apt) => toStringValue(apt.status) === "completed");
+  const waitingToday = activeRows.filter((apt) => {
+    const st = toStringValue(apt.status);
+    return st === "pending" || st === "confirmed";
+  });
+
+  const todayRevenue = completedToday.reduce((acc, apt) => {
+    if (Boolean(apt.is_free)) return acc;
+    return acc + (toNumber(apt.preco) || 0);
+  }, 0);
 
   const sorted = [...activeRows].sort((a, b) => toStringValue(a.hora).localeCompare(toStringValue(b.hora)));
   const nextRaw = sorted.find((apt) => {
+    const st = toStringValue(apt.status);
+    if (st === "completed" || st === "no_show") return false;
     const [h, m] = toStringValue(apt.hora).split(":").map(Number);
     const startMin = (h || 0) * 60 + (m || 0);
     const dur = toNumber(apt.duracao) || 30;
     return (startMin + dur) > nowMinutes;
-  }) || sorted[0];
+  }) || sorted.find((apt) => toStringValue(apt.status) !== "completed") || sorted[0];
 
   const getClientName = (apt: Record<string, unknown>) => {
     const profile = apt.profile;
@@ -143,7 +165,10 @@ const buildFallbackFromAgendaCache = (barbeiroId: string): { data: DashboardData
     data: {
       ...emptyDashboardData,
       todayCount: activeRows.length,
-      pendingCount: activeRows.filter((apt) => toStringValue(apt.status) === "pending").length,
+      todayCompletedCount: completedToday.length,
+      todayWaitingCount: waitingToday.length,
+      todayRevenue,
+      pendingCount: waitingToday.length,
       nextAppointment: nextRaw
         ? {
             id: toStringValue(nextRaw.id),
@@ -190,54 +215,69 @@ export async function fetchBarberDashboard(barbeiroId: string): Promise<Dashboar
   if (error) throw error;
   const parsed = parseDashboardData(data);
 
-  // Busca agendamento mais próximo de hoje para garantir id e dados reais completos
+  // Busca todos os agendamentos de hoje para extrair métricas do dia e próximo corte
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
-  const { data: realNextApts } = await supabase
+  const { data: todayApts } = await supabase
     .from("agendamentos")
     .select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
     .eq("barbeiro_id", barbeiroId)
     .eq("data", today)
-    .in("status", ["pending", "confirmed"])
-    .order("hora", { ascending: true })
-    .limit(20);
+    .not("status", "in", '("cancelled_by_admin","cancelled_by_user")')
+    .order("hora", { ascending: true });
 
-  if (realNextApts && realNextApts.length > 0) {
-    const upcoming = realNextApts.find((apt: any) => {
+  const activeTodayApts = todayApts || [];
+  const completedToday = activeTodayApts.filter((apt: any) => apt.status === "completed");
+  const waitingToday = activeTodayApts.filter((apt: any) => apt.status === "pending" || apt.status === "confirmed");
+
+  parsed.todayCount = activeTodayApts.length;
+  parsed.todayCompletedCount = completedToday.length;
+  parsed.todayWaitingCount = waitingToday.length;
+  parsed.todayRevenue = completedToday.reduce((acc: number, apt: any) => {
+    if (apt.is_free) return acc;
+    const p = apt.preco ?? (apt.servicos as any)?.preco ?? 0;
+    return acc + (typeof p === "number" ? p : 0);
+  }, 0);
+
+  if (activeTodayApts.length > 0) {
+    const upcoming = activeTodayApts.find((apt: any) => {
+      if (apt.status === "completed" || apt.status === "no_show") return false;
       const [h, m] = (apt.hora || "00:00").split(":").map(Number);
       const startMin = (h || 0) * 60 + (m || 0);
       const dur = apt.duracao || (apt.servicos as any)?.duracao_minutos || 30;
       return (startMin + dur) > nowMinutes;
-    }) || realNextApts[0];
+    }) || activeTodayApts.find((apt: any) => apt.status !== "completed") || activeTodayApts[0];
 
-    const realClientName = resolveClienteDisplayName(
-      upcoming.observacoes,
-      (upcoming.profiles as any)?.nome,
-      "Cliente"
-    );
-    const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
-    const uStartMin = (uh || 0) * 60 + (um || 0);
-    const uDur = upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30;
-    const isBlinkingNow = nowMinutes >= uStartMin && nowMinutes < (uStartMin + uDur);
+    if (upcoming) {
+      const realClientName = resolveClienteDisplayName(
+        upcoming.observacoes,
+        (upcoming.profiles as any)?.nome,
+        "Cliente"
+      );
+      const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
+      const uStartMin = (uh || 0) * 60 + (um || 0);
+      const uDur = upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30;
+      const isBlinkingNow = nowMinutes >= uStartMin && nowMinutes < (uStartMin + uDur);
 
-    parsed.nextAppointment = {
-      id: upcoming.id,
-      hora: (upcoming.hora || "").slice(0, 5),
-      clientName: realClientName,
-      serviceName: (upcoming.servicos as any)?.nome || "Atendimento",
-      status: upcoming.status || "confirmed",
-      duracao: upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30,
-      preco: upcoming.preco ?? (upcoming.servicos as any)?.preco ?? 0,
-      payment_method: upcoming.payment_method || null,
-      tipo_agendamento: upcoming.tipo_agendamento || null,
-      is_free: Boolean(upcoming.is_free),
-      barbeiro_confirmou: upcoming.barbeiro_confirmou,
-      observacoes: upcoming.observacoes,
-      avatarUrl: (upcoming.profiles as any)?.avatar_url || null,
-      isBlinking: isBlinkingNow,
-    };
+      parsed.nextAppointment = {
+        id: upcoming.id,
+        hora: (upcoming.hora || "").slice(0, 5),
+        clientName: realClientName,
+        serviceName: (upcoming.servicos as any)?.nome || "Atendimento",
+        status: upcoming.status || "confirmed",
+        duracao: upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30,
+        preco: upcoming.preco ?? (upcoming.servicos as any)?.preco ?? 0,
+        payment_method: upcoming.payment_method || null,
+        tipo_agendamento: upcoming.tipo_agendamento || null,
+        is_free: Boolean(upcoming.is_free),
+        barbeiro_confirmou: upcoming.barbeiro_confirmou,
+        observacoes: upcoming.observacoes,
+        avatarUrl: (upcoming.profiles as any)?.avatar_url || null,
+        isBlinking: isBlinkingNow,
+      };
+    }
   }
 
   writeSyncCache(`barber-dashboard:${barbeiroId}`, parsed);

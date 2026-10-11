@@ -31,7 +31,7 @@ export function ScheduleHeader({ title, subtitle, onBack, backTo, right, classNa
   return (
     <header
       className={cn(
-        'sticky top-0 z-40 w-full bg-background/98 dark:bg-[#0c0c0e]/98 backdrop-blur-md border-b border-border/30 shadow-xs px-4 transition-colors',
+        'sticky top-0 z-40 shrink-0 w-full bg-background/98 dark:bg-[#0c0c0e]/98 backdrop-blur-md px-4 transition-colors',
         className
       )}
       style={{ paddingTop: 'env(safe-area-inset-top)' }}

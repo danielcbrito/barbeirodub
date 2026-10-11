@@ -780,11 +780,11 @@ export function CarteiraPage({
   };
 
   return (
-    <div className="flex flex-col h-app overflow-hidden bg-background text-foreground">
+    <div className="min-h-app bg-background text-foreground pb-32">
       {/* HEADER: Saudação e status */}
       <div
-        className="relative px-5 pb-3 flex items-center justify-between gap-3 z-10 shrink-0"
-        style={{ paddingTop: "max(24px, calc(env(safe-area-inset-top, 0px) + 12px))" }}
+        className="sticky top-0 px-5 pb-3 flex items-center justify-between gap-3 z-20 bg-background/95 dark:bg-[#0c0c0e]/95 backdrop-blur-md"
+        style={{ paddingTop: "max(16px, calc(env(safe-area-inset-top, 0px) + 8px))" }}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-border/80 bg-card">
@@ -828,12 +828,9 @@ export function CarteiraPage({
         </button>
       </div>
 
-      {/* CONTEÚDO PRINCIPAL SCROLLÁVEL */}
-      <div
-        className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-32"
-        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
-      >
-        <div className="mx-auto w-full max-w-md space-y-6 pt-2">
+      {/* CONTEÚDO PRINCIPAL */}
+      <div className="relative z-10 px-5 pt-2">
+        <div className="mx-auto w-full max-w-md space-y-6">
           {loading ? (
             <div className="w-full rounded-2xl min-h-[200px] flex items-center justify-center border border-border/80 bg-card">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />

@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,7 +52,6 @@ import { WhatsAppRequiredBanner } from "@/components/whatsapp/WhatsAppRequiredBa
 import { SetupCompletionBanner } from "@/components/barber/SetupCompletionBanner";
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import { useAdminBarbeiroId } from "@/hooks/useAdminBarbeiroId";
-import { CampaignPromoBanners } from "@/components/admin/CampaignPromoBanners";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { NotificationBell } from "@/components/NotificationBell";
 import { resolveClienteDisplayName } from "@/lib/walkInName";
@@ -63,6 +63,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
+import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
+import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 
 interface AdminDashboardProps {
   adminContext: AdminContext;
@@ -75,6 +78,9 @@ interface DashboardData {
   todayCount: number;
   yesterdayCount: number;
   pendingCount: number;
+  todayRevenue?: number;
+  todayCompletedCount?: number;
+  todayWaitingCount?: number;
   nextAppointment: NextAppointmentData | null;
   monthRevenue: number;
   lastMonthRevenue: number;
@@ -107,6 +113,9 @@ const ChartTooltipContent = ({ active, payload, label }: any) => {
   );
 };
 
+const formatBRL = (n: number) =>
+  `R$\u00A0${n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
 export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = null, tenantNome: propTenantNome }: AdminDashboardProps) {
   const scopeKey = `admin-dashboard:${adminContext.barbeiroId || tenantId || "global"}`;
   const cachedDash = readSyncCache<DashboardData>(scopeKey);
@@ -137,15 +146,46 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
   }, [propTenantNome, tenantId, adminContext.tenantId]);
   const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
   const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
+  const overdueState = useOverdueAppointments(effectiveBarbeiroId);
+  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
+  const hasAutoPromptedOverdueRef = useRef(false);
+
+  useEffect(() => {
+    if (overdueState.isLoading || !effectiveBarbeiroId) return;
+    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
+      const promptedThisSession = typeof window !== "undefined" && window.sessionStorage.getItem("admin_overdue_prompted_v1") === "1";
+      if (overdueState.hasOverduePastDays || !promptedThisSession) {
+        setIsOverdueModalOpen(true);
+        hasAutoPromptedOverdueRef.current = true;
+        try {
+          window.sessionStorage.setItem("admin_overdue_prompted_v1", "1");
+        } catch {}
+      }
+    }
+  }, [effectiveBarbeiroId, overdueState.count, overdueState.hasOverduePastDays, overdueState.isLoading]);
+
   const { isConnected: whatsAppConnected, isLoading: whatsAppLoading } = useWhatsAppStatus(effectiveBarbeiroId);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("dub:barber-profile:v1:")) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(k) || "");
+            if (parsed?.avatarUrl) return parsed.avatarUrl;
+          } catch {}
+        }
+      }
+    }
+    return null;
+  });
 
   useEffect(() => {
     const uId = adminContext?.userId;
     const bId = effectiveBarbeiroId;
-    if (!uId && !bId) return;
 
     async function loadAvatar() {
+      // 1. Tentar profiles por uId
       if (uId) {
         const { data: prof } = await supabase.from("profiles").select("avatar_url").eq("id", uId).maybeSingle();
         if (prof?.avatar_url) {
@@ -153,15 +193,53 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           return;
         }
       }
+      // 2. Tentar barbeiros por bId
       if (bId) {
         const { data: barb } = await supabase.from("barbeiros").select("foto_url").eq("id", bId).maybeSingle();
         if (barb?.foto_url) {
           setAvatarUrl(barb.foto_url);
+          return;
+        }
+      }
+      // 3. Tentar barbeiros por user_id
+      if (uId) {
+        const { data: barbUser } = await supabase.from("barbeiros").select("foto_url").eq("user_id", uId).maybeSingle();
+        if (barbUser?.foto_url) {
+          setAvatarUrl(barbUser.foto_url);
+          return;
+        }
+      }
+      // 4. Tentar barbeiro por apelido / nome (ex: Túlio)
+      const searchName = adminContext?.apelido || "Túlio";
+      const { data: barbByName } = await supabase
+        .from("barbeiros")
+        .select("foto_url")
+        .ilike("apelido", `%${searchName}%`)
+        .not("foto_url", "is", null)
+        .limit(1)
+        .maybeSingle();
+      if (barbByName?.foto_url) {
+        setAvatarUrl(barbByName.foto_url);
+        return;
+      }
+      // 5. Tentar qualquer barbeiro do tenant com foto
+      const tId = tenantId || adminContext?.tenantId;
+      if (tId) {
+        const { data: tenantBarbs } = await supabase
+          .from("barbeiros")
+          .select("foto_url")
+          .eq("tenant_id", tId)
+          .eq("ativo", true)
+          .not("foto_url", "is", null)
+          .limit(1)
+          .maybeSingle();
+        if (tenantBarbs?.foto_url) {
+          setAvatarUrl(tenantBarbs.foto_url);
         }
       }
     }
     loadAvatar();
-  }, [adminContext?.userId, effectiveBarbeiroId]);
+  }, [adminContext?.userId, effectiveBarbeiroId, adminContext?.apelido, tenantId, adminContext?.tenantId]);
 
   const [tenantBarberIds, setTenantBarberIds] = useState<string[] | null>(null);
   const setupCompletion = useSetupCompletion({
@@ -279,59 +357,73 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           : [],
       };
 
-      // Busca agendamento mais próximo de hoje para garantir dados completos e horário em tempo real
+      // Busca agendamentos de hoje para garantir dados completos, métricas do dia e próximo corte
       const todayStr = format(new Date(), "yyyy-MM-dd");
       const now = new Date();
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
-      let nextAptQuery = supabase
+      let todayQuery = supabase
         .from("agendamentos")
         .select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
         .eq("data", todayStr)
-        .in("status", ["pending", "confirmed"])
-        .order("hora", { ascending: true })
-        .limit(20);
+        .not("status", "in", '("cancelled_by_admin","cancelled_by_user")')
+        .order("hora", { ascending: true });
 
       if (adminContext.barbeiroId) {
-        nextAptQuery = nextAptQuery.eq("barbeiro_id", adminContext.barbeiroId);
+        todayQuery = todayQuery.eq("barbeiro_id", adminContext.barbeiroId);
       } else if (!adminContext.isAdmin && tenantId && tenantBarberIds && tenantBarberIds.length > 0) {
-        nextAptQuery = nextAptQuery.in("barbeiro_id", tenantBarberIds);
+        todayQuery = todayQuery.in("barbeiro_id", tenantBarberIds);
       }
 
-      const { data: realNextApts } = await nextAptQuery;
-      if (realNextApts && realNextApts.length > 0) {
-        const upcoming = realNextApts.find((apt: any) => {
+      const { data: realTodayApts } = await todayQuery;
+      if (realTodayApts && realTodayApts.length > 0) {
+        const completed = realTodayApts.filter((a: any) => a.status === "completed");
+        const waiting = realTodayApts.filter((a: any) => a.status === "pending" || a.status === "confirmed");
+
+        parsed.todayCount = realTodayApts.length;
+        parsed.todayCompletedCount = completed.length;
+        parsed.todayWaitingCount = waiting.length;
+        parsed.todayRevenue = completed.reduce((acc: number, a: any) => {
+          if (a.is_free) return acc;
+          const p = a.preco ?? (a.servicos as any)?.preco ?? 0;
+          return acc + (typeof p === "number" ? p : 0);
+        }, 0);
+
+        const upcoming = realTodayApts.find((apt: any) => {
+          if (apt.status === "completed" || apt.status === "no_show") return false;
           const [h, m] = (apt.hora || "00:00").split(":").map(Number);
           const startMin = (h || 0) * 60 + (m || 0);
           const dur = apt.duracao || (apt.servicos as any)?.duracao_minutos || 30;
           return (startMin + dur) > nowMinutes;
-        }) || realNextApts[0];
+        }) || realTodayApts.find((apt: any) => apt.status !== "completed") || realTodayApts[0];
 
-        const realClientName = resolveClienteDisplayName(
-          upcoming.observacoes,
-          (upcoming.profiles as any)?.nome,
-          "Cliente"
-        );
-        const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
-        const uStartMin = (uh || 0) * 60 + (um || 0);
-        const uDur = upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30;
-        const isBlinkingNow = nowMinutes >= (uStartMin - 5) && nowMinutes < (uStartMin + uDur);
+        if (upcoming) {
+          const realClientName = resolveClienteDisplayName(
+            upcoming.observacoes,
+            (upcoming.profiles as any)?.nome,
+            "Cliente"
+          );
+          const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
+          const uStartMin = (uh || 0) * 60 + (um || 0);
+          const uDur = upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30;
+          const isBlinkingNow = nowMinutes >= (uStartMin - 5) && nowMinutes < (uStartMin + uDur);
 
-        parsed.nextAppointment = {
-          id: upcoming.id,
-          hora: (upcoming.hora || "").slice(0, 5),
-          clientName: realClientName,
-          serviceName: (upcoming.servicos as any)?.nome || "Atendimento",
-          status: upcoming.status || "confirmed",
-          duracao: upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30,
-          preco: upcoming.preco ?? (upcoming.servicos as any)?.preco ?? 0,
-          payment_method: upcoming.payment_method || null,
-          tipo_agendamento: upcoming.tipo_agendamento || null,
-          is_free: Boolean(upcoming.is_free),
-          barbeiro_confirmou: upcoming.barbeiro_confirmou,
-          observacoes: upcoming.observacoes,
-          avatarUrl: (upcoming.profiles as any)?.avatar_url || null,
-          isBlinking: isBlinkingNow,
-        };
+          parsed.nextAppointment = {
+            id: upcoming.id,
+            hora: (upcoming.hora || "").slice(0, 5),
+            clientName: realClientName,
+            serviceName: (upcoming.servicos as any)?.nome || "Atendimento",
+            status: upcoming.status || "confirmed",
+            duracao: upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30,
+            preco: upcoming.preco ?? (upcoming.servicos as any)?.preco ?? 0,
+            payment_method: upcoming.payment_method || null,
+            tipo_agendamento: upcoming.tipo_agendamento || null,
+            is_free: Boolean(upcoming.is_free),
+            barbeiro_confirmou: upcoming.barbeiro_confirmou,
+            observacoes: upcoming.observacoes,
+            avatarUrl: (upcoming.profiles as any)?.avatar_url || null,
+            isBlinking: isBlinkingNow,
+          };
+        }
       }
 
       setData(parsed);
@@ -532,8 +624,23 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       const currentMonthUserIds = new Set((newMonthRes.data || []).map((a: any) => a.user_id));
       const newClientsMonth = Array.from(currentMonthUserIds).filter(id => !prevMonthUserIds.has(id)).length;
 
+      const todayCompletedRes = await addFilter(
+        supabase
+          .from("agendamentos")
+          .select("preco, is_free")
+          .eq("data", today)
+          .eq("status", "completed")
+      );
+      const todayCompletedCount = (todayCompletedRes.data || []).length;
+      const todayRevenue = (todayCompletedRes.data || []).reduce(
+        (acc: number, a: any) => acc + (a.is_free ? 0 : (a.preco || 0)),
+        0
+      );
+
       setData({
         todayCount: todayRes.count || 0,
+        todayCompletedCount,
+        todayRevenue,
         yesterdayCount: yesterdayRes.count || 0,
         pendingCount: pendingRes.count || 0,
         nextAppointment,
@@ -636,7 +743,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
   // ═══════════════════════════════════════
   if (isMobile) {
     return (
-      <div className="w-full max-w-lg mx-auto space-y-4 pb-6 pt-1 animate-fade-in">
+      <div className="w-full max-w-lg mx-auto space-y-4 pb-32 pt-1 animate-fade-in">
         {/* 1. Header (Hello + Localização / Sino + Avatar) */}
         <div className="flex items-center justify-between gap-3 pt-1">
           <div className="min-w-0">
@@ -644,7 +751,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
               Olá, {adminContext.apelido || "Administrador"}
             </h1>
             <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground mt-0.5">
-              <PinLocationSolid className="w-[18px] h-[18px] shrink-0" />
+              <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <span className="font-semibold text-foreground/90 truncate">
                 {tenantNome || "Barbearia DUB"}
               </span>
@@ -664,7 +771,12 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
               className="w-11 h-11 rounded-full overflow-hidden border-2 border-white dark:border-white/20 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-foreground shadow-[0_2px_10px_rgba(0,0,0,0.04)] active:scale-95 transition-all hover:ring-2 hover:ring-foreground/20"
             >
               {avatarUrl ? (
-                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                <img
+                  src={avatarUrl}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                  onError={() => setAvatarUrl(null)}
+                />
               ) : (
                 <span>{adminContext.apelido ? adminContext.apelido.slice(0, 2).toUpperCase() : "AD"}</span>
               )}
@@ -672,13 +784,41 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           </div>
         </div>
 
+        {/* Aviso estratégico no topo se houver configuração pendente */}
+        {setupCompletion.percentage < 100 && !setupCompletion.loading && (
+          <button
+            type="button"
+            onClick={() => navigate(`${basePath}/perfil`)}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-secondary/50 dark:bg-white/[0.04] border border-border/40 dark:border-white/[0.08] text-xs hover:bg-secondary/70 active:scale-[0.99] transition-all group shadow-xs"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-pulse" />
+              <span className="text-[12.5px] font-medium text-foreground/90 truncate">
+                Configure sua barbearia ({setupCompletion.percentage}% concluído)
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-muted-foreground group-hover:text-foreground shrink-0 text-[11.5px] font-medium">
+              <span>Concluir no Mais</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </button>
+        )}
+
+        {overdueState.count > 0 && (
+          <OverdueAppointmentsBanner
+            count={overdueState.count}
+            hasPastDays={overdueState.hasOverduePastDays}
+            onOpenModal={() => setIsOverdueModalOpen(true)}
+          />
+        )}
+
         {/* 2. Barra de Busca Arredondada Confortável e Larga (Fiel ao Mockup) */}
         <div
           onClick={() => setIsGlobalSearchOpen(true)}
-          className="w-full h-12 px-4 rounded-full bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 text-muted-foreground flex items-center gap-3 cursor-pointer hover:border-zinc-300 dark:hover:border-white/20 active:scale-[0.99] transition-all shadow-[0_2px_12px_rgba(0,0,0,0.03)]"
+          className="w-full h-11 px-3.5 rounded-full bg-secondary/50 dark:bg-zinc-900 border border-border/40 text-muted-foreground flex items-center gap-2.5 cursor-pointer hover:border-border active:scale-[0.99] transition-all shadow-2xs"
         >
-          <Search className="w-5 h-5 text-zinc-900 dark:text-white stroke-[2.2] shrink-0" />
-          <span className="text-[13.5px] text-zinc-400 truncate font-normal">
+          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+          <span className="text-[13px] text-muted-foreground truncate font-normal">
             Buscar cliente, corte, serviço, financeiro...
           </span>
         </div>
@@ -687,48 +827,40 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <button
             onClick={() => navigate(`${basePath}/dados-empresa`)}
-            className="flex items-center gap-3 p-3 rounded-[20px] bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 active:scale-[0.98] transition-all group min-h-[64px]"
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
           >
-            <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <IconBarbearia3D className="w-7 h-7" />
-            </div>
-            <span className="text-[13.5px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight truncate">
+            <IconBarbearia3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+            <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
               Barbearia
             </span>
           </button>
 
           <button
             onClick={() => navigate(`${basePath}/horarios`)}
-            className="flex items-center gap-3 p-3 rounded-[20px] bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 active:scale-[0.98] transition-all group min-h-[64px]"
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
           >
-            <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <IconHorarios3D className="w-7 h-7" />
-            </div>
-            <span className="text-[13.5px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight truncate">
+            <IconHorarios3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+            <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
               Horários
             </span>
           </button>
 
           <button
             onClick={() => navigate(`${basePath}/clientes`)}
-            className="flex items-center gap-3 p-3 rounded-[20px] bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 active:scale-[0.98] transition-all group min-h-[64px]"
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
           >
-            <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <IconClientes3D className="w-7 h-7" />
-            </div>
-            <span className="text-[13.5px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight truncate">
+            <IconClientes3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+            <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
               Clientes
             </span>
           </button>
 
           <button
             onClick={() => navigate(`${basePath}/servicos/cortes`)}
-            className="flex items-center gap-3 p-3 rounded-[20px] bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 active:scale-[0.98] transition-all group min-h-[64px]"
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-border active:scale-[0.98] transition-all group min-h-[64px]"
           >
-            <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <IconServicos3D className="w-7 h-7" />
-            </div>
-            <span className="text-[13.5px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight truncate">
+            <IconServicos3D className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform object-contain" />
+            <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
               Serviços
             </span>
           </button>
@@ -736,13 +868,13 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
         {/* 4. Próximo Atendimento: Minimalista, Idêntico ao Card da Agenda com Horário Verde Piscando */}
         <div>
-          <div className="flex items-center justify-between px-1 mb-2">
-            <span className="text-[12px] font-bold text-muted-foreground uppercase tracking-wider">
+          <div className="flex items-center justify-between px-0.5 mb-2">
+            <span className="text-[13px] font-semibold text-foreground tracking-tight">
               Próximo corte
             </span>
             <button
               onClick={() => navigate(`${basePath}/agenda`)}
-              className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground hover:text-foreground transition-colors group"
+              className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors group"
             >
               <span>Ver agenda</span>
               <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/70 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
@@ -751,58 +883,52 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           <NextAppointmentCard appointment={data.nextAppointment} basePath={basePath} />
         </div>
 
-        {/* 5. Card Faturamento 100% Sério e Minimalista (Com cor apenas nas letras) */}
+        {/* 5. Card Faturamento do Mês — Estratégico, Simples e 100% Funcional */}
         <div
           onClick={() => navigate(`${basePath}/financeiro`)}
-          className="w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 sm:p-4.5 shadow-xs hover:border-border transition-all cursor-pointer"
+          className="w-full rounded-2xl border border-border/40 dark:border-white/[0.08] bg-card p-4 sm:p-5 shadow-xs hover:border-border transition-all cursor-pointer group"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pb-2">
             <span className="text-[12.5px] font-medium text-muted-foreground">
-              Faturamento do mês
+              Faturamento deste mês
             </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setRevenueVisible((v) => !v);
-              }}
-              className="p-1 rounded-md text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={revenueVisible ? "Ocultar receita" : "Mostrar receita"}
-            >
-              {revenueVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRevenueVisible((v) => !v);
+                }}
+                className="w-8 h-8 rounded-full bg-secondary/60 dark:bg-white/[0.06] border border-border/40 dark:border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all"
+                aria-label={revenueVisible ? "Ocultar faturamento" : "Mostrar faturamento"}
+              >
+                {revenueVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              </button>
+              <div className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+                <span>Ver financeiro</span>
+                <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
-            <span className="text-2xl sm:text-3xl font-black tracking-tight text-foreground tabular-nums">
-              {revenueVisible
-                ? `R$ ${(data?.monthRevenue ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                : "R$\u00A0••••"}
-            </span>
-            {revenueVisible && revenueGrowth !== 0 && (
-              <span
-                className={cn(
-                  "text-[12.5px] font-semibold tabular-nums",
-                  revenueGrowth > 0
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-rose-600 dark:text-rose-400"
-                )}
-              >
-                {revenueGrowth > 0 ? `+${revenueGrowth}%` : `${revenueGrowth}%`} vs mês anterior
-              </span>
-            )}
+          <div className="pt-1">
+            <p className="text-[32px] sm:text-[38px] font-extrabold tracking-tight text-foreground tabular-nums leading-tight">
+              {revenueVisible ? formatBRL(data?.monthRevenue || 0) : "R$\u00A0••••"}
+            </p>
+            <p className="text-[13px] text-muted-foreground mt-1 font-medium">
+              {(data?.monthCuts || 0)} {(data?.monthCuts || 0) === 1 ? "corte concluído" : "cortes concluídos"}
+            </p>
           </div>
         </div>
 
-        {/* Banner de configuração */}
-        <SetupCompletionBanner
-          percentage={setupCompletion.percentage}
-          steps={setupCompletion.steps}
-          loading={setupCompletion.loading}
-          variant="compact"
+        {/* Modal de confirmação em lote de agendamentos pendentes */}
+        <PendingAppointmentsModal
+          open={isOverdueModalOpen}
+          onOpenChange={setIsOverdueModalOpen}
+          appointments={overdueState.overdueAppointments}
+          onCompleteBulk={overdueState.completeBulk}
+          isCompleting={overdueState.isCompleting}
         />
-
-        {/* Campanhas Hero - Modelo Limpo e Moderno */}
-        <CampaignPromoBanners basePath={basePath} tenantId={tenantId || adminContext.tenantId} />
 
         {/* Modal de Busca Global Inteligente no Mobile */}
         <GlobalSearchModal
@@ -853,6 +979,14 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
       {/* Banner de ativação removido — o PendingSetupModal cuida disso */}
       </div>
+
+      {overdueState.count > 0 && (
+        <OverdueAppointmentsBanner
+          count={overdueState.count}
+          hasPastDays={overdueState.hasOverduePastDays}
+          onOpenModal={() => setIsOverdueModalOpen(true)}
+        />
+      )}
 
       {/* Next row */}
       {data.nextAppointment && (
@@ -925,8 +1059,6 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
         </div>
       </div>
 
-      <CampaignPromoBanners basePath={basePath} tenantId={tenantId || adminContext.tenantId} />
-
       {/* Recent Appointments - Desktop */}
       <div className="space-y-3">
         <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">Atividade Recente</p>
@@ -960,6 +1092,15 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           )}
         </div>
       </div>
+
+      {/* Modal de confirmação em lote de agendamentos pendentes */}
+      <PendingAppointmentsModal
+        open={isOverdueModalOpen}
+        onOpenChange={setIsOverdueModalOpen}
+        appointments={overdueState.overdueAppointments}
+        onCompleteBulk={overdueState.completeBulk}
+        isCompleting={overdueState.isCompleting}
+      />
 
       {/* Modal de Busca Global Inteligente */}
       <GlobalSearchModal

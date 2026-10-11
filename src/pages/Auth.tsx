@@ -365,6 +365,44 @@ const Auth = () => {
   const passwordValid = passwordSchema.safeParse(senha).success;
   const canSubmit = emailValid && passwordValid;
 
+  /* ─── Visual Viewport & Teclado Móvel ─────────────────────────── */
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handleResize = () => {
+      setViewportHeight(vv.height);
+      const keyboardActive = window.innerHeight - vv.height > 100;
+      setIsKeyboardOpen(keyboardActive);
+    };
+
+    vv.addEventListener("resize", handleResize);
+    vv.addEventListener("scroll", handleResize);
+    handleResize();
+
+    return () => {
+      vv.removeEventListener("resize", handleResize);
+      vv.removeEventListener("scroll", handleResize);
+    };
+  }, []);
+
+  // Garante que o campo com foco nunca fique oculto pelo teclado
+  useEffect(() => {
+    const handleFocus = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        setTimeout(() => {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 150);
+      }
+    };
+    window.addEventListener("focusin", handleFocus);
+    return () => window.removeEventListener("focusin", handleFocus);
+  }, []);
+
   /* ─── Session bootstrap ─────────────────────────────────────────── */
   useEffect(() => {
     const verified = searchParams.get("verified");
@@ -797,14 +835,15 @@ const Auth = () => {
   return (
     <div
       data-no-auto-scroll="true"
-      className="min-h-[100dvh] w-full flex flex-col bg-background text-foreground overflow-y-auto overscroll-y-contain"
+      className="w-full flex flex-col bg-background text-foreground overflow-hidden"
       style={{
-        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
-        paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 24px)",
+        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+        maxHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
+        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 8px)",
       }}
     >
       {/* ─── Header: idêntico ao modelo anterior com < na esquerda e título centralizado ─── */}
-      <header className="relative flex items-center justify-center px-4 shrink-0 pb-3">
+      <header className="relative flex items-center justify-center px-4 shrink-0 pb-2">
         <button
           type="button"
           onClick={onBackClick}
@@ -831,8 +870,8 @@ const Auth = () => {
         </div>
       )}
 
-      {/* ─── Content: layout com título no topo e botão ancorado no rodapé com rolagem natural ─── */}
-      <div className="w-full max-w-md mx-auto px-6 pt-2 pb-2 flex-1 flex flex-col">
+      {/* ─── Content: Área de rolagem dos campos (ScrollView) ─── */}
+      <div className="w-full max-w-md mx-auto px-6 pt-2 pb-2 flex-1 overflow-y-auto overscroll-contain flex flex-col">
         <AnimatePresence mode="wait">
           <motion.div
             key={mode === "login" ? "login" : `signup-${step}`}
@@ -840,13 +879,13 @@ const Auth = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-full flex-1 flex flex-col justify-between"
+            className="w-full flex-1 flex flex-col justify-start"
           >
             {mode === "login" ? (
               <form
                 id="auth-login-form"
                 onSubmit={handleLoginSubmit}
-                className="flex-1 flex flex-col justify-between"
+                className="w-full"
                 noValidate
               >
                 <div>
@@ -904,35 +943,6 @@ const Auth = () => {
                     </div>
                   </div>
                 </div>
-
-                {/* Botão Continuar — sempre bem lá embaixo */}
-                <div className="mt-auto pt-8 pb-2 w-full">
-                  <button
-                    type="submit"
-                    onClick={onCtaClick}
-                    disabled={!canGoCta || isLoading}
-                    className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-                    style={{ touchAction: "manipulation" }}
-                  >
-                    {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-                    {ctaLabel}
-                  </button>
-
-                  <p className="pt-4 text-center text-[13.5px] text-foreground/60">
-                    Não tem uma conta?{" "}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMode("signup");
-                        setStep("name");
-                      }}
-                      className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                      style={{ touchAction: "manipulation" }}
-                    >
-                      Criar conta
-                    </button>
-                  </p>
-                </div>
               </form>
             ) : (
               <form
@@ -941,7 +951,7 @@ const Auth = () => {
                   e.preventDefault();
                   handleSignupNext();
                 }}
-                className="flex-1 flex flex-col justify-between"
+                className="w-full"
                 noValidate
               >
                 <div>
@@ -976,39 +986,65 @@ const Auth = () => {
                     )}
                   </div>
                 </div>
-
-                <div className="mt-auto pt-8 pb-2 w-full">
-                  <button
-                    type="submit"
-                    onClick={onCtaClick}
-                    disabled={!canGoCta || isLoading}
-                    className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-                    style={{ touchAction: "manipulation" }}
-                  >
-                    {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-                    {ctaLabel}
-                  </button>
-
-                  {step !== "otp" && (
-                    <p className="pt-4 text-center text-[13.5px] text-foreground/60">
-                      Já tem uma conta?{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode("login");
-                        }}
-                        className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                        style={{ touchAction: "manipulation" }}
-                      >
-                        Entrar
-                      </button>
-                    </p>
-                  )}
-                </div>
               </form>
             )}
           </motion.div>
         </AnimatePresence>
+      </div>
+
+      {/* ─── Botão Continuar Fixo Acima do Teclado (Fora do ScrollView) ─── */}
+      <div
+        className="shrink-0 w-full max-w-md mx-auto px-6 bg-background/95 backdrop-blur-xs transition-all duration-150 pt-2"
+        style={{
+          paddingBottom: isKeyboardOpen
+            ? "12px"
+            : "max(16px, env(safe-area-inset-bottom, 16px))",
+        }}
+      >
+        <button
+          type={mode === "login" ? "submit" : "button"}
+          form={mode === "login" ? "auth-login-form" : "auth-signup-form"}
+          onClick={onCtaClick}
+          disabled={!canGoCta || isLoading}
+          className="w-full h-[52px] sm:h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+          style={{ touchAction: "manipulation" }}
+        >
+          {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+          {ctaLabel}
+        </button>
+
+        {mode === "login" ? (
+          <p className="pt-3 text-center text-[13.5px] text-foreground/60">
+            Não tem uma conta?{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signup");
+                setStep("name");
+              }}
+              className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
+              style={{ touchAction: "manipulation" }}
+            >
+              Criar conta
+            </button>
+          </p>
+        ) : (
+          step !== "otp" && (
+            <p className="pt-3 text-center text-[13.5px] text-foreground/60">
+              Já tem uma conta?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                }}
+                className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
+                style={{ touchAction: "manipulation" }}
+              >
+                Entrar
+              </button>
+            </p>
+          )
+        )}
       </div>
     </div>
   );

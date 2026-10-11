@@ -30,6 +30,10 @@ import { ConfirmAttendanceModal } from "./ConfirmAttendanceModal";
 import { CancelAllAppointmentsModal } from "./CancelAllAppointmentsModal";
 import { MobileManualBookingModal } from "./mobile/MobileManualBookingModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAdminBarbeiroId } from "@/hooks/useAdminBarbeiroId";
+import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
+import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
+import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 
 export interface TimelineAppointment {
   id: string;
@@ -117,12 +121,17 @@ const getPaymentBadge = (apt: { tipo_agendamento: string | null; payment_method:
 
 export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
+  const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
+  const overdueState = useOverdueAppointments(effectiveBarbeiroId);
+  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
   const syncKey = (dateStr: string) =>
-    `admin-agenda-desktop:${adminContext.barbeiroId || tenantId || "all"}:${dateStr}`;
+    `admin-agenda-desktop:${effectiveBarbeiroId || tenantId || "all"}:${dateStr}`;
   const initialKey = format(new Date(), "yyyy-MM-dd");
   const [appointments, setAppointments] = useState<TimelineAppointment[]>(
     () => readSyncCache<TimelineAppointment[]>(syncKey(initialKey))?.data || []
@@ -138,7 +147,6 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [services, setServices] = useState<Array<{ id: string; nome: string }>>([]);
   const [showFilters, setShowFilters] = useState(false);
-  const navigate = useNavigate();
   const [tenantBarberIds, setTenantBarberIds] = useState<string[] | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -464,7 +472,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
         onAppointmentClick={(apt) =>
           navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt as any } })
         }
-        barbeiroId={adminContext.barbeiroId}
+        barbeiroId={effectiveBarbeiroId}
         tenantId={tenantId}
       />
     );
@@ -475,6 +483,16 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
     <div className="flex flex-col animate-fade-in pb-16 relative">
       {/* ══════ HEADER SECTION ══════ */}
       <div className="flex-shrink-0 px-6 pt-2 pb-4">
+        {overdueState.count > 0 && (
+          <div className="mb-4">
+            <OverdueAppointmentsBanner
+              count={overdueState.count}
+              hasPastDays={overdueState.hasOverduePastDays}
+              onOpenModal={() => setIsOverdueModalOpen(true)}
+            />
+          </div>
+        )}
+
         {/* Title + Controls */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
@@ -565,7 +583,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
               scrollToDate(today);
             }}
             className={cn(
-              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-opacity duration-200",
+              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200",
               isToday(selectedDate) ? "opacity-0 pointer-events-none" : "opacity-100"
             )}
           >
@@ -602,39 +620,35 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                           setSelectedDate(day);
                           scrollToDate(day);
                         }}
-                        className="w-full flex flex-col items-center gap-1.5 py-1.5 hover:opacity-80 transition-all"
+                        className={cn(
+                          "w-full flex flex-col items-center gap-1 py-1 transition-all duration-200 select-none cursor-pointer",
+                          isSelected ? "opacity-100 scale-105" : "opacity-40 hover:opacity-75 scale-95"
+                        )}
                       >
                         <span className={cn(
-                          "text-[10px] font-semibold uppercase leading-none tracking-wider transition-colors duration-150",
-                          isSelected ? "text-foreground" : "text-muted-foreground/40"
+                          "text-[11px] uppercase leading-none tracking-tight transition-colors duration-200",
+                          isSelected ? "text-foreground font-semibold" : "text-muted-foreground/70 font-medium"
                         )}>
                           {shortDayName(day)}
                         </span>
 
                         <div
                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full will-change-transform",
-                            isSelected && "bg-foreground shadow-md shadow-foreground/20",
-                            dayIsToday && !isSelected && "ring-1 ring-primary/30"
+                            "w-10 h-10 flex items-center justify-center rounded-full will-change-transform transition-all duration-200 ease-out",
+                            isSelected
+                              ? "bg-foreground text-background shadow-xs font-semibold"
+                              : dayIsToday
+                                ? "text-foreground font-semibold ring-1.5 ring-foreground/40 bg-transparent"
+                                : "text-foreground font-normal bg-transparent hover:bg-secondary/40"
                           )}
-                          style={{
-                            transform: isSelected ? "scale(1.08)" : "scale(1)",
-                            transition: "transform 200ms ease-out, background-color 200ms ease-out",
-                          }}
                         >
                           <span className={cn(
-                            "font-bold leading-none",
-                            isSelected ? "text-[17px] text-background" : "text-[15px] text-foreground"
-                          )}
-                          style={{ transition: "font-size 200ms ease-out" }}
-                          >
+                            "leading-none tabular-nums transition-all duration-200",
+                            isSelected ? "text-[16px] text-background font-semibold" : dayIsToday ? "text-[15px] font-semibold" : "text-[15px] font-normal"
+                          )}>
                             {format(day, "d")}
                           </span>
                         </div>
-
-                        {isSelected && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                        )}
                       </button>
                     </div>
                   );
@@ -682,15 +696,18 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                 const duration = (apt as any).duracao || apt.servico?.duracao_minutos || 30;
                 const horaFormatted = apt.hora.substring(0, 5);
 
+                const isCompleted = apt.status === "completed" || apt.status === "no_show";
+
                 return (
                   <div
                     key={apt.id}
                     onClick={() => navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt } })}
+                    style={{ opacity: isCompleted ? 0.48 : 1 }}
                     className={cn(
-                      "rounded-xl border-l-[3px] p-4 border",
-                      "hover:scale-[1.01] transition-all cursor-pointer",
-                      "dark:bg-card/60 bg-card backdrop-blur-sm",
-                      "dark:shadow-none shadow-[0_2px_10px_rgba(0,0,0,0.06)]",
+                      "rounded-xl border-l-[3px] p-4 border transition-all cursor-pointer",
+                      isCompleted
+                        ? "dark:bg-white/[0.015] bg-muted/20 border-border/30"
+                        : "hover:scale-[1.01] dark:bg-card/60 bg-card backdrop-blur-sm dark:shadow-none shadow-[0_2px_10px_rgba(0,0,0,0.06)]",
                       statusConfig.border, statusConfig.accent, statusConfig.lightBg
                     )}
                   >
@@ -814,8 +831,17 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
         initialTime={selectedEmptySlot.time}
         onSuccess={() => loadAppointments(selectedDate)}
         skipValidation={true}
-        barbeiroId={adminContext.barbeiroId || undefined}
+        barbeiroId={effectiveBarbeiroId || undefined}
         tenantId={tenantId}
+      />
+
+      {/* Modal de confirmação em lote de agendamentos pendentes */}
+      <PendingAppointmentsModal
+        open={isOverdueModalOpen}
+        onOpenChange={setIsOverdueModalOpen}
+        appointments={overdueState.overdueAppointments}
+        onCompleteBulk={overdueState.completeBulk}
+        isCompleting={overdueState.isCompleting}
       />
     </div>
   );

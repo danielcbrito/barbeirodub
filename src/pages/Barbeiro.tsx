@@ -21,6 +21,8 @@ import { useWalletActivationPrompt } from "@/hooks/useWalletActivationPrompt";
 import { useWhatsAppStatus } from "@/hooks/useWhatsAppStatus";
 import { WalletActivationModal } from "@/components/barber/WalletActivationModal";
 import { PendingSetupModal } from "@/components/tenant/PendingSetupModal";
+import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
+import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 
 /* ── Abas primárias (bottom nav): carregadas eager para navegação instantânea ── */
 import { BarberDashboard } from "@/components/barber/BarberDashboard";
@@ -226,6 +228,32 @@ const Barbeiro = () => {
       sessionStorage.setItem(sessionKey, "1");
     }
   }, [authChecked, barberContext, whatsAppStatus.isLoading, whatsAppStatus.isConnected, whatsAppStatus.resolvedBarbeiroId, walletPrompt.isLoading, walletPrompt.walletActive, walletPrompt.resolvedBarbeiroId]);
+
+  // Monitoramento de agendamentos vencidos/em aberto
+  const overdueState = useOverdueAppointments(barberContext?.barbeiroId);
+  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
+  const hasAutoPromptedOverdueRef = useRef(false);
+
+  useEffect(() => {
+    if (!barberContext?.barbeiroId || overdueState.isLoading) return;
+
+    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
+      const promptedThisSession = typeof window !== "undefined" && window.sessionStorage.getItem("overdue_prompted_v1") === "1";
+      if (overdueState.hasOverduePastDays || !promptedThisSession) {
+        setIsOverdueModalOpen(true);
+        hasAutoPromptedOverdueRef.current = true;
+        try {
+          window.sessionStorage.setItem("overdue_prompted_v1", "1");
+        } catch {}
+      }
+    }
+  }, [barberContext?.barbeiroId, overdueState.count, overdueState.hasOverduePastDays, overdueState.isLoading]);
+
+  useEffect(() => {
+    const handleOpen = () => setIsOverdueModalOpen(true);
+    window.addEventListener("open-overdue-modal", handleOpen);
+    return () => window.removeEventListener("open-overdue-modal", handleOpen);
+  }, []);
 
   // Verificação de manutenção
   const { 
@@ -686,6 +714,15 @@ const Barbeiro = () => {
           onSuccess={walletPrompt.onActivated}
         />
 
+        {/* Modal de confirmação em lote de agendamentos pendentes */}
+        <PendingAppointmentsModal
+          open={isOverdueModalOpen}
+          onOpenChange={setIsOverdueModalOpen}
+          appointments={overdueState.overdueAppointments}
+          onCompleteBulk={overdueState.completeBulk}
+          isCompleting={overdueState.isCompleting}
+        />
+
         {/* Banner de aviso de manutenção (barbeiro/ambos) */}
         {showBarberBanner && (
           <MaintenanceWarningBanner message={warningMessage!} />
@@ -708,29 +745,29 @@ const Barbeiro = () => {
         <main
           className={cn(
             "flex-1 min-h-0 bg-background",
-            (location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo")) && "pb-0"
+            (location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp")) && "pb-0"
           )}
           style={
-            location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo")
+            location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp")
               ? undefined
               : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
           }
         >
           <div
             className={cn(
-              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp")
+              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/config-barbearia")
                 ? "p-0"
                 : "px-3 sm:px-4 py-2"
             )}
             style={
-              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp")
+              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/config-barbearia")
                 ? undefined
                 : { paddingTop: "calc(0.5rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }
             }
           >
 
 
-            {!location.pathname.includes("/barbeiro/promocoes") && !location.pathname.includes("/perfil") && !isInGracePeriod && (
+            {!location.pathname.includes("/barbeiro/promocoes") && !location.pathname.includes("/perfil") && !location.pathname.includes("/config-barbearia") && !location.pathname.includes("/whatsapp") && !isInGracePeriod && (
               <div className="mb-3">
                 <BarberPushPermissionBanner barbeiroId={barberContext.barbeiroId} />
               </div>
@@ -791,7 +828,7 @@ const Barbeiro = () => {
 
         {/* Bottom Navigation Mobile — esconder no período de graça, configurações, horários, financeiro e disparo */}
         {!isInGracePeriod && !location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("horarios") && !location.pathname.includes("financeiro") && !location.pathname.includes("meus-dados") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("relatorios") && !location.pathname.includes("servicos") && !location.pathname.includes("planos") && !location.pathname.includes("cupons") && !location.pathname.includes("promocoes") && !location.pathname.includes("whatsapp") && !location.pathname.includes("portfolio") && !location.pathname.includes("loja") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("configuracoes") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
-          <BarberMobileNavigation />
+          <BarberMobileNavigation barbeiroId={barberContext?.barbeiroId} />
         )}
         <SupportChatBubble />
       </div>
@@ -808,6 +845,15 @@ const Barbeiro = () => {
         whatsappConnected={whatsAppStatus.isConnected}
         walletActive={walletPrompt.walletActive === true}
         basePath="/barbeiro"
+      />
+
+      {/* Modal de confirmação em lote de agendamentos pendentes (desktop) */}
+      <PendingAppointmentsModal
+        open={isOverdueModalOpen}
+        onOpenChange={setIsOverdueModalOpen}
+        appointments={overdueState.overdueAppointments}
+        onCompleteBulk={overdueState.completeBulk}
+        isCompleting={overdueState.isCompleting}
       />
       {showBarberBanner && (
         <MaintenanceWarningBanner message={warningMessage!} />
@@ -834,7 +880,12 @@ const Barbeiro = () => {
             </div>
           )}
           <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-            <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+            <div className={cn(
+              "max-w-[1600px] mx-auto",
+              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/perfil"))
+                ? "p-0"
+                : "p-6 lg:p-8"
+            )}>
               <Suspense fallback={<LoadingFallback />}>
                 <Routes>
                   {isInGracePeriod ? (

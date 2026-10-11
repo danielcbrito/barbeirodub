@@ -602,6 +602,7 @@ const TenantAdmin = () => {
           <div className="lg:hidden">
             <AdminMobileNavigation
               basePath={BASE}
+              barbeiroId={adminContext?.barbeiroId}
             />
           </div>
         )}
@@ -645,7 +646,13 @@ const TenantAdmin = () => {
           <TrialBanner daysRemaining={subscription.daysRemaining} onSubscribe={goToSubscription} />
         )}
         <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-          <div className={isSubscriptionRoute ? "h-full" : "p-6 lg:p-8 max-w-[1600px] mx-auto"}>
+          <div className={
+            isSubscriptionRoute
+              ? "h-full"
+              : (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/perfil"))
+              ? "p-0 max-w-[1600px] mx-auto"
+              : "p-6 lg:p-8 max-w-[1600px] mx-auto"
+          }>
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
                 <Route index element={<AdminDashboard adminContext={adminContext} basePath={BASE} tenantId={tenantId} />} />

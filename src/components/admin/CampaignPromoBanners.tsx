@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Sparkles, MessageCircle, Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
-import whatsappLogo from "@/assets/whatsapp-logo.png";
+import bannerAiBarber from "@/assets/banner_ai_barber.jpg";
+import bannerCampaignsBarber from "@/assets/banner_campaigns_barber.jpg";
 import { useTenantSubscription } from "@/hooks/useTenantSubscription";
 
 interface CampaignPromoBannersProps {
@@ -18,13 +19,11 @@ export function CampaignPromoBanners({ basePath = "/admin", className, tenantId 
   const subscription = useTenantSubscription(effectiveTenantId);
 
   const handleGoToAiAgent = () => {
-    // Se a barbearia tem plano ativo ou período de testes com Agente de IA:
     const hasAccess = (subscription.isActive || subscription.isTrial) && !subscription.isExpired;
 
     if (hasAccess) {
       navigate(`${basePath}/whatsapp?highlight=agente`, { state: { highlight: "agente" } });
     } else {
-      // Direciona para a tela de planos
       navigate(`${basePath}/planos`);
     }
   };
@@ -35,88 +34,101 @@ export function CampaignPromoBanners({ basePath = "/admin", className, tenantId 
 
   return (
     <div className={cn("space-y-3.5", className)}>
-      {/* ─── 1. BANNER NOVO (TOPO): Agente de IA ─── */}
+      {/* ─── 1. BANNER: Agente de IA (Barbeiro cortando sem parar pro WhatsApp) ─── */}
       <div
         onClick={handleGoToAiAgent}
-        className="group relative cursor-pointer overflow-hidden rounded-[26px] bg-[#18191d] text-white border border-emerald-500/20 shadow-md transition-all duration-300 hover:border-emerald-500/40 active:scale-[0.99] p-5 sm:p-6"
-        style={{
-          backgroundImage: "radial-gradient(circle at 85% 45%, rgba(37,211,102,0.14) 0%, rgba(16,185,129,0.05) 45%, transparent 70%)",
-        }}
+        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 dark:border-white/10 shadow-md transition-all duration-300 active:scale-[0.99] h-[215px] sm:h-[235px] flex flex-col justify-between p-5 select-none"
       >
-        {/* Ícone do WhatsApp ao fundo bem desfocado e elegante */}
+        {/* Foto de Fundo com Zoom Suave no Hover */}
         <img
-          src={whatsappLogo}
-          alt=""
-          aria-hidden="true"
-          className="absolute -right-3 -bottom-4 w-32 h-32 sm:w-36 sm:h-36 object-contain opacity-[0.16] filter blur-[0.8px] pointer-events-none select-none transition-transform duration-500 group-hover:scale-105"
+          src={bannerAiBarber}
+          alt="Barbeiro atendendo cliente"
+          className="absolute inset-0 w-full h-full object-cover object-center filter brightness-[0.72] contrast-[1.05] transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none"
         />
 
-        <div className="relative z-10 flex flex-col justify-between">
-          <div>
-            <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-snug">
-              Agente de IA
+        {/* Gradiente Cinematográfico Apple Dark */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#09090b] via-[#09090b]/65 to-[#09090b]/25"
+        />
+
+        {/* Topo do Card: Badge Apple Liquid Glass */}
+        <div className="relative z-10 flex items-center justify-between">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-[11px] font-medium text-white shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-[#25D366] animate-pulse" />
+            <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
+            <span>Agente de IA no WhatsApp</span>
+          </div>
+
+          <span className="text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-md text-white/80 border border-white/10">
+            24h Ativo
+          </span>
+        </div>
+
+        {/* Conteúdo Inferior */}
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3 mt-auto">
+          <div className="max-w-md">
+            <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
+              Corte sem parar para responder
             </h3>
-            <p className="text-xs sm:text-sm text-white/75 mt-1 leading-relaxed max-w-md">
-              Atende clientes, responde dúvidas e agenda horários de forma 100% automatizada 24h direto pelo seu WhatsApp.
+            <p className="text-[12.5px] text-zinc-300 mt-1 leading-relaxed font-normal line-clamp-2">
+              Seu assistente virtual responde dúvidas, envia preços e fecha horários na sua agenda enquanto você trabalha.
             </p>
           </div>
 
-          {/* Botão: Configure e ative */}
-          <div className="mt-4 flex items-center justify-between bg-black/45 hover:bg-black/65 border border-white/15 rounded-full py-1.5 pl-4 pr-1.5 transition-all max-w-xs shadow-sm">
-            <span className="text-xs sm:text-sm font-semibold text-white tracking-wide">
-              Configurar e ativar
-            </span>
-            <div className="w-7 h-7 rounded-full bg-white text-black flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0">
-              <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
-            </div>
+          {/* Botão Cápsula Apple HIG */}
+          <div className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black font-semibold text-xs shadow-md group-hover:bg-zinc-100 group-hover:scale-[1.02] transition-all">
+            <span>Configurar e ativar</span>
+            <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
           </div>
         </div>
       </div>
 
-      {/* ─── 2. BANNER DE CAMPANHAS (ABAIXO): Efeito vermelho e notas de dinheiro de fundo ─── */}
+      {/* ─── 2. BANNER: Campanhas para Novos Clientes (Barbeiro com cliente satisfeito) ─── */}
       <div
         onClick={handleGoToCampaigns}
-        className="group relative cursor-pointer overflow-hidden rounded-[26px] bg-[#18191d] text-white border border-rose-500/20 shadow-md transition-all duration-300 hover:border-rose-500/40 active:scale-[0.99] p-5 sm:p-6"
-        style={{
-          backgroundImage: "radial-gradient(circle at 85% 45%, rgba(239,68,68,0.15) 0%, rgba(244,63,94,0.06) 45%, transparent 70%)",
-        }}
+        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 dark:border-white/10 shadow-md transition-all duration-300 active:scale-[0.99] h-[215px] sm:h-[235px] flex flex-col justify-between p-5 select-none"
       >
-        {/* Marca d'água de notas de dinheiro no fundo */}
-        <div className="absolute -right-2 -bottom-2 w-32 h-32 sm:w-36 sm:h-36 pointer-events-none select-none opacity-[0.14] filter blur-[0.4px] transition-transform duration-500 group-hover:scale-105 flex items-center justify-center">
-          <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" className="w-full h-full text-rose-400">
-            {/* Nota 1 inclinada */}
-            <g transform="rotate(-18 45 42)">
-              <rect x="12" y="24" width="62" height="34" rx="4" strokeWidth="2.4" />
-              <circle cx="43" cy="41" r="8.5" strokeWidth="2" />
-              <path d="M43 35.5v11M40 38.5h6" strokeWidth="1.8" strokeLinecap="round" />
-            </g>
-            {/* Nota 2 inclinada caindo */}
-            <g transform="rotate(16 68 62)" opacity="0.85">
-              <rect x="36" y="44" width="56" height="30" rx="3.5" strokeWidth="2.2" />
-              <circle cx="64" cy="59" r="7" strokeWidth="1.9" />
-              <path d="M64 54.5v9M61.5 56.8h5" strokeWidth="1.7" strokeLinecap="round" />
-            </g>
-          </svg>
+        {/* Foto de Fundo com Zoom Suave no Hover */}
+        <img
+          src={bannerCampaignsBarber}
+          alt="Barbeiro satisfeito cumprimentando novo cliente"
+          className="absolute inset-0 w-full h-full object-cover object-center filter brightness-[0.70] contrast-[1.05] transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none"
+        />
+
+        {/* Gradiente Cinematográfico Apple Dark */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#09090b] via-[#09090b]/65 to-[#09090b]/25"
+        />
+
+        {/* Topo do Card: Badge Apple Liquid Glass */}
+        <div className="relative z-10 flex items-center justify-between">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-[11px] font-medium text-white shadow-xs">
+            <Gift className="w-3.5 h-3.5 text-amber-400" />
+            <span>Fidelidade & Novos Clientes</span>
+          </div>
+
+          <span className="text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-md text-white/80 border border-white/10">
+            Crescimento
+          </span>
         </div>
 
-        <div className="relative z-10 flex flex-col justify-between">
-          <div>
-            <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-snug">
-              Campanhas para novos clientes
+        {/* Conteúdo Inferior */}
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3 mt-auto">
+          <div className="max-w-md">
+            <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
+              Lote sua cadeira com novos clientes
             </h3>
-            <p className="text-xs sm:text-sm text-white/75 mt-1 leading-relaxed max-w-md">
-              Atraia clientes com cupons, indicações e fidelidade para lotar sua agenda e faturar mais.
+            <p className="text-[12.5px] text-zinc-300 mt-1 leading-relaxed font-normal line-clamp-2">
+              Atraia clientes com cupons de primeiro corte, programa de indicação e cartão fidelidade automático.
             </p>
           </div>
 
-          {/* Botão: Configure e ative */}
-          <div className="mt-4 flex items-center justify-between bg-black/45 hover:bg-black/65 border border-white/15 rounded-full py-1.5 pl-4 pr-1.5 transition-all max-w-xs shadow-sm">
-            <span className="text-xs sm:text-sm font-semibold text-white tracking-wide">
-              Configurar e ativar
-            </span>
-            <div className="w-7 h-7 rounded-full bg-white text-black flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0">
-              <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
-            </div>
+          {/* Botão Cápsula Apple HIG */}
+          <div className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black font-semibold text-xs shadow-md group-hover:bg-zinc-100 group-hover:scale-[1.02] transition-all">
+            <span>Criar campanhas</span>
+            <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
           </div>
         </div>
       </div>

@@ -801,7 +801,7 @@ export function BarberConfigBarbearia({
 
   /** Hub principal — 100% sério, minimalista, institucional e estratégico (Padrão Atendimento & Notificações) */
   return (
-    <div className="pb-10 min-h-app bg-background">
+    <div className="pb-10">
       {/* Inputs ocultos para upload de foto e banner */}
       <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
       <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
@@ -812,13 +812,18 @@ export function BarberConfigBarbearia({
         onBack={() => navigate(`${appBasePath}/perfil`)}
       />
 
-      <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
+      <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
         {/* Barra Superior: Barbearia Ativa + Botões de Ação */}
-        <div className="flex items-center justify-between gap-2 px-1 py-1">
+        <div className="flex items-center justify-between gap-2 px-1 py-0.5">
           <div className="min-w-0 flex-1 flex items-center gap-2">
-            <span className="text-[14.5px] font-semibold text-foreground truncate block">
+            <span className="text-[14px] font-semibold text-foreground truncate block">
               {activeUnit?.nome || tenantNome}
             </span>
+            {activeUnit?.is_sede && (
+              <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
+                Sede
+              </span>
+            )}
             {activeUnit?.ativo === false && (
               <span className="text-[9.5px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 shrink-0">
                 Pausada
@@ -832,10 +837,10 @@ export function BarberConfigBarbearia({
               <button
                 type="button"
                 onClick={() => setShowSelectUnitDrawer(true)}
-                className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40 shadow-xs"
+                className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40"
               >
                 <Store className="w-3.5 h-3.5 opacity-70" />
-                <span>Trocar barbearia</span>
+                <span>Trocar filial</span>
                 <ChevronDown className="w-3 h-3 opacity-60" />
               </button>
             )}
@@ -844,11 +849,11 @@ export function BarberConfigBarbearia({
             <button
               type="button"
               onClick={() => setWizardOpen(true)}
-              className="text-[12px] font-medium text-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40 shadow-xs"
+              className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40"
               title="Adicionar nova barbearia"
             >
               <Plus className="w-3.5 h-3.5 text-foreground stroke-[2.2]" />
-              <span>Nova barbearia</span>
+              <span>Nova</span>
             </button>
           </div>
         </div>
@@ -874,109 +879,61 @@ export function BarberConfigBarbearia({
           </div>
         )}
 
-        {/* ═══ CARD DE IDENTIDADE VISUAL: FOTO E BANNER DA BARBEARIA ═══ */}
+        {/* ═══ CARD DE IDENTIDADE VISUAL (100% MINIMALISTA, SÉRIO & ESTRATÉGICO — PADRÃO APPLE HIG) ═══ */}
         <div
           onClick={() => setActiveScreen("fotos-banner")}
-          className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card overflow-hidden shadow-xs cursor-pointer group hover:border-foreground/30 transition-all"
+          className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 flex items-center justify-between gap-3 shadow-xs cursor-pointer hover:border-foreground/30 active:scale-[0.99] transition-all group"
         >
-          {/* Banner Preview Compacto com altura controlada (100px) */}
-          <div className="relative w-full h-[100px] bg-muted overflow-hidden" style={{ height: 100, maxHeight: 100 }}>
-            <img
-              src={bannerUrl || profileBannerDefault}
-              alt="Banner da barbearia"
-              className="w-full h-full object-cover group-hover:scale-[1.01] transition-transform duration-300"
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/15 to-transparent" />
-
-            <button
-              type="button"
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {/* Logo da Barbearia com indicador sutil de câmera */}
+            <div
               onClick={(e) => {
                 e.stopPropagation();
-                bannerInputRef.current?.click();
+                logoInputRef.current?.click();
               }}
-              disabled={uploadingBanner}
-              className="absolute top-2.5 right-2.5 h-6 px-2.5 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/15 text-white/90 text-[10.5px] font-medium flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
-              title="Trocar banner"
+              title="Toque para trocar a foto de perfil"
+              className="relative shrink-0 w-11 h-11 active:scale-95 transition-transform"
             >
-              {uploadingBanner ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Camera className="w-3 h-3" />
-              )}
-              <span>Alterar banner</span>
-            </button>
-          </div>
-
-          {/* Logo e Nome da Barbearia com dimensões estritamente fixadas */}
-          <div className="px-4 pb-3.5 pt-0 flex items-end justify-between gap-3">
-            <div className="flex items-end gap-3 min-w-0">
-              {/* Avatar da Logo da Barbearia (60px x 60px fixo) com badge de câmera projetado para fora */}
-              <div className="relative -mt-7 shrink-0" style={{ width: 60, height: 60 }}>
-                <div
-                  className="w-full h-full rounded-2xl border-2 border-card bg-secondary overflow-hidden shadow-md flex items-center justify-center"
-                  style={{ width: 60, height: 60, minWidth: 60, minHeight: 60 }}
-                >
-                  {activeUnit?.logo_url || tenantLogoUrl ? (
-                    <img
-                      src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
-                      alt={tenantNome}
-                      className="w-full h-full object-cover rounded-2xl"
-                      style={{ width: 60, height: 60, objectFit: "cover" }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center font-bold text-foreground text-lg">
-                      {(tenantNome || "B").charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-
-                {/* Botão da Câmera 100% funcional no canto inferior direito, projetado para fora sem recorte */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    logoInputRef.current?.click();
-                  }}
-                  disabled={uploadingLogo}
-                  className="absolute -bottom-1 -right-1 z-10 w-6 h-6 rounded-full bg-foreground text-background flex items-center justify-center border-2 border-card shadow-md hover:scale-110 active:scale-95 transition-all cursor-pointer"
-                  title="Trocar foto de perfil"
-                  aria-label="Trocar foto de perfil"
-                >
-                  {uploadingLogo ? (
-                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                  ) : (
-                    <Camera className="w-3 h-3 stroke-[2.2]" />
-                  )}
-                </button>
+              <div className="w-full h-full rounded-2xl border border-border/50 bg-secondary/80 overflow-hidden flex items-center justify-center shadow-xs group-hover:border-foreground/40 transition-colors">
+                {uploadingLogo ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : activeUnit?.logo_url || tenantLogoUrl ? (
+                  <img
+                    src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
+                    alt={tenantNome}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="font-bold text-foreground text-[15px]">
+                    {(tenantNome || "B").charAt(0).toUpperCase()}
+                  </span>
+                )}
               </div>
-
-              <div className="min-w-0 pb-0.5">
-                <p className="text-[14px] font-semibold text-foreground truncate leading-tight">
-                  {activeUnit?.nome || tenantNome || DEFAULT_COMPANY_NAME}
-                </p>
-                <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
-                  Foto de perfil e banner da barbearia
-                </p>
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-foreground text-background flex items-center justify-center border border-card shadow-xs">
+                <Camera className="w-2.5 h-2.5 stroke-[2.2]" />
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveScreen("fotos-banner");
-              }}
-              className="shrink-0 mb-0.5 flex items-center gap-1 active:scale-95 transition-all px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium border border-border/40 shadow-xs"
-            >
+            <div className="min-w-0 flex-1">
+              <p className="text-[13.5px] font-semibold text-foreground truncate">
+                Identidade Visual
+              </p>
+              <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
+                Foto de perfil e banner de capa
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            {/* Botão Único Cápsula Apple — Editar fotos e banner */}
+            <div className="px-3.5 py-1.5 rounded-full bg-foreground text-background text-[12px] font-semibold shadow-xs flex items-center gap-1 group-hover:opacity-90 active:scale-95 transition-all">
               <span>Editar</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+              <ChevronRight className="w-3.5 h-3.5 stroke-[2.2]" />
+            </div>
           </div>
         </div>
 
         {/* ═══ LISTA UNIFICADA DIRETO NA TELA DE FUNDO (PADRÃO ATENDIMENTO & NOTIFICAÇÕES) ═══ */}
-        {/* Fica 100% sério, limpo, sem quadradinhos ou caixas em volta */}
         <div className="divide-y divide-border/25 dark:divide-white/[0.08] pt-1">
           <ConfigListItem
             label="Dados da Barbearia"
@@ -1020,7 +977,7 @@ export function BarberConfigBarbearia({
           />
           <ConfigListItem
             label="Filiais da Barbearia"
-            description={`${unidades.length} ${unidades.length === 1 ? "1 unidade cadastrada · Matriz" : `${unidades.length} unidades cadastradas · Matriz e filiais`}`}
+            description={unidades.length <= 1 ? "1 unidade cadastrada · Matriz" : `${unidades.length} unidades cadastradas · Matriz e filiais`}
             onClick={() => {
               if (unidades.length <= 1) {
                 setWizardOpen(true);
@@ -1031,8 +988,8 @@ export function BarberConfigBarbearia({
           />
         </div>
 
-        {/* ═══ ADICIONAR UMA NOVA BARBEARIA (SIMPLES, TRADICIONAL & DIRETO) ═══ */}
-        <div className="pt-1">
+        {/* ═══ ADICIONAR UMA NOVA BARBEARIA ═══ */}
+        <div className="pt-2">
           <button
             type="button"
             onClick={() => setWizardOpen(true)}
@@ -1057,82 +1014,47 @@ export function BarberConfigBarbearia({
           </button>
         </div>
 
-        {/* ═══ GERENCIAMENTO OPERACIONAL DA BARBEARIA (PAUSAR / EXCLUIR) ═══ */}
-        <div className="pt-4 pb-4 space-y-3">
-          <div className="px-1 flex items-center justify-between">
-            <span className="text-[11.5px] font-semibold text-muted-foreground uppercase tracking-wider">
-              Gerenciamento da Barbearia
-            </span>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border",
-                activeUnit?.ativo !== false
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-              )}
-            >
-              <span
-                className={cn(
-                  "w-1.5 h-1.5 rounded-full",
-                  activeUnit?.ativo !== false ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
-                )}
-              />
-              {activeUnit?.ativo !== false ? "Operação Ativa" : "Pausada Temporariamente"}
-            </span>
-          </div>
-
-          <div className="rounded-2xl border border-border/70 dark:border-white/[0.08] bg-card p-4 space-y-3.5 shadow-xs">
-            <div className="space-y-1">
-              <h4 className="text-[14px] font-semibold text-foreground">
-                {activeUnit?.nome || tenantNome}
-              </h4>
-              <p className="text-[12px] text-muted-foreground leading-relaxed">
-                {activeUnit?.ativo !== false
-                  ? "Esta filial está ativa e recebendo agendamentos normalmente. Você pode pausá-la temporariamente para suspender o fluxo sem apagar dados, ou excluí-la definitivamente caso não vá mais operar nesta unidade."
-                  : "Esta filial está pausada temporariamente e não aparece para clientes. Os dados e históricos continuam preservados. Você pode reativá-la a qualquer momento."}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              {/* Botão Pausar / Reativar */}
-              {activeUnit?.ativo !== false ? (
-                <button
-                  type="button"
-                  onClick={() => setShowPauseModal(true)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[12.5px] font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                >
-                  <PauseCircle className="w-4 h-4 shrink-0" />
-                  <span>Pausar barbearia</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleToggleAtivo}
-                  disabled={isPausing}
-                  className="w-full h-11 px-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[12.5px] font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                >
-                  {isPausing ? (
-                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  ) : (
-                    <PlayCircle className="w-4 h-4 shrink-0" />
-                  )}
-                  <span>Reativar barbearia</span>
-                </button>
-              )}
-
-              {/* Botão Excluir Barbearia */}
+        {/* ═══ AÇÕES DE GERENCIAMENTO DA BARBEARIA (100% MINIMALISTA & SÉRIO) ═══ */}
+        <div className="pt-2 pb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Botão Pausar / Reativar */}
+            {activeUnit?.ativo !== false ? (
               <button
                 type="button"
-                onClick={() => {
-                  setDeleteConfirmText("");
-                  setShowDeleteModal(true);
-                }}
-                className="w-full h-11 px-3.5 rounded-xl border border-destructive/30 bg-destructive/10 hover:bg-destructive/15 text-destructive text-[12.5px] font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                onClick={() => setShowPauseModal(true)}
+                className="w-full h-11 px-4 rounded-xl border border-border/40 hover:bg-secondary/40 text-muted-foreground hover:text-foreground text-[13px] font-medium transition-all active:scale-[0.99] flex items-center justify-center gap-2"
               >
-                <Trash2 className="w-4 h-4 shrink-0" />
-                <span>Excluir barbearia</span>
+                <PauseCircle className="w-4 h-4 stroke-[1.8] opacity-70" />
+                <span>Pausar barbearia</span>
               </button>
-            </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleToggleAtivo}
+                disabled={isPausing}
+                className="w-full h-11 px-4 rounded-xl border border-border/40 hover:bg-secondary/40 text-foreground text-[13px] font-medium transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+              >
+                {isPausing ? (
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                ) : (
+                  <PlayCircle className="w-4 h-4 stroke-[1.8] opacity-70" />
+                )}
+                <span>Reativar barbearia</span>
+              </button>
+            )}
+
+            {/* Botão Excluir Barbearia */}
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteConfirmText("");
+                setShowDeleteModal(true);
+              }}
+              className="w-full h-11 px-4 rounded-xl border border-border/30 hover:border-destructive/30 hover:bg-destructive/5 text-muted-foreground/75 hover:text-destructive text-[13px] font-medium transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+            >
+              <Trash2 className="w-4 h-4 stroke-[1.8] opacity-70" />
+              <span>Excluir barbearia</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1363,7 +1285,7 @@ export function BarberConfigBarbearia({
 }
 
 /**
- * Subcomponente de item de menu direto na tela de fundo (Padrão Atendimento & Notificações)
+ * Subcomponente de item de menu direto na tela de fundo (Padrão 100% idêntico ao Atendimento & Notificações)
  */
 function ConfigListItem({
   label,
@@ -1380,24 +1302,24 @@ function ConfigListItem({
     <button
       type="button"
       onClick={onClick}
-      className="w-full py-3.5 px-1 flex items-center justify-between text-left hover:opacity-80 active:opacity-60 transition-opacity group"
+      className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
     >
       <div className="min-w-0 pr-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13.5px] font-semibold text-foreground block truncate leading-tight">
+          <p className="text-[13.5px] font-medium text-foreground leading-snug">
             {label}
-          </span>
+          </p>
           {badge && (
             <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
               {badge}
             </span>
           )}
         </div>
-        <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 leading-snug font-normal">
+        <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
           {description}
-        </span>
+        </p>
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/35 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
     </button>
   );
 }

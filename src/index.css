@@ -288,7 +288,7 @@ All colors MUST be HSL. */
     min-height: 100%;
     min-height: 100dvh;
     min-height: -webkit-fill-available;
-    overflow-x: hidden;
+    overflow-x: clip;
     margin: 0;
     scroll-padding-top: calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 1rem);
     scroll-padding-bottom: max(var(--kb-offset, 0px), 5.5rem);
@@ -324,7 +324,7 @@ All colors MUST be HSL. */
     min-height: -webkit-fill-available;
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
-    overflow-x: hidden;
+    overflow-x: clip;
     margin: 0;
     padding: 0;
   }
@@ -341,7 +341,7 @@ All colors MUST be HSL. */
     display: flex;
     flex-direction: column;
     background: hsl(var(--background));
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   @supports (-webkit-touch-callout: none) {
@@ -1372,32 +1372,24 @@ html.platform-android-browser body {
    - Todos os textos da agenda em negrito no tema claro
    - Textos destacados / principais: nível mais forte de negrito (font-weight: 800)
    - Demais textos: nível menor de negrito (font-weight: 600)
-   - Aplicado ESTRITAMENTE ao tema claro (html:not(.dark)) e à agenda (.admin-mobile-agenda)
-   - O tema escuro (html.dark) permanece 100% inalterado com seus pesos padrão
+/* ══════════════════════════════════════════════════════════════════════
+   APPLE HIG TYPOGRAPHY & CLARITY STANDARDS (iOS)
+   SF Pro system hierarchy: Body & notes regular/medium, Headlines semibold.
+   Removes exaggerated bolding to maintain clarity, deference, and minimalism.
    ══════════════════════════════════════════════════════════════════════ */
-html:not(.dark) .admin-mobile-agenda,
-html:not(.dark) .admin-mobile-agenda button,
-html:not(.dark) .admin-mobile-agenda span,
-html:not(.dark) .admin-mobile-agenda p,
-html:not(.dark) .admin-mobile-agenda h1,
-html:not(.dark) .admin-mobile-agenda h2,
-html:not(.dark) .admin-mobile-agenda h3,
-html:not(.dark) .admin-mobile-agenda h4,
-html:not(.dark) .admin-mobile-agenda div {
+.admin-mobile-agenda {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.admin-mobile-agenda .agenda-subtle {
+  font-weight: 400;
+}
+
+.admin-mobile-agenda .agenda-strong {
   font-weight: 600;
 }
 
-/* Nível Menor de Negrito (font-weight: 600) para todos os textos secundários / normais */
-html:not(.dark) .admin-mobile-agenda .agenda-subtle,
-html:not(.dark) .admin-mobile-agenda .agenda-subtle * {
-  font-weight: 600 !important;
-}
-
-/* Nível Mais Forte de Negrito (font-weight: 800) para textos destacados / principais */
-html:not(.dark) .admin-mobile-agenda .agenda-strong,
-html:not(.dark) .admin-mobile-agenda .agenda-strong * {
-  font-weight: 800 !important;
-}
 
 /* Animação suave e minimalista de piscada para o próximo horário verde */
 @keyframes soft-pulse-blink {

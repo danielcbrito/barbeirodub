@@ -13,13 +13,14 @@ import { readSyncCache } from "@/lib/syncQueryCache";
 
 interface AppMobileNavProps {
   basePath: string;
+  barbeiroId?: string | null;
 }
 
 const items = [
   { key: "inicio", label: "Início", path: "", end: true, Icon: HomeNavIcon, countKey: "inicio" },
   { key: "agenda", label: "Agenda", path: "/agenda", Icon: AgendaNavIcon, countKey: "agenda" },
-  { key: "carteira", label: "Financeiro", path: "/carteira", Icon: FinanceiroNavIcon, countKey: "financeiro" },
-  { key: "menu", label: "Menu", path: "/perfil", Icon: MenuGridNavIcon, countKey: "menu" },
+  { key: "carteira", label: "Finanças", path: "/carteira", Icon: FinanceiroNavIcon, countKey: "financeiro" },
+  { key: "menu", label: "Mais", path: "/perfil", Icon: MenuGridNavIcon, countKey: "menu" },
 ];
 
 /**
@@ -27,15 +28,31 @@ const items = [
  * pílula ativa branca com texto e ícone escuro, ícones inativos em traço branco (26px),
  * mais larga de cima para baixo (h-[72px], itens h-[56px]) e 100% minimalista e séria.
  */
-export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
+export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: AppMobileNavProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const [barbeiroId, setBarbeiroId] = useState<string | null>(() => localStorage.getItem("barbeiroId"));
+  const [localBarbeiroId, setLocalBarbeiroId] = useState<string | null>(() => {
+    return propBarbeiroId || (typeof window !== "undefined" ? localStorage.getItem("barbeiroId") : null);
+  });
 
   useEffect(() => {
-    setBarbeiroId(localStorage.getItem("barbeiroId"));
-  }, []);
+    if (propBarbeiroId) {
+      setLocalBarbeiroId(propBarbeiroId);
+      return;
+    }
+    const current = localStorage.getItem("barbeiroId");
+    if (current) setLocalBarbeiroId(current);
+
+    const handleStorage = () => {
+      const updated = localStorage.getItem("barbeiroId");
+      if (updated) setLocalBarbeiroId(updated);
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [propBarbeiroId]);
+
+  const barbeiroId = propBarbeiroId || localBarbeiroId;
 
   // Ocultar completamente a barra de navegação em telas imersivas como disparo de mensagens
   if (location.pathname.includes("/disparo")) {
@@ -67,25 +84,40 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
     },
   });
 
-  // Contagem de itens pendentes de configuração para a aba "Menu"
+  // Contagem de itens pendentes de configuração para a aba "Menu" (Mais)
   const { data: menuPendingCount = 0 } = useQuery({
     queryKey: ["bottom-nav-menu-pending", barbeiroId],
     staleTime: 60_000,
     queryFn: async () => {
       try {
-        if (!barbeiroId) return 0;
-        // Verifica no cache síncrono do setup completion se há etapas pendentes
-        const cached = readSyncCache<{ steps: { completed: boolean }[] }>(`setup-completion:${barbeiroId}:`);
-        if (cached?.data?.steps) {
-          const incomplete = cached.data.steps.filter((s) => !s.completed).length;
-          return incomplete;
+        // 1. Verifica no localStorage por qualquer cache síncrono do setup completion
+        if (typeof window !== "undefined") {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith("dub:qc:v1:setup-completion:")) {
+              try {
+                const parsed = JSON.parse(localStorage.getItem(k) || "");
+                if (parsed?.d?.steps && Array.isArray(parsed.d.steps)) {
+                  const incomplete = parsed.d.steps.filter((s: { completed: boolean }) => !s.completed).length;
+                  if (incomplete > 0) return incomplete;
+                }
+              } catch {
+                /* ignore json error */
+              }
+            }
+          }
         }
-        const { data: barb } = await supabase
-          .from("barbeiros")
-          .select("setup_completed")
-          .eq("id", barbeiroId)
-          .maybeSingle();
-        return barb && !barb.setup_completed ? 1 : 0;
+
+        // 2. Se não encontrou no cache síncrono, consulta no Supabase
+        if (barbeiroId) {
+          const { data: barb } = await supabase
+            .from("barbeiros")
+            .select("setup_completed")
+            .eq("id", barbeiroId)
+            .maybeSingle();
+          if (barb && !barb.setup_completed) return 1;
+        }
+        return 0;
       } catch {
         return 0;
       }
@@ -98,6 +130,9 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
       .channel(`bottom-bar-badges-${barbeiroId || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "agendamentos" }, () => {
         queryClient.invalidateQueries({ queryKey: ["day-appointments-count"] });
+        if (barbeiroId) {
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.barbeiro.dashboard(barbeiroId) });
+        }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "assinaturas" }, () => {
         queryClient.invalidateQueries({ queryKey: ["bottom-nav-fin-pending"] });
@@ -210,7 +245,12 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
       >
         <nav
           aria-label="Navegação do aplicativo"
-          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] bg-[#202126] border border-white/10 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.18)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300 dark:bg-[#18181b]/95 dark:backdrop-blur-xl dark:border-white/[0.08] dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] rounded-full border border-white/12 shadow-[0_12px_36px_rgba(0,0,0,0.38)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300"
+          style={{
+            backgroundColor: "rgba(14, 14, 18, 0.88)",
+            backdropFilter: "blur(24px) saturate(180%)",
+            WebkitBackdropFilter: "blur(24px) saturate(180%)",
+          }}
         >
           {items.map(({ key, label, path, end, Icon, countKey }) => {
             const to = `${basePath}${path}`;
@@ -250,24 +290,26 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
                       className={cn(
                         "relative flex items-center justify-center transition-all duration-300 active:scale-95 shrink-0",
                         active
-                          ? "h-[56px] px-4 sm:px-4.5 bg-white text-[#09090b] rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.22)] gap-2.5 dark:bg-white/10 dark:hover:bg-white/[0.14] dark:border dark:border-white/15 dark:text-white dark:shadow-xs"
-                          : "w-[54px] sm:w-[58px] h-[56px] rounded-full text-white/95 hover:text-white dark:text-white/50 dark:hover:text-white/80"
+                          ? "h-[56px] px-3.5 sm:px-4 bg-white text-[#09090b] rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.22)] gap-2 dark:bg-white/15 dark:border dark:border-white/20 dark:text-white dark:shadow-xs"
+                          : "w-[54px] sm:w-[58px] h-[56px] rounded-full flex flex-col items-center justify-center gap-1 text-white/70 hover:text-white"
                       )}
                     >
                       <div className="relative flex items-center justify-center shrink-0">
                         <Icon
                           active={active}
                           className={cn(
-                            "w-[26px] h-[26px] shrink-0 block",
-                            active ? "text-[#09090b] dark:text-white" : "text-white dark:text-white/60"
+                            "shrink-0 block",
+                            active
+                              ? "w-[22px] h-[22px] text-[#09090b] dark:text-white"
+                              : "w-[21px] h-[21px] text-white/80"
                           )}
                           aria-hidden="true"
                         />
                         {hasBadge && (
                           <span
                             className={cn(
-                              "absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 rounded-full text-[9.5px] font-bold flex items-center justify-center leading-none shadow-sm bg-red-500 text-white",
-                              active ? "ring-2 ring-white dark:ring-white/20" : "ring-2 ring-[#202126] dark:ring-[#18181b]"
+                              "absolute -top-1.5 -right-2 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none shadow-sm bg-red-500 text-white",
+                              active ? "ring-2 ring-white dark:ring-white/20" : "ring-2 ring-[#141416]"
                             )}
                             aria-label={`${count} pendências`}
                           >
@@ -275,8 +317,12 @@ export function AppMobileBottomBar({ basePath }: AppMobileNavProps) {
                           </span>
                         )}
                       </div>
-                      {active && (
-                        <span className="text-[13.5px] font-bold text-[#09090b] dark:font-semibold dark:text-white tracking-tight leading-none whitespace-nowrap">
+                      {active ? (
+                        <span className="text-[13px] font-semibold text-[#09090b] dark:text-white tracking-tight leading-none whitespace-nowrap">
+                          {label}
+                        </span>
+                      ) : (
+                        <span className="text-[9.5px] sm:text-[10px] font-medium tracking-tight text-white/60 leading-none whitespace-nowrap">
                           {label}
                         </span>
                       )}
