@@ -362,54 +362,64 @@ const Barbeiro = () => {
       }
     };
 
-    const ch1 = supabase
-      .channel(`barber-pending-agendamentos-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'agendamentos',
-        filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
-      }, async (payload) => {
-        loadPendingCount();
-        if (payload.eventType === 'INSERT') {
-          playNotificationSound();
+    let ch1: ReturnType<typeof supabase.channel> | null = null;
+    let ch2: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      ch1 = supabase
+        .channel(`barber-pending-agendamentos-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
+        .on('postgres_changes', {
+          event: '*', schema: 'public', table: 'agendamentos',
+          filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
+        }, async (payload) => {
+          loadPendingCount();
+          if (payload.eventType === 'INSERT') {
+            playNotificationSound();
 
-          // Buscar detalhes do agendamento para notificação rica
-          const details = await fetchAppointmentDetails(
-            (payload.new as Record<string, unknown>).id as string
-          );
+            // Buscar detalhes do agendamento para notificação rica
+            const details = await fetchAppointmentDetails(
+              (payload.new as Record<string, unknown>).id as string
+            );
 
-          if (details) {
-            sendBrowserNotification("✂️ Novo Agendamento!", {
-              body: `${details.clienteNome} agendou ${details.servicoNome} para ${details.data} às ${details.hora}`,
-              tag: `new-appointment-${(payload.new as Record<string, unknown>).id}`,
-            });
-          } else {
-            sendBrowserNotification("✂️ Novo Agendamento!", {
-              body: "Um novo cliente agendou com você. Confira sua agenda.",
-              tag: "new-appointment",
+            if (details) {
+              sendBrowserNotification("✂️ Novo Agendamento!", {
+                body: `${details.clienteNome} agendou ${details.servicoNome} para ${details.data} às ${details.hora}`,
+                tag: `new-appointment-${(payload.new as Record<string, unknown>).id}`,
+              });
+            } else {
+              sendBrowserNotification("✂️ Novo Agendamento!", {
+                body: "Um novo cliente agendou com você. Confira sua agenda.",
+                tag: "new-appointment",
+              });
+            }
+          }
+        }).subscribe();
+
+      ch2 = supabase
+        .channel(`barber-pending-planos-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
+        .on('postgres_changes', {
+          event: '*', schema: 'public', table: 'assinaturas',
+          filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
+        }, (payload) => {
+          loadPendingCount();
+          if (payload.eventType === 'INSERT' && (payload.new as Record<string, unknown>)?.payment_method === 'cash') {
+            playNotificationSound();
+            sendBrowserNotification("💈 Novo Plano Pendente!", {
+              body: "Um cliente solicitou ativação de plano. Confirme o pagamento.",
+              tag: "new-plan-payment",
             });
           }
-        }
-      }).subscribe();
-
-    const ch2 = supabase
-      .channel(`barber-pending-planos-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'assinaturas',
-        filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
-      }, (payload) => {
-        loadPendingCount();
-        if (payload.eventType === 'INSERT' && (payload.new as Record<string, unknown>)?.payment_method === 'cash') {
-          playNotificationSound();
-          sendBrowserNotification("💈 Novo Plano Pendente!", {
-            body: "Um cliente solicitou ativação de plano. Confirme o pagamento.",
-            tag: "new-plan-payment",
-          });
-        }
-      }).subscribe();
+        }).subscribe();
+    } catch (err) {
+      console.warn('[Barbeiro] Erro ao conectar canais de pendencias:', err);
+    }
 
     return () => {
-      supabase.removeChannel(ch1);
-      supabase.removeChannel(ch2);
+      if (ch1) {
+        try { supabase.removeChannel(ch1); } catch {}
+      }
+      if (ch2) {
+        try { supabase.removeChannel(ch2); } catch {}
+      }
     };
   }, [barberContext, playNotificationSound, sendBrowserNotification]);
 

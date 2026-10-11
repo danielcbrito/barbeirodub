@@ -196,25 +196,34 @@ export function useOverdueAppointments(
   useEffect(() => {
     if (!targetBarbeiroId || !isEnabled) return;
 
-    const channelId = `overdue-watcher-${targetBarbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
-    const channel = supabase
-      .channel(channelId)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "agendamentos",
-          filter: `barbeiro_id=eq.${targetBarbeiroId}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey });
-        }
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      const channelId = `overdue-watcher-${targetBarbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
+      channel = supabase
+        .channel(channelId)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "agendamentos",
+            filter: `barbeiro_id=eq.${targetBarbeiroId}`,
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey });
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("[useOverdueAppointments] Erro ao conectar canal Realtime:", err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [targetBarbeiroId, isEnabled, queryClient, queryKey]);
 

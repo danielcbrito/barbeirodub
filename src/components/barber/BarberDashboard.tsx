@@ -170,27 +170,36 @@ export function BarberDashboard({
 
   /* Realtime — invalida cache quando agendamentos mudam */
   useEffect(() => {
-    const channelId = `barber-dash-realtime-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
-    const channel = supabase
-      .channel(channelId)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "agendamentos",
-          filter: `barbeiro_id=eq.${barberContext.barbeiroId}`,
-        },
-        () => {
-          queryClient.invalidateQueries({
-            queryKey: QUERY_KEYS.barbeiro.dashboard(barberContext.barbeiroId),
-          });
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      const channelId = `barber-dash-realtime-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
+      channel = supabase
+        .channel(channelId)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "agendamentos",
+            filter: `barbeiro_id=eq.${barberContext.barbeiroId}`,
+          },
+          () => {
+            queryClient.invalidateQueries({
+              queryKey: QUERY_KEYS.barbeiro.dashboard(barberContext.barbeiroId),
+            });
+          },
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn('[BarberDashboard] Erro ao conectar canal Realtime:', err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [barberContext.barbeiroId, queryClient]);
 

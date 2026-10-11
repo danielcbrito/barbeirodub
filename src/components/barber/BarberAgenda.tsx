@@ -153,24 +153,33 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   /* ── Realtime: ouvir mudanças de agendamentos (somente no desktop, mobile tem seu próprio) ── */
   useEffect(() => {
     if (isMobile || !barberContext.barbeiroId) return;
-    const channelId = `barber-agenda-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
-    const channel = supabase
-      .channel(channelId)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "agendamentos",
-        filter: `barbeiro_id=eq.${barberContext.barbeiroId}`,
-      }, (payload) => {
-        invalidateAgenda();
-        if (payload.eventType === "INSERT") {
-          toast.success("Novo agendamento recebido!");
-        }
-      })
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      const channelId = `barber-agenda-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
+      channel = supabase
+        .channel(channelId)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "agendamentos",
+          filter: `barbeiro_id=eq.${barberContext.barbeiroId}`,
+        }, (payload) => {
+          invalidateAgenda();
+          if (payload.eventType === "INSERT") {
+            toast.success("Novo agendamento recebido!");
+          }
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn("[BarberAgenda] Erro ao conectar canal Realtime:", err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [barberContext.barbeiroId, invalidateAgenda, isMobile]);
 

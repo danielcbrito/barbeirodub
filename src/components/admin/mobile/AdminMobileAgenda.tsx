@@ -587,11 +587,16 @@ export function AdminMobileAgenda({
       }, 250);
     };
 
-    const channelId = `mobile-agenda-v6-${barbeiroId || 'all'}-${Math.random().toString(36).slice(2, 9)}`;
-    const channel = supabase
-      .channel(channelId)
-      .on('postgres_changes', channelConfig as any, scheduleSilentRefresh)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      const channelId = `mobile-agenda-v6-${barbeiroId || 'all'}-${Math.random().toString(36).slice(2, 9)}`;
+      channel = supabase
+        .channel(channelId)
+        .on('postgres_changes', channelConfig as any, scheduleSilentRefresh)
+        .subscribe();
+    } catch (err) {
+      console.warn('[AdminMobileAgenda] Erro ao conectar canal Realtime:', err);
+    }
 
     const handleHeaderRefresh = () => {
       setRefreshing(true);
@@ -601,7 +606,11 @@ export function AdminMobileAgenda({
 
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
       window.removeEventListener('agenda-refresh', handleHeaderRefresh);
     };
   }, [selectedDate, selectedMonth, loadAppointments, barbeiroId]);

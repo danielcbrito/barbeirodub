@@ -282,12 +282,23 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       : { event: "*" as const, schema: "public" as const, table: "agendamentos" };
 
     const channelId = adminContext.barbeiroId || tenantId || 'global';
-    const channel = supabase
-      .channel(`admin-dash-realtime-${channelId}-${Math.random().toString(36).slice(2, 9)}`)
-      .on("postgres_changes", channelConfig as any, () => loadData())
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`admin-dash-realtime-${channelId}-${Math.random().toString(36).slice(2, 9)}`)
+        .on("postgres_changes", channelConfig as any, () => loadData())
+        .subscribe();
+    } catch (err) {
+      console.warn('[AdminDashboard] Erro ao conectar canal Realtime:', err);
+    }
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
+    };
   }, [adminContext.barbeiroId, adminContext.isAdmin, tenantId, tenantBarberIds]);
 
   /**

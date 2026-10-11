@@ -30,8 +30,15 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   private handleReload = () => {
     try {
-      sessionStorage.clear();
-      localStorage.clear();
+      // Limpa APENAS caches de UI e requisições temporárias (dub: e dub-),
+      // mantendo a autenticação intacta (sb-*-auth-token), evitando deslogar o usuário.
+      const keys = Object.keys(window.localStorage);
+      for (const key of keys) {
+        if (key.startsWith("dub:") || key.startsWith("dub-")) {
+          window.localStorage.removeItem(key);
+        }
+      }
+      sessionStorage.removeItem("dub-chunk-reload");
     } catch {
       /* noop */
     }

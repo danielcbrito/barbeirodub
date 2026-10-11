@@ -399,23 +399,32 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       : { event: '*' as const, schema: 'public' as const, table: 'agendamentos' as const };
 
     if (isMobile) return;
-    const channelId = `admin-agenda-desktop-v3-${isTenantScope ? tenantId : (adminContext.barbeiroId || 'all')}-${Math.random().toString(36).slice(2, 9)}`;
-    const channel = supabase
-      .channel(channelId)
-      .on('postgres_changes', channelConfig as any, (payload) => {
-        loadAppointments(selectedDate, true);
-        if (payload.eventType === 'INSERT') {
-          toast.success("Novo agendamento recebido!");
-        }
-      })
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      const channelId = `admin-agenda-desktop-v3-${isTenantScope ? tenantId : (adminContext.barbeiroId || 'all')}-${Math.random().toString(36).slice(2, 9)}`;
+      channel = supabase
+        .channel(channelId)
+        .on('postgres_changes', channelConfig as any, (payload) => {
+          loadAppointments(selectedDate, true);
+          if (payload.eventType === 'INSERT') {
+            toast.success("Novo agendamento recebido!");
+          }
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn('[AdminAgenda] Erro ao conectar canal Realtime:', err);
+    }
 
     const pollingInterval = setInterval(() => {
       loadAppointments(selectedDate, true);
     }, 15000);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
       clearInterval(pollingInterval);
     };
   }, [selectedDate, loadAppointments, adminContext.barbeiroId, isTenantScope, tenantBarberIds, tenantId]);

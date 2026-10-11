@@ -231,16 +231,25 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
       ? { event: '*', schema: 'public', table: 'agendamentos', filter: `barbeiro_id=eq.${barbeiroId}` }
       : { event: '*', schema: 'public', table: 'agendamentos' };
 
-    const channelId = `mobile-timeline-updates-${barbeiroId || 'all'}-${Math.random().toString(36).slice(2, 9)}`;
-    const channel = supabase
-      .channel(channelId)
-      .on('postgres_changes', channelConfig as any, () => {
-        queryClient.invalidateQueries({ queryKey });
-      })
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      const channelId = `mobile-timeline-updates-${barbeiroId || 'all'}-${Math.random().toString(36).slice(2, 9)}`;
+      channel = supabase
+        .channel(channelId)
+        .on('postgres_changes', channelConfig as any, () => {
+          queryClient.invalidateQueries({ queryKey });
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn('[MobileDayTimeline] Erro ao conectar canal Realtime:', err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [barbeiroId, queryClient, queryKey]);
 
