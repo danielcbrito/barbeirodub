@@ -64,9 +64,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
-import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
-import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
+
 
 interface AdminDashboardProps {
   adminContext: AdminContext;
@@ -147,23 +145,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
   }, [propTenantNome, tenantId, adminContext.tenantId]);
   const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
   const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
-  const overdueState = useOverdueAppointments(effectiveBarbeiroId);
-  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
-  const hasAutoPromptedOverdueRef = useRef(false);
 
-  useEffect(() => {
-    if (overdueState.isLoading || !effectiveBarbeiroId) return;
-    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
-      const promptedThisSession = typeof window !== "undefined" && window.sessionStorage.getItem("admin_overdue_prompted_v1") === "1";
-      if (overdueState.hasOverduePastDays || !promptedThisSession) {
-        setIsOverdueModalOpen(true);
-        hasAutoPromptedOverdueRef.current = true;
-        try {
-          window.sessionStorage.setItem("admin_overdue_prompted_v1", "1");
-        } catch {}
-      }
-    }
-  }, [effectiveBarbeiroId, overdueState.count, overdueState.hasOverduePastDays, overdueState.isLoading]);
 
   const { isConnected: whatsAppConnected, isLoading: whatsAppLoading } = useWhatsAppStatus(effectiveBarbeiroId);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
@@ -816,13 +798,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           </button>
         )}
 
-        {overdueState.count > 0 && (
-          <OverdueAppointmentsBanner
-            count={overdueState.count}
-            hasPastDays={overdueState.hasOverduePastDays}
-            onOpenModal={() => setIsOverdueModalOpen(true)}
-          />
-        )}
+
 
         {/* 2. Barra de Busca Arredondada Confortável e Larga (Fiel ao Mockup) */}
         <div
@@ -933,14 +909,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           </div>
         </div>
 
-        {/* Modal de confirmação em lote de agendamentos pendentes */}
-        <PendingAppointmentsModal
-          open={isOverdueModalOpen}
-          onOpenChange={setIsOverdueModalOpen}
-          appointments={overdueState.overdueAppointments}
-          onCompleteBulk={overdueState.completeBulk}
-          isCompleting={overdueState.isCompleting}
-        />
+
 
         {/* Modal de Busca Global Inteligente no Mobile */}
         <GlobalSearchModal
@@ -992,13 +961,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       {/* Banner de ativação removido — o PendingSetupModal cuida disso */}
       </div>
 
-      {overdueState.count > 0 && (
-        <OverdueAppointmentsBanner
-          count={overdueState.count}
-          hasPastDays={overdueState.hasOverduePastDays}
-          onOpenModal={() => setIsOverdueModalOpen(true)}
-        />
-      )}
+
 
       {/* Next row */}
       {data.nextAppointment && (
@@ -1105,14 +1068,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
         </div>
       </div>
 
-      {/* Modal de confirmação em lote de agendamentos pendentes */}
-      <PendingAppointmentsModal
-        open={isOverdueModalOpen}
-        onOpenChange={setIsOverdueModalOpen}
-        appointments={overdueState.overdueAppointments}
-        onCompleteBulk={overdueState.completeBulk}
-        isCompleting={overdueState.isCompleting}
-      />
+
 
       {/* Modal de Busca Global Inteligente */}
       <GlobalSearchModal

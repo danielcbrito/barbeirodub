@@ -126,6 +126,18 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
   const overdueState = useOverdueAppointments(effectiveBarbeiroId, { enabled: !isMobile });
   const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
+  const hasAutoPromptedOverdueRef = useRef(false);
+
+  // Auto-abertura da gaveta ao entrar na Agenda quando houver agendamentos para finalizar
+  useEffect(() => {
+    if (isMobile || overdueState.isLoading) return;
+    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
+      setIsOverdueModalOpen(true);
+      hasAutoPromptedOverdueRef.current = true;
+    } else if (overdueState.count === 0) {
+      hasAutoPromptedOverdueRef.current = false;
+    }
+  }, [isMobile, overdueState.count, overdueState.isLoading]);
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());

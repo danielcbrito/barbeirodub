@@ -1,4 +1,4 @@
-import { CheckCheck, AlertCircle } from "lucide-react";
+import { Check } from "lucide-react";
 
 interface OverdueAppointmentsBannerProps {
   count: number;
@@ -7,6 +7,10 @@ interface OverdueAppointmentsBannerProps {
   className?: string;
 }
 
+/**
+ * Banner de Finalização de Atendimentos — 100% Apple HIG.
+ * Minimalista, preto e branco, sem cores berrantes.
+ */
 export function OverdueAppointmentsBanner({
   count,
   hasPastDays = false,
@@ -18,18 +22,18 @@ export function OverdueAppointmentsBanner({
   return (
     <div
       onClick={onOpenModal}
-      className={`w-full p-3 sm:p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-3 cursor-pointer hover:bg-amber-500/15 active:scale-[0.99] transition-all group shadow-2xs ${className}`}
+      className={`w-full p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 flex items-center justify-between gap-3 cursor-pointer hover:bg-secondary/40 active:opacity-75 transition-all shadow-xs select-none ${className}`}
     >
       <div className="flex items-center gap-2.5 min-w-0">
-        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-pulse" />
+        <span className="w-2 h-2 rounded-full bg-foreground shrink-0" />
         <div className="min-w-0">
-          <p className="text-[12.5px] sm:text-[13px] font-semibold text-foreground truncate">
-            {count} {count === 1 ? "atendimento pendente" : "atendimentos pendentes"}
+          <p className="text-[13px] font-semibold text-foreground truncate tracking-tight">
+            {count} {count === 1 ? "atendimento para finalizar" : "atendimentos para finalizar"}
           </p>
-          <p className="text-[11px] text-muted-foreground truncate">
+          <p className="text-[11.5px] text-muted-foreground truncate">
             {hasPastDays
-              ? "Agendamentos em atraso aguardando fechamento."
-              : "Horário finalizado. Confirme para computar seu faturamento."}
+              ? "Confirme para fechar o caixa dos dias anteriores."
+              : "Horário finalizado. Toque para confirmar faturamento."}
           </p>
         </div>
       </div>
@@ -40,10 +44,10 @@ export function OverdueAppointmentsBanner({
           e.stopPropagation();
           onOpenModal();
         }}
-        className="h-8 px-3 rounded-full bg-foreground text-background text-[11.5px] font-semibold flex items-center gap-1.5 hover:opacity-90 active:scale-95 transition-all shrink-0 shadow-xs"
+        className="h-8 px-3.5 rounded-full bg-foreground text-background text-[12px] font-semibold flex items-center gap-1.5 hover:opacity-90 active:scale-95 transition-all shrink-0 shadow-xs cursor-pointer"
       >
-        <CheckCheck className="w-3.5 h-3.5" />
-        <span>Confirmar todos</span>
+        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+        <span>Finalizar</span>
       </button>
     </div>
   );

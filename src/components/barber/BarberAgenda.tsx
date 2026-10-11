@@ -34,6 +34,7 @@ import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { toast } from "sonner";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
+import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 
 interface BarberAgendaProps {
   barberContext: BarberContext;
@@ -104,6 +105,19 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const overdueState = useOverdueAppointments(barberContext.barbeiroId, { enabled: !isMobile });
+  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
+  const hasAutoPromptedOverdueRef = useRef(false);
+
+  // Auto-abertura da gaveta ao entrar na Agenda quando houver agendamentos para finalizar
+  useEffect(() => {
+    if (isMobile || overdueState.isLoading) return;
+    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
+      setIsOverdueModalOpen(true);
+      hasAutoPromptedOverdueRef.current = true;
+    } else if (overdueState.count === 0) {
+      hasAutoPromptedOverdueRef.current = false;
+    }
+  }, [isMobile, overdueState.count, overdueState.isLoading]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -326,7 +340,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
             <OverdueAppointmentsBanner
               count={overdueState.count}
               hasPastDays={overdueState.hasOverduePastDays}
-              onOpenModal={() => window.dispatchEvent(new CustomEvent("open-overdue-modal"))}
+              onOpenModal={() => setIsOverdueModalOpen(true)}
             />
           </div>
         )}
@@ -678,6 +692,15 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
         skipValidation={true}
         barbeiroId={barberContext.barbeiroId}
         tenantId={barberContext.tenantId}
+      />
+
+      {/* Gaveta Apple HIG de finalização de atendimentos */}
+      <PendingAppointmentsModal
+        open={isOverdueModalOpen}
+        onOpenChange={setIsOverdueModalOpen}
+        appointments={overdueState.overdueAppointments}
+        onCompleteBulk={overdueState.completeBulk}
+        isCompleting={overdueState.isCompleting}
       />
     </div>
   );

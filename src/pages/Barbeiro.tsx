@@ -21,8 +21,7 @@ import { useWalletActivationPrompt } from "@/hooks/useWalletActivationPrompt";
 import { useWhatsAppStatus } from "@/hooks/useWhatsAppStatus";
 import { WalletActivationModal } from "@/components/barber/WalletActivationModal";
 import { PendingSetupModal } from "@/components/tenant/PendingSetupModal";
-import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
-import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
+
 
 /* ── Abas primárias (bottom nav): carregadas eager para navegação instantânea ── */
 import { BarberDashboard } from "@/components/barber/BarberDashboard";
@@ -229,31 +228,7 @@ const Barbeiro = () => {
     }
   }, [authChecked, barberContext, whatsAppStatus.isLoading, whatsAppStatus.isConnected, whatsAppStatus.resolvedBarbeiroId, walletPrompt.isLoading, walletPrompt.walletActive, walletPrompt.resolvedBarbeiroId]);
 
-  // Monitoramento de agendamentos vencidos/em aberto
-  const overdueState = useOverdueAppointments(barberContext?.barbeiroId);
-  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
-  const hasAutoPromptedOverdueRef = useRef(false);
 
-  useEffect(() => {
-    if (!barberContext?.barbeiroId || overdueState.isLoading) return;
-
-    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
-      const promptedThisSession = typeof window !== "undefined" && window.sessionStorage.getItem("overdue_prompted_v1") === "1";
-      if (overdueState.hasOverduePastDays || !promptedThisSession) {
-        setIsOverdueModalOpen(true);
-        hasAutoPromptedOverdueRef.current = true;
-        try {
-          window.sessionStorage.setItem("overdue_prompted_v1", "1");
-        } catch {}
-      }
-    }
-  }, [barberContext?.barbeiroId, overdueState.count, overdueState.hasOverduePastDays, overdueState.isLoading]);
-
-  useEffect(() => {
-    const handleOpen = () => setIsOverdueModalOpen(true);
-    window.addEventListener("open-overdue-modal", handleOpen);
-    return () => window.removeEventListener("open-overdue-modal", handleOpen);
-  }, []);
 
   // Verificação de manutenção
   const { 
@@ -724,14 +699,7 @@ const Barbeiro = () => {
           onSuccess={walletPrompt.onActivated}
         />
 
-        {/* Modal de confirmação em lote de agendamentos pendentes */}
-        <PendingAppointmentsModal
-          open={isOverdueModalOpen}
-          onOpenChange={setIsOverdueModalOpen}
-          appointments={overdueState.overdueAppointments}
-          onCompleteBulk={overdueState.completeBulk}
-          isCompleting={overdueState.isCompleting}
-        />
+
 
         {/* Banner de aviso de manutenção (barbeiro/ambos) */}
         {showBarberBanner && (
@@ -857,14 +825,7 @@ const Barbeiro = () => {
         basePath="/barbeiro"
       />
 
-      {/* Modal de confirmação em lote de agendamentos pendentes (desktop) */}
-      <PendingAppointmentsModal
-        open={isOverdueModalOpen}
-        onOpenChange={setIsOverdueModalOpen}
-        appointments={overdueState.overdueAppointments}
-        onCompleteBulk={overdueState.completeBulk}
-        isCompleting={overdueState.isCompleting}
-      />
+
       {showBarberBanner && (
         <MaintenanceWarningBanner message={warningMessage!} />
       )}

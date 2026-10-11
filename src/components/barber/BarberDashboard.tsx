@@ -29,8 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { useBarberDashboard, type DashboardData } from "@/hooks/useBarberDashboard";
-import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
-import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
+
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { BarberContext } from "@/pages/Barbeiro";
@@ -88,7 +87,7 @@ export function BarberDashboard({
 
   const [revenueVisible, setRevenueVisible] = useState(true);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
-  const overdueState = useOverdueAppointments(barberContext.barbeiroId);
+
 
   const setup = useSetupCompletion({
     userId: barberContext.userId,
@@ -432,13 +431,7 @@ export function BarberDashboard({
         </button>
       )}
 
-      {overdueState.count > 0 && (
-        <OverdueAppointmentsBanner
-          count={overdueState.count}
-          hasPastDays={overdueState.hasOverduePastDays}
-          onOpenModal={() => window.dispatchEvent(new CustomEvent("open-overdue-modal"))}
-        />
-      )}
+
 
       <SearchFilterRow />
 

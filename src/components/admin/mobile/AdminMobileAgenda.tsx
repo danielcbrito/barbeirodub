@@ -184,17 +184,17 @@ export function AdminMobileAgenda({
 
   const overdueState = useOverdueAppointments(barbeiroId);
 
-  // Auto-abertura forçada quando houver agendamentos não confirmados de dias anteriores (ex: ontem)
+  // Auto-abertura da gaveta ao entrar na Agenda quando houver agendamentos para finalizar
   const hasAutoPromptedOverdueRef = useRef(false);
   useEffect(() => {
     if (overdueState.isLoading) return;
     if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
-      if (overdueState.hasOverduePastDays) {
-        setIsOverdueModalOpen(true);
-        hasAutoPromptedOverdueRef.current = true;
-      }
+      setIsOverdueModalOpen(true);
+      hasAutoPromptedOverdueRef.current = true;
+    } else if (overdueState.count === 0) {
+      hasAutoPromptedOverdueRef.current = false;
     }
-  }, [overdueState.count, overdueState.hasOverduePastDays, overdueState.isLoading]);
+  }, [overdueState.count, overdueState.isLoading]);
 
   useEffect(() => {
     const handleOpen = () => setIsOverdueModalOpen(true);
