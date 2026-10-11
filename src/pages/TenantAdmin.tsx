@@ -300,36 +300,43 @@ const TenantAdmin = () => {
 
     loadPendingCount();
 
-    const ch1 = supabase
-      .channel(`tenant-pending-count-agendamentos-${Math.random().toString(36).slice(2, 9)}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "agendamentos",
-      }, (payload: any) => {
-        loadPendingCount();
-        if (payload.eventType === "INSERT") {
-          playNotificationSound();
-          sendBrowserNotification("Novo Agendamento!", {
-            body: "Um novo cliente agendou com você. Verifique suas confirmações.",
-            tag: "new-appointment",
-          });
-        }
-      }).subscribe();
+    let ch1: ReturnType<typeof supabase.channel> | null = null;
+    let ch2: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      ch1 = supabase
+        .channel(`tenant-pending-count-agendamentos-${Math.random().toString(36).slice(2, 9)}`)
+        .on("postgres_changes", {
+          event: "*", schema: "public", table: "agendamentos",
+        }, (payload: any) => {
+          loadPendingCount();
+          if (payload.eventType === "INSERT") {
+            playNotificationSound();
+            sendBrowserNotification("Novo Agendamento!", {
+              body: "Um novo cliente agendou com você. Verifique suas confirmações.",
+              tag: "new-appointment",
+            });
+          }
+        }).subscribe();
 
-    const ch2 = supabase
-      .channel(`tenant-pending-count-planos-${Math.random().toString(36).slice(2, 9)}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "assinaturas",
-      }, (payload: any) => {
-        loadPendingCount();
-        // Notificação silenciosa apenas para INSERTs vindos do próprio cliente (autoatendimento via PIX/cash).
-        // Ativações feitas pelo admin/barbeiro NÃO devem disparar som — esse evento já é gerado por ele mesmo.
-        // Para evitar confusão, removido o som aqui; novos planos pendentes aparecem no badge de contagem.
-      }).subscribe();
+      ch2 = supabase
+        .channel(`tenant-pending-count-planos-${Math.random().toString(36).slice(2, 9)}`)
+        .on("postgres_changes", {
+          event: "*", schema: "public", table: "assinaturas",
+        }, (payload: any) => {
+          loadPendingCount();
+        }).subscribe();
+    } catch (err) {
+      console.warn('[TenantAdmin] Erro ao conectar canais Realtime:', err);
+    }
 
     return () => {
       isCancelled = true;
-      supabase.removeChannel(ch1);
-      supabase.removeChannel(ch2);
+      if (ch1) {
+        try { supabase.removeChannel(ch1); } catch {}
+      }
+      if (ch2) {
+        try { supabase.removeChannel(ch2); } catch {}
+      }
     };
   }, [adminContext, playNotificationSound, sendBrowserNotification]);
 

@@ -136,39 +136,49 @@ const Admin = () => {
     loadPendingCount();
 
     // Configurar subscription com filtro apropriado
+    const channelId = adminContext.barbeiroId || adminContext.tenantId || 'global';
     const uniqueChannelName = `admin-pending-count-${channelId}-${Math.random().toString(36).slice(2, 9)}`;
-    const channel = adminContext.barbeiroId
-      ? supabase
-          .channel(uniqueChannelName)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos', filter: `barbeiro_id=eq.${adminContext.barbeiroId}` } as const, (payload) => {
-            loadPendingCount();
-            if (payload.eventType === 'INSERT') {
-              playNotificationSound();
-              sendBrowserNotification("Novo Agendamento!", {
-                body: "Um novo cliente agendou. Verifique as confirmações pendentes.",
-                tag: "new-appointment",
-              });
-            }
-          })
-      : supabase
-          .channel(uniqueChannelName)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' } as const, (payload) => {
-            loadPendingCount();
-            if (payload.eventType === 'INSERT') {
-              playNotificationSound();
-              sendBrowserNotification("Novo Agendamento!", {
-                body: "Um novo cliente agendou. Verifique as confirmações pendentes.",
-                tag: "new-appointment",
-              });
-            }
-          });
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = adminContext.barbeiroId
+        ? supabase
+            .channel(uniqueChannelName)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos', filter: `barbeiro_id=eq.${adminContext.barbeiroId}` } as const, (payload) => {
+              loadPendingCount();
+              if (payload.eventType === 'INSERT') {
+                playNotificationSound();
+                sendBrowserNotification("Novo Agendamento!", {
+                  body: "Um novo cliente agendou. Verifique as confirmações pendentes.",
+                  tag: "new-appointment",
+                });
+              }
+            })
+        : supabase
+            .channel(uniqueChannelName)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' } as const, (payload) => {
+              loadPendingCount();
+              if (payload.eventType === 'INSERT') {
+                playNotificationSound();
+                sendBrowserNotification("Novo Agendamento!", {
+                  body: "Um novo cliente agendou. Verifique as confirmações pendentes.",
+                  tag: "new-appointment",
+                });
+              }
+            });
 
-    channel.subscribe();
+      channel.subscribe();
+    } catch (err) {
+      console.warn('[Admin] Erro ao conectar canal Realtime:', err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
-  }, [adminContext]);
+  }, [adminContext, playNotificationSound, sendBrowserNotification]);
 
   // Solicitar permissão de notificação ao montar
   useEffect(() => {
