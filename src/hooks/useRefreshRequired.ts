@@ -51,6 +51,11 @@ function isAcknowledged(refreshAt: string | null): boolean {
 function computeOverlay(snapshot: GlobalConfigSnapshot | null) {
   const refreshAt = snapshot?.refresh_barber_required_at ?? null;
   if (!refreshAt) return { show: false, requiredAt: null as string | null };
+  // Pedidos antigos (>24h) ou no futuro não devem mais incomodar o usuário.
+  const t = new Date(refreshAt).getTime();
+  if (isNaN(t) || Date.now() - t > 86_400_000 || t > Date.now() + 60_000) {
+    return { show: false, requiredAt: null as string | null };
+  }
 
   const acknowledged = isAcknowledged(refreshAt);
   return { show: !acknowledged, requiredAt: refreshAt };
