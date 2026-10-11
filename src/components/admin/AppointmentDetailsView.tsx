@@ -453,7 +453,7 @@ export function AppointmentDetailsView({
     ? "Hoje" 
     : format(new Date(`${appointment.data}T12:00:00`), "EEEE, dd 'de' MMMM", { locale: ptBR });
 
-  const horaFormatted = appointment.hora.substring(0, 5);
+  const horaFormatted = (appointment.hora || "00:00").substring(0, 5);
   const duration = (appointment as any).duracao || appointment.servico?.duracao_minutos || 30;
 
   const getPaymentLabel = () => {
@@ -516,7 +516,7 @@ export function AppointmentDetailsView({
     ? "No Plano" 
     : appointment.is_free || isCredit
       ? "Incluso"
-      : `R$ ${appointment.preco.toFixed(2).replace('.', ',')}`;
+      : `R$ ${typeof appointment.preco === 'number' && !isNaN(appointment.preco) ? appointment.preco.toFixed(2).replace('.', ',') : '0,00'}`;
 
   /* ═══ Conteúdo compartilhado entre Sheet e tela cheia ═══ */
   const content = (

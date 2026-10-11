@@ -256,15 +256,16 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     const checkAppointmentCompletion = () => {
       const now = new Date();
       const currentDateStr = format(now, "yyyy-MM-dd");
-      const todaysAppointments = appointments.filter(apt => apt.data === currentDateStr);
+      const todaysAppointments = appointments.filter(apt => apt?.data === currentDateStr);
 
       todaysAppointments.forEach(apt => {
+        if (!apt || !apt.hora) return;
         if (apt.status === "completed" || apt.status === "cancelled_by_admin" ||
             apt.status === "cancelled_by_user" || apt.status === "no_show") return;
 
-        const [hours, minutes] = apt.hora.split(":").map(Number);
+        const [hours, minutes] = (apt.hora || "00:00").split(":").map(Number);
         const aptStart = new Date(now);
-        aptStart.setHours(hours, minutes, 0, 0);
+        aptStart.setHours(hours || 0, minutes || 0, 0, 0);
         const aptEnd = new Date(aptStart.getTime() + (apt.servico?.duracao_minutos || 30) * 60000);
 
         if (now >= aptEnd && now.getTime() - aptEnd.getTime() < 120000) {
@@ -495,29 +496,31 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
             {/* Cards — 2 columns on large screens */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
               {filteredAppointments.map((apt, idx) => {
+                if (!apt) return null;
                 const statusConfig = getStatusColorConfig(apt.status, apt.barbeiro_confirmou);
                 const paymentBadge = getPaymentBadge(apt);
                 const PayIcon = paymentBadge.icon;
                 const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
-                const horaFormatted = apt.hora.substring(0, 5);
+                const rawHora = apt.hora || "00:00";
+                const horaFormatted = rawHora.slice(0, 5);
 
                 const now = new Date();
                 const isViewingToday = isToday(selectedDate);
                 const currentTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
                 const aptEndMinutes = (() => {
-                  const [h, m] = apt.hora.split(":").map(Number);
-                  return (h * 60 + m) + duration;
+                  const [h, m] = rawHora.split(":").map(Number);
+                  return ((h || 0) * 60 + (m || 0)) + duration;
                 })();
                 const nowMinutes = now.getHours() * 60 + now.getMinutes();
                 const isCompleted = apt.status === "completed" || apt.status === "no_show";
                 const isPastTime = isViewingToday && aptEndMinutes <= nowMinutes;
                 const isDone = isCompleted || isPastTime;
-                const isNextUp = isViewingToday && !isDone && apt.hora >= currentTimeStr
+                const isNextUp = isViewingToday && !isDone && rawHora >= currentTimeStr
                   && apt.status !== "completed" && apt.status !== "no_show"
                   && idx === filteredAppointments.findIndex(a =>
-                    a.hora >= currentTimeStr
-                    && a.status !== "completed"
-                    && a.status !== "no_show"
+                    (a?.hora || "") >= currentTimeStr
+                    && a?.status !== "completed"
+                    && a?.status !== "no_show"
                   );
 
                 return (
@@ -613,7 +616,9 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                         "text-[13px] font-medium tabular-nums",
                         apt.is_free ? "text-muted-foreground/40 line-through" : "text-foreground"
                       )}>
-                        {apt.is_free ? "Grátis" : `R$ ${apt.preco.toFixed(2)}`}
+                        {apt.is_free
+                          ? "Grátis"
+                          : `R$ ${typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco.toFixed(2).replace(".", ",") : "0,00"}`}
                       </span>
                     </div>
                   </div>

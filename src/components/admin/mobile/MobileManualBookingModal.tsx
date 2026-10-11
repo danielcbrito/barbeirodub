@@ -436,9 +436,9 @@ export function MobileManualBookingModal({
         let hasConflict = false;
         
         for (const apt of existingAppointments) {
-          const [aptH, aptM] = apt.hora.split(":").map(Number);
+          const [aptH, aptM] = (apt.hora || "00:00").split(":").map(Number);
           const aptStart = new Date();
-          aptStart.setHours(aptH, aptM, 0, 0);
+          aptStart.setHours(aptH || 0, aptM || 0, 0, 0);
           const aptEnd = addMinutes(aptStart, apt.duracao || 30);
           const aptEndWithDelay = addMinutes(aptEnd, DELAY_MINUTES);
           
@@ -775,7 +775,7 @@ export function MobileManualBookingModal({
                                 </div>
                               ) : (
                                 <span className="text-[13px] text-foreground font-semibold tabular-nums">
-                                  R$ {service.preco.toFixed(0)}
+                                  R$ {typeof service.preco === 'number' && !isNaN(service.preco) ? service.preco.toFixed(0) : '0'}
                                 </span>
                               )}
                             </div>

@@ -122,9 +122,11 @@ export function AppointmentCard({
             <Clock className="w-4 h-4" />
             <span>{appointment.hora}</span>
           </div>
-          {appointment.preco && (
+          {typeof appointment.preco === 'number' && !isNaN(appointment.preco) && (
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">R$ {appointment.preco.toFixed(2)}</span>
+              <span className="font-semibold text-foreground">
+                R$ {appointment.preco.toFixed(2).replace('.', ',')}
+              </span>
             </div>
           )}
           

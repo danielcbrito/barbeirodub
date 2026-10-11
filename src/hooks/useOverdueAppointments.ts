@@ -141,12 +141,13 @@ export function useOverdueAppointments(
       const list: OverdueAppointment[] = [];
 
       for (const apt of data || []) {
-        const isPastDay = apt.data < todayStr;
+        if (!apt) continue;
+        const isPastDay = Boolean(apt.data && apt.data < todayStr);
         const srv = servicosMap[apt.servico_id];
         const dur = apt.duracao || srv?.duracao_minutos || 30;
         const [h, m] = (apt.hora || "00:00").split(":").map(Number);
         const endMinutes = (h || 0) * 60 + (m || 0) + dur;
-        const isPastTimeToday = apt.data === todayStr && currentMinutes >= endMinutes;
+        const isPastTimeToday = Boolean(apt.data && apt.data === todayStr && currentMinutes >= endMinutes);
 
         // É atrasado se for de dia anterior OU se for de hoje e o horário previsto já terminou
         if (isPastDay || isPastTimeToday) {
@@ -157,18 +158,20 @@ export function useOverdueAppointments(
           let displayDateLabel = "Hoje";
           if (apt.data === yesterdayStr) {
             displayDateLabel = "Ontem";
-          } else if (apt.data < yesterdayStr) {
-            const [ano, mes, dia] = apt.data.split("-");
-            displayDateLabel = `${dia}/${mes}`;
+          } else if (apt.data && apt.data < yesterdayStr) {
+            const parts = (apt.data || "").split("-");
+            if (parts.length === 3) {
+              displayDateLabel = `${parts[2]}/${parts[1]}`;
+            }
           }
 
           list.push({
             id: apt.id,
-            data: apt.data,
-            hora: (apt.hora || "").slice(0, 5),
+            data: apt.data || todayStr,
+            hora: (apt.hora || "00:00").slice(0, 5),
             duracao: dur,
             status: apt.status || "pending",
-            preco: apt.preco || 0,
+            preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
             observacoes: apt.observacoes,
             payment_method: apt.payment_method,
             tipo_agendamento: apt.tipo_agendamento,

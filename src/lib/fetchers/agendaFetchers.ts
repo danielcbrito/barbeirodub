@@ -38,17 +38,17 @@ export async function fetchAgendaDia(
   const bundle = data as { appointments?: any[] } | null;
   const raw = bundle?.appointments || [];
 
-  return raw.map((apt: any): TimelineAppointment => {
+  return raw.filter(Boolean).map((apt: any): TimelineAppointment => {
     const walkInName = extractWalkInName(apt.observacoes);
     const whatsAppName = extractWhatsAppName(apt.observacoes);
     const displayName = whatsAppName || walkInName || apt.profile?.nome || null;
     return {
       id: apt.id,
-      data: apt.data,
-      hora: apt.hora,
+      data: apt.data || dateStr,
+      hora: apt.hora || "00:00",
       duracao: apt.duracao,
       status: apt.status || "pending",
-      preco: apt.preco,
+      preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
       observacoes: apt.observacoes,
       barbeiro_confirmou: apt.barbeiro_confirmou,
       cliente_confirmou: apt.cliente_confirmou,
@@ -56,7 +56,7 @@ export async function fetchAgendaDia(
       user_id: apt.user_id,
       servico_id: apt.servico_id,
       barbeiro_id: apt.barbeiro_id,
-      is_free: apt.is_free,
+      is_free: Boolean(apt.is_free),
       payment_method: apt.payment_method,
       tipo_agendamento: apt.tipo_agendamento,
       remarcacao_solicitada: apt.remarcacao_solicitada,
@@ -116,7 +116,7 @@ async function fetchAgendaDiaFallback(
     pagamentosMap.set(key, arr);
   }
 
-  return agendamentos.map((apt): TimelineAppointment => {
+  return agendamentos.filter(Boolean).map((apt): TimelineAppointment => {
     const profile = profilesMap.get(apt.user_id) as any;
     const servico = servicosMap.get(apt.servico_id) as any;
     const walkInName = extractWalkInName(apt.observacoes);
@@ -124,11 +124,11 @@ async function fetchAgendaDiaFallback(
     const displayName = whatsAppName || walkInName || profile?.nome || null;
     return {
       id: apt.id,
-      data: apt.data,
-      hora: apt.hora,
+      data: apt.data || dateStr,
+      hora: apt.hora || "00:00",
       duracao: apt.duracao,
       status: apt.status || "pending",
-      preco: apt.preco,
+      preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
       observacoes: apt.observacoes,
       barbeiro_confirmou: apt.barbeiro_confirmou,
       cliente_confirmou: apt.cliente_confirmou,
@@ -136,7 +136,7 @@ async function fetchAgendaDiaFallback(
       user_id: apt.user_id,
       servico_id: apt.servico_id,
       barbeiro_id: apt.barbeiro_id,
-      is_free: apt.is_free,
+      is_free: Boolean(apt.is_free),
       payment_method: apt.payment_method,
       tipo_agendamento: apt.tipo_agendamento,
       remarcacao_solicitada: apt.remarcacao_solicitada,

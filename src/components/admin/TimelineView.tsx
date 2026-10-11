@@ -105,7 +105,7 @@ export function TimelineView({ appointments, loading, selectedDate, onSelectAppo
   const getAppointmentForSlot = (slot: string) => {
     return appointments.find(apt => {
       // Normalizar hora do agendamento para comparação
-      const aptHora = apt.hora.substring(0, 5); // Pegar só HH:MM
+      const aptHora = (apt.hora || "00:00").substring(0, 5); // Pegar só HH:MM
       return aptHora === slot;
     });
   };
@@ -119,8 +119,8 @@ export function TimelineView({ appointments, loading, selectedDate, onSelectAppo
     const DELAY_MINUTES = businessHours.delay_entre_servicos;
 
     for (const apt of appointments) {
-      const [aptHour, aptMin] = apt.hora.split(':').map(Number);
-      const aptStart = aptHour * 60 + aptMin;
+      const [aptHour, aptMin] = (apt.hora || "00:00").split(':').map(Number);
+      const aptStart = (aptHour || 0) * 60 + (aptMin || 0);
       const aptEnd = aptStart + (apt.servico?.duracao_minutos || 30);
       const aptEndWithDelay = aptEnd + DELAY_MINUTES;
 
@@ -368,7 +368,9 @@ export function TimelineView({ appointments, loading, selectedDate, onSelectAppo
                               )}
                               <div className="flex items-center gap-2">
                                 <CreditCard className="w-3 h-3" />
-                                <span className="font-medium text-foreground">R$ {appointment.preco.toFixed(2).replace('.', ',')}</span>
+                                <span className="font-medium text-foreground">
+                                  R$ {typeof appointment.preco === 'number' && !isNaN(appointment.preco) ? appointment.preco.toFixed(2).replace('.', ',') : '0,00'}
+                                </span>
                               </div>
                             </>
                           )}

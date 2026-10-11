@@ -167,7 +167,9 @@ export function PendingAppointmentsModal({
 
                   <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
                     {apt.serviceName}
-                    {apt.tipo_agendamento === "plano" ? " • Plano" : ` • R$ ${apt.preco.toFixed(0)}`}
+                    {apt.tipo_agendamento === "plano"
+                      ? " • Plano"
+                      : ` • R$ ${(typeof apt.preco === 'number' && !isNaN(apt.preco) ? apt.preco : 0).toFixed(0)}`}
                   </p>
                 </div>
 

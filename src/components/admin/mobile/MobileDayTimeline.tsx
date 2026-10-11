@@ -294,10 +294,10 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
   // Verificar se um slot está ocupado
   const getAppointmentForSlot = (time: string): TimelineAppointment | null => {
     return appointments.find(apt => {
-      const aptStart = apt.hora.substring(0, 5);
+      const aptStart = (apt.hora || "00:00").substring(0, 5);
       const [h, m] = aptStart.split(":").map(Number);
       const aptStartDate = new Date();
-      aptStartDate.setHours(h, m, 0, 0);
+      aptStartDate.setHours(h || 0, m || 0, 0, 0);
       
       const aptEndDate = addMinutes(aptStartDate, apt.duracao || apt.servico?.duracao_minutos || 30);
       
@@ -312,7 +312,7 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
 
   // Verificar se é o primeiro slot de um agendamento
   const isFirstSlotOfAppointment = (time: string): TimelineAppointment | null => {
-    return appointments.find(apt => apt.hora.substring(0, 5) === time) || null;
+    return appointments.find(apt => (apt.hora || "00:00").substring(0, 5) === time) || null;
   };
 
   const timeSlots = generateTimeSlots();
@@ -502,7 +502,7 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
                                 </div>
                               ) : (
                                 <span className="text-sm font-bold text-foreground">
-                                  R$ {appointmentStart.preco.toFixed(0)}
+                                  R$ {typeof appointmentStart.preco === 'number' && !isNaN(appointmentStart.preco) ? appointmentStart.preco.toFixed(0) : '0'}
                                 </span>
                               )}
                             </div>

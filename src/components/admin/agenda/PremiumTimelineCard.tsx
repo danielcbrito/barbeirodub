@@ -183,7 +183,7 @@ export const PremiumTimelineCard = memo(function PremiumTimelineCard({
                 timeStatus === "now" && "text-emerald-400",
                 timeStatus === "soon" && "text-amber-400"
               )}>
-                {appointment.hora.substring(0, 5)}
+                {(appointment.hora || "00:00").substring(0, 5)}
               </span>
             </div>
 
@@ -224,7 +224,7 @@ export const PremiumTimelineCard = memo(function PremiumTimelineCard({
                     {isPaid ? "PAGO" : "PENDENTE"}
                   </span>
                   <span className="text-xs font-medium text-muted-foreground">
-                    R$ {appointment.preco.toFixed(2).replace('.', ',')}
+                    R$ {typeof appointment.preco === 'number' && !isNaN(appointment.preco) ? appointment.preco.toFixed(2).replace('.', ',') : '0,00'}
                   </span>
                 </>
               )}

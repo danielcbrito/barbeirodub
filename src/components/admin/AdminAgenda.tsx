@@ -423,15 +423,16 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
     const checkAppointmentCompletion = () => {
       const now = new Date();
       const currentDateStr = format(now, 'yyyy-MM-dd');
-      const todaysAppointments = appointments.filter(apt => apt.data === currentDateStr);
+      const todaysAppointments = appointments.filter(apt => apt?.data === currentDateStr);
 
       todaysAppointments.forEach(apt => {
+        if (!apt || !apt.hora) return;
         if (apt.status === 'completed' || apt.status === 'cancelled_by_admin' ||
             apt.status === 'cancelled_by_user' || apt.status === 'no_show') return;
 
-        const [hours, minutes] = apt.hora.split(':').map(Number);
+        const [hours, minutes] = (apt.hora || "00:00").split(':').map(Number);
         const aptStart = new Date(now);
-        aptStart.setHours(hours, minutes, 0, 0);
+        aptStart.setHours(hours || 0, minutes || 0, 0, 0);
         const aptEnd = new Date(aptStart.getTime() + (apt.servico?.duracao_minutos || 30) * 60000);
 
         if (now >= aptEnd && now.getTime() - aptEnd.getTime() < 120000) {
@@ -690,11 +691,13 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
             {/* Cards — 2 columns on large screens */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
               {filteredAppointments.map((apt, idx) => {
+                if (!apt) return null;
                 const statusConfig = getStatusColorConfig(apt.status, apt.barbeiro_confirmou);
                 const paymentBadge = getPaymentBadge(apt);
                 const PayIcon = paymentBadge.icon;
                 const duration = (apt as any).duracao || apt.servico?.duracao_minutos || 30;
-                const horaFormatted = apt.hora.substring(0, 5);
+                const rawHora = apt.hora || "00:00";
+                const horaFormatted = rawHora.slice(0, 5);
 
                 const isCompleted = apt.status === "completed" || apt.status === "no_show";
 
@@ -776,7 +779,9 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                           "text-sm font-semibold tabular-nums",
                           apt.is_free ? "text-muted-foreground/40 line-through" : "text-foreground"
                         )}>
-                          {apt.is_free ? "Grátis" : `R$ ${apt.preco.toFixed(2).replace('.', ',')}`}
+                          {apt.is_free
+                            ? "Grátis"
+                            : `R$ ${typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco.toFixed(2).replace('.', ',') : "0,00"}`}
                         </span>
                       )}
                     </div>

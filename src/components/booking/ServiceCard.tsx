@@ -42,7 +42,7 @@ export function ServiceCard({ service, isSelected, onToggle }: ServiceCardProps)
               {service.duracao_minutos} min
             </span>
             <span className="text-primary font-semibold">
-              R$ {service.preco.toFixed(2).replace('.', ',')}
+              R$ {typeof service.preco === 'number' && !isNaN(service.preco) ? service.preco.toFixed(2).replace('.', ',') : '0,00'}
             </span>
           </div>
         </div>

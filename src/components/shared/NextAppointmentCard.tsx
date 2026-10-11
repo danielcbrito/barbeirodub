@@ -159,7 +159,7 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
       return false;
     }
 
-    const [h, m] = appointment.hora.split(":").map(Number);
+    const [h, m] = (appointment.hora || "00:00").split(":").map(Number);
     const startMin = (h || 0) * 60 + (m || 0);
     const dur = appointment.duracao || 30;
     const endMin = startMin + dur;

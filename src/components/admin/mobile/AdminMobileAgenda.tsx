@@ -232,13 +232,15 @@ export function AdminMobileAgenda({
 
   // Agendamento que está CORTANDO AGORA no dia de hoje (dentro do horário de início até o fim da duração)
   const currentlyCuttingApt = useMemo(() => {
-    if (!isToday(selectedDate) || appointments.length === 0) return null;
+    if (!isToday(selectedDate) || !appointments?.length) return null;
 
     return appointments.find((apt) => {
+      if (!apt || !apt.hora) return false;
       if (apt.status === "completed" || apt.status === "no_show" || (apt as any).status === "cancelled") {
         return false;
       }
-      const [h, m] = apt.hora.split(":").map(Number);
+      const rawHora = apt.hora || "00:00";
+      const [h, m] = rawHora.split(":").map(Number);
       const startMin = (h || 0) * 60 + (m || 0);
       const dur = apt.duracao || apt.servico?.duracao_minutos || 30;
       return currentMinutesNow >= startMin && currentMinutesNow < (startMin + dur);
@@ -382,13 +384,16 @@ export function AdminMobileAgenda({
         if (!bundleError) {
           const raw = ((bundle as any)?.appointments || []) as any[];
           appointmentsWithDetails = raw
-            .filter((apt) => ["pending", "confirmed", "completed"].includes(apt.status || "pending"))
+            .filter((apt) => Boolean(apt) && ["pending", "confirmed", "completed"].includes(apt.status || "pending"))
             .map((apt) => {
               const walkInName = extractWalkInName(apt.observacoes);
               const whatsAppName = extractWhatsAppName(apt.observacoes);
               const displayName = whatsAppName || walkInName || apt.profile?.nome || null;
               return {
                 ...apt,
+                hora: apt.hora || "00:00",
+                preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
+                duracao: apt.duracao || apt.servico?.duracao_minutos || 30,
                 status: apt.status || "pending",
                 profile: displayName
                   ? { nome: displayName, telefone: apt.profile?.telefone ?? undefined }
@@ -438,15 +443,25 @@ export function AdminMobileAgenda({
             ((servicosRes.data || []) as Array<{ id: string; nome: string; duracao_minutos: number }>).map((servico) => [servico.id, servico])
           );
 
-          appointmentsWithDetails = rawAppointments.map((apt) => {
-            const walkInName = extractWalkInName(apt.observacoes);
-            const whatsAppName = extractWhatsAppName(apt.observacoes);
-            const displayName = whatsAppName || walkInName || null;
-            const profile = displayName
-              ? { nome: displayName, telefone: profilesMap.get(apt.user_id)?.telefone ?? undefined }
-              : profilesMap.get(apt.user_id) || null;
-            return { ...apt, profile, servico: servicosMap.get(apt.servico_id) || null };
-          }) as MobileAppointment[];
+          appointmentsWithDetails = rawAppointments
+            .filter(Boolean)
+            .map((apt) => {
+              const walkInName = extractWalkInName(apt.observacoes);
+              const whatsAppName = extractWhatsAppName(apt.observacoes);
+              const displayName = whatsAppName || walkInName || null;
+              const profile = displayName
+                ? { nome: displayName, telefone: profilesMap.get(apt.user_id)?.telefone ?? undefined }
+                : profilesMap.get(apt.user_id) || null;
+              return {
+                ...apt,
+                hora: apt.hora || "00:00",
+                preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
+                duracao: apt.duracao || servicosMap.get(apt.servico_id)?.duracao_minutos || 30,
+                status: apt.status || "pending",
+                profile,
+                servico: servicosMap.get(apt.servico_id) || null,
+              };
+            }) as MobileAppointment[];
         }
       }
 
@@ -857,17 +872,19 @@ export function AdminMobileAgenda({
           /* ══════ LISTA DE AGENDAMENTOS: PADRÃO APPLE HIG, MINIMALISTA, SÉRIO E MODERNO ══════ */
           <div className="px-4 space-y-2 mt-0.5">
             {appointments.map((apt) => {
+              if (!apt) return null;
               const statusConfig = getStatusConfig(apt.status, apt.barbeiro_confirmou);
               const paymentBadge = getPaymentBadge(apt);
               const PayIcon = paymentBadge.icon;
               const isPlan = apt.tipo_agendamento === "plano" || apt.payment_method === "plano";
               const isFree = Boolean(apt.is_free);
               const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
-              const horaFormatted = apt.hora.substring(0, 5);
+              const rawHora = apt.hora || "00:00";
+              const horaFormatted = rawHora.slice(0, 5);
 
               const isCompleted = apt.status === "completed" || apt.status === "no_show";
               const isViewingToday = isToday(selectedDate);
-              const [h, m] = apt.hora.split(':').map(Number);
+              const [h, m] = rawHora.split(':').map(Number);
               const startMinutes = (h || 0) * 60 + (m || 0);
               const endMinutes = startMinutes + duration;
               const isPastTime = isViewingToday && endMinutes <= currentMinutesNow;
@@ -902,6 +919,10 @@ export function AdminMobileAgenda({
                 (apt as any).status !== 'cancelled' &&
                 currentMinutesNow >= startMinutes &&
                 currentMinutesNow < endMinutes;
+
+              const precoFormatted = typeof apt.preco === 'number' && !isNaN(apt.preco)
+                ? apt.preco.toFixed(2).replace('.', ',')
+                : '0,00';
 
               return (
                 <div
@@ -972,14 +993,16 @@ export function AdminMobileAgenda({
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {apt.status !== 'completed' && apt.status !== 'no_show' && (apt.data < format(new Date(), 'yyyy-MM-dd') || (isViewingToday && isPastTime)) && (
+                        {apt.status !== 'completed' && apt.status !== 'no_show' && ((apt.data && apt.data < format(new Date(), 'yyyy-MM-dd')) || (isViewingToday && isPastTime)) && (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              overdueState.completeBulk([apt.id]);
+                              if (overdueState?.completeBulk && apt.id) {
+                                overdueState.completeBulk([apt.id]);
+                              }
                             }}
-                            disabled={overdueState.isCompleting}
+                            disabled={overdueState?.isCompleting}
                             className="h-6 px-2.5 rounded-full bg-foreground text-background text-[11px] font-semibold active:opacity-75 shadow-xs flex items-center gap-1 shrink-0 cursor-pointer"
                           >
                             <Check className="w-3 h-3 stroke-[2.5]" />
@@ -994,7 +1017,7 @@ export function AdminMobileAgenda({
                             ? "Plano"
                             : isFree
                               ? "Grátis"
-                              : `R$ ${apt.preco.toFixed(2).replace('.', ',')}`}
+                              : `R$ ${precoFormatted}`}
                         </span>
                       </div>
                     </div>
