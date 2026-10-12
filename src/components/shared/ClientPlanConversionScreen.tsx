@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { addMonths, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, Check, ChevronLeft, Loader2, User, Scissors, Plus, Clock, X, Wallet } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, Loader2, User, Scissors, Plus, Clock, X, Wallet, Sparkles } from "lucide-react";
 import { sendNovoAgendamentoEvent } from "@/lib/webhookService";
 import { toast } from "sonner";
 import useEmblaCarousel from "embla-carousel-react";

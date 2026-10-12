@@ -19,7 +19,6 @@ import {
   CreditCard,
   Inbox,
   ChevronRight,
-  ChevronLeft,
   Users,
   Loader2,
   Wallet,
@@ -157,7 +156,7 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
   useEffect(() => {
     loadClients();
     const channel = supabase
-      .channel(`admin-clients-${tenantId || "global"}-${Math.random().toString(36).slice(2, 9)}`)
+      .channel(`admin-clients-${tenantId || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => loadClients())
       // Realtime: assinaturas + usos — reflete em tempo real quando um cliente assina,
       // cancela o plano ou tem um uso de corte registrado.
@@ -566,16 +565,29 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
     return (
       <div className="pb-8 -mx-3 -mt-3">
         {/* Header fixo */}
-        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
-          <div className="flex items-center gap-3 px-4 h-14">
+        <div className="sticky top-0 z-30 bg-background">
+          <div className="flex items-center gap-2.5 px-4 h-14">
             <button
               onClick={goBack}
-              className="w-9 h-9 rounded-full flex items-center justify-center bg-card border border-border/60 hover:bg-secondary/50 active:scale-95 transition-all text-foreground shrink-0 shadow-sm"
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
               aria-label="Voltar"
             >
-              <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-foreground"
+              >
+                <path d="M9 14L4 9l5-5" />
+                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+              </svg>
             </button>
-            <h1 className="text-[18px] font-semibold tracking-tight text-foreground flex-1 truncate">
+            <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1 truncate">
               {client.nome}
             </h1>
             <span
@@ -624,10 +636,10 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
 
           {/* Dados de contato */}
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
+            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
               Informações de contato
             </p>
-            <div className="space-y-0 rounded-2xl bg-card border border-border/60 overflow-hidden shadow-sm">
+            <div className="space-y-0 rounded-xl border border-border/30 overflow-hidden">
               <DetailRow icon={Mail} label="Email" value={client.email || "Não informado"} />
               <DetailRow icon={Phone} label="Telefone" value={client.telefone || "Não informado"} />
             </div>
@@ -636,21 +648,21 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
           {/* Plano ativo */}
           {client.plano && (
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
+              <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
                 Plano ativo
               </p>
-              <div className="rounded-2xl bg-card border border-border/60 p-4 shadow-sm">
+              <div className="bg-blue-500/8 rounded-xl p-4 border border-blue-500/20">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
-                    <CreditCard className="w-4 h-4 text-foreground/70" />
+                  <span className="flex items-center gap-2 text-[13px] font-semibold text-blue-400">
+                    <CreditCard className="w-4 h-4" />
                     {client.plano.nome}
                   </span>
-                  <span className="text-[10px] text-emerald-500 font-semibold px-2.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full uppercase tracking-wider">
+                  <span className="text-[10px] text-emerald-400 font-medium px-2 py-0.5 bg-emerald-500/10 rounded-full">
                     Ativo
                   </span>
                 </div>
                 {client.plano.next_billing_date && (
-                  <p className="text-[11px] text-muted-foreground mt-2">
+                  <p className="text-[11px] text-muted-foreground/60 mt-2">
                     Próxima renovação:{" "}
                     {format(new Date(client.plano.next_billing_date + "T12:00:00"), "dd/MM/yyyy", {
                       locale: ptBR,
@@ -664,16 +676,16 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
           {/* Créditos — apenas admin global */}
           {!tenantId && client.creditos > 0 && !client.plano && (
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
+              <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
                 Créditos
               </p>
-              <div className="rounded-2xl bg-card border border-border/60 p-4 shadow-sm">
+              <div className="bg-purple-500/8 rounded-xl p-4 border border-purple-500/20">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
-                    <Wallet className="w-4 h-4 text-foreground/70" />
+                  <span className="flex items-center gap-2 text-[13px] font-semibold text-purple-400">
+                    <Wallet className="w-4 h-4" />
                     Créditos disponíveis
                   </span>
-                  <span className="text-[14px] font-bold text-foreground tabular-nums">
+                  <span className="text-[14px] font-bold text-purple-400">
                     R$ {client.creditos.toFixed(2)}
                   </span>
                 </div>
@@ -683,7 +695,7 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
 
           {/* Ações */}
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
+            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
               Ações
             </p>
             <div className="space-y-2">
@@ -1328,10 +1340,10 @@ function KpiCard({
   accentClass?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-card border border-border/60 p-4 text-center shadow-sm">
-      <Icon className={cn("w-4 h-4 mx-auto mb-1.5", accentClass || "text-foreground/70")} />
-      <p className="text-[16px] font-bold text-foreground leading-none tabular-nums">{value}</p>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1.5">{label}</p>
+    <div className="rounded-xl bg-secondary/30 border border-border/20 p-3.5 text-center">
+      <Icon className={cn("w-4 h-4 mx-auto mb-1.5", accentClass || "text-muted-foreground/50")} />
+      <p className="text-[15px] font-bold text-foreground leading-none tabular-nums">{value}</p>
+      <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider mt-1">{label}</p>
     </div>
   );
 }
@@ -1346,12 +1358,12 @@ function DetailRow({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/40 last:border-b-0">
-      <Icon className="w-4 h-4 text-muted-foreground/60 flex-shrink-0" />
-      <span className="text-[11px] text-muted-foreground uppercase tracking-[0.08em] w-20 flex-shrink-0">
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20 last:border-b-0">
+      <Icon className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
+      <span className="text-[10px] text-muted-foreground/50 uppercase tracking-[0.08em] w-16 flex-shrink-0">
         {label}
       </span>
-      <span className="text-[13px] font-medium text-foreground truncate flex-1">{value}</span>
+      <span className="text-[13px] text-foreground truncate flex-1">{value}</span>
     </div>
   );
 }

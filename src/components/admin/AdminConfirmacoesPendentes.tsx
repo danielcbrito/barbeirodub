@@ -175,7 +175,7 @@ export function AdminConfirmacoesPendentes({ adminContext }: AdminConfirmacoesPe
   useEffect(() => {
     loadAll();
 
-    const ch2 = supabase.channel(`admin-confirmacoes-planos-${adminContext.barbeiroId || 'global'}-${Math.random().toString(36).slice(2, 9)}`)
+    const ch2 = supabase.channel(`admin-confirmacoes-planos-${adminContext.barbeiroId || 'global'}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "assinaturas", ...(adminContext.barbeiroId ? { filter: `barbeiro_id=eq.${adminContext.barbeiroId}` } : {}) }, () => loadPendingPlans()).subscribe();
 
     const poll = setInterval(() => loadAll(true), 20000);

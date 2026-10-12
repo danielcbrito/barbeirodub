@@ -1,10 +1,18 @@
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { ChevronLeft } from 'lucide-react';
 
-/** Seta padrão do sistema (ChevronLeft com traço 2.2). */
+/** Seta curva padrão do sistema (mesma das telas de configuração de dia). */
 export function CurvedBackArrow({ className }: { className?: string }) {
-  return <ChevronLeft className={cn("w-6 h-6 stroke-[2.2]", className)} />;
+  return (
+    <svg
+      width="26" height="26" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+    </svg>
+  );
 }
 
 interface ScheduleHeaderProps {
@@ -17,8 +25,8 @@ interface ScheduleHeaderProps {
 }
 
 /**
- * Header padrão das telas: seta padrão à esquerda + título alinhado
- * ao lado dela.
+ * Header padrão das telas de horário: seta curva à esquerda + título alinhado
+ * ao lado dela, igual ao que aparece ao entrar em um dia da semana.
  */
 export function ScheduleHeader({ title, subtitle, onBack, backTo, right, className }: ScheduleHeaderProps) {
   const navigate = useNavigate();
@@ -30,10 +38,7 @@ export function ScheduleHeader({ title, subtitle, onBack, backTo, right, classNa
 
   return (
     <header
-      className={cn(
-        'sticky top-0 z-40 shrink-0 w-full bg-background/98 dark:bg-[#0c0c0e]/98 backdrop-blur-md px-4 transition-colors',
-        className
-      )}
+      className={cn('sticky top-0 z-30 bg-background/95 backdrop-blur-md px-4', className)}
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       <div className="mx-auto flex w-full max-w-md items-center gap-1.5 min-h-[56px]">
@@ -41,9 +46,9 @@ export function ScheduleHeader({ title, subtitle, onBack, backTo, right, classNa
           type="button"
           onClick={handleBack}
           aria-label="Voltar"
-          className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all shrink-0 text-foreground flex items-center justify-center border border-border/30"
+          className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all -ml-1 shrink-0"
         >
-          <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+          <CurvedBackArrow className="text-foreground" />
         </button>
 
         <div className="flex-1 min-w-0">

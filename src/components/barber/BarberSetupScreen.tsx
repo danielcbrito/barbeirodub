@@ -334,8 +334,8 @@ export function BarberSetupScreen({ barberContext, onSetupComplete }: Props) {
       {/* Barra de progresso */}
       <SetupStepIndicator currentStep={step} totalSteps={TOTAL_STEPS} />
 
-      {/* Header com voltar e pular */}
-      <div className="px-5 pt-5 flex items-center justify-between">
+      {/* Seta de voltar */}
+      <div className="px-5 pt-5">
         {!isFirstStep ? (
           <button
             onClick={goBack}
@@ -348,19 +348,8 @@ export function BarberSetupScreen({ barberContext, onSetupComplete }: Props) {
             </svg>
           </button>
         ) : (
-          <div className="h-9 w-9" />
+          <div className="h-10" />
         )}
-
-        <button
-          type="button"
-          onClick={() => {
-            try { sessionStorage.setItem("barber_setup_dismissed", "1"); } catch {}
-            onSetupComplete();
-          }}
-          className="text-xs font-semibold text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-lg border border-border/50 hover:bg-muted/40 transition-colors"
-        >
-          Ir para o início
-        </button>
       </div>
 
       {/* Content com animação */}

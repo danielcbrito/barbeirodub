@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Crown, Users, Zap, ArrowRight, X } from "lucide-react";
+import { Crown, Users, Zap, ArrowRight, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -144,7 +144,7 @@ export function UpgradePlanModal({ open, onClose, currentBarbers, isTrial }: Upg
           }}
         >
           <div className="flex items-center gap-2 mb-3">
-            <Crown className="w-4 h-4 text-primary" />
+            <Sparkles className="w-4 h-4 text-primary" />
             <span className="text-[14px] font-semibold text-foreground">{neededTier.name}</span>
           </div>
 

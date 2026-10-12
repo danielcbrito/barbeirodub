@@ -4,63 +4,38 @@ import { format } from "date-fns";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 
 /**
- * Conta os agendamentos ativos na agenda no dia corrente.
+ * Conta os agendamentos ativos do barbeiro no dia corrente.
  * Usado no badge da aba "Agenda" da bottom bar.
  */
-export function useMonthAppointmentsCount(barbeiroId?: string | null) {
+export function useMonthAppointmentsCount(barbeiroId: string | null) {
   const today = format(new Date(), "yyyy-MM-dd");
-  const cacheKey = `day-appointments-count:${barbeiroId ?? "resolved"}:${today}`;
+  const cacheKey = `day-appointments-count:${barbeiroId ?? "all-visible"}:${today}`;
   const cached = readSyncCache<number>(cacheKey);
 
   return useQuery({
-    queryKey: ["day-appointments-count", barbeiroId ?? "resolved", today],
-    staleTime: 10_000,
+    queryKey: ["day-appointments-count", barbeiroId ?? "all-visible", today],
+    staleTime: 15_000,
     refetchOnWindowFocus: true,
     refetchOnMount: true,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
     initialData: cached?.data,
     initialDataUpdatedAt: cached?.updatedAt,
     queryFn: async () => {
-      let targetBarberId = barbeiroId || null;
-
-      if (!targetBarberId && typeof window !== "undefined") {
-        targetBarberId = window.localStorage.getItem("barbeiroId");
-      }
-
-      if (!targetBarberId) {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user?.id) {
-            const { data: barb } = await supabase
-              .from("barbeiros")
-              .select("id")
-              .eq("user_id", session.user.id)
-              .maybeSingle();
-            if (barb?.id) {
-              targetBarberId = barb.id;
-              window.localStorage.setItem("barbeiroId", barb.id);
-            }
-          }
-        } catch {
-          // ignore session retrieval error
-        }
-      }
-
-      // Conta agendamentos da agenda de hoje (excluindo apenas os cancelados)
+      // Conta apenas agendamentos pendentes/confirmados (ainda não concluídos)
       let query = supabase
         .from("agendamentos")
         .select("id", { count: "exact", head: true })
         .eq("data", today)
-        .not("status", "in", '("cancelled_by_admin","cancelled_by_user","cancelled")');
+        .in("status", ["pending", "confirmed"]);
 
-      if (targetBarberId) {
-        query = query.eq("barbeiro_id", targetBarberId);
+      if (barbeiroId) {
+        query = query.eq("barbeiro_id", barbeiroId);
       }
 
       const { count, error } = await query;
 
       if (error) {
-        console.error("Erro ao contar agendamentos da agenda:", error);
+        console.error("Erro ao contar agendamentos do dia:", error);
         return 0;
       }
 

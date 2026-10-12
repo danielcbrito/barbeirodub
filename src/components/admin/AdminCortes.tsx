@@ -91,7 +91,7 @@ export function AdminCortes({ tenantId, basePath = "/admin", hideHeader = false 
   useEffect(() => {
     loadServicos();
     const channel = supabase
-      .channel(`servicos-changes-${Math.random().toString(36).slice(2, 9)}`)
+      .channel("servicos-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "servicos" }, () => loadServicos())
       .subscribe();
     return () => { supabase.removeChannel(channel); };

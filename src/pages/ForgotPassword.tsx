@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, Loader2, CheckCircle2 } from "lucide-react";
@@ -9,49 +9,44 @@ import { supabase } from "@/integrations/supabase/client";
 const emailSchema = z.object({
   email: z.string().trim().email("Email inválido"),
 });
-/* ─── Floating input (mesmo padrão do Auth / iFood) ──────────────── */
+
+/* ─── Floating input (mesmo padrão do Auth) ─────────────────────── */
 const FloatingInput = ({
   id,
   label,
   value,
   onChange,
-  placeholder,
   type = "text",
   inputMode,
   autoComplete,
   enterKeyHint,
-  autoFocus,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
-  placeholder?: string;
   type?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   autoComplete?: string;
-  enterKeyHint?: React.InputHTMLAttributes<HTMLInputElement>["enterKeyHint"];
-  autoFocus?: boolean;
+  enterKeyHint?: React.HTMLAttributes<HTMLInputElement>["enterKeyHint"];
 }) => {
   const [focused, setFocused] = useState(false);
   const active = focused || value.length > 0;
 
   return (
     <div
-      className={`relative h-[62px] rounded-2xl transition-all duration-150 ${
+      className={`relative rounded-2xl transition-colors ${
         focused
-          ? "border-2 border-primary bg-transparent shadow-sm"
-          : "border border-transparent bg-foreground/[0.06] hover:bg-foreground/[0.08]"
+          ? "border border-primary bg-transparent"
+          : "border border-transparent bg-foreground/[0.06]"
       }`}
     >
       <label
         htmlFor={id}
-        className={`pointer-events-none absolute left-5 select-none transition-all duration-150 ${
+        className={`pointer-events-none absolute left-5 transition-all ${
           active
-            ? `top-[9px] text-[11.5px] font-medium tracking-wide leading-none ${
-                focused ? "text-primary" : "text-foreground/55"
-              }`
-            : "top-1/2 -translate-y-1/2 text-[15.5px] font-normal text-foreground/45"
+            ? `top-2 text-[11px] ${focused ? "text-primary" : "text-foreground/60"}`
+            : "top-1/2 -translate-y-1/2 text-[15px] text-foreground/55"
         }`}
       >
         {label}
@@ -65,14 +60,11 @@ const FloatingInput = ({
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}
-        autoFocus={autoFocus}
-        placeholder={active && placeholder ? placeholder : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        data-no-auto-scroll="true"
-        className="peer h-full w-full rounded-2xl bg-transparent px-5 pt-[22px] pb-[6px] text-[15.5px] text-foreground caret-primary outline-none leading-normal font-normal"
+        className="peer h-[68px] w-full rounded-2xl bg-transparent px-5 pt-5 pb-1 text-[15px] text-foreground caret-primary outline-none"
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
     </div>
@@ -90,7 +82,7 @@ const ForgotPassword = () => {
     if (isLoading) return;
     setIsLoading(true);
     try {
-      const { email: validEmail } = emailSchema.parse({ email: email.trim().toLowerCase() });
+      const { email: validEmail } = emailSchema.parse({ email });
       const productionUrl = window.location.origin.includes("localhost")
         ? "https://dubadmin.lovable.app"
         : window.location.origin;
@@ -116,131 +108,117 @@ const ForgotPassword = () => {
 
   return (
     <div
-      data-no-auto-scroll="true"
-      className="min-h-[100dvh] w-full flex flex-col bg-background text-foreground overflow-y-auto overscroll-y-contain"
-      style={{
-        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
-        paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 24px)",
-      }}
+      className="fixed inset-0 flex flex-col overflow-hidden bg-background"
+      style={{ minHeight: "var(--app-height, 100svh)" }}
     >
-      {/* ─── Header: centralizado com < na esquerda ─── */}
-      <header className="relative flex items-center justify-center px-4 shrink-0 pb-3">
+      {/* Top bar */}
+      <div
+        className="relative flex items-center justify-center px-4"
+        style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 10px)", paddingBottom: 10 }}
+      >
         <button
           type="button"
           onClick={() => (emailSent ? navigate("/auth") : navigate(-1))}
-          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
+          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/85 active:scale-95"
           aria-label="Voltar"
-          style={{ touchAction: "manipulation" }}
         >
           <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
         </button>
-        <h2 className="text-[16px] font-semibold text-foreground/90">Recuperar senha</h2>
-      </header>
+        <h2 className="text-[15px] font-semibold text-foreground">Recuperar senha</h2>
+      </div>
 
-      <div className="w-full max-w-md mx-auto px-6 pt-2 pb-2 flex-1 flex flex-col">
+      {/* Content */}
+      <main className="flex-1 overflow-y-auto px-6">
         <AnimatePresence mode="wait">
           {!emailSent ? (
             <motion.div
               key="form"
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -16 }}
-              transition={{ duration: 0.2 }}
-              className="w-full flex-1 flex flex-col justify-between"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25 }}
+              className="w-full pt-6"
             >
-              <form
-                onSubmit={handleSubmit}
-                className="flex-1 flex flex-col justify-between"
-                noValidate
-              >
-                <div>
-                  <h1 className="text-[25px] sm:text-[27px] font-extrabold tracking-tight text-foreground leading-tight mb-2">
-                    Recuperar senha
-                  </h1>
-                  <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
-                    Informe seu e-mail para receber as instruções de recuperação
-                  </p>
+              <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
+                Esqueceu sua senha?
+              </h1>
+              <p className="mt-1.5 text-[13px] text-foreground/55">
+                Digite seu e-mail e enviaremos um link para você criar uma nova senha.
+              </p>
 
-                  <FloatingInput
-                    id="fp-email"
-                    label="E-mail"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="username"
-                    enterKeyHint="send"
-                    value={email}
-                    onChange={setEmail}
-                  />
-                </div>
-
-                <div className="mt-auto pt-8 pb-2 w-full">
-                  <button
-                    type="submit"
-                    disabled={!canSubmit || isLoading}
-                    className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-                    style={{ touchAction: "manipulation" }}
-                  >
-                    {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-                    Continuar
-                  </button>
-
-                  <p className="pt-4 text-center text-[13.5px] text-foreground/60">
-                    <button
-                      type="button"
-                      onClick={() => navigate("/auth")}
-                      className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                      style={{ touchAction: "manipulation" }}
-                    >
-                      Voltar ao login
-                    </button>
-                  </p>
-                </div>
+              <form onSubmit={handleSubmit} className="mt-6 space-y-3" noValidate>
+                <FloatingInput
+                  id="fp-email"
+                  label="E-mail"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  enterKeyHint="send"
+                  value={email}
+                  onChange={setEmail}
+                />
+                <button type="submit" className="sr-only" tabIndex={-1}>
+                  Enviar
+                </button>
               </form>
             </motion.div>
           ) : (
             <motion.div
               key="success"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.25 }}
-              className="w-full flex-1 flex flex-col justify-between pt-4 text-center"
+              className="w-full pt-10 flex flex-col items-center text-center"
             >
-              <div className="flex flex-col items-center">
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
-                  style={{
-                    background: "hsl(var(--primary) / 0.12)",
-                    border: "1px solid hsl(var(--primary) / 0.25)",
-                  }}
-                >
-                  <CheckCircle2 className="w-8 h-8 text-primary" />
-                </div>
-                <h1 className="text-[23px] sm:text-[25px] font-bold tracking-tight text-foreground leading-tight">
-                  E-mail enviado
-                </h1>
-                <p className="mt-2 text-[14px] text-foreground/60 leading-relaxed max-w-[280px]">
-                  Verifique sua caixa de entrada em
-                </p>
-                <p className="mt-1 text-[14px] text-primary font-semibold break-all">{email}</p>
-                <p className="mt-3 text-[13px] text-foreground/45 leading-relaxed max-w-[280px]">
-                  Toque no link recebido no e-mail para criar uma nova senha.
-                </p>
+              <div
+                className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
+                style={{
+                  background: "hsl(var(--primary) / 0.12)",
+                  border: "1px solid hsl(var(--primary) / 0.25)",
+                }}
+              >
+                <CheckCircle2 className="w-10 h-10 text-primary" />
               </div>
-
-              <div className="mt-auto pt-8 pb-2 w-full">
-                <button
-                  type="button"
-                  onClick={() => navigate("/auth")}
-                  className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all flex items-center justify-center cursor-pointer"
-                  style={{ touchAction: "manipulation" }}
-                >
-                  Voltar ao login
-                </button>
-              </div>
+              <h1 className="text-[24px] font-extrabold tracking-tight text-foreground leading-tight">
+                E-mail enviado
+              </h1>
+              <p className="mt-2 text-[13px] text-foreground/60 leading-relaxed max-w-[280px]">
+                Verifique sua caixa de entrada em
+              </p>
+              <p className="mt-1 text-[13px] text-primary font-semibold break-all">{email}</p>
+              <p className="mt-3 text-[12px] text-foreground/45 leading-relaxed max-w-[280px]">
+                Toque no link do e-mail para redefinir sua senha.
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
+      </main>
+
+      {/* Bottom CTA */}
+      <div
+        className="px-6 pt-3"
+        style={{ paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)" }}
+      >
+        {!emailSent ? (
+          <button
+            type="button"
+            onClick={() => handleSubmit()}
+            disabled={!canSubmit || isLoading}
+            className="w-full h-[48px] rounded-xl bg-foreground text-background font-semibold text-[15px] active:scale-[0.99] transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            Enviar
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => navigate("/auth")}
+            className="w-full h-[48px] rounded-xl bg-foreground text-background font-semibold text-[15px] active:scale-[0.99] transition-transform flex items-center justify-center"
+          >
+            Voltar ao login
+          </button>
+        )}
       </div>
     </div>
   );

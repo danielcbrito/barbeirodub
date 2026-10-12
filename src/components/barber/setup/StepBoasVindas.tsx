@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Sparkles } from "lucide-react";
 
 interface Props {
   nome: string;
@@ -27,7 +27,7 @@ export function StepBoasVindas({ nome }: Props) {
         className="space-y-2"
       >
         <h2 className="text-[24px] font-bold text-foreground leading-tight">
-          Tudo pronto, {nome}!
+          Tudo pronto, {nome}! 🎉
         </h2>
         <p className="text-[13px] text-foreground/90 leading-relaxed max-w-xs mx-auto">
           Seu painel está configurado e pronto para receber agendamentos.
@@ -38,9 +38,9 @@ export function StepBoasVindas({ nome }: Props) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-foreground/[0.05] border border-border/80"
+        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary/5 border border-primary/10"
       >
-        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+        <Sparkles className="w-4 h-4 text-primary" />
         <span className="text-[12px] text-foreground font-medium">
           Você já pode começar a usar seu painel
         </span>

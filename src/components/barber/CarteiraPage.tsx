@@ -5,16 +5,21 @@ import { useViewportHeight } from "@/hooks/useViewportHeight";
 import { toast } from "sonner";
 import {
   Loader2,
+  Plus,
   ArrowDownLeft,
   ArrowUpRight,
   Eye,
   EyeOff,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
+  Wallet as WalletIcon,
+  ArrowDownToLine,
+  ArrowRight,
+  X,
   Calendar,
+  ShieldCheck,
   Lock,
   AlertCircle,
+  Key,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,19 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import pixLogo from "@/assets/pix-logo.png";
-
-function PixLogoImage({ className = "w-8 h-8" }: { className?: string }) {
-  return (
-    <img
-      src={pixLogo}
-      alt="Pix"
-      className={`${className} object-contain shrink-0`}
-      loading="eager"
-      decoding="sync"
-    />
-  );
-}
 
 /* ─── Types ───────────────────────────────────────────────── */
 
@@ -67,7 +59,9 @@ interface WooviTransaction {
 }
 
 type PinMode = "create" | "validate";
+
 type PixKeyType = "cpf" | "cnpj" | "email" | "phone" | "random";
+type ViewTab = "saldo" | "movimento" | "subconta";
 
 const PIX_KEY_LABELS: Record<PixKeyType, string> = {
   cpf: "CPF",
@@ -76,6 +70,12 @@ const PIX_KEY_LABELS: Record<PixKeyType, string> = {
   phone: "Telefone",
   random: "Aleatória",
 };
+
+const TABS: { id: ViewTab; label: string }[] = [
+  { id: "saldo", label: "Saldo" },
+  { id: "movimento", label: "Em espera" },
+  { id: "subconta", label: "Conta" },
+];
 
 const fmtBRL = (cents: number) =>
   (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -106,53 +106,13 @@ const validatePixKey = (key: string, type: PixKeyType) => {
   return null;
 };
 
-const maskPixKey = (key?: string | null, type?: string | null) => {
-  if (!key) return "Não cadastrada";
-  const trimmed = key.trim();
-  if (type === "cpf" && trimmed.length === 11) {
-    return `${trimmed.slice(0, 3)}.•••.•••-${trimmed.slice(-2)}`;
-  }
-  if (type === "cnpj" && trimmed.length === 14) {
-    return `${trimmed.slice(0, 2)}.•••.•••/••••-${trimmed.slice(-2)}`;
-  }
-  if (type === "phone") {
-    return trimmed.length > 6 ? `${trimmed.slice(0, 4)} •••••-${trimmed.slice(-2)}` : trimmed;
-  }
-  if (type === "email") {
-    const parts = trimmed.split("@");
-    if (parts.length === 2) {
-      const name = parts[0];
-      return `${name.slice(0, 2)}•••@${parts[1]}`;
-    }
-  }
-  if (trimmed.length > 8) {
-    return `${trimmed.slice(0, 4)}••••${trimmed.slice(-4)}`;
-  }
-  return trimmed;
-};
-
-const formatTransactionDate = (dateStr: string) => {
-  try {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
-    const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    if (isToday) return `Hoje às ${time}`;
-    const yesterday = new Date();
-    yesterday.setDate(now.getDate() - 1);
-    if (d.toDateString() === yesterday.toDateString()) return `Ontem às ${time}`;
-    return `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} · ${time}`;
-  } catch {
-    return dateStr;
-  }
-};
-
 const emptyPin = ["", "", "", ""];
 
 const PAID_WOOVI_STATUSES = ["PAID", "paid", "COMPLETED", "ACTIVE_PAID"];
 const REFUNDED_WOOVI_STATUSES = ["REFUNDED", "refunded"];
 const VISIBLE_WOOVI_STATUSES = [...PAID_WOOVI_STATUSES, ...REFUNDED_WOOVI_STATUSES];
 
+/** Taxa fixa do banco em cada Pix recebido (R$ 0,40) — descontada do valor bruto. */
 const PIX_FEE_CENTAVOS = 40;
 const netCentavos = (value: unknown) => Math.max(0, Number(value ?? 0) - PIX_FEE_CENTAVOS);
 
@@ -178,19 +138,18 @@ const mapWooviChargeToTransaction = (charge: LocalWooviCharge): WooviTransaction
   const bruto = Number(charge.value_centavos ?? 0);
 
   if (isRefunded) {
-    return [
-      {
-        id: `c-${charge.id}`,
-        type: "withdraw",
-        value_centavos: bruto,
-        status: "Estornado",
-        created_at,
-        description: "Cancelamento — estornado ao cliente",
-      },
-    ];
+    return [{
+      id: `c-${charge.id}`,
+      type: "withdraw",
+      value_centavos: bruto,
+      status: "Estornado",
+      created_at,
+      description: "Cancelamento — estornado ao cliente",
+    }];
   }
 
   const blocked = !charge.released_at;
+  // Taxa ocorre após o recebimento -> fica acima na lista (mais recente)
   const feeCreatedAt = new Date(new Date(created_at).getTime() + 1000).toISOString();
   return [
     {
@@ -199,7 +158,7 @@ const mapWooviChargeToTransaction = (charge: LocalWooviCharge): WooviTransaction
       value_centavos: PIX_FEE_CENTAVOS,
       status: blocked ? "Aguardando finalização do corte" : "Cobrada",
       created_at: feeCreatedAt,
-      description: "Taxa bancária · Pix recebido",
+      description: "Taxa do banco · Pix recebido",
       blocked,
     },
     {
@@ -208,11 +167,13 @@ const mapWooviChargeToTransaction = (charge: LocalWooviCharge): WooviTransaction
       value_centavos: bruto,
       status: blocked ? "Aguardando finalização do corte" : "Disponível",
       created_at,
-      description: blocked ? "Pix recebido · aguardando corte" : "Pagamento recebido (Pix)",
+      description: blocked ? "Pix recebido · aguardando confirmação" : "Pagamento recebido (Pix)",
       blocked,
     },
   ];
+
 };
+
 
 type StoreApiAction = "woovi_get_balance" | "woovi_history" | "woovi_withdraw";
 type StoreApiPayload = { action: StoreApiAction; [key: string]: unknown };
@@ -223,6 +184,7 @@ type StoreApiResponse<T> = {
 };
 
 async function invokeStoreApi<T>(payload: StoreApiPayload): Promise<StoreApiResponse<T>> {
+  // Carteira usa a função dedicada woovi-wallet (saldo, extrato e saque).
   const { data, error } = await supabase.functions.invoke("woovi-wallet", { body: payload });
 
   if (error instanceof FunctionsHttpError) {
@@ -246,7 +208,29 @@ async function invokeStoreApi<T>(payload: StoreApiPayload): Promise<StoreApiResp
   return data as StoreApiResponse<T>;
 }
 
-/* Cache em memória */
+/* ─── Paleta — tokens do design system do app ─────────────── */
+
+const COLORS = {
+  yellow: "hsl(var(--gold))",
+  red: "hsl(var(--primary))",
+  redDark: "hsl(var(--primary))",
+  card: "hsl(var(--card))",
+  ink: "hsl(var(--foreground))",
+  inkSoft: "hsl(var(--muted-foreground))",
+  indigo: "hsl(var(--primary))",
+  green: "hsl(var(--success))",
+  greenSoft: "hsl(var(--success) / 0.12)",
+  divider: "hsl(var(--border))",
+  surface: "hsl(var(--muted) / 0.4)",
+  amber: "hsl(var(--gold))",
+  amberSoft: "hsl(var(--gold) / 0.12)",
+  dangerSoft: "hsl(var(--primary) / 0.12)",
+  page: "hsl(var(--background))",
+};
+
+const WALLET_TOP_SAFE_OFFSET = "max(28px, calc(env(safe-area-inset-top, 0px) + 12px))";
+
+/* Cache em memória — entra na carteira instantâneo e revalida em background */
 type WalletCacheEntry = {
   barber: BarberRow | null;
   balanceCentavos: number;
@@ -257,18 +241,35 @@ type WalletCacheEntry = {
 };
 const walletCache = new Map<string, WalletCacheEntry>();
 
+function CurvedBackArrow({ className }: { className?: string }) {
+  return (
+    <svg
+      width="26" height="26" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+    </svg>
+  );
+}
+
+/**
+ * Carteira Woovi — página interna do app, com a bottom nav sempre visível.
+ */
 export function CarteiraPage({
   barbeiroId,
   barbeiroNome,
+  basePath = "/barbeiro",
 }: CarteiraPageProps) {
   const cached = walletCache.get(barbeiroId);
   const [loading, setLoading] = useState(!cached);
-  const [refreshing, setRefreshing] = useState(false);
   const [barber, setBarber] = useState<BarberRow | null>(cached?.barber ?? null);
   const [balanceCentavos, setBalanceCentavos] = useState<number>(cached?.balanceCentavos ?? 0);
   const [blockedCentavos, setBlockedCentavos] = useState<number>(cached?.blockedCentavos ?? 0);
   const availableCentavos = Math.max(0, balanceCentavos - blockedCentavos);
   const [showBalance, setShowBalance] = useState(true);
+  const [activeTab, setActiveTab] = useState<ViewTab>("saldo");
 
   const [creating, setCreating] = useState(false);
   const [formName, setFormName] = useState(barbeiroNome ?? "");
@@ -293,24 +294,6 @@ export function CarteiraPage({
   const [changeConfirmDigits, setChangeConfirmDigits] = useState<string[]>(emptyPin);
   const [changePinError, setChangePinError] = useState<string | null>(null);
   const [savingChangePin, setSavingChangePin] = useState(false);
-
-  const [savingSettings, setSavingSettings] = useState(false);
-  const [autoEnabled, setAutoEnabled] = useState(false);
-  const [autoConfigOpen, setAutoConfigOpen] = useState(false);
-  const [pixKeyOpen, setPixKeyOpen] = useState(false);
-  const [pixKeyDraft, setPixKeyDraft] = useState("");
-  const [pixKeyTypeDraft, setPixKeyTypeDraft] = useState<PixKeyType>("cpf");
-  const [savingPixKey, setSavingPixKey] = useState(false);
-
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [transactions, setTransactions] = useState<WooviTransaction[]>([]);
-  const [extratoOpen, setExtratoOpen] = useState(false);
-  const [extratoFilter, setExtratoFilter] = useState<"all" | "deposit" | "withdraw">("all");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [avatarFailed, setAvatarFailed] = useState(false);
-
-  const firstName = (barbeiroNome ?? "").split(" ")[0] || "Barbeiro";
-  const hasSubaccount = Boolean(barber?.woovi_pix_key);
 
   const resetChangePinForm = () => {
     setChangeCurrentDigits([...emptyPin]);
@@ -381,6 +364,33 @@ export function CarteiraPage({
     }
   };
 
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [autoConfigOpen, setAutoConfigOpen] = useState(false);
+  const [autoDay, setAutoDay] = useState<string>("wednesday");
+  const [pixKeyOpen, setPixKeyOpen] = useState(false);
+  const [pixKeyDraft, setPixKeyDraft] = useState("");
+  const [pixKeyTypeDraft, setPixKeyTypeDraft] = useState<PixKeyType>("cpf");
+  const [savingPixKey, setSavingPixKey] = useState(false);
+
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [transactions, setTransactions] = useState<WooviTransaction[]>([]);
+  const [extratoOpen, setExtratoOpen] = useState(false);
+  const [extratoFilter, setExtratoFilter] = useState<"all" | "deposit" | "withdraw">("all");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  const initials = (barbeiroNome ?? "")
+    .trim()
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const hasSubaccount = Boolean(barber?.woovi_pix_key);
+  const firstName = (barbeiroNome ?? "").split(" ")[0] || "Barbeiro";
+
   const loadBarber = useCallback(async () => {
     const { data } = await supabase
       .from("barbeiros")
@@ -448,7 +458,7 @@ export function CarteiraPage({
       value_centavos: Math.round(Number(s.valor ?? 0) * 100),
       status: s.status ?? "processando",
       created_at: s.created_at,
-      description: "Saque via Pix",
+      description: "Saque Pix",
     }));
 
     const localTransactions = [...mappedCharges, ...mappedSaques].sort((a, b) =>
@@ -468,6 +478,12 @@ export function CarteiraPage({
     return localTransactions;
   }, [barbeiroId]);
 
+  /**
+   * Saldo real da subconta no provedor. É a ÚNICA fonte confiável para saque:
+   * a taxa cobrada pelo banco pode variar e o cálculo local (bruto - taxa fixa)
+   * chega a mostrar alguns centavos a mais do que existe de fato na conta,
+   * fazendo o saque do "saldo total" ser recusado.
+   */
   const syncProviderBalance = useCallback(async () => {
     try {
       const res = await invokeStoreApi<{
@@ -503,35 +519,30 @@ export function CarteiraPage({
     await syncProviderBalance();
   }, [loadLocalWalletData, syncProviderBalance]);
 
+
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const localTransactions = await loadLocalWalletData();
-      setTransactions(localTransactions);
-    } catch (fallbackErr) {
-      console.error("[woovi] histórico local:", fallbackErr);
+      try {
+        const localTransactions = await loadLocalWalletData();
+        setTransactions(localTransactions);
+      } catch (fallbackErr) {
+        console.error("[woovi] histórico local:", fallbackErr);
+      }
     } finally {
       setHistoryLoading(false);
     }
   }, [loadLocalWalletData]);
 
-  const handleRefreshAll = async () => {
-    setRefreshing(true);
-    try {
-      await Promise.all([loadBarber(), loadBalance(), loadHistory()]);
-      toast.success("Dados atualizados");
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   useEffect(() => {
     let alive = true;
     setFormName(barbeiroNome ?? "");
+    setActiveTab("saldo");
     setAvatarFailed(false);
 
     const entry = walletCache.get(barbeiroId);
     if (entry) {
+      // Pinta instantâneo com o cache e revalida em background
       setBarber(entry.barber);
       setAutoEnabled(Boolean(entry.barber?.woovi_auto_withdraw_enabled));
       setBalanceCentavos(entry.balanceCentavos);
@@ -545,6 +556,7 @@ export function CarteiraPage({
     }
 
     (async () => {
+      // Tudo em paralelo — sem cascata de requisições
       const [barberRes, pinRes, walletRes, authRes] = await Promise.all([
         loadBarber().catch(() => null),
         loadPinStatus().catch(() => false),
@@ -580,6 +592,7 @@ export function CarteiraPage({
         hasPin: Boolean(pinRes),
       });
 
+      // Corrige o saldo com o valor real da subconta (evita saque recusado).
       if (alive) await syncProviderBalance();
     })();
 
@@ -588,6 +601,8 @@ export function CarteiraPage({
     };
   }, [barbeiroId, barbeiroNome, loadBarber, loadLocalWalletData, loadPinStatus, syncProviderBalance]);
 
+
+  // Mantém o cache com os saldos mais recentes
   useEffect(() => {
     const entry = walletCache.get(barbeiroId);
     if (entry) {
@@ -595,6 +610,7 @@ export function CarteiraPage({
       entry.blockedCentavos = blockedCentavos;
     }
   }, [barbeiroId, balanceCentavos, blockedCentavos]);
+
 
   const resetPinForm = () => {
     setPinDigits([...emptyPin]);
@@ -678,8 +694,11 @@ export function CarteiraPage({
     }
   };
 
+  // histórico já vem do carregamento inicial paralelo (sem segundo spinner)
+
+
   const handleCreate = async () => {
-    if (!formName.trim()) return toast.error("Informe o nome do titular.");
+    if (!formName.trim()) return toast.error("Informe o nome.");
     if (!formKey.trim()) return toast.error("Informe a chave Pix.");
 
     const pixKey = normalizePixKey(formKey, formKeyType);
@@ -701,11 +720,11 @@ export function CarteiraPage({
       }
       if (!data?.success) throw new Error(data?.error?.message || "Falha ao criar subconta");
 
-      toast.success("Chave Pix cadastrada!");
+      toast.success("Conta de pagamento criada!");
       await loadBarber();
       await loadBalance();
     } catch (err) {
-      toast.error((err as Error).message || "Erro ao configurar carteira");
+      toast.error((err as Error).message || "Erro ao criar conta");
     } finally {
       setCreating(false);
     }
@@ -713,12 +732,12 @@ export function CarteiraPage({
 
   const handleWithdraw = async (pinAlreadyValidated = false) => {
     const valueReais = parseFloat(withdrawValue.replace(",", "."));
-    if (!valueReais || valueReais <= 0) return toast.error("Informe um valor válido");
+    if (!valueReais || valueReais <= 0) return toast.error("Valor inválido");
     const cents = Math.round(valueReais * 100);
     if (cents > availableCentavos) {
       return toast.error(
         blockedCentavos > 0
-          ? `Disponível ${fmtBRL(availableCentavos)} — ${fmtBRL(blockedCentavos)} aguardando finalização`
+          ? `Disponível ${fmtBRL(availableCentavos)} — ${fmtBRL(blockedCentavos)} aguardando finalização do corte`
           : "Saldo insuficiente",
       );
     }
@@ -743,7 +762,7 @@ export function CarteiraPage({
         }
         throw new Error(response.error?.message || "Falha no saque");
       }
-      toast.success("Saque solicitado via Pix!");
+      toast.success("Saque solicitado!");
       setWithdrawValue("");
       setWithdrawOpen(false);
       await loadBalance();
@@ -768,360 +787,221 @@ export function CarteiraPage({
       if (error) throw error;
       toast.success(
         next
-          ? "Saque automático semanal ativado"
+          ? "Saque automático ativado (toda quarta-feira)"
           : "Saque automático desativado",
       );
     } catch (err) {
       setAutoEnabled(!next);
-      toast.error((err as Error).message || "Erro ao salvar preferência");
+      toast.error((err as Error).message || "Erro ao salvar");
     } finally {
       setSavingSettings(false);
     }
   };
 
   return (
-    <div className="min-h-app bg-background text-foreground pb-32">
-      {/* HEADER: Saudação e status */}
+    <div className="flex flex-col h-app overflow-hidden" style={{ background: COLORS.page }}>
+      {/* HEADER minimalista — sem X e sem seta */}
       <div
-        className="sticky top-0 px-5 pb-3 flex items-center justify-between gap-3 z-20 bg-background/95 dark:bg-[#0c0c0e]/95 backdrop-blur-md"
-        style={{ paddingTop: "max(16px, calc(env(safe-area-inset-top, 0px) + 8px))" }}
+        className="relative px-5 pb-4 flex items-center gap-3 z-10"
+        style={{ paddingTop: WALLET_TOP_SAFE_OFFSET }}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-border/80 bg-card">
-            {avatarUrl && !avatarFailed ? (
-              <img
-                src={avatarUrl}
-                alt={barbeiroNome || "Avatar"}
-                className="w-full h-full object-cover"
-                onError={() => setAvatarFailed(true)}
-              />
-            ) : (
-              <span className="text-[13px] font-bold text-foreground">
-                {(barbeiroNome || "B")
-                  .trim()
-                  .split(/\s+/)
-                  .map((p) => p[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </span>
-            )}
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-[16px] font-bold leading-tight truncate tracking-tight text-foreground">
-              Olá, {firstName}
-            </h1>
-            <p className="text-[12px] font-normal text-muted-foreground leading-none mt-0.5">
-              Carteira Digital
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={handleRefreshAll}
-          disabled={refreshing}
-          className="w-9 h-9 rounded-full border border-border/80 bg-card flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all"
-          title="Atualizar dados"
-          aria-label="Atualizar dados"
+        <div
+          className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0"
+          style={{ background: COLORS.surface, border: `1px solid ${COLORS.divider}` }}
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-foreground" : ""}`} />
-        </button>
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="relative z-10 px-5 pt-2">
-        <div className="mx-auto w-full max-w-md space-y-6">
-          {loading ? (
-            <div className="w-full rounded-2xl min-h-[200px] flex items-center justify-center border border-border/80 bg-card">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : !hasSubaccount ? (
-            /* Formulário de ativação / cadastro Pix */
-            <div className="w-full rounded-2xl border border-border/80 bg-card p-6 shadow-sm">
-              <div className="space-y-1 mb-5">
-                <PixLogoImage className="w-9 h-9 mb-3" />
-                <h2 className="text-[18px] font-bold tracking-tight text-foreground">
-                  Cadastrar Chave Pix
-                </h2>
-                <p className="text-[13px] leading-relaxed text-muted-foreground">
-                  Cadastre sua chave Pix para receber os repasses dos agendamentos diretamente na sua conta.
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[12px] font-medium text-muted-foreground">
-                    Nome do titular
-                  </Label>
-                  <Input
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    placeholder="Nome completo"
-                    className="h-11 rounded-xl bg-background border-border/80 text-[14px]"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-[12px] font-medium text-muted-foreground">
-                    Tipo de chave
-                  </Label>
-                  <Select value={formKeyType} onValueChange={(v) => setFormKeyType(v as PixKeyType)}>
-                    <SelectTrigger className="h-11 rounded-xl bg-background border-border/80 text-[14px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map((k) => (
-                        <SelectItem key={k} value={k}>
-                          {PIX_KEY_LABELS[k]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-[12px] font-medium text-muted-foreground">
-                    Chave Pix
-                  </Label>
-                  <Input
-                    value={formKey}
-                    onChange={(e) => setFormKey(e.target.value)}
-                    placeholder={
-                      formKeyType === "email"
-                        ? "voce@exemplo.com"
-                        : formKeyType === "phone"
-                        ? "11999999999"
-                        : formKeyType === "random"
-                        ? "chave-aleatoria-uuid"
-                        : "Somente números"
-                    }
-                    className="h-11 rounded-xl bg-background border-border/80 text-[14px] tabular-nums"
-                  />
-                </div>
-
-                <Button
-                  onClick={handleCreate}
-                  disabled={creating}
-                  className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all mt-2"
-                >
-                  {creating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...
-                    </>
-                  ) : (
-                    "Cadastrar chave Pix"
-                  )}
-                </Button>
-              </div>
-            </div>
+          {avatarUrl && !avatarFailed ? (
+            <img
+              src={avatarUrl}
+              alt={barbeiroNome || "Avatar"}
+              className="w-full h-full object-cover"
+              onError={() => setAvatarFailed(true)}
+            />
+          ) : initials ? (
+            <span className="text-[13px] font-semibold" style={{ color: COLORS.ink }}>
+              {initials}
+            </span>
           ) : (
-            <>
-              {/* 1. CARD PRINCIPAL DE SALDO (Padrão exato elogiado pelo usuário) */}
-              <div className="w-full rounded-2xl border border-border/60 bg-muted/30 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Saldo disponível
-                  </p>
-                  <button
-                    onClick={() => setShowBalance((v) => !v)}
-                    aria-label="Mostrar ou ocultar saldo"
-                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                  >
-                    {showBalance ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  </button>
-                </div>
-
-                <p className="text-[32px] sm:text-[36px] font-bold tracking-tight text-foreground tabular-nums leading-tight">
-                  {showBalance ? fmtBRL(availableCentavos) : "R$ ••••••"}
-                </p>
-
-                {blockedCentavos > 0 && (
-                  <p className="text-[12px] text-muted-foreground mt-1">
-                    {showBalance ? fmtBRL(blockedCentavos) : "R$ ••••"} aguardando finalização
-                  </p>
-                )}
-
-                {/* Botão de Saque (Padrão Add Money NeoBank) */}
-                <button
-                  onClick={() => setWithdrawOpen(true)}
-                  disabled={availableCentavos <= 0}
-                  className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] flex items-center justify-center hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-40 disabled:pointer-events-none mt-4 shadow-sm"
-                >
-                  Sacar via Pix
-                </button>
-              </div>
-
-              {/* 2. CHAVE PIX CADASTRADA (Banner Minimalista e Sério) */}
-              <div className="w-full rounded-2xl p-4 sm:p-5 bg-zinc-900 text-white border border-zinc-800 shadow-sm relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <PixLogoImage className="w-5 h-5" />
-                    <span className="text-[12px] font-medium text-zinc-300 truncate">
-                      Chave Pix cadastrada
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-zinc-400 shrink-0">
-                    {barber?.woovi_pix_key_type ? PIX_KEY_LABELS[barber.woovi_pix_key_type as PixKeyType] : "Pix"}
-                  </span>
-                </div>
-
-                <div className="mt-2.5 mb-3">
-                  <p className="text-[18px] sm:text-[19px] font-mono font-medium tracking-wider text-zinc-100 tabular-nums">
-                    {maskPixKey(barber?.woovi_pix_key, barber?.woovi_pix_key_type)}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between pt-2.5 border-t border-zinc-800/80">
-                  <p className="text-[12px] text-zinc-400 truncate">
-                    {barber?.woovi_subaccount_name || barbeiroNome}
-                  </p>
-
-                  <button
-                    onClick={() => {
-                      setPixKeyDraft(barber?.woovi_pix_key ?? "");
-                      setPixKeyTypeDraft(((barber?.woovi_pix_key_type as PixKeyType) ?? "cpf"));
-                      setPixKeyOpen(true);
-                    }}
-                    className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-[12px] font-medium text-white transition-all shrink-0"
-                  >
-                    Configurar
-                  </button>
-                </div>
-              </div>
-
-              {/* 3. AÇÕES RÁPIDAS (Ícones diretos na linha, sem caixas/blocos por trás) */}
-              <div className="rounded-2xl border border-border/80 bg-card overflow-hidden divide-y divide-border/60">
-                {/* Linha: Saque Automático (Abre tela cheia) */}
-                <div
-                  onClick={() => setAutoConfigOpen(true)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:scale-[0.99] transition-all cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <Calendar className="w-5 h-5 text-muted-foreground shrink-0" />
-                    <div className="text-left min-w-0">
-                      <p className="text-[14px] font-medium text-foreground">Saque automático</p>
-                      <p className="text-[12px] text-muted-foreground truncate">
-                        {autoEnabled ? "Ativado · Semanalmente" : "Desativado"}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                </div>
-
-                {/* Linha: PIN Financeiro (Abre tela cheia) */}
-                <div
-                  onClick={openChangePin}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:scale-[0.99] transition-all cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <Lock className="w-5 h-5 text-muted-foreground shrink-0" />
-                    <div className="text-left min-w-0">
-                      <p className="text-[14px] font-medium text-foreground">PIN de segurança</p>
-                      <p className="text-[12px] text-muted-foreground truncate">
-                        {hasPin ? "PIN de 4 dígitos ativo" : "Criar PIN de segurança"}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                </div>
-              </div>
-
-              {/* 4. TRANSAÇÕES RECENTES (SOLTAS na página, sem quadrado/container externo) */}
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center justify-between px-1">
-                  <h2 className="text-[14px] font-semibold tracking-tight text-foreground">
-                    Transações recentes
-                  </h2>
-                  {transactions.length > 0 && (
-                    <button
-                      onClick={() => setExtratoOpen(true)}
-                      className="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Ver todas
-                    </button>
-                  )}
-                </div>
-
-                {historyLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : transactions.length === 0 ? (
-                  <div className="py-6 text-center">
-                    <p className="text-[13px] text-muted-foreground">
-                      Nenhuma transação recente.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border/40">
-                    {transactions.slice(0, 5).map((t) => {
-                      const isIn = t.type === "deposit";
-                      const isBlocked = Boolean(t.blocked);
-                      return (
-                        <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
-                          <div className="flex items-center gap-3 min-w-0">
-                            {isIn ? (
-                              <ArrowDownLeft className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                            ) : (
-                              <ArrowUpRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                            )}
-                            <div className="min-w-0">
-                              <p className="text-[13.5px] font-medium text-foreground truncate">
-                                {t.description ?? (isIn ? "Recebimento Pix" : "Saque via Pix")}
-                              </p>
-                              <p className="text-[11.5px] text-muted-foreground">
-                                {formatTransactionDate(t.created_at)}
-                                {isBlocked && " · Em espera"}
-                              </p>
-                            </div>
-                          </div>
-
-                          <p
-                            className={`text-[13.5px] font-semibold tabular-nums shrink-0 ${
-                              isBlocked
-                                ? "text-muted-foreground"
-                                : isIn
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-foreground"
-                            }`}
-                          >
-                            {isIn ? "+" : "-"}
-                            {fmtBRL(t.value_centavos)}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </>
+            <User className="w-4 h-4" style={{ color: COLORS.inkSoft }} />
           )}
         </div>
+        <div className="min-w-0">
+          <p
+            className="text-[11px] uppercase tracking-[0.14em] leading-none mb-1"
+            style={{ color: COLORS.inkSoft }}
+          >
+            Carteira
+          </p>
+          <p
+            className="text-[15px] font-semibold leading-none truncate tracking-tight"
+            style={{ color: COLORS.ink }}
+          >
+            {firstName}
+          </p>
+        </div>
       </div>
 
-      {/* ─── TELAS INTEIRAS (100% sem gaveta) ────────────────────────── */}
+      {/* CONTAINER central */}
+      <div
+        className="relative z-10 flex-1 min-h-0 flex flex-col items-center overflow-y-auto overscroll-contain px-5 pb-24"
+        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+      >
+        {loading ? (
+          <div
+            className="w-full max-w-md rounded-2xl min-h-[240px] flex-1 flex items-center justify-center"
+            style={{ background: COLORS.card, border: `1px solid ${COLORS.divider}` }}
+          >
+            <Loader2 className="w-6 h-6 animate-spin" style={{ color: COLORS.inkSoft }} />
+          </div>
+        ) : !hasSubaccount ? (
+          <div
+            className="w-full max-w-md rounded-2xl min-h-[320px] flex-1 flex flex-col overflow-hidden"
+            style={{ background: COLORS.card, border: `1px solid ${COLORS.divider}` }}
+          >
+            <CreationForm
+              formName={formName}
+              setFormName={setFormName}
+              formKeyType={formKeyType}
+              setFormKeyType={setFormKeyType}
+              formKey={formKey}
+              setFormKey={setFormKey}
+              creating={creating}
+              onCreate={handleCreate}
+            />
+          </div>
+        ) : (
+          <>
+            {/* TABS */}
+            <div
+              className="relative z-20 grid w-full max-w-md shrink-0 p-1 rounded-xl mb-4"
+              style={{
+                gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))`,
+                background: COLORS.surface,
+                border: `1px solid ${COLORS.divider}`,
+              }}
+            >
+              {TABS.map((t) => {
+                const active = activeTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id)}
+                    className="relative flex h-9 items-center justify-center rounded-lg text-[13px] font-semibold tracking-tight transition-colors duration-150"
+                    style={{
+                      color: active ? COLORS.ink : COLORS.inkSoft,
+                      background: active ? COLORS.card : "transparent",
+                      border: active ? `1px solid ${COLORS.divider}` : "1px solid transparent",
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
 
-      {/* TELA INTEIRA: SACAR VIA PIX */}
+            {/* CARD central */}
+            <div
+              className="relative z-10 w-full max-w-md shrink-0 overflow-hidden flex flex-col rounded-2xl"
+              style={{
+                background: COLORS.card,
+                border: `1px solid ${COLORS.divider}`,
+              }}
+            >
+              <div className="pb-0">
+                {activeTab === "saldo" ? (
+                  <SaldoView
+                    balanceCentavos={availableCentavos}
+                    blockedCentavos={blockedCentavos}
+                    showBalance={showBalance}
+                    onToggle={() => setShowBalance((v) => !v)}
+                    onSacar={() => setWithdrawOpen(true)}
+                    onOpenExtrato={() => setExtratoOpen(true)}
+                  />
+                ) : activeTab === "movimento" ? (
+                  <MovimentoView
+                    blockedCentavos={blockedCentavos}
+                    showBalance={showBalance}
+                    onToggle={() => setShowBalance((v) => !v)}
+                  />
+                ) : (
+                  <SubcontaView
+                    barber={barber}
+                    fallbackName={barbeiroNome}
+                    hasSubaccount={hasSubaccount}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Configurações abaixo do card */}
+            {activeTab === "saldo" && (
+              <div className="w-full max-w-md shrink-0 mt-4 space-y-2">
+                <ConfigRow
+                  icon={<Calendar className="w-4 h-4" style={{ color: COLORS.inkSoft }} />}
+                  label="Saque automático"
+                  value={autoEnabled ? "Ativo" : "Desativado"}
+                  onClick={() => setAutoConfigOpen(true)}
+                />
+                <ConfigRow
+                  icon={<Key className="w-4 h-4" style={{ color: COLORS.inkSoft }} />}
+                  label="Chave Pix"
+                  value={
+                    barber?.woovi_pix_key
+                      ? barber.woovi_pix_key.length > 8
+                        ? `${barber.woovi_pix_key.slice(0, 3)}•••${barber.woovi_pix_key.slice(-3)}`
+                        : barber.woovi_pix_key
+                      : "Não cadastrada"
+                  }
+                  onClick={() => {
+                    setPixKeyDraft(barber?.woovi_pix_key ?? "");
+                    setPixKeyTypeDraft(((barber?.woovi_pix_key_type as PixKeyType) ?? "cpf"));
+                    setPixKeyOpen(true);
+                  }}
+                />
+
+                <ExtratoPreview
+                  loading={historyLoading}
+                  transactions={transactions}
+                  onOpen={() => setExtratoOpen(true)}
+                />
+              </div>
+            )}
+
+            {activeTab === "movimento" && (
+              <div className="w-full max-w-md shrink-0 mt-4">
+                <ExtratoPreview
+                  loading={historyLoading}
+                  transactions={transactions.filter((t) => t.blocked)}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Tela cheia de Sacar */}
       {withdrawOpen && (
         <div
-          className="fixed inset-0 z-[120] flex flex-col bg-background text-foreground overflow-hidden"
-          style={{ minHeight: viewportHeight }}
+          className="fixed inset-0 z-[90] flex flex-col overflow-hidden"
+          style={{ minHeight: viewportHeight, background: COLORS.page }}
         >
-          {/* Header com ChevronLeft limpo (sem caixa cinza) */}
+          {/* Header padrão do app */}
           <div
             className="flex-shrink-0 mx-auto w-full max-w-md px-5"
             style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
           >
-            <div className="flex items-center gap-2 min-h-[52px]">
+            <div className="flex items-center gap-1.5 min-h-[52px]">
               <button
                 onClick={() => !withdrawing && setWithdrawOpen(false)}
                 disabled={withdrawing}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
+                className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all -ml-1 shrink-0"
                 aria-label="Voltar"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <CurvedBackArrow className="text-foreground" />
               </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
+              <h2
+                className="text-[20px] font-semibold tracking-tight flex-1 truncate"
+                style={{ color: COLORS.ink }}
+              >
                 Sacar via Pix
               </h2>
             </div>
@@ -1129,58 +1009,53 @@ export function CarteiraPage({
 
           {/* Conteúdo */}
           <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-6">
-              {/* Saldo disponível (Idêntico ao padrão que o usuário elogiou) */}
-              <div className="rounded-2xl p-4 bg-muted/30 border border-border/60">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            <div className="mx-auto w-full max-w-md px-5 pt-2 pb-6 space-y-5">
+              <div className="rounded-2xl p-4" style={{ background: COLORS.surface }}>
+                <p className="text-[11px]" style={{ color: COLORS.inkSoft }}>
                   Saldo disponível
                 </p>
-                <p className="text-[26px] font-bold text-foreground mt-0.5 tabular-nums">
+                <p className="text-[24px] font-extrabold" style={{ color: COLORS.ink }}>
                   {fmtBRL(availableCentavos)}
                 </p>
                 {blockedCentavos > 0 && (
-                  <p className="text-[12px] mt-1 text-muted-foreground">
-                    {fmtBRL(blockedCentavos)} aguardando finalização
+                  <p className="text-[11px] mt-1" style={{ color: COLORS.amber }}>
+                    {fmtBRL(blockedCentavos)} aguardando finalização do corte
                   </p>
                 )}
               </div>
 
-              {/* Valor a transferir: DIRETO NA TELA, sem bolha/caixa de input */}
-              <div className="flex flex-col items-center justify-center py-6">
-                <p className="text-[13px] font-medium text-muted-foreground mb-3">
-                  Quanto deseja transferir?
-                </p>
-                <div className="flex items-baseline justify-center gap-1.5 w-full">
-                  <span className="text-[28px] sm:text-[34px] font-bold text-muted-foreground select-none">
-                    R$
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoFocus
-                    placeholder="0,00"
-                    value={withdrawValue}
-                    onChange={(e) => setWithdrawValue(e.target.value)}
-                    className="bg-transparent text-[38px] sm:text-[44px] font-bold text-foreground text-center focus:outline-none w-[240px] tabular-nums border-none shadow-none p-0"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label className="text-[13px]" style={{ color: COLORS.ink }}>
+                  Valor
+                </Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  value={withdrawValue}
+                  onChange={(e) => setWithdrawValue(e.target.value)}
+                  className="h-12 text-lg border-2"
+                  style={{ borderColor: COLORS.divider }}
+                />
                 <button
                   type="button"
                   onClick={() =>
                     setWithdrawValue((availableCentavos / 100).toFixed(2).replace(".", ","))
                   }
-                  className="mt-4 text-[13px] font-medium text-muted-foreground hover:text-foreground underline transition-colors"
+                  className="text-[12px] font-semibold"
+                  style={{ color: COLORS.indigo }}
                 >
-                  Sacar valor total ({fmtBRL(availableCentavos)})
+                  Sacar tudo
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Footer CTA */}
+          {/* Footer / CTA — sobe com o teclado */}
           <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3 bg-background border-t border-border/60"
+            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3"
             style={{
+              background: COLORS.page,
               paddingBottom: keyboardOpen
                 ? 12
                 : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
@@ -1189,100 +1064,146 @@ export function CarteiraPage({
             <Button
               onClick={() => handleWithdraw()}
               disabled={withdrawing || availableCentavos <= 0}
-              className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all shadow-sm"
+              className="w-full h-12 text-[14px] font-semibold"
+              style={{ background: COLORS.indigo, color: "hsl(var(--primary-foreground))" }}
             >
               {withdrawing ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Transferindo...
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...
                 </>
               ) : (
-                "Confirmar saque Pix"
+                <>
+                  <ArrowDownToLine className="w-4 h-4 mr-2" /> Sacar
+                </>
               )}
             </Button>
           </div>
         </div>
       )}
 
-      {/* TELA INTEIRA: CONFIGURAR CHAVE PIX */}
+      {/* Sheet: Saque automático */}
+      {autoConfigOpen && (
+        <div
+          className="fixed inset-0 z-30 flex items-end"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={() => setAutoConfigOpen(false)}
+        >
+          <div
+            className="w-full rounded-t-3xl p-5 space-y-4"
+            style={{ background: COLORS.card }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-[17px] font-bold" style={{ color: COLORS.ink }}>
+                Saque automático
+              </h3>
+              <button
+                onClick={() => setAutoConfigOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: COLORS.surface }}
+              >
+                <X className="w-4 h-4" style={{ color: COLORS.ink }} />
+              </button>
+            </div>
+
+            <div
+              className="rounded-2xl p-4 flex items-center justify-between"
+              style={{ background: COLORS.surface }}
+            >
+              <div>
+                <p className="text-[13px] font-semibold" style={{ color: COLORS.ink }}>
+                  Ativar saque automático
+                </p>
+                <p className="text-[11px] mt-0.5" style={{ color: COLORS.inkSoft }}>
+                  Todo dia 15 o saldo disponível cai na sua chave Pix
+                </p>
+              </div>
+              <Switch
+                checked={autoEnabled}
+                onCheckedChange={handleSaveSettings}
+                disabled={savingSettings}
+              />
+            </div>
+
+            <p className="text-[11px] leading-relaxed" style={{ color: COLORS.inkSoft }}>
+              Você pode desativar a qualquer momento. Saques em espera só são liberados após a
+              confirmação do corte.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Sheet: Chave Pix */}
       {pixKeyOpen && (
         <div
-          className="fixed inset-0 z-[120] flex flex-col bg-background text-foreground overflow-hidden"
-          style={{ minHeight: viewportHeight }}
+          className="fixed inset-0 z-30 flex items-end"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={() => !savingPixKey && setPixKeyOpen(false)}
         >
-          {/* Header com ChevronLeft limpo */}
           <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5"
-            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
+            className="w-full rounded-t-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+            style={{ background: COLORS.card }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 min-h-[52px]">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[15px] font-medium tracking-tight" style={{ color: COLORS.ink }}>
+                Chave Pix
+              </h3>
               <button
-                onClick={() => !savingPixKey && setPixKeyOpen(false)}
+                onClick={() => setPixKeyOpen(false)}
                 disabled={savingPixKey}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
-                aria-label="Voltar"
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: COLORS.surface }}
               >
-                <ChevronLeft className="w-6 h-6" />
+                <X className="w-4 h-4" style={{ color: COLORS.ink }} />
               </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                Configurar Chave Pix
-              </h2>
             </div>
-          </div>
 
-          <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-5">
-              <div className="rounded-2xl p-4 bg-muted/30 border border-border/60">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Chave atual
-                </p>
-                <p className="text-[13.5px] font-mono font-medium mt-1 text-foreground break-all">
-                  {barber?.woovi_pix_key ?? "Nenhuma cadastrada"}
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[12px] font-medium text-muted-foreground">
-                  Tipo da chave
-                </Label>
-                <Select
-                  value={pixKeyTypeDraft}
-                  onValueChange={(v) => setPixKeyTypeDraft(v as PixKeyType)}
-                >
-                  <SelectTrigger className="h-11 rounded-xl bg-background border-border/80 text-[14px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cpf">CPF</SelectItem>
-                    <SelectItem value="cnpj">CNPJ</SelectItem>
-                    <SelectItem value="email">E-mail</SelectItem>
-                    <SelectItem value="phone">Telefone</SelectItem>
-                    <SelectItem value="random">Aleatória</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[12px] font-medium text-muted-foreground">
-                  Nova chave Pix
-                </Label>
-                <Input
-                  value={pixKeyDraft}
-                  onChange={(e) => setPixKeyDraft(e.target.value)}
-                  placeholder="Digite a chave Pix"
-                  className="h-11 rounded-xl bg-background border-border/80 text-[14px] tabular-nums"
-                />
-              </div>
+            <div
+              className="rounded-md px-3 py-2.5"
+              style={{ background: COLORS.surface }}
+            >
+              <p className="text-[10px] uppercase tracking-[0.1em]" style={{ color: COLORS.inkSoft }}>
+                Chave atual
+              </p>
+              <p className="text-[13px] font-medium tabular-nums mt-1 break-all" style={{ color: COLORS.ink }}>
+                {barber?.woovi_pix_key ?? "Nenhuma cadastrada"}
+              </p>
             </div>
-          </div>
 
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3 bg-background border-t border-border/60"
-            style={{
-              paddingBottom: keyboardOpen
-                ? 12
-                : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
-            }}
-          >
+            <div className="space-y-2">
+              <Label className="text-[12px]" style={{ color: COLORS.ink }}>
+                Tipo da chave
+              </Label>
+              <Select
+                value={pixKeyTypeDraft}
+                onValueChange={(v) => setPixKeyTypeDraft(v as PixKeyType)}
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cpf">CPF</SelectItem>
+                  <SelectItem value="cnpj">CNPJ</SelectItem>
+                  <SelectItem value="email">E-mail</SelectItem>
+                  <SelectItem value="phone">Telefone</SelectItem>
+                  <SelectItem value="random">Aleatória</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[12px]" style={{ color: COLORS.ink }}>
+                Nova chave
+              </Label>
+              <Input
+                value={pixKeyDraft}
+                onChange={(e) => setPixKeyDraft(e.target.value)}
+                placeholder="Digite a chave Pix"
+                className="h-11"
+              />
+            </div>
+
             <Button
               onClick={async () => {
                 const normalizedPixKey = normalizePixKey(pixKeyDraft, pixKeyTypeDraft);
@@ -1303,8 +1224,8 @@ export function CarteiraPage({
                     .select("id")
                     .maybeSingle();
                   if (error) throw error;
-                  if (!data) throw new Error("Não foi possível atualizar");
-                  toast.success("Chave Pix atualizada!");
+                  if (!data) throw new Error("Não foi possível atualizar este barbeiro");
+                  toast.success("Chave Pix atualizada");
                   await loadBarber();
                   setPixKeyOpen(false);
                 } catch (err) {
@@ -1314,149 +1235,111 @@ export function CarteiraPage({
                 }
               }}
               disabled={savingPixKey}
-              className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all shadow-sm"
+              className="w-full h-11"
+              style={{ background: COLORS.indigo, color: "hsl(var(--primary-foreground))" }}
             >
               {savingPixKey ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar chave"}
             </Button>
+
+            <button
+              onClick={() => {
+                setPixKeyOpen(false);
+                openChangePin();
+              }}
+              disabled={savingPixKey}
+              className="w-full h-11 rounded-md text-[13px] font-medium border flex items-center justify-center gap-2"
+              style={{ borderColor: COLORS.divider, color: COLORS.ink, background: COLORS.card }}
+            >
+              <Lock className="w-4 h-4" />
+              Alterar PIN financeiro
+            </button>
           </div>
         </div>
       )}
 
-      {/* TELA INTEIRA: SAQUE AUTOMÁTICO */}
-      {autoConfigOpen && (
-        <div
-          className="fixed inset-0 z-[120] flex flex-col bg-background text-foreground overflow-hidden"
-          style={{ minHeight: viewportHeight }}
-        >
-          {/* Header com ChevronLeft limpo */}
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5"
-            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
-          >
-            <div className="flex items-center gap-2 min-h-[52px]">
-              <button
-                onClick={() => setAutoConfigOpen(false)}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
-                aria-label="Voltar"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                Saque Automático
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-4">
-              <div className="rounded-2xl p-4 bg-muted/30 border border-border/60 flex items-center justify-between">
-                <div className="pr-4">
-                  <p className="text-[14px] font-medium text-foreground">
-                    Repasse semanal automático
-                  </p>
-                  <p className="text-[12px] text-muted-foreground mt-0.5">
-                    O saldo liberado é transferido toda semana para sua chave Pix.
-                  </p>
-                </div>
-                <Switch
-                  checked={autoEnabled}
-                  onCheckedChange={handleSaveSettings}
-                  disabled={savingSettings}
-                />
-              </div>
-
-              <p className="text-[12px] leading-relaxed text-muted-foreground px-1">
-                Você pode desativar quando quiser. Valores de agendamentos pendentes continuam em espera até a finalização do corte.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TELA INTEIRA: ALTERAR PIN FINANCEIRO */}
+      {/* Sheet: Alterar PIN financeiro */}
       {changePinOpen && (
         <div
-          className="fixed inset-0 z-[120] flex flex-col bg-background text-foreground overflow-hidden"
-          style={{ minHeight: viewportHeight }}
+          className="fixed inset-0 z-40 flex items-end"
+          style={{ background: "rgba(0,0,0,0.48)" }}
+          onClick={() => !savingChangePin && setChangePinOpen(false)}
         >
-          {/* Header com ChevronLeft limpo */}
           <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5"
-            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
+            className="w-full rounded-t-3xl p-5 space-y-5 max-h-[90vh] overflow-y-auto"
+            style={{ background: COLORS.card }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 min-h-[52px]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                  style={{ background: COLORS.surface }}
+                >
+                  <Lock className="w-4 h-4" style={{ color: COLORS.ink }} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-[16px] font-bold" style={{ color: COLORS.ink }}>
+                    Alterar PIN financeiro
+                  </h3>
+                  <p className="text-[11px]" style={{ color: COLORS.inkSoft }}>
+                    Informe o PIN atual e defina um novo
+                  </p>
+                </div>
+              </div>
               <button
-                onClick={() => !savingChangePin && setChangePinOpen(false)}
+                onClick={() => setChangePinOpen(false)}
                 disabled={savingChangePin}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
-                aria-label="Voltar"
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: COLORS.surface }}
               >
-                <ChevronLeft className="w-6 h-6" />
+                <X className="w-4 h-4" style={{ color: COLORS.ink }} />
               </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                PIN de Segurança
-              </h2>
             </div>
-          </div>
 
-          <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-6">
-              <p className="text-[13px] text-muted-foreground">
-                Defina seu código de 4 dígitos para autorizar transferências e saques
-              </p>
-
-              {[
-                { label: "PIN atual", digits: changeCurrentDigits, setter: setChangeCurrentDigits, prefix: "cur" },
-                { label: "Novo PIN (4 dígitos)", digits: changeNewDigits, setter: setChangeNewDigits, prefix: "new" },
-                { label: "Confirmar novo PIN", digits: changeConfirmDigits, setter: setChangeConfirmDigits, prefix: "cnf" },
-              ].map((field) => (
-                <div key={field.prefix} className="space-y-2">
-                  <Label className="text-[12px] font-medium text-muted-foreground">
-                    {field.label}
-                  </Label>
-                  <div className="flex items-center justify-center gap-3">
-                    {[0, 1, 2, 3].map((index) => (
-                      <Input
-                        key={`${field.prefix}-${index}`}
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={field.digits[index]}
-                        onChange={(event) => {
-                          const value = event.target.value.replace(/\D/g, "").slice(-1);
-                          const arr = [...field.digits];
-                          arr[index] = value;
-                          field.setter(arr);
-                          setChangePinError(null);
-                        }}
-                        className="w-12 h-13 text-center text-xl font-bold rounded-xl bg-background border-border/80 text-foreground"
-                      />
-                    ))}
-                  </div>
+            {[
+              { label: "PIN atual", digits: changeCurrentDigits, setter: setChangeCurrentDigits, prefix: "cur" },
+              { label: "Novo PIN (4 dígitos)", digits: changeNewDigits, setter: setChangeNewDigits, prefix: "new" },
+              { label: "Confirmar novo PIN", digits: changeConfirmDigits, setter: setChangeConfirmDigits, prefix: "cnf" },
+            ].map((field) => (
+              <div key={field.prefix} className="space-y-3">
+                <Label className="text-[12px] font-semibold" style={{ color: COLORS.ink }}>
+                  {field.label}
+                </Label>
+                <div className="flex items-center justify-center gap-3">
+                  {[0, 1, 2, 3].map((index) => (
+                    <Input
+                      key={`${field.prefix}-${index}`}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={field.digits[index]}
+                      onChange={(event) => {
+                        const value = event.target.value.replace(/\D/g, "").slice(-1);
+                        const arr = [...field.digits];
+                        arr[index] = value;
+                        field.setter(arr);
+                        setChangePinError(null);
+                      }}
+                      className="w-12 h-14 text-center text-xl font-bold rounded-2xl"
+                      style={{ borderColor: changePinError ? COLORS.red : COLORS.divider, color: COLORS.ink }}
+                    />
+                  ))}
                 </div>
-              ))}
+              </div>
+            ))}
 
-              {changePinError && (
-                <div className="flex items-center justify-center gap-2 text-[12px] text-destructive font-medium">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>{changePinError}</span>
-                </div>
-              )}
-            </div>
-          </div>
+            {changePinError && (
+              <div className="flex items-center justify-center gap-2 text-[12px]" style={{ color: COLORS.red }}>
+                <AlertCircle className="w-4 h-4" />
+                <span>{changePinError}</span>
+              </div>
+            )}
 
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3 bg-background border-t border-border/60"
-            style={{
-              paddingBottom: keyboardOpen
-                ? 12
-                : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
-            }}
-          >
             <Button
               onClick={submitChangePin}
               disabled={savingChangePin}
-              className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all shadow-sm"
+              className="w-full h-12 text-[14px] font-semibold rounded-md"
+              style={{ background: COLORS.indigo, color: "hsl(var(--primary-foreground))" }}
             >
               {savingChangePin ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar novo PIN"}
             </Button>
@@ -1464,42 +1347,46 @@ export function CarteiraPage({
         </div>
       )}
 
-      {/* TELA INTEIRA: AUTORIZAÇÃO DE PIN (SAQUE) */}
+      {/* Tela cheia: PIN financeiro */}
       {pinOpen && (
         <div
-          className="fixed inset-0 z-[140] flex flex-col bg-background text-foreground overflow-hidden"
-          style={{ minHeight: viewportHeight }}
+          className="fixed inset-0 z-[120] flex flex-col overflow-hidden"
+          style={{ minHeight: viewportHeight, background: COLORS.page }}
         >
-          {/* Header limpo com ChevronLeft */}
+          {/* Header padrão do app */}
           <div
             className="flex-shrink-0 mx-auto w-full max-w-md px-5"
             style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
           >
-            <div className="flex items-center gap-2 min-h-[52px]">
+            <div className="flex items-center gap-1.5 min-h-[52px]">
               <button
                 onClick={() => !savingPinSession && setPinOpen(false)}
                 disabled={savingPinSession}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
+                className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all -ml-1 shrink-0"
                 aria-label="Voltar"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <CurvedBackArrow className="text-foreground" />
               </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                {pinMode === "create" ? "Criar PIN de segurança" : "Autorizar saque"}
+              <h2
+                className="text-[20px] font-semibold tracking-tight flex-1 truncate"
+                style={{ color: COLORS.ink }}
+              >
+                {pinMode === "create" ? "Criar PIN" : "Confirmar PIN"}
               </h2>
             </div>
           </div>
 
+          {/* Conteúdo */}
           <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-6">
-              <p className="text-[13px] leading-relaxed text-muted-foreground">
+            <div className="mx-auto w-full max-w-md px-5 pt-2 pb-6 space-y-7">
+              <p className="text-[13px] leading-relaxed" style={{ color: COLORS.inkSoft }}>
                 {pinMode === "create"
-                  ? "Defina um PIN de 4 dígitos para autorizar saques."
-                  : "Digite seu PIN de 4 dígitos para autorizar o saque via Pix."}
+                  ? "Crie um PIN de 4 dígitos para proteger seus saques."
+                  : "Digite os 4 dígitos do seu PIN para autorizar o saque."}
               </p>
 
-              <div className="space-y-2">
-                <Label className="text-[12px] font-medium text-muted-foreground">
+              <div className="space-y-3">
+                <Label className="text-[12px] font-semibold" style={{ color: COLORS.ink }}>
                   PIN
                 </Label>
                 <div className="flex items-center justify-center gap-3">
@@ -1527,15 +1414,16 @@ export function CarteiraPage({
                           document.getElementById(`fin-pin-${index - 1}`)?.focus();
                         }
                       }}
-                      className="w-13 h-14 text-center text-2xl font-bold rounded-xl bg-card border-border/80 text-foreground shadow-sm"
+                      className="w-14 h-16 text-center text-2xl font-bold rounded-2xl border-2"
+                      style={{ borderColor: pinError ? COLORS.red : COLORS.divider, color: COLORS.ink }}
                     />
                   ))}
                 </div>
               </div>
 
               {pinMode === "create" && (
-                <div className="space-y-2">
-                  <Label className="text-[12px] font-medium text-muted-foreground">
+                <div className="space-y-3">
+                  <Label className="text-[12px] font-semibold" style={{ color: COLORS.ink }}>
                     Confirmar PIN
                   </Label>
                   <div className="flex items-center justify-center gap-3">
@@ -1562,7 +1450,8 @@ export function CarteiraPage({
                             document.getElementById(`fin-pin-c-${index - 1}`)?.focus();
                           }
                         }}
-                        className="w-13 h-14 text-center text-2xl font-bold rounded-xl bg-card border-border/80 text-foreground shadow-sm"
+                        className="w-14 h-16 text-center text-2xl font-bold rounded-2xl border-2"
+                        style={{ borderColor: pinError ? COLORS.red : COLORS.divider, color: COLORS.ink }}
                       />
                     ))}
                   </div>
@@ -1570,7 +1459,7 @@ export function CarteiraPage({
               )}
 
               {pinError && (
-                <div className="flex items-center justify-center gap-2 text-[12px] text-destructive font-medium">
+                <div className="flex items-center justify-center gap-2 text-[12px]" style={{ color: COLORS.red }}>
                   <AlertCircle className="w-4 h-4" />
                   <span>{pinError}</span>
                 </div>
@@ -1578,9 +1467,11 @@ export function CarteiraPage({
             </div>
           </div>
 
+          {/* Footer / CTA — sobe com o teclado */}
           <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3 bg-background border-t border-border/60"
+            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3"
             style={{
+              background: COLORS.page,
               paddingBottom: keyboardOpen
                 ? 12
                 : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
@@ -1589,43 +1480,48 @@ export function CarteiraPage({
             <Button
               onClick={authorizePinAndWithdraw}
               disabled={savingPinSession}
-              className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all shadow-sm"
+              className="w-full h-12 text-[14px] font-semibold rounded-md"
+              style={{ background: COLORS.indigo, color: "hsl(var(--primary-foreground))" }}
             >
               {savingPinSession ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : pinMode === "create" ? (
-                "Criar PIN e autorizar saque"
+                "Criar PIN e sacar"
               ) : (
-                "Confirmar PIN e sacar"
+                "Confirmar e sacar"
               )}
             </Button>
           </div>
         </div>
       )}
 
-      {/* TELA INTEIRA: EXTRATO COMPLETO */}
+
+      {/* Extrato — tela cheia sobre a página */}
       {extratoOpen && (
-        <div className="fixed inset-0 z-[120] flex flex-col bg-background text-foreground overflow-hidden">
+        <div className="fixed inset-0 z-40 flex flex-col" style={{ background: COLORS.card }}>
           <div
-            className="flex items-center gap-2 px-5 py-4 border-b border-border/80 shrink-0"
-            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)" }}
+            className="flex items-center gap-3 px-5 py-4 border-b"
+            style={{ borderColor: COLORS.divider }}
           >
             <button
               onClick={() => setExtratoOpen(false)}
-              className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
+              className="w-8 h-8 rounded-full flex items-center justify-center"
+              style={{ background: COLORS.surface }}
               aria-label="Voltar"
             >
-              <ChevronLeft className="w-6 h-6" />
+              <X className="w-4 h-4" style={{ color: COLORS.ink }} />
             </button>
-            <h2 className="text-[17px] font-bold tracking-tight text-foreground flex-1">
+            <h2 className="text-[15px] font-medium" style={{ color: COLORS.ink }}>
               Extrato
             </h2>
           </div>
 
-          {/* Filtros em Pílulas */}
-          <div className="flex gap-2 px-5 py-3 border-b border-border/60 bg-muted/10 shrink-0">
+          <div
+            className="flex gap-2 px-5 py-3 border-b"
+            style={{ borderColor: COLORS.divider }}
+          >
             {[
-              { id: "all", label: "Todas" },
+              { id: "all", label: "Todos" },
               { id: "deposit", label: "Entradas" },
               { id: "withdraw", label: "Saídas" },
             ].map((f) => {
@@ -1634,11 +1530,11 @@ export function CarteiraPage({
                 <button
                   key={f.id}
                   onClick={() => setExtratoFilter(f.id as typeof extratoFilter)}
-                  className={`px-3.5 py-1 rounded-full text-[13px] font-medium transition-all ${
-                    active
-                      ? "bg-foreground text-background"
-                      : "bg-card border border-border/80 text-muted-foreground hover:text-foreground"
-                  }`}
+                  className="px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors"
+                  style={{
+                    background: active ? COLORS.ink : COLORS.surface,
+                    color: active ? "hsl(var(--background))" : COLORS.inkSoft,
+                  }}
                 >
                   {f.label}
                 </button>
@@ -1646,11 +1542,10 @@ export function CarteiraPage({
             })}
           </div>
 
-          {/* Lista de Transações SOLTA com divisores */}
-          <div className="flex-1 overflow-y-auto px-5 divide-y divide-border/40 pb-20">
+          <div className="flex-1 overflow-y-auto px-5">
             {historyLoading ? (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-5 h-5 animate-spin" style={{ color: COLORS.inkSoft }} />
               </div>
             ) : (() => {
               const list = transactions.filter((t) =>
@@ -1658,56 +1553,531 @@ export function CarteiraPage({
               );
               if (list.length === 0) {
                 return (
-                  <div className="text-center py-20 text-muted-foreground">
-                    <p className="text-[13px]">Nenhuma movimentação encontrada.</p>
-                  </div>
+                  <p className="text-center text-[13px] py-16" style={{ color: COLORS.inkSoft }}>
+                    Nenhuma movimentação encontrada.
+                  </p>
                 );
               }
               return (
-                <div>
+                <ul>
                   {list.map((t) => {
                     const isIn = t.type === "deposit";
                     const isBlocked = Boolean(t.blocked);
                     return (
-                      <div key={t.id} className="flex items-center justify-between gap-3 py-3.5">
-                        <div className="flex items-center gap-3 min-w-0">
+                      <li
+                        key={t.id}
+                        className="flex items-center gap-3 py-3.5"
+                        style={{ borderBottom: `1px solid ${COLORS.divider}` }}
+                      >
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                          style={{
+                            background: isBlocked ? COLORS.amberSoft : isIn ? COLORS.greenSoft : COLORS.dangerSoft,
+                            color: isBlocked ? COLORS.amber : isIn ? COLORS.green : COLORS.red,
+                          }}
+                        >
                           {isIn ? (
-                            <ArrowDownLeft className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <ArrowDownLeft className="w-4 h-4" />
                           ) : (
-                            <ArrowUpRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <ArrowUpRight className="w-4 h-4" />
                           )}
-                          <div className="min-w-0">
-                            <p className="text-[13.5px] font-medium text-foreground truncate">
-                              {t.description ?? (isIn ? "Recebimento Pix" : "Saque via Pix")}
-                            </p>
-                            <p className="text-[11.5px] text-muted-foreground">
-                              {formatTransactionDate(t.created_at)}
-                              {isBlocked && " · Em espera"}
-                            </p>
-                          </div>
                         </div>
-
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className="text-[13px] font-medium truncate"
+                            style={{ color: COLORS.ink }}
+                          >
+                            {t.description ?? (isIn ? "Recebimento" : "Transferência")}
+                          </p>
+                          <p className="text-[11px]" style={{ color: COLORS.inkSoft }}>
+                            {new Date(t.created_at).toLocaleString("pt-BR")}
+                          </p>
+                          {isBlocked && (
+                            <span
+                              className="mt-1 inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                              style={{ background: COLORS.amberSoft, color: COLORS.amber }}
+                            >
+                              Em espera
+                            </span>
+                          )}
+                        </div>
                         <p
-                          className={`text-[13.5px] font-semibold tabular-nums shrink-0 ${
-                            isBlocked
-                              ? "text-muted-foreground"
-                              : isIn
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-foreground"
-                          }`}
+                          className="text-[13px] font-medium tabular-nums"
+                          style={{ color: isBlocked ? COLORS.amber : isIn ? COLORS.green : COLORS.ink }}
                         >
                           {isIn ? "+" : "-"}
                           {fmtBRL(t.value_centavos)}
                         </p>
-                      </div>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               );
             })()}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── SALDO ──────────────────────────────────────────────── */
+
+function SaldoView({
+  balanceCentavos,
+  blockedCentavos = 0,
+  showBalance,
+  onToggle,
+  onSacar,
+  onOpenExtrato,
+}: {
+  balanceCentavos: number;
+  blockedCentavos?: number;
+  showBalance: boolean;
+  onToggle: () => void;
+  onSacar: () => void;
+  onOpenExtrato: () => void;
+}) {
+  const recebidoStr = showBalance ? fmtBRL(balanceCentavos) : "R$ ••••";
+  const blockedStr = showBalance ? fmtBRL(blockedCentavos) : "R$ ••••";
+  return (
+    <div className="px-5 pt-5 pb-4">
+
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p
+            className="text-[11px] uppercase tracking-[0.16em] mb-2"
+            style={{ color: COLORS.inkSoft }}
+          >
+            Saldo disponível
+          </p>
+          <div className="flex items-center gap-2.5">
+            <p
+              className="text-[34px] font-semibold tracking-tight leading-none tabular-nums"
+              style={{ color: COLORS.ink }}
+            >
+              {recebidoStr}
+            </p>
+            <button onClick={onToggle} aria-label="Mostrar/ocultar saldo" className="pb-0.5">
+              {showBalance ? (
+                <Eye className="w-4 h-4" style={{ color: COLORS.inkSoft }} />
+              ) : (
+                <EyeOff className="w-4 h-4" style={{ color: COLORS.inkSoft }} />
+              )}
+            </button>
+          </div>
+          <p className="text-[12px] mt-2" style={{ color: COLORS.inkSoft }}>
+            Pronto para saque agora
+          </p>
+        </div>
+        <button
+          onClick={onOpenExtrato}
+          className="flex items-center gap-1 text-[12px] font-medium shrink-0 mt-0.5"
+          style={{ color: COLORS.inkSoft }}
+        >
+          Extrato
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {blockedCentavos > 0 && (
+        <div
+          className="mt-5 flex items-center justify-between rounded-xl px-4 py-3"
+          style={{ background: COLORS.surface, border: `1px solid ${COLORS.divider}` }}
+        >
+          <p className="text-[12px]" style={{ color: COLORS.inkSoft }}>
+            Aguardando finalização do corte
+          </p>
+          <p className="text-[13px] font-semibold tabular-nums" style={{ color: COLORS.amber }}>
+            {blockedStr}
+          </p>
+        </div>
+      )}
+
+      <button
+        onClick={onSacar}
+        disabled={balanceCentavos <= 0}
+        className="mt-5 w-full h-12 rounded-xl text-[14px] font-semibold tracking-tight transition-opacity active:opacity-80 disabled:opacity-40"
+        style={{ background: COLORS.indigo, color: "hsl(var(--primary-foreground))" }}
+      >
+        Sacar
+      </button>
+    </div>
+  );
+}
+
+function ConfigRow({
+  icon,
+  label,
+  value,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl transition-colors hover:bg-muted/40"
+      style={{ border: `1px solid ${COLORS.divider}`, background: COLORS.card }}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        {icon}
+        <div className="text-left min-w-0">
+          <p className="text-[13.5px] font-medium" style={{ color: COLORS.ink }}>
+            {label}
+          </p>
+          <p className="text-[11.5px] truncate mt-0.5" style={{ color: COLORS.inkSoft }}>
+            {value}
+          </p>
+        </div>
+      </div>
+      <ArrowRight className="w-4 h-4 shrink-0" style={{ color: COLORS.inkSoft }} />
+    </button>
+  );
+}
+
+/* ─── EXTRATO PREVIEW — sem borda externa, apenas divisores entre itens ── */
+
+function ExtratoPreview({
+  loading,
+  transactions,
+  onOpen,
+}: {
+  loading: boolean;
+  transactions: WooviTransaction[];
+  onOpen?: () => void;
+}) {
+  return (
+    <div className="pt-5">
+      <div className="flex items-center justify-between mb-2">
+        <p
+          className="text-[11px] uppercase tracking-[0.16em]"
+          style={{ color: COLORS.inkSoft }}
+        >
+          Extrato
+        </p>
+        {onOpen && transactions.length > 0 && (
+          <button
+            onClick={onOpen}
+            className="text-[12px] font-medium flex items-center gap-1"
+            style={{ color: COLORS.inkSoft }}
+          >
+            Ver todos
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: COLORS.inkSoft }} />
+        </div>
+      ) : transactions.length === 0 ? (
+        <p className="text-[12px] py-2" style={{ color: COLORS.inkSoft }}>
+          Sem movimentações.
+        </p>
+      ) : (
+        <ul>
+          {transactions.map((t, i) => {
+            const isIn = t.type === "deposit";
+            return (
+              <li
+                key={t.id}
+                className="flex items-center gap-3 py-3.5"
+                style={{ borderBottom: `1px solid ${COLORS.divider}` }}
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                  style={{
+                    background: isIn ? COLORS.greenSoft : COLORS.dangerSoft,
+                    color: isIn ? COLORS.green : COLORS.red,
+                  }}
+                >
+                  {isIn ? (
+                    <ArrowDownLeft className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className="text-[13px] font-medium truncate"
+                    style={{ color: COLORS.ink }}
+                  >
+                    {t.description ?? (isIn ? "Recebimento" : "Transferência")}
+                  </p>
+                  <p className="text-[11px] mt-0.5" style={{ color: COLORS.inkSoft }}>
+                    {new Date(t.created_at).toLocaleDateString("pt-BR")}
+                  </p>
+                </div>
+                <p
+                  className="text-[13px] font-semibold tabular-nums"
+                  style={{ color: isIn ? COLORS.green : COLORS.ink }}
+                >
+                  {isIn ? "+" : "-"}
+                  {fmtBRL(t.value_centavos)}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ─── MOVIMENTO ──────────────────────────────────────────── */
+
+function MovimentoView({
+  blockedCentavos = 0,
+  showBalance,
+  onToggle,
+}: {
+  blockedCentavos?: number;
+  showBalance: boolean;
+  onToggle: () => void;
+}) {
+  const blockedStr = showBalance ? fmtBRL(blockedCentavos) : "R$ ••••";
+  const amber = COLORS.amber;
+
+  return (
+    <div className="px-5 pt-6 pb-6">
+      <p
+        className="text-[11px] uppercase tracking-[0.16em] mb-2"
+        style={{ color: COLORS.inkSoft }}
+      >
+        Em espera
+      </p>
+      <div className="flex items-center gap-2.5">
+        <p
+          className="text-[34px] font-semibold tracking-tight leading-none tabular-nums"
+          style={{ color: amber }}
+        >
+          {blockedStr}
+        </p>
+        <button
+          onClick={onToggle}
+          aria-label="Mostrar/ocultar saldo em espera"
+          className="pb-0.5"
+        >
+          {showBalance ? (
+            <Eye className="w-4 h-4" style={{ color: COLORS.inkSoft }} />
+          ) : (
+            <EyeOff className="w-4 h-4" style={{ color: COLORS.inkSoft }} />
+          )}
+        </button>
+      </div>
+
+      <p className="text-[12px] mt-3 leading-relaxed" style={{ color: COLORS.inkSoft }}>
+        Liberado quando o corte for confirmado. Se o cliente cancelar, é estornado automaticamente.
+      </p>
+    </div>
+  );
+}
+
+/* ─── SUBCONTA ───────────────────────────────────────────── */
+
+function SubcontaView({
+  barber,
+  fallbackName,
+  hasSubaccount,
+}: {
+  barber: BarberRow | null;
+  fallbackName?: string | null;
+  hasSubaccount: boolean;
+}) {
+  const displayName =
+    barber?.woovi_subaccount_name?.trim() ||
+    fallbackName?.trim() ||
+    "—";
+
+  const keyTypeLabel = barber?.woovi_pix_key_type
+    ? PIX_KEY_LABELS[barber.woovi_pix_key_type as PixKeyType] ?? "—"
+    : "—";
+
+  const statusLabel = hasSubaccount
+    ? "Subconta ativa"
+    : "Pendente de criação";
+
+  const statusColor = hasSubaccount ? COLORS.green : COLORS.amber;
+
+  return (
+    <div className="px-5 pt-6 space-y-4">
+      <h2 className="text-[16px] font-bold" style={{ color: COLORS.ink }}>
+        Dados da subconta
+      </h2>
+      <div
+        className="rounded-2xl p-4 space-y-2"
+        style={{ background: COLORS.card, border: `1px solid ${COLORS.divider}` }}
+      >
+        <Row label="Nome" value={displayName} />
+        <Row label="Tipo de chave" value={keyTypeLabel} />
+        <Row label="Chave Pix" value={barber?.woovi_pix_key ?? "—"} mono />
+        <div className="flex items-center justify-between gap-3 py-1">
+          <span className="text-[12px]" style={{ color: COLORS.inkSoft }}>
+            Status
+          </span>
+          <span
+            className="text-[12px] font-semibold px-2 py-0.5 rounded-full"
+            style={{
+              color: statusColor,
+              background: `${statusColor}1a`,
+            }}
+          >
+            {statusLabel}
+          </span>
+        </div>
+      </div>
+      <p className="text-[11px]" style={{ color: COLORS.inkSoft }}>
+        Os Pix recebidos dos seus agendamentos caem diretamente nessa chave.
+      </p>
+    </div>
+  );
+}
+
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1">
+      <span className="text-[12px]" style={{ color: COLORS.inkSoft }}>
+        {label}
+      </span>
+      <span
+        className={`text-[13px] font-medium truncate max-w-[60%] text-right ${mono ? "tabular-nums" : ""}`}
+        style={{ color: COLORS.ink }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/* ─── CRIAÇÃO ────────────────────────────────────────────── */
+
+function CreationForm({
+  formName,
+  setFormName,
+  formKeyType,
+  setFormKeyType,
+  formKey,
+  setFormKey,
+  creating,
+  onCreate,
+}: {
+  formName: string;
+  setFormName: (v: string) => void;
+  formKeyType: PixKeyType;
+  setFormKeyType: (v: PixKeyType) => void;
+  formKey: string;
+  setFormKey: (v: string) => void;
+  creating: boolean;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto px-5 pt-6 pb-5 space-y-6">
+        <div className="space-y-1">
+          <h2 className="text-[20px] font-bold tracking-tight" style={{ color: COLORS.ink }}>
+            Criar carteira
+          </h2>
+          <p className="text-[12px] leading-relaxed" style={{ color: COLORS.inkSoft }}>
+            Cadastre sua chave Pix para começar a receber os pagamentos dos seus agendamentos.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase tracking-wide" style={{ color: COLORS.inkSoft }}>
+              Nome do titular
+            </Label>
+            <Input
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              placeholder="Seu nome completo"
+              className="h-11 border bg-transparent"
+              style={{ borderColor: COLORS.divider, color: COLORS.ink }}
+            />
+          </div>
+
+          <div style={{ height: 1, background: COLORS.divider }} />
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase tracking-wide" style={{ color: COLORS.inkSoft }}>
+              Tipo de chave Pix
+            </Label>
+            <Select value={formKeyType} onValueChange={(v) => setFormKeyType(v as PixKeyType)}>
+              <SelectTrigger
+                className="h-11 border bg-transparent"
+                style={{ borderColor: COLORS.divider, color: COLORS.ink }}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {PIX_KEY_LABELS[k]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div style={{ height: 1, background: COLORS.divider }} />
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase tracking-wide" style={{ color: COLORS.inkSoft }}>
+              Chave Pix
+            </Label>
+            <Input
+              value={formKey}
+              onChange={(e) => setFormKey(e.target.value)}
+              placeholder={
+                formKeyType === "email"
+                  ? "voce@exemplo.com"
+                  : formKeyType === "phone"
+                  ? "11999999999"
+                  : formKeyType === "random"
+                  ? "chave-aleatoria-uuid"
+                  : "Somente números"
+              }
+              className="h-11 border bg-transparent tabular-nums"
+              style={{ borderColor: COLORS.divider, color: COLORS.ink }}
+            />
+          </div>
+        </div>
+
+        <div
+          className="rounded-xl px-4 py-3 flex items-start gap-2"
+          style={{ background: COLORS.surface, border: `1px solid ${COLORS.divider}` }}
+        >
+          <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0" style={{ color: COLORS.indigo }} />
+          <p className="text-[11px] leading-relaxed" style={{ color: COLORS.inkSoft }}>
+            Seus pagamentos via Pix cairão direto nessa chave. Confira os dados — eles ficam vinculados à sua subconta.
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="px-5 py-4"
+        style={{ borderTop: `1px solid ${COLORS.divider}`, background: COLORS.card }}
+      >
+        <Button
+          onClick={onCreate}
+          disabled={creating}
+          className="w-full h-12 text-[14px] font-semibold rounded-md"
+          style={{ background: COLORS.indigo, color: "hsl(var(--primary-foreground))" }}
+        >
+          {creating ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Criando carteira...
+            </>
+          ) : (
+            "Criar carteira"
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

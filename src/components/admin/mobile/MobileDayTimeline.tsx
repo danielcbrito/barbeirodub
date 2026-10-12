@@ -231,25 +231,15 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
       ? { event: '*', schema: 'public', table: 'agendamentos', filter: `barbeiro_id=eq.${barbeiroId}` }
       : { event: '*', schema: 'public', table: 'agendamentos' };
 
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      const channelId = `mobile-timeline-updates-${barbeiroId || 'all'}-${Math.random().toString(36).slice(2, 9)}`;
-      channel = supabase
-        .channel(channelId)
-        .on('postgres_changes', channelConfig as any, () => {
-          queryClient.invalidateQueries({ queryKey });
-        })
-        .subscribe();
-    } catch (err) {
-      console.warn('[MobileDayTimeline] Erro ao conectar canal Realtime:', err);
-    }
+    const channel = supabase
+      .channel(`mobile-timeline-updates-${barbeiroId || 'all'}`)
+      .on('postgres_changes', channelConfig as any, () => {
+        queryClient.invalidateQueries({ queryKey });
+      })
+      .subscribe();
 
     return () => {
-      if (channel) {
-        try {
-          supabase.removeChannel(channel);
-        } catch {}
-      }
+      supabase.removeChannel(channel);
     };
   }, [barbeiroId, queryClient, queryKey]);
 
@@ -304,10 +294,10 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
   // Verificar se um slot está ocupado
   const getAppointmentForSlot = (time: string): TimelineAppointment | null => {
     return appointments.find(apt => {
-      const aptStart = (apt.hora || "00:00").substring(0, 5);
+      const aptStart = apt.hora.substring(0, 5);
       const [h, m] = aptStart.split(":").map(Number);
       const aptStartDate = new Date();
-      aptStartDate.setHours(h || 0, m || 0, 0, 0);
+      aptStartDate.setHours(h, m, 0, 0);
       
       const aptEndDate = addMinutes(aptStartDate, apt.duracao || apt.servico?.duracao_minutos || 30);
       
@@ -322,7 +312,7 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
 
   // Verificar se é o primeiro slot de um agendamento
   const isFirstSlotOfAppointment = (time: string): TimelineAppointment | null => {
-    return appointments.find(apt => (apt.hora || "00:00").substring(0, 5) === time) || null;
+    return appointments.find(apt => apt.hora.substring(0, 5) === time) || null;
   };
 
   const timeSlots = generateTimeSlots();
@@ -512,7 +502,7 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
                                 </div>
                               ) : (
                                 <span className="text-sm font-bold text-foreground">
-                                  R$ {typeof appointmentStart.preco === 'number' && !isNaN(appointmentStart.preco) ? appointmentStart.preco.toFixed(0) : '0'}
+                                  R$ {appointmentStart.preco.toFixed(0)}
                                 </span>
                               )}
                             </div>

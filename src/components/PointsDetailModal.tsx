@@ -4,7 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Gift, CheckCircle, Clock, X } from "lucide-react";
+import { Gift, CheckCircle, Clock, X, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface PointsDetailModalProps {
@@ -136,8 +136,8 @@ export function PointsDetailModal({
                 transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
                 className="mt-4 flex items-center justify-center"
               >
-                <div className="flex items-center gap-2 px-4 py-2 bg-foreground/[0.06] rounded-full border border-border/80">
-                  <Gift className="w-4 h-4 text-foreground" />
+                <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500/20 to-orange-500/20 rounded-full border border-red-500/30">
+                  <Sparkles className="w-4 h-4 text-yellow-400" />
                   <span className="text-sm font-semibold text-foreground">
                     {redemptions} {redemptions === 1 ? 'corte grátis disponível' : 'cortes grátis disponíveis'}!
                   </span>

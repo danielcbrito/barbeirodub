@@ -108,17 +108,17 @@ export function AdminSuporteConfig() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">Configurações do Suporte</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Configure o tom, direcionamento e estilo de resposta do atendimento automatizado
+        <h2 className="text-2xl font-bold text-foreground">Configurações do Chat IA</h2>
+        <p className="text-muted-foreground mt-2">
+          Configure o tom e estilo das respostas do assistente de suporte
         </p>
       </div>
 
-      <Card className="bg-card border border-border/80">
+      <Card className="card-glass">
         <CardHeader>
-          <CardTitle>Diretrizes de Atendimento</CardTitle>
+          <CardTitle>Prompt de Personalidade</CardTitle>
           <CardDescription>
-            Define o tom e estilo das respostas para clientes e equipe técnica.
+            Define o tom e estilo das respostas. A inteligência base não é alterada, apenas o modo de comunicação.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -129,10 +129,10 @@ export function AdminSuporteConfig() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Ex: Seja formal e direto, use linguagem técnica..."
-              className="min-h-[200px] bg-background border-border/80"
+              className="min-h-[200px] bg-background/50 border-border/50"
             />
             <p className="text-xs text-muted-foreground">
-              Exemplos: "Seja formal e profissional" / "Use linguagem casual e amigável" / "Seja direto e objetivo"
+              Exemplos: "Seja formal e profissional" / "Use linguagem casual e amigável" / "Seja direto e técnico"
             </p>
           </div>
 
@@ -140,7 +140,7 @@ export function AdminSuporteConfig() {
             <Button
               onClick={saveConfig}
               disabled={loading || !prompt.trim()}
-              className="bg-foreground text-background hover:bg-foreground/90 font-semibold rounded-xl"
+              className="bg-gradient-primary hover:shadow-glow-red"
             >
               {loading ? (
                 <>
@@ -158,17 +158,16 @@ export function AdminSuporteConfig() {
               onClick={resetToDefault}
               variant="outline"
               disabled={loading}
-              className="rounded-xl font-medium"
             >
               <RotateCcw className="mr-2 h-4 w-4" />
               Restaurar Padrão
             </Button>
           </div>
 
-          <div className="bg-muted/30 border border-border/60 rounded-xl p-4 mt-6">
-            <h4 className="font-bold text-sm text-foreground mb-2">Capacidades Operacionais do Suporte</h4>
+          <div className="bg-muted/30 border border-border/50 rounded-lg p-4 mt-6">
+            <h4 className="font-semibold text-sm text-foreground mb-2">🤖 Capacidades da IA</h4>
             <p className="text-sm text-muted-foreground mb-3">
-              O sistema possui rotinas integradas e pode executar ações diretamente:
+              A IA possui inteligência avançada e pode executar ações automaticamente:
             </p>
             <ul className="text-sm text-muted-foreground space-y-2">
               <li className="flex items-start">

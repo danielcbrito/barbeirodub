@@ -252,7 +252,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     if (!userId) return;
 
     const channel = supabase
-      .channel(`agendar-assinatura-${userId}-${Math.random().toString(36).slice(2, 9)}`)
+      .channel(`agendar-assinatura-${userId}`)
       .on(
         "postgres_changes",
         {

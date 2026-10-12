@@ -1,29 +1,23 @@
 /**
- * AdminCampanhas — Hub oficial de campanhas e promoções da barbearia.
+ * AdminCampanhas — Hub de campanhas da barbearia.
  *
- * Padrão 100% sério, minimalista e institucional (alinhado a Atendimento & Notificações e Perfil):
- *  1. Header oficial com ScheduleHeader
- *  2. Card Destaque sem caixas de ícone artificiais e sem pills pesadas
- *  3. Seção "Monte do seu jeito" agrupada em container limpo com divisores sutis
- *  4. Seção "Resumo das minhas promoções" com métricas nítidas
- *  5. Sub-telas no padrão executivo
- *
- * Zero emojis, zero elementos que pareçam gerados por IA.
+ * Tela que abre em "Ative uma campanha" (perfil). Lista os banners de cada
+ * campanha disponível e abre a configuração de cada uma:
+ *  1. Programa de Fidelidade  (promocoes)
+ *  2. Convide e Ganhe         (campanhas_config.convide_ganhe + indicacoes)
+ *  3. Cliente do Mês          (campanhas_config.cliente_do_mes + ciclos_indicacao)
+ *  4. Cupons de desconto      (AdminCupons)
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import {
-  Scissors, Users, Trophy, Ticket, ChevronRight, Loader2,
-  CheckCircle2, Share2, Award, ShieldCheck,
-} from "lucide-react";
+import { Gift, Users, Crown, Ticket, ChevronRight, Loader2, Trophy } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { AdminPromocoes } from "./AdminPromocoes";
-import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import {
   useCampanhasConfig,
   useSaveCampanha,
@@ -37,6 +31,84 @@ type View = "hub" | "fidelidade" | "cupons" | "convide" | "clientemes";
 interface AdminCampanhasProps {
   tenantId?: string | null;
   basePath?: string;
+}
+
+const BackArrow = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 14L4 9l5-5" />
+    <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+  </svg>
+);
+
+/** Banner no mesmo formato do card "Dub Pago" da carteira. */
+function CampaignBanner({
+  eyebrow,
+  eyebrowAccent,
+  icon,
+  title,
+  subtitle,
+  status,
+  onClick,
+}: {
+  eyebrow: string;
+  eyebrowAccent: string;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  status?: "ativo" | "inativo";
+  onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} className="relative w-full text-left active:scale-[0.99] transition-transform">
+      <div className="relative rounded-2xl bg-muted/60 dark:bg-muted/30 overflow-hidden">
+        <div className="relative bg-card rounded-2xl border border-border/60 shadow-sm px-4 pt-3 pb-3.5">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-baseline">
+              <span className="text-[12px] font-bold text-primary tracking-tight leading-none">{eyebrow}</span>
+              <span className="text-[12px] font-bold text-primary italic tracking-tight leading-none">{eyebrowAccent}</span>
+            </div>
+            {status && (
+              <span
+                className={cn(
+                  "text-[9px] px-2 py-0.5 rounded-full font-semibold tracking-wide uppercase",
+                  status === "ativo"
+                    ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                    : "bg-muted/40 text-muted-foreground border border-border/30",
+                )}
+              >
+                {status === "ativo" ? "Ativa" : "Inativa"}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="text-foreground flex-shrink-0">{icon}</span>
+            <p className="flex-1 text-[14px] font-medium text-foreground leading-tight">{title}</p>
+            <ChevronRight className="h-[15px] w-[15px] text-muted-foreground/60" strokeWidth={1.8} />
+          </div>
+        </div>
+        <div className="relative px-4 py-2.5">
+          <p className="text-[11.5px] font-normal text-muted-foreground leading-tight">{subtitle}</p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ScreenHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div className="sticky top-0 z-20 bg-background">
+      <div className="flex items-center gap-2.5 px-4 h-14">
+        <button
+          onClick={onBack}
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-foreground hover:bg-secondary/50 active:scale-95 transition-all"
+          aria-label="Voltar"
+        >
+          <BackArrow />
+        </button>
+        <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">{title}</h1>
+      </div>
+    </div>
+  );
 }
 
 export function AdminCampanhas({ tenantId, basePath = "/admin" }: AdminCampanhasProps = {}) {
@@ -122,21 +194,7 @@ export function AdminCampanhas({ tenantId, basePath = "/admin" }: AdminCampanhas
     [],
   );
 
-  /* Métricas */
-  const totalCampanhasAtivas = useMemo(() => {
-    let count = 0;
-    if (fidelidadeAtiva) count++;
-    if (convide?.ativo) count++;
-    if (clienteMes?.ativo) count++;
-    count += 1; // Cupons sempre disponível
-    return count;
-  }, [fidelidadeAtiva, convide?.ativo, clienteMes?.ativo]);
-
-  const totalIndicacoesCiclo = useMemo(() => {
-    return ranking.reduce((acc, r) => acc + (r.total || 0), 0);
-  }, [ranking]);
-
-  /* ─────────── Sub-telas Fidelidade e Cupons ─────────── */
+  /* ─────────── Sub-telas reaproveitando AdminPromocoes ─────────── */
   if (view === "fidelidade" || view === "cupons") {
     return (
       <AdminPromocoes
@@ -148,47 +206,23 @@ export function AdminCampanhas({ tenantId, basePath = "/admin" }: AdminCampanhas
     );
   }
 
-  /* ─────────── Convide e Ganhe (Indicou Amigo Cortou) ─────────── */
+  /* ─────────── Convide e Ganhe ─────────── */
   if (view === "convide") {
     return (
       <div className="flex flex-col min-h-[100dvh] bg-background">
-        <ScheduleHeader title="Indicou Amigo Cortou" onBack={() => setView("hub")} />
+        <ScreenHeader title="Convide e Ganhe" onBack={() => setView("hub")} />
+        <div className="flex-1 px-4 pt-3 pb-28 space-y-6 overflow-y-auto scrollbar-none">
+          <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+            O cliente compartilha o link da barbearia. Quando o convidado corta o cabelo e você
+            confirma o atendimento, o convite é validado. Ao atingir a quantidade configurada de
+            convites validados, o cliente ganha um corte grátis automaticamente.
+          </p>
 
-        <div className="flex-1 px-4 pt-3 pb-28 space-y-4 overflow-y-auto scrollbar-none max-w-md mx-auto w-full">
-          {/* Card Hero informativo limpo */}
-          <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-5 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-                Programa de Indicação
-              </span>
-              {convide?.ativo ? (
-                <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Ativa
-                </span>
-              ) : (
-                <span className="text-[11.5px] font-medium text-muted-foreground">
-                  Inativa
-                </span>
-              )}
-            </div>
-
-            <div>
-              <h2 className="text-[17px] font-bold text-foreground tracking-tight leading-tight">
-                Indicou Amigo Cortou
-              </h2>
-              <p className="text-[12.5px] text-muted-foreground mt-1.5 leading-relaxed">
-                Transforme seus clientes em divulgadores da barbearia. Eles compartilham o link exclusivo no WhatsApp e recebem corte cortesia quando os amigos concluem o atendimento.
-              </p>
-            </div>
-          </div>
-
-          {/* Toggle de ativação rápida */}
-          <div className="flex items-center justify-between p-4 rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] shadow-xs">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-card border border-border/30">
             <div className="pr-4">
-              <p className="text-[13.5px] font-medium text-foreground">Disponibilidade no app</p>
-              <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                Exibir banner de indicação no aplicativo de todos os clientes
+              <p className="text-[13px] font-semibold text-foreground">Campanha ativa</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Aparece no aplicativo do cliente como “Convide e Ganhe”
               </p>
             </div>
             <Switch
@@ -199,60 +233,13 @@ export function AdminCampanhas({ tenantId, basePath = "/admin" }: AdminCampanhas
                   { onSuccess: () => toast.success(v ? "Campanha ativada" : "Campanha desativada") },
                 )
               }
-              className="data-[state=checked]:bg-foreground shrink-0"
             />
           </div>
 
-          {/* Como funciona estruturado */}
-          <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-5 shadow-xs space-y-4">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-              Como funciona o programa
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
+              Convites necessários para 1 corte grátis
             </p>
-
-            <div className="space-y-3.5">
-              <div className="flex items-start gap-3">
-                <Share2 className="w-4 h-4 text-foreground/70 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-[13px] font-semibold text-foreground leading-tight">1. Compartilhamento do link</h4>
-                  <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                    O cliente acessa o app e compartilha o link oficial de indicação com amigos via WhatsApp.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <ShieldCheck className="w-4 h-4 text-foreground/70 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-[13px] font-semibold text-foreground leading-tight">2. Validação presencial do corte</h4>
-                  <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                    O amigo corta o cabelo na barbearia e a presença é concluída no sistema. O ponto é validado automaticamente.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <Award className="w-4 h-4 text-foreground/70 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-[13px] font-semibold text-foreground leading-tight">3. Liberação do corte cortesia</h4>
-                  <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Ao atingir a meta estipulada, o cliente recebe 1 corte grátis para resgatar no próximo agendamento.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Configuração de metas */}
-          <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-5 shadow-xs space-y-3.5">
-            <div>
-              <p className="text-[13.5px] font-semibold text-foreground">
-                Amigos necessários para 1 corte grátis
-              </p>
-              <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                Quantos amigos indicados precisam cortar cabelo para liberar o prêmio
-              </p>
-            </div>
-
             <div className="flex gap-2">
               {[1, 2, 3, 5].map((n) => (
                 <button
@@ -260,50 +247,40 @@ export function AdminCampanhas({ tenantId, basePath = "/admin" }: AdminCampanhas
                   type="button"
                   onClick={() => setConvidesNecessarios(n)}
                   className={cn(
-                    "flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-all active:scale-95 border",
+                    "flex-1 py-3 rounded-xl text-[13px] font-bold transition-all border",
                     convidesNecessarios === n
-                      ? "bg-foreground text-background border-foreground shadow-xs"
-                      : "bg-secondary/40 border-border/60 text-muted-foreground hover:text-foreground"
+                      ? "bg-foreground/10 border-foreground/40 text-foreground"
+                      : "bg-transparent border-border/40 text-muted-foreground hover:border-foreground/30",
                   )}
                 >
-                  {n} {n === 1 ? "amigo" : "amigos"}
+                  {n}
                 </button>
               ))}
             </div>
-
-            <div>
-              <label className="text-[10.5px] text-muted-foreground/80 uppercase tracking-wider font-semibold block mb-1.5">
-                Ou digite uma quantidade personalizada
-              </label>
-              <Input
-                type="number"
-                min={1}
-                max={50}
-                value={convidesNecessarios}
-                onChange={(e) => setConvidesNecessarios(Number(e.target.value))}
-                className="h-11 text-[13.5px] font-medium bg-secondary/30 border-border/60 rounded-xl px-3.5"
-              />
-            </div>
-
-            <div className="rounded-xl bg-secondary/50 border border-border/40 p-3 flex items-start gap-2.5">
-              <CheckCircle2 className="w-4 h-4 text-foreground/80 shrink-0 mt-0.5" />
-              <p className="text-[12px] text-foreground/90 leading-relaxed font-medium">
-                Regra atual: a cada <strong>{convidesNecessarios} {convidesNecessarios === 1 ? "amigo indicado que cortar" : "amigos indicados que cortarem"}</strong>, o cliente ganha 1 corte grátis.
-              </p>
-            </div>
+            <Input
+              type="number"
+              min={1}
+              max={50}
+              value={convidesNecessarios}
+              onChange={(e) => setConvidesNecessarios(Number(e.target.value))}
+              className="h-12 text-[15px] font-medium bg-transparent border-border/40 rounded-xl px-4 mt-2"
+            />
+            <p className="text-[11px] text-muted-foreground mt-2 px-1">
+              A cada {convidesNecessarios} {convidesNecessarios === 1 ? "convite validado" : "convites validados"} → 1 corte grátis
+            </p>
           </div>
 
           <Button
             onClick={() =>
               saveMutation.mutate(
                 { tipo: "convide_ganhe", indicacoes_necessarias: convidesNecessarios },
-                { onSuccess: () => toast.success("Configuração de indicação salva") },
+                { onSuccess: () => toast.success("Regra salva") },
               )
             }
             disabled={saveMutation.isPending || convidesNecessarios < 1}
-            className="w-full h-12 rounded-xl text-[13.5px] font-semibold bg-foreground text-background hover:bg-foreground/90 active:scale-[0.98] transition-all shadow-xs"
+            className="w-full h-12 rounded-xl text-[14px] font-semibold bg-foreground text-background hover:bg-foreground/90"
           >
-            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar Configuração"}
+            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar regra"}
           </Button>
         </div>
       </div>
@@ -314,121 +291,62 @@ export function AdminCampanhas({ tenantId, basePath = "/admin" }: AdminCampanhas
   if (view === "clientemes") {
     return (
       <div className="flex flex-col min-h-[100dvh] bg-background">
-        <ScheduleHeader title="Cliente do Mês" onBack={() => setView("hub")} />
+        <ScreenHeader title="Cliente do Mês" onBack={() => setView("hub")} />
+        <div className="flex-1 px-4 pt-3 pb-28 space-y-6 overflow-y-auto scrollbar-none">
+          <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+            Todo mês, o cliente que mais trouxer novos clientes para a barbearia ganha um corte
+            grátis. Só contam os convites validados — quando o convidado corta e você confirma.
+          </p>
 
-        <div className="flex-1 px-4 pt-3 pb-28 space-y-4 overflow-y-auto scrollbar-none max-w-md mx-auto w-full">
-          {/* Card Hero informativo */}
-          <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-5 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-                Torneio Mensal
-              </span>
-              {clienteMes?.ativo ? (
-                <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Ativa
-                </span>
-              ) : (
-                <span className="text-[11.5px] font-medium text-muted-foreground">
-                  Inativa
-                </span>
-              )}
-            </div>
-
-            <div>
-              <h2 className="text-[17px] font-bold text-foreground tracking-tight leading-tight">
-                Disputa Mensal de Clientes
-              </h2>
-              <p className="text-[12.5px] text-muted-foreground mt-1.5 leading-relaxed">
-                Crie um ambiente de competição na barbearia. O cliente com o maior número de novos amigos que cortarem no mês conquista o 1º lugar e 1 corte grátis.
-              </p>
-            </div>
-          </div>
-
-          {/* Toggle de ativação */}
-          <div className="flex items-center justify-between p-4 rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] shadow-xs">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-card border border-border/30">
             <div className="pr-4">
-              <p className="text-[13.5px] font-medium text-foreground">Status do torneio</p>
-              <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                Ciclo atual: <strong className="text-foreground capitalize">{mesAtual}</strong>
+              <p className="text-[13px] font-semibold text-foreground">Campanha ativa</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Ciclo mensal {ciclo ? "em andamento" : "será criado ao ativar"}
               </p>
             </div>
             <Switch
               checked={!!clienteMes?.ativo}
               onCheckedChange={toggleClienteMes}
               disabled={saveMutation.isPending || garantirCiclo.isPending}
-              className="data-[state=checked]:bg-foreground shrink-0"
             />
           </div>
 
-          {/* Ranking mensal */}
-          <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-5 shadow-xs space-y-3.5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                Classificação de {mesAtual}
-              </h3>
-              <span className="text-[11px] font-medium text-muted-foreground">
-                {ranking.length} {ranking.length === 1 ? "participante" : "participantes"}
-              </span>
-            </div>
-
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
+              Ranking de {mesAtual}
+            </p>
             {ranking.length === 0 ? (
-              <div className="py-8 text-center space-y-2">
-                <Trophy className="w-6 h-6 stroke-[1.5] text-muted-foreground/60 mx-auto" />
-                <p className="text-[13px] font-medium text-foreground">
-                  Nenhum corte computado no ciclo
-                </p>
-                <p className="text-[11.5px] text-muted-foreground max-w-xs mx-auto leading-relaxed">
-                  Os clientes que tiverem amigos que cortaram cabelo neste mês aparecerão no ranking automaticamente.
-                </p>
+              <div className="text-center py-10 space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-muted/30 border border-border/20 flex items-center justify-center mx-auto">
+                  <Trophy className="w-5 h-5 text-muted-foreground/40" strokeWidth={1.5} />
+                </div>
+                <p className="text-[12px] text-muted-foreground">Nenhum convite validado ainda</p>
               </div>
             ) : (
-              <div className="divide-y divide-border/30">
-                {ranking.map((r, i) => {
-                  const isFirst = i === 0;
-                  return (
-                    <div
-                      key={r.user_id}
+              <div className="rounded-2xl border border-border/30 bg-card overflow-hidden">
+                {ranking.map((r, i) => (
+                  <div
+                    key={r.user_id}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3",
+                      i > 0 && "border-t border-border/30",
+                    )}
+                  >
+                    <span
                       className={cn(
-                        "flex items-center gap-3.5 py-3 px-1 transition-colors",
-                        isFirst && "bg-secondary/20 rounded-xl px-2.5 -mx-1"
+                        "w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center",
+                        i === 0 ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
                       )}
                     >
-                      <div
-                        className={cn(
-                          "w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0",
-                          isFirst
-                            ? "bg-foreground text-background font-black shadow-xs"
-                            : "bg-secondary text-muted-foreground font-semibold"
-                        )}
-                      >
-                        {i + 1}º
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-[13px] font-semibold text-foreground truncate">
-                            {r.nome}
-                          </p>
-                          {isFirst && (
-                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-foreground text-background">
-                              Líder
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                          {r.total} {r.total === 1 ? "corte confirmado" : "cortes confirmados"}
-                        </p>
-                      </div>
-
-                      <div className="shrink-0 text-right">
-                        <span className="text-[13px] font-bold text-foreground">
-                          {r.total}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                      {i + 1}
+                    </span>
+                    <span className="flex-1 text-[13px] font-medium text-foreground truncate">{r.nome}</span>
+                    <span className="text-[12px] text-muted-foreground">
+                      {r.total} {r.total === 1 ? "convite" : "convites"}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -437,18 +355,15 @@ export function AdminCampanhas({ tenantId, basePath = "/admin" }: AdminCampanhas
     );
   }
 
-  /* ─────────── Hub Principal de Campanhas (Padrão 100% Sóbrio & Minimalista) ─────────── */
+  /* ─────────── Hub ─────────── */
   return (
     <div className="flex flex-col min-h-[100dvh] bg-background">
-      <ScheduleHeader title="Promoções" onBack={() => navigate(`${basePath}/perfil`)} />
-
-      <div className="flex-1 px-4 pt-2 pb-32 space-y-6 overflow-y-auto scrollbar-none max-w-md mx-auto w-full">
-        {/* Subtítulo institucional */}
-        <div className="px-0.5">
-          <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-            As promoções são formas de ajudar sua barbearia a reter clientes, acelerar indicações e alcançar seus objetivos.
-          </p>
-        </div>
+      <ScreenHeader title="Campanhas" onBack={() => navigate(`${basePath}/perfil`)} />
+      <div className="flex-1 px-4 pt-2 pb-28 space-y-4 overflow-y-auto scrollbar-none">
+        <p className="text-[12.5px] text-muted-foreground leading-relaxed px-1">
+          Ative campanhas para atrair e fidelizar clientes. Elas aparecem automaticamente no
+          aplicativo do cliente.
+        </p>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
@@ -456,224 +371,44 @@ export function AdminCampanhas({ tenantId, basePath = "/admin" }: AdminCampanhas
           </div>
         ) : (
           <>
-            {/* ══════════════════════════════════════════════════════════════
-                1. CARD DESTAQUE PRINCIPAL (Totalmente limpo, sem caixas de ícone ou pills artificiais)
-               ══════════════════════════════════════════════════════════════ */}
-            <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] p-5 shadow-xs space-y-4">
-              {/* Linha superior: título discreto e status sem caixa */}
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/75">
-                  Campanha em destaque
-                </span>
+            <CampaignBanner
+              eyebrow="Programa"
+              eyebrowAccent="Fidelidade"
+              icon={<Gift className="h-[18px] w-[18px]" strokeWidth={1.6} />}
+              title="Cortes que viram corte grátis"
+              subtitle="Configure quantos cortes o cliente precisa para ganhar um grátis"
+              status={fidelidadeAtiva === null ? undefined : fidelidadeAtiva ? "ativo" : "inativo"}
+              onClick={() => setView("fidelidade")}
+            />
 
-                {fidelidadeAtiva ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    Ativa
-                  </span>
-                ) : (
-                  <span className="text-[11.5px] font-medium text-muted-foreground">
-                    Disponível
-                  </span>
-                )}
-              </div>
+            <CampaignBanner
+              eyebrow="Convide"
+              eyebrowAccent="e Ganhe"
+              icon={<Users className="h-[18px] w-[18px]" strokeWidth={1.6} />}
+              title="Indicou e o amigo cortou? Corte grátis"
+              subtitle={`A cada ${convide?.indicacoes_necessarias ?? 2} convites validados o cliente ganha 1 corte`}
+              status={convide?.ativo ? "ativo" : "inativo"}
+              onClick={() => setView("convide")}
+            />
 
-              {/* Título e valor */}
-              <div>
-                <h2 className="text-[17px] font-bold text-foreground tracking-tight leading-tight">
-                  Programa de Fidelidade
-                </h2>
-                <p className="text-[12.5px] text-muted-foreground mt-1.5 leading-relaxed">
-                  {fidelidadeAtiva
-                    ? "A campanha está ativa para garantir o retorno contínuo dos clientes e maior recorrência nos agendamentos da barbearia."
-                    : "Ative a fidelidade automática para recompensar clientes assíduos e aumentar a retenção na sua barbearia."}
-                </p>
-              </div>
+            <CampaignBanner
+              eyebrow="Cliente"
+              eyebrowAccent=" do Mês"
+              icon={<Crown className="h-[18px] w-[18px]" strokeWidth={1.6} />}
+              title="Quem mais indicar ganha o mês"
+              subtitle="O cliente que mais trouxer novos clientes no mês ganha um corte grátis"
+              status={clienteMes?.ativo ? "ativo" : "inativo"}
+              onClick={() => setView("clientemes")}
+            />
 
-              {/* Botão de ação direto */}
-              <button
-                type="button"
-                onClick={() => setView("fidelidade")}
-                className="w-full h-11 rounded-xl bg-foreground text-background font-semibold text-[13px] flex items-center justify-center hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-xs"
-              >
-                {fidelidadeAtiva ? "Ver campanha" : "Configurar e ativar"}
-              </button>
-            </div>
-
-            {/* ══════════════════════════════════════════════════════════════
-                2. SEÇÃO "MONTE DO SEU JEITO" (Container unificado e elegante com divisores finos)
-               ══════════════════════════════════════════════════════════════ */}
-            <div className="space-y-2.5">
-              <div className="px-0.5">
-                <h3 className="text-[14.5px] font-bold text-foreground tracking-tight">
-                  Monte do seu jeito
-                </h3>
-                <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                  Crie campanhas personalizadas para atender às necessidades da barbearia
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] overflow-hidden divide-y divide-border/25 dark:divide-white/[0.06] shadow-xs">
-                {/* 1. Programa de fidelidade */}
-                <button
-                  type="button"
-                  onClick={() => setView("fidelidade")}
-                  className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-secondary/40 active:bg-secondary/60 transition-colors group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-2">
-                    <Scissors className="w-5 h-5 text-foreground/80 shrink-0 stroke-[1.8]" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13.5px] font-semibold text-foreground leading-snug">
-                        Programa de fidelidade
-                      </p>
-                      <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed truncate">
-                        Defina a quantidade de cortes para liberar um corte cortesia
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {fidelidadeAtiva ? (
-                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Ativa</span>
-                    ) : null}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </button>
-
-                {/* 2. Indicou amigo cortou */}
-                <button
-                  type="button"
-                  onClick={() => setView("convide")}
-                  className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-secondary/40 active:bg-secondary/60 transition-colors group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-2">
-                    <Users className="w-5 h-5 text-foreground/80 shrink-0 stroke-[1.8]" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13.5px] font-semibold text-foreground leading-snug">
-                        Indicou amigo cortou
-                      </p>
-                      <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed truncate">
-                        Link de indicação com premiação para quem trouxer amigos
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {convide?.ativo ? (
-                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Ativa</span>
-                    ) : null}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </button>
-
-                {/* 3. Cliente do mês */}
-                <button
-                  type="button"
-                  onClick={() => setView("clientemes")}
-                  className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-secondary/40 active:bg-secondary/60 transition-colors group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-2">
-                    <Trophy className="w-5 h-5 text-foreground/80 shrink-0 stroke-[1.8]" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13.5px] font-semibold text-foreground leading-snug">
-                        Cliente do mês
-                      </p>
-                      <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed truncate">
-                        Torneio mensal de clientes com premiação para o líder
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {clienteMes?.ativo ? (
-                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Ativa</span>
-                    ) : null}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </button>
-
-                {/* 4. Cupons de desconto */}
-                <button
-                  type="button"
-                  onClick={() => setView("cupons")}
-                  className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-secondary/40 active:bg-secondary/60 transition-colors group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-2">
-                    <Ticket className="w-5 h-5 text-foreground/80 shrink-0 stroke-[1.8]" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13.5px] font-semibold text-foreground leading-snug">
-                        Cupons de desconto
-                      </p>
-                      <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed truncate">
-                        Cupons em % ou R$ com validade e limite de usos
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] font-medium text-muted-foreground">Gerenciar</span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* ══════════════════════════════════════════════════════════════
-                3. SEÇÃO "RESUMO DAS CAMPANHAS" (Métricas limpas e executivas)
-               ══════════════════════════════════════════════════════════════ */}
-            <div className="space-y-2.5 pt-1">
-              <div className="flex items-center gap-2 px-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <h3 className="text-[14px] font-bold text-foreground tracking-tight">
-                  Resumo das minhas promoções
-                </h3>
-              </div>
-              <p className="text-[11.5px] text-muted-foreground px-0.5 -mt-1.5">
-                Confira o resumo das campanhas e o desempenho recente da barbearia
-              </p>
-
-              <div className="grid grid-cols-2 gap-3">
-                {/* Métrica 1: Promoções ativas */}
-                <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] p-4 shadow-xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-muted-foreground">Promoções</span>
-                    <button
-                      type="button"
-                      onClick={() => setView("fidelidade")}
-                      className="text-[10.5px] font-medium text-muted-foreground hover:text-foreground underline transition-colors cursor-pointer"
-                    >
-                      Ver todas
-                    </button>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-semibold text-muted-foreground/75 block">
-                      Ativas no momento
-                    </span>
-                    <p className="text-[22px] font-bold text-foreground tracking-tight leading-none mt-1">
-                      {totalCampanhasAtivas}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Métrica 2: Desempenho do mês */}
-                <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] p-4 shadow-xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-muted-foreground">Desempenho</span>
-                    <button
-                      type="button"
-                      onClick={() => setView("clientemes")}
-                      className="text-[10.5px] font-medium text-muted-foreground hover:text-foreground underline transition-colors cursor-pointer"
-                    >
-                      Ver ranking
-                    </button>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-semibold text-muted-foreground/75 block truncate">
-                      Indicações no mês
-                    </span>
-                    <p className="text-[22px] font-bold text-foreground tracking-tight leading-none mt-1">
-                      {totalIndicacoesCiclo}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <CampaignBanner
+              eyebrow="Cupons"
+              eyebrowAccent=" de desconto"
+              icon={<Ticket className="h-[18px] w-[18px]" strokeWidth={1.6} />}
+              title="Crie cupons promocionais"
+              subtitle="Descontos em reais ou porcentagem, com validade e limite de usos"
+              onClick={() => setView("cupons")}
+            />
           </>
         )}
       </div>

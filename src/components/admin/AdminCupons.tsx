@@ -21,7 +21,6 @@ import {
   useToggleCupom,
   useDeleteCupom,
 } from "@/hooks/useAdminMutations";
-import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 
 interface Cupom {
   id: string;
@@ -188,9 +187,8 @@ export function AdminCupons({ tenantId }: AdminCuponsProps = {}) {
 
   // Realtime invalidation
   useEffect(() => {
-    const channelId = `admin-cupons-${tenantId || 'global'}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(channelId)
+      .channel(`admin-cupons-${tenantId || 'global'}`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
@@ -284,16 +282,23 @@ export function AdminCupons({ tenantId }: AdminCuponsProps = {}) {
     const handleSubmit = editOpen ? handleEdit : handleCreate;
 
     return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col">
-        <ScheduleHeader
-          title={pageTitle}
-          onBack={() => {
-            setCreateOpen(false);
-            setEditOpen(false);
-            setEditingId(null);
-            setForm(emptyForm);
-          }}
-        />
+      <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[env(safe-area-inset-top)]">
+        {/* Header fixo — padrão app */}
+        <div className="sticky top-0 z-30 bg-background">
+          <div className="flex items-center gap-2.5 px-4 h-14">
+            <button
+              onClick={() => { setCreateOpen(false); setEditOpen(false); setEditingId(null); setForm(emptyForm); }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
+              aria-label="Voltar"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+                <path d="M9 14L4 9l5-5" />
+                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+              </svg>
+            </button>
+            <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">{pageTitle}</h1>
+          </div>
+        </div>
 
         {/* Formulário full-page */}
         <div className="flex-1 overflow-y-auto px-4 pt-5 pb-28 scrollbar-none">
@@ -346,10 +351,10 @@ export function AdminCupons({ tenantId }: AdminCuponsProps = {}) {
                       type="button"
                       onClick={() => setForm({ ...form, percent: p })}
                       className={cn(
-                        "flex-1 py-2.5 rounded-xl text-[12.5px] font-semibold transition-all active:scale-95 border",
+                        "flex-1 py-3 rounded-xl text-[13px] font-bold transition-all duration-200 border",
                         form.percent === p
-                          ? "bg-foreground text-background border-foreground shadow-xs"
-                          : "bg-secondary/40 border-border/60 text-muted-foreground hover:text-foreground"
+                          ? "bg-foreground/10 border-foreground/40 text-foreground"
+                          : "bg-transparent border-border/40 text-muted-foreground hover:border-foreground/30 hover:text-foreground"
                       )}
                     >
                       {p}%
@@ -438,12 +443,12 @@ export function AdminCupons({ tenantId }: AdminCuponsProps = {}) {
         {/* Search bar */}
         <div className="mb-4">
           <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 stroke-[1.8]" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar cupom por nome ou código..."
-              className="h-11 text-[13px] pl-10 bg-card border-border/60 dark:border-white/[0.08] rounded-2xl placeholder:text-muted-foreground/40 shadow-xs focus-visible:ring-1 focus-visible:ring-foreground/20"
+              placeholder="Buscar cupom..."
+              className="h-11 text-[13px] pl-10 bg-card border-border/30 rounded-xl placeholder:text-muted-foreground/40"
             />
           </div>
         </div>

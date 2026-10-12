@@ -35,7 +35,7 @@ export function BarberAvaliacoes({ barberContext, basePath = "/barbeiro" }: Barb
   /* ── Realtime — invalida o cache quando há mudança ── */
   useEffect(() => {
     const channel = supabase
-      .channel(`barber-reviews-page-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
+      .channel(`barber-reviews-page-${barberContext.barbeiroId}`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",

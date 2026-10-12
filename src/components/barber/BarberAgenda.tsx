@@ -17,7 +17,6 @@ import {
   QrCode,
   Filter,
   ExternalLink,
-  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarberContext } from "@/pages/Barbeiro";
@@ -33,8 +32,6 @@ import { isWhatsAppAppointment } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { toast } from "sonner";
-import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
-import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 
 interface BarberAgendaProps {
   barberContext: BarberContext;
@@ -104,20 +101,6 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   const [selectedEmptySlot, setSelectedEmptySlot] = useState({ date: "", time: "" });
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const overdueState = useOverdueAppointments(barberContext.barbeiroId, { enabled: !isMobile });
-  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
-  const hasAutoPromptedOverdueRef = useRef(false);
-
-  // Auto-abertura da gaveta ao entrar na Agenda quando houver agendamentos para finalizar
-  useEffect(() => {
-    if (isMobile || overdueState.isLoading) return;
-    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
-      setIsOverdueModalOpen(true);
-      hasAutoPromptedOverdueRef.current = true;
-    } else if (overdueState.count === 0) {
-      hasAutoPromptedOverdueRef.current = false;
-    }
-  }, [isMobile, overdueState.count, overdueState.isLoading]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -164,38 +147,27 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     });
   }, [queryClient, barberContext.barbeiroId, selectedDate]);
 
-  /* ── Realtime: ouvir mudanças de agendamentos (somente no desktop, mobile tem seu próprio) ── */
+  /* ── Realtime: ouvir mudanças de agendamentos ── */
   useEffect(() => {
-    if (isMobile || !barberContext.barbeiroId) return;
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      const channelId = `barber-agenda-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
-      channel = supabase
-        .channel(channelId)
-        .on("postgres_changes", {
-          event: "*",
-          schema: "public",
-          table: "agendamentos",
-          filter: `barbeiro_id=eq.${barberContext.barbeiroId}`,
-        }, (payload) => {
-          invalidateAgenda();
-          if (payload.eventType === "INSERT") {
-            toast.success("Novo agendamento recebido!");
-          }
-        })
-        .subscribe();
-    } catch (err) {
-      console.warn("[BarberAgenda] Erro ao conectar canal Realtime:", err);
-    }
+    const channel = supabase
+      .channel(`barber-agenda-${barberContext.barbeiroId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "agendamentos",
+        filter: `barbeiro_id=eq.${barberContext.barbeiroId}`,
+      }, (payload) => {
+        invalidateAgenda();
+        if (payload.eventType === "INSERT") {
+          toast.success("Novo agendamento recebido!");
+        }
+      })
+      .subscribe();
 
     return () => {
-      if (channel) {
-        try {
-          supabase.removeChannel(channel);
-        } catch {}
-      }
+      supabase.removeChannel(channel);
     };
-  }, [barberContext.barbeiroId, invalidateAgenda, isMobile]);
+  }, [barberContext.barbeiroId, invalidateAgenda]);
 
   // Estabilizar array de dias — hoje SEMPRE no fuso local
   const today = useMemo(() => {
@@ -281,16 +253,15 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     const checkAppointmentCompletion = () => {
       const now = new Date();
       const currentDateStr = format(now, "yyyy-MM-dd");
-      const todaysAppointments = appointments.filter(apt => apt?.data === currentDateStr);
+      const todaysAppointments = appointments.filter(apt => apt.data === currentDateStr);
 
       todaysAppointments.forEach(apt => {
-        if (!apt || !apt.hora) return;
         if (apt.status === "completed" || apt.status === "cancelled_by_admin" ||
             apt.status === "cancelled_by_user" || apt.status === "no_show") return;
 
-        const [hours, minutes] = (apt.hora || "00:00").split(":").map(Number);
+        const [hours, minutes] = apt.hora.split(":").map(Number);
         const aptStart = new Date(now);
-        aptStart.setHours(hours || 0, minutes || 0, 0, 0);
+        aptStart.setHours(hours, minutes, 0, 0);
         const aptEnd = new Date(aptStart.getTime() + (apt.servico?.duracao_minutos || 30) * 60000);
 
         if (now >= aptEnd && now.getTime() - aptEnd.getTime() < 120000) {
@@ -337,39 +308,14 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
       <div className="flex-shrink-0 px-6 pt-2 pb-4">
         {/* Title + Controls */}
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <span className="text-[20px] font-bold text-foreground capitalize tracking-tight">
+          <div>
+            <h1 className="text-2xl font-bold tracking-wide text-foreground">Minha Agenda</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
               {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
-            </span>
-            {!isToday(selectedDate) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDate(today);
-                  scrollToDate(today);
-                }}
-                className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
-              >
-                Hoje
-              </button>
-            )}
-            <span className="text-[12px] font-medium text-muted-foreground/75 tabular-nums">
-              • {filteredAppointments.length} {filteredAppointments.length === 1 ? "agendamento" : "agendamentos"}
-            </span>
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
-            {overdueState.count > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsOverdueModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold bg-foreground text-background hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-xs"
-              >
-                <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>Finalizar ({overdueState.count})</span>
-              </button>
-            )}
-
             <button
               onClick={() => window.open("/agenda", "_blank")}
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium bg-secondary/50 text-muted-foreground hover:bg-secondary/70 transition-all"
@@ -419,7 +365,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
               scrollToDate(today);
             }}
             className={cn(
-              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200",
+              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-opacity duration-200",
               isToday(selectedDate) ? "opacity-0 pointer-events-none" : "opacity-100"
             )}
           >
@@ -455,35 +401,39 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                           setSelectedDate(day);
                           scrollToDate(day);
                         }}
-                        className={cn(
-                          "w-full flex flex-col items-center gap-1 py-1 transition-all duration-200 select-none cursor-pointer",
-                          isSelected ? "opacity-100 scale-105" : "opacity-40 hover:opacity-75 scale-95"
-                        )}
+                        className="w-full flex flex-col items-center gap-1.5 py-1.5 hover:opacity-80 transition-all"
                       >
                         <span className={cn(
-                          "text-[11px] uppercase leading-none tracking-tight transition-colors duration-200",
-                          isSelected ? "text-foreground font-semibold" : "text-muted-foreground/70 font-medium"
+                          "text-[10px] font-semibold uppercase leading-none tracking-wider transition-colors duration-150",
+                          isSelected ? "text-foreground" : "text-muted-foreground/40"
                         )}>
                           {shortDayName(day)}
                         </span>
 
                         <div
                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full will-change-transform transition-all duration-200 ease-out",
-                            isSelected
-                              ? "bg-foreground text-background shadow-xs font-semibold"
-                              : dayIsToday
-                                ? "text-foreground font-semibold ring-1.5 ring-foreground/40 bg-transparent"
-                                : "text-foreground font-normal bg-transparent hover:bg-secondary/40"
+                            "w-10 h-10 flex items-center justify-center rounded-full will-change-transform",
+                            isSelected && "bg-foreground shadow-md shadow-foreground/20",
+                            dayIsToday && !isSelected && "ring-1 ring-primary/30"
                           )}
+                          style={{
+                            transform: isSelected ? "scale(1.08)" : "scale(1)",
+                            transition: "transform 200ms ease-out, background-color 200ms ease-out",
+                          }}
                         >
                           <span className={cn(
-                            "leading-none tabular-nums transition-all duration-200",
-                            isSelected ? "text-[16px] text-background font-semibold" : dayIsToday ? "text-[15px] font-semibold" : "text-[15px] font-normal"
-                          )}>
+                            "font-bold leading-none",
+                            isSelected ? "text-[17px] text-background" : "text-[15px] text-foreground"
+                          )}
+                          style={{ transition: "font-size 200ms ease-out" }}
+                          >
                             {format(day, "d")}
                           </span>
                         </div>
+
+                        {isSelected && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        )}
                       </button>
                     </div>
                   );
@@ -504,7 +454,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Calendar className="w-7 h-7 text-muted-foreground/30 mb-3" strokeWidth={1.5} />
             <p className="text-[15px] font-semibold text-muted-foreground">
-              Sem agendamentos
+              {isToday(selectedDate) ? "Nenhum agendamento para hoje." : "Nenhum agendamento neste dia."}
+            </p>
+            <p className="text-[13px] text-[#4B5563] mt-1.5 max-w-[280px]">
+              {isToday(selectedDate)
+                ? "Seus horários livres estão visíveis para clientes e podem ser reservados a qualquer momento."
+                : "Navegue pelo calendário ou adicione um agendamento manual."}
             </p>
           </div>
         ) : (
@@ -522,31 +477,27 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
             {/* Cards — 2 columns on large screens */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
               {filteredAppointments.map((apt, idx) => {
-                if (!apt) return null;
                 const statusConfig = getStatusColorConfig(apt.status, apt.barbeiro_confirmou);
                 const paymentBadge = getPaymentBadge(apt);
                 const PayIcon = paymentBadge.icon;
                 const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
-                const rawHora = apt.hora || "00:00";
-                const horaFormatted = rawHora.slice(0, 5);
+                const horaFormatted = apt.hora.substring(0, 5);
 
                 const now = new Date();
                 const isViewingToday = isToday(selectedDate);
                 const currentTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
                 const aptEndMinutes = (() => {
-                  const [h, m] = rawHora.split(":").map(Number);
-                  return ((h || 0) * 60 + (m || 0)) + duration;
+                  const [h, m] = apt.hora.split(":").map(Number);
+                  return (h * 60 + m) + duration;
                 })();
                 const nowMinutes = now.getHours() * 60 + now.getMinutes();
-                const isCompleted = apt.status === "completed" || apt.status === "no_show";
-                const isPastTime = isViewingToday && aptEndMinutes <= nowMinutes;
-                const isDone = isCompleted || isPastTime;
-                const isNextUp = isViewingToday && !isDone && rawHora >= currentTimeStr
+                const isPast = isViewingToday && aptEndMinutes <= nowMinutes && (apt.status === "completed" || apt.status === "no_show");
+                const isNextUp = isViewingToday && !isPast && apt.hora >= currentTimeStr
                   && apt.status !== "completed" && apt.status !== "no_show"
                   && idx === filteredAppointments.findIndex(a =>
-                    (a?.hora || "") >= currentTimeStr
-                    && a?.status !== "completed"
-                    && a?.status !== "no_show"
+                    a.hora >= currentTimeStr
+                    && a.status !== "completed"
+                    && a.status !== "no_show"
                   );
 
                 return (
@@ -572,12 +523,11 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                         staleTime: STALE_TIMES.CLIENTES,
                       });
                     }}
-                    style={{ opacity: isDone ? 0.48 : 1 }}
+                    style={{ opacity: isPast ? 0.4 : 1 }}
                     className={cn(
-                      "group relative rounded-2xl p-4 cursor-pointer transition-all duration-200",
-                      isDone
-                        ? "border border-border/30 bg-muted/20 dark:bg-white/[0.015]"
-                        : "border border-border/60 bg-card hover:border-border",
+                      "group relative rounded-2xl p-4 cursor-pointer",
+                      "border border-border/60 bg-card",
+                      "transition-colors hover:border-border",
                       isNextUp && "ring-1 ring-foreground/20"
                     )}
                   >
@@ -642,33 +592,13 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                         "text-[13px] font-medium tabular-nums",
                         apt.is_free ? "text-muted-foreground/40 line-through" : "text-foreground"
                       )}>
-                        {apt.is_free
-                          ? "Grátis"
-                          : `R$ ${typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco.toFixed(2).replace(".", ",") : "0,00"}`}
+                        {apt.is_free ? "Grátis" : `R$ ${apt.preco.toFixed(2)}`}
                       </span>
                     </div>
                   </div>
                 );
               })}
 
-              {/* Botão estratégico inferior para finalizar todos ao final dos atendimentos */}
-              {overdueState.count > 0 && (
-                <div className="pt-8 pb-4 flex flex-col items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsOverdueModalOpen(true)}
-                    className="h-12 px-8 rounded-full bg-foreground text-background text-[14px] font-semibold flex items-center justify-center gap-2 active:opacity-70 hover:opacity-90 transition-all cursor-pointer shadow-sm"
-                  >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>Finalizar todos ({overdueState.count})</span>
-                  </button>
-                  <p className="text-[12px] text-muted-foreground font-normal">
-                    {overdueState.count === 1
-                      ? "1 atendimento pendente de confirmação"
-                      : `${overdueState.count} atendimentos pendentes de confirmação`}
-                  </p>
-                </div>
-              )}
             </div>
           </>
         )}
@@ -681,7 +611,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
           setManualBookingModalOpen(true);
         }}
         className={cn(
-          "fixed bottom-28 right-8 z-40",
+          "fixed bottom-8 right-8 z-50",
           "w-13 h-13 rounded-full",
           "bg-foreground text-background",
           "flex items-center justify-center",
@@ -711,15 +641,6 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
         skipValidation={true}
         barbeiroId={barberContext.barbeiroId}
         tenantId={barberContext.tenantId}
-      />
-
-      {/* Gaveta Apple HIG de finalização de atendimentos */}
-      <PendingAppointmentsModal
-        open={isOverdueModalOpen}
-        onOpenChange={setIsOverdueModalOpen}
-        appointments={overdueState.overdueAppointments}
-        onCompleteBulk={overdueState.completeBulk}
-        isCompleting={overdueState.isCompleting}
       />
     </div>
   );

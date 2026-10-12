@@ -23,7 +23,6 @@ import {
   Crown,
   Loader2,
   ChevronLeft,
-  Award,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -453,7 +452,7 @@ export function AppointmentDetailsView({
     ? "Hoje" 
     : format(new Date(`${appointment.data}T12:00:00`), "EEEE, dd 'de' MMMM", { locale: ptBR });
 
-  const horaFormatted = (appointment.hora || "00:00").substring(0, 5);
+  const horaFormatted = appointment.hora.substring(0, 5);
   const duration = (appointment as any).duracao || appointment.servico?.duracao_minutos || 30;
 
   const getPaymentLabel = () => {
@@ -516,231 +515,192 @@ export function AppointmentDetailsView({
     ? "No Plano" 
     : appointment.is_free || isCredit
       ? "Incluso"
-      : `R$ ${typeof appointment.preco === 'number' && !isNaN(appointment.preco) ? appointment.preco.toFixed(2).replace('.', ',') : '0,00'}`;
+      : `R$ ${appointment.preco.toFixed(2).replace('.', ',')}`;
 
   /* ═══ Conteúdo compartilhado entre Sheet e tela cheia ═══ */
   const content = (
-    <div className="mx-auto w-full max-w-md pb-6 space-y-3.5">
-      {/* ── CLIENT HEADER STATUS ── */}
-      <div className={cn("px-4 pb-1", renderAsPage ? "pt-1" : "")} style={renderAsPage ? undefined : { paddingTop: "calc(3rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }}>
+    <>
+      {/* ── CLIENT HEADER ── */}
+      <div className={cn("px-6 pb-5", renderAsPage ? "pt-5" : "")} style={renderAsPage ? undefined : { paddingTop: "calc(3rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }}>
         <div className="space-y-1">
           {!renderAsPage && (
             <div className="flex items-center gap-2">
-              <h2 className="text-[16px] font-semibold text-foreground leading-tight truncate">
+              <h2 className="text-[15px] font-semibold text-foreground leading-tight truncate">
                 {appointment.profile?.nome || "Cliente"}
               </h2>
               {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
             </div>
           )}
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-card border border-border/60 text-foreground">
-              <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
-              {statusConfig.label}
-            </span>
-            <span className="text-[12px] text-muted-foreground capitalize truncate">{dateLabel}</span>
+          <div className="flex items-center gap-1.5">
+            <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
+            <span className="text-[11px] font-medium text-muted-foreground">{statusConfig.label}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span className="text-[11px] text-muted-foreground capitalize truncate">{dateLabel}</span>
           </div>
         </div>
       </div>
 
-      {/* ── CARD PRINCIPAL: HORÁRIO, SERVIÇO, PAGAMENTO ── */}
-      <div className="px-4">
-        <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3.5 shadow-sm">
-          {/* Horário */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5 text-muted-foreground">
-              <Clock className="w-4 h-4 text-foreground/70" />
-              <span className="text-[13px] font-medium">Horário</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-[13px]">
-              <span className="font-semibold tabular-nums text-foreground">{horaFormatted}</span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="text-muted-foreground">{duration} min</span>
-            </div>
+      {/* ── SCHEDULE + SERVICE + PAYMENT (flat, sem linhas) ── */}
+      <div className="px-6 mt-6 space-y-6">
+        {/* Schedule row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Clock className="w-4 h-4 text-muted-foreground/70" />
+            <span className="text-[14px] text-muted-foreground">Horário</span>
           </div>
-
-          <div className="h-px bg-border/40" />
-
-          {/* Serviço */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0 text-muted-foreground">
-              <Scissors className="w-4 h-4 text-foreground/70 flex-shrink-0" />
-              <span className="text-[13px] font-medium truncate">{serviceName}</span>
-            </div>
-            {appliedCupom ? (
-              <div className="flex items-baseline gap-1.5 flex-shrink-0">
-                <span className="text-[11px] text-muted-foreground/60 line-through tabular-nums">
-                  R$ {appliedCupom.preco_original.toFixed(2).replace('.', ',')}
-                </span>
-                <span className="text-[13px] font-semibold text-foreground tabular-nums">
-                  R$ {appliedCupom.preco_final.toFixed(2).replace('.', ',')}
-                </span>
-              </div>
-            ) : (
-              <span className="text-[13px] font-semibold text-foreground tabular-nums flex-shrink-0">{priceDisplay}</span>
-            )}
-          </div>
-
-          <div className="h-px bg-border/40" />
-
-          {/* Pagamento */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5 text-muted-foreground">
-              <PayIcon className="w-4 h-4 text-foreground/70" />
-              <span className="text-[13px] font-medium">{getPaymentLabel()}</span>
-            </div>
-            {(isPrepaid || isPlanAppointment || isCredit || appointment.is_free) ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[11px] font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span>Pago</span>
-              </div>
-            ) : (
-              <span className="text-[11px] text-muted-foreground px-2.5 py-0.5 rounded-full bg-secondary">Na barbearia</span>
-            )}
+          <div className="flex items-center gap-2 text-[13px]">
+            <span className="font-mono font-semibold tabular-nums text-foreground">{horaFormatted}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span className="text-muted-foreground">{duration} min</span>
           </div>
         </div>
-      </div>
 
-      {/* Cash plan banner — se houver pagamento pendente */}
-      {isPlanAppointment && planInfo.isCashPending && !paymentJustConfirmed && (
-        <div className="px-4">
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 text-amber-500">
-              <Banknote className="w-5 h-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold text-foreground truncate">
-                Cobrar R$ {planInfo.precoMensal.toFixed(2).replace('.', ',')}
-              </p>
-              <p className="text-[12px] text-muted-foreground truncate">
-                {planInfo.planName ? `Plano ${planInfo.planName} · ` : ''}pagamento pendente
-              </p>
-            </div>
+        {/* Service row */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Scissors className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />
+            <span className="text-[14px] text-muted-foreground truncate">{serviceName}</span>
           </div>
-        </div>
-      )}
-
-      {/* ── OBSERVAÇÕES ── */}
-      {appointment.observacoes && (
-        <div className="px-4">
-          <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-1.5 shadow-sm">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Observações</p>
-            <p className="text-[13px] text-foreground leading-relaxed">{appointment.observacoes}</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── PLANO / FIDELIDADE ── */}
-      <div className="px-4">
-        <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-sm">
-          {isPlanAppointment || hasPlan ? (
-            <>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-foreground/10 flex items-center justify-center text-foreground">
-                    <CalendarCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold text-foreground">Uso do Plano</p>
-                    <p className="text-[10px] text-muted-foreground">Mês atual</p>
-                  </div>
-                </div>
-                <span className="text-[15px] font-bold text-foreground tabular-nums">
-                  {planUsageCount}/{planLimit}
-                </span>
-              </div>
-              <div className="flex gap-1.5 flex-wrap pt-1">
-                {Array.from({ length: planLimit }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "h-2 flex-1 min-w-[14px] rounded-full transition-all",
-                      i < planUsageCount ? "bg-foreground" : "bg-secondary"
-                    )}
-                  />
-                ))}
-              </div>
-              {planUsageCount >= planLimit ? (
-                <p className="text-[11px] font-medium text-amber-500">Limite mensal atingido</p>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  {planLimit - planUsageCount} {planLimit - planUsageCount === 1 ? "corte restante" : "cortes restantes"}
-                </p>
-              )}
-            </>
+          {appliedCupom ? (
+            <div className="flex items-baseline gap-1.5 flex-shrink-0">
+              <span className="text-[11px] text-muted-foreground/60 line-through tabular-nums">
+                R$ {appliedCupom.preco_original.toFixed(2).replace('.', ',')}
+              </span>
+              <span className="text-[14px] font-semibold text-foreground tabular-nums">
+                R$ {appliedCupom.preco_final.toFixed(2).replace('.', ',')}
+              </span>
+            </div>
           ) : (
-            <>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
-                    <Award className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold text-foreground">Programa Fidelidade</p>
-                    <p className="text-[10px] text-muted-foreground">Pontos acumulados</p>
-                  </div>
-                </div>
-                <span className="text-[15px] font-bold text-foreground tabular-nums">
-                  {clientPoints}/{requiredPoints}
-                </span>
-              </div>
-              <div className="flex gap-1.5 flex-wrap pt-1">
-                {Array.from({ length: requiredPoints }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "h-2 flex-1 min-w-[12px] rounded-full transition-all",
-                      i < clientPoints ? "bg-amber-500" : "bg-secondary"
-                    )}
-                  />
-                ))}
-              </div>
-              {clientPoints >= requiredPoints ? (
-                <p className="text-[11px] font-medium text-amber-500">Próximo corte gratuito disponível!</p>
-              ) : appointment.ponto_liberado ? (
-                <p className="text-[11px] text-emerald-500">Ponto registrado para este atendimento</p>
-              ) : null}
+            <span className="text-[14px] font-semibold text-foreground tabular-nums flex-shrink-0">{priceDisplay}</span>
+          )}
+        </div>
 
-              {isActiveStatus && !hasPlan && !isPlanAppointment && (
-                <div className="pt-2 border-t border-border/40">
-                  <button
-                    type="button"
-                    onClick={() => setConvertingToPlan(true)}
-                    className="w-full h-9 rounded-xl bg-secondary/50 hover:bg-secondary text-foreground text-[12px] font-medium flex items-center justify-center gap-1.5 transition-colors active:scale-[0.98]"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Vincular cliente a um plano</span>
-                  </button>
-                </div>
-              )}
-            </>
+        {/* Payment row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <PayIcon className="w-4 h-4 text-muted-foreground/70" />
+            <span className="text-[14px] text-muted-foreground">{getPaymentLabel()}</span>
+          </div>
+          {(isPrepaid || isPlanAppointment || isCredit || appointment.is_free) ? (
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-[11px] font-medium text-muted-foreground">Pago</span>
+            </div>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">Na barbearia</span>
           )}
         </div>
       </div>
 
-      {/* ── HISTÓRICO DE VISITAS ── */}
-      {history.length > 0 && (
-        <div className="px-4">
-          <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-sm">
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold flex items-center gap-1.5">
-              <History className="w-3.5 h-3.5" />
-              Últimas visitas
+      {/* Cash plan banner — flat */}
+      {isPlanAppointment && planInfo.isCashPending && !paymentJustConfirmed && (
+        <div className="px-6 mt-6 flex items-center gap-2.5">
+          <Banknote className="w-4 h-4 text-amber-500 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-medium text-foreground truncate">
+              Cobrar R$ {planInfo.precoMensal.toFixed(2).replace('.', ',')}
             </p>
-            <div className="divide-y divide-border/40">
-              {history.map((h, i) => (
-                <div key={i} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
-                  <span className="text-[12px] font-mono text-muted-foreground tabular-nums">
-                    {format(new Date(`${h.data}T12:00:00`), "dd/MM/yy")} · {h.hora?.substring(0, 5)}
-                  </span>
-                  <span className="text-[13px] font-medium text-foreground truncate ml-3">
-                    {(h as any).servico?.nome || "Serviço"}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <p className="text-[12px] text-muted-foreground truncate">
+              {planInfo.planName ? `Plano ${planInfo.planName} · ` : ''}pagamento pendente
+            </p>
           </div>
         </div>
       )}
-    </div>
+
+      {/* ── OBSERVATIONS ── */}
+      {appointment.observacoes && (
+        <div className="px-6 mt-8">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-[0.12em] font-medium mb-2">Observações</p>
+          <p className="text-[14px] text-foreground leading-relaxed">{appointment.observacoes}</p>
+        </div>
+      )}
+
+      {/* ── PLANO / FIDELIDADE ── */}
+      <div className="px-6 mt-8">
+        {isPlanAppointment || hasPlan ? (
+          <>
+            <div className="flex items-center justify-between mb-3.5">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-[0.12em] font-medium flex items-center gap-1.5">
+                <CalendarCheck className="w-3.5 h-3.5" />
+                Uso do plano — mês atual
+              </p>
+              <span className="text-[14px] font-semibold text-foreground tabular-nums">
+                {planUsageCount}/{planLimit}
+              </span>
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {Array.from({ length: planLimit }).map((_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "h-1.5 flex-1 min-w-[12px] rounded-full",
+                    i < planUsageCount ? "bg-foreground" : "bg-border/60"
+                  )}
+                />
+              ))}
+            </div>
+            {planUsageCount >= planLimit && (
+              <p className="text-[12px] text-amber-500 mt-3">Limite mensal atingido</p>
+            )}
+            {planUsageCount < planLimit && (
+              <p className="text-[12px] text-muted-foreground mt-3">
+                {planLimit - planUsageCount} {planLimit - planUsageCount === 1 ? "vaga restante" : "vagas restantes"}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-3.5">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-[0.12em] font-medium">Fidelidade</p>
+              <span className="text-[14px] font-semibold text-foreground tabular-nums">
+                {clientPoints}/{requiredPoints}
+              </span>
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {Array.from({ length: requiredPoints }).map((_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "h-1.5 flex-1 min-w-[10px] rounded-full",
+                    i < clientPoints ? "bg-foreground" : "bg-border/60"
+                  )}
+                />
+              ))}
+            </div>
+            {clientPoints >= requiredPoints && (
+              <p className="text-[12px] text-foreground mt-3">Próximo corte gratuito</p>
+            )}
+            {appointment.ponto_liberado && (
+              <p className="text-[12px] text-emerald-500 mt-3">Ponto registrado</p>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── HISTORY ── */}
+      {history.length > 0 && (
+        <div className="px-6 mt-8">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-[0.12em] font-medium mb-3 flex items-center gap-1.5">
+            <History className="w-3.5 h-3.5" />
+            Últimas visitas
+          </p>
+          <div className="space-y-2.5">
+            {history.map((h, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <span className="text-[12px] font-mono text-muted-foreground tabular-nums">
+                  {format(new Date(`${h.data}T12:00:00`), "dd/MM/yy")} · {h.hora?.substring(0, 5)}
+                </span>
+                <span className="text-[13px] text-foreground truncate ml-3">
+                  {(h as any).servico?.nome || "Serviço"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="h-6" />
+    </>
   );
 
   /* ═══ Renderização: Sheet (default) vs. tela cheia ═══ */
@@ -755,7 +715,7 @@ export function AppointmentDetailsView({
         {/* ═══ FIXED ACTION BAR ═══ */}
         {(canComplete || canCancel || canNoShow) && (
           <div
-            className="flex-shrink-0 border-t border-border/60 bg-background px-5 pt-3.5 space-y-2.5"
+            className="flex-shrink-0 border-t border-border/60 bg-background px-6 pt-4 space-y-2.5"
             style={{ paddingBottom: "calc(1.25rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))" }}
           >
             {/* Confirm plan cash payment */}
@@ -775,15 +735,26 @@ export function AppointmentDetailsView({
               </button>
             )}
 
-            {/* Primary: Finalizar Atendimento — largo, proeminente e confortável */}
+            {/* Vincular ao Plano */}
+            {isActiveStatus && !hasPlan && !isPlanAppointment && (
+              <button
+                onClick={() => setConvertingToPlan(true)}
+                className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-card border border-border/60 text-muted-foreground hover:text-foreground transition-colors active:scale-[0.98] text-[12px] font-medium"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Vincular ao plano
+              </button>
+            )}
+
+            {/* Primary: Finalizar */}
             {canComplete && (
               <button 
                 onClick={handleMarkAsCompleted} 
                 disabled={isActing}
                 className={cn(
-                  "w-full h-12 rounded-2xl text-[14px] font-bold flex items-center justify-center gap-2",
-                  "bg-foreground text-background shadow-md shadow-foreground/15",
-                  "active:scale-[0.98] transition-all duration-150",
+                  "w-full h-11 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2",
+                  "bg-foreground text-background",
+                  "active:scale-[0.98] transition-transform duration-150",
                   "disabled:opacity-40 disabled:pointer-events-none"
                 )}
               >
@@ -792,7 +763,7 @@ export function AppointmentDetailsView({
               </button>
             )}
 
-            {/* Secondary row: Cancelar + Falta */}
+            {/* Secondary row: Cancelar + Não Veio */}
             {(canCancel || canNoShow) && (
               <div className="flex gap-2.5">
                 {canCancel && (
@@ -830,18 +801,6 @@ export function AppointmentDetailsView({
                 )}
               </div>
             )}
-
-            {/* Opção discreta: Vincular ao Plano */}
-            {isActiveStatus && !hasPlan && !isPlanAppointment && (
-              <button
-                type="button"
-                onClick={() => setConvertingToPlan(true)}
-                className="w-full py-0.5 text-center text-[11px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors flex items-center justify-center gap-1"
-              >
-                <Plus className="w-3 h-3" />
-                <span>Vincular ao plano</span>
-              </button>
-            )}
           </div>
         )}
       </SheetContent>
@@ -852,19 +811,19 @@ export function AppointmentDetailsView({
     <div className="fixed inset-0 z-[80] bg-background flex flex-col overflow-hidden">
       {/* ── HEADER PADRÃO DO APP ── */}
       <div
-        className="flex-shrink-0 mx-auto w-full max-w-md px-4"
-        style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}
+        className="flex-shrink-0 mx-auto w-full max-w-md px-5"
+        style={{ paddingTop: "calc(env(safe-area-inset-top) + 14px)" }}
       >
-        <div className="flex items-center gap-3 min-h-[52px]">
+        <div className="flex items-center gap-1.5 min-h-[52px]">
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-full flex items-center justify-center bg-card border border-border/60 hover:bg-secondary/50 active:scale-95 transition-all text-foreground shrink-0 shadow-sm"
+            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all -ml-1 shrink-0"
             aria-label="Voltar"
           >
-            <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+            <CurvedBackArrow className="text-foreground" />
           </button>
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <h2 className="text-[18px] font-semibold text-foreground tracking-tight truncate">
+            <h2 className="text-[20px] font-semibold text-foreground tracking-tight truncate">
               {appointment.profile?.nome || "Cliente"}
             </h2>
             {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
@@ -880,7 +839,7 @@ export function AppointmentDetailsView({
       {/* ── FIXED ACTION BAR ── */}
       {(canComplete || canCancel || canNoShow) && (
         <div
-          className="flex-shrink-0 border-t border-border/60 bg-background px-5 pt-3.5 space-y-2.5"
+          className="flex-shrink-0 border-t border-border/60 bg-background px-6 pt-4 space-y-2.5"
           style={{ paddingBottom: "calc(1.25rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))" }}
         >
           {isPlanAppointment && planInfo.isCashPending && !paymentJustConfirmed && (
@@ -899,15 +858,24 @@ export function AppointmentDetailsView({
             </button>
           )}
 
-          {/* Primary: Finalizar Atendimento — largo, proeminente e confortável */}
+          {isActiveStatus && !hasPlan && !isPlanAppointment && (
+            <button
+              onClick={() => setConvertingToPlan(true)}
+              className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-card border border-border/60 text-muted-foreground hover:text-foreground transition-colors active:scale-[0.98] text-[12px] font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Vincular ao plano
+            </button>
+          )}
+
           {canComplete && (
             <button 
               onClick={handleMarkAsCompleted} 
               disabled={isActing}
               className={cn(
-                "w-full h-12 rounded-2xl text-[14px] font-bold flex items-center justify-center gap-2",
-                "bg-foreground text-background shadow-md shadow-foreground/15",
-                "active:scale-[0.98] transition-all duration-150",
+                "w-full h-11 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2",
+                "bg-foreground text-background",
+                "active:scale-[0.98] transition-transform duration-150",
                 "disabled:opacity-40 disabled:pointer-events-none"
               )}
             >
@@ -916,7 +884,6 @@ export function AppointmentDetailsView({
             </button>
           )}
 
-          {/* Secondary row: Cancelar + Falta */}
           {(canCancel || canNoShow) && (
             <div className="flex gap-2.5">
               {canCancel && (
@@ -954,18 +921,6 @@ export function AppointmentDetailsView({
               )}
             </div>
           )}
-
-          {/* Opção discreta: Vincular ao Plano */}
-          {isActiveStatus && !hasPlan && !isPlanAppointment && (
-            <button
-              type="button"
-              onClick={() => setConvertingToPlan(true)}
-              className="w-full py-0.5 text-center text-[11px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors flex items-center justify-center gap-1"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Vincular ao plano</span>
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -1002,7 +957,7 @@ export function AppointmentDetailsView({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
             className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
-            style={{ background: "#0f0f0f" }}
+            style={{ background: "#0a0a0a" }}
           >
             {/* Linha verde sutil no topo */}
             <motion.div

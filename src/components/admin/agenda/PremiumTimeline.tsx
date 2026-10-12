@@ -108,7 +108,7 @@ export function PremiumTimeline({
 
   // Get appointment for a specific slot
   const getAppointmentForSlot = useCallback((slot: string) => {
-    return appointments.find(apt => (apt.hora || "00:00").substring(0, 5) === slot);
+    return appointments.find(apt => apt.hora.substring(0, 5) === slot);
   }, [appointments]);
 
   // Check if slot is blocked by another appointment's duration
@@ -120,8 +120,8 @@ export function PremiumTimeline({
     const DELAY_MINUTES = businessHours.delay_entre_servicos;
 
     for (const apt of appointments) {
-      const [aptHour, aptMin] = (apt.hora || "00:00").split(':').map(Number);
-      const aptStart = (aptHour || 0) * 60 + (aptMin || 0);
+      const [aptHour, aptMin] = apt.hora.split(':').map(Number);
+      const aptStart = aptHour * 60 + aptMin;
       const aptEnd = aptStart + ((apt as any).duracao || apt.servico?.duracao_minutos || 30);
       const aptEndWithDelay = aptEnd + DELAY_MINUTES;
 

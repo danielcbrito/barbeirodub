@@ -51,7 +51,7 @@ const DialogContent = React.forwardRef<
           "duration-200 ease-out",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-          "max-h-[min(88vh,calc(var(--kb-viewport-height,100dvh)-2rem))] overflow-y-auto overscroll-contain",
+          "max-h-[85vh] overflow-hidden",
           className,
         )}
         onWheel={(e) => e.stopPropagation()}

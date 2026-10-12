@@ -105,8 +105,8 @@ export function AgendaDiariaView({ date, appointments, onCancelAppointment }: Ag
     const bufferTime = businessHours.delay_entre_servicos;
 
     for (const apt of appointments) {
-      const [aptHour, aptMin] = (apt.hora || "00:00").split(':').map(Number);
-      const aptStart = (aptHour || 0) * 60 + (aptMin || 0);
+      const [aptHour, aptMin] = apt.hora.split(':').map(Number);
+      const aptStart = aptHour * 60 + aptMin;
       const duration = apt.servico?.duracao_minutos || apt.duracao || 30;
       const aptEnd = aptStart + duration + bufferTime;
 

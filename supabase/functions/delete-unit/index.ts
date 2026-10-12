@@ -72,17 +72,7 @@ Deno.serve(async (req) => {
       throw barberError;
     }
 
-    // ═══ Passo 4 — Remove configurações auxiliares da unidade (se existirem) ═══
-    try {
-      await supabaseAdmin.from('configuracoes_horario_unidade').delete().eq('unidade_id', unidadeId);
-      await supabaseAdmin.from('horarios_excepcionais').delete().eq('unidade_id', unidadeId);
-      await supabaseAdmin.from('client_booking_blocks').delete().eq('unidade_id', unidadeId);
-      await supabaseAdmin.from('barber_unit_roles').delete().eq('unidade_id', unidadeId);
-    } catch (ancillaryErr) {
-      console.warn('[delete-unit] Non-fatal ancillary cleanup:', ancillaryErr);
-    }
-
-    // ═══ Passo 5 — Deleta a unidade ═══
+    // ═══ Passo 4 — Deleta a unidade ═══
     const { error: deleteError } = await supabaseAdmin
       .from('tenant_unidades')
       .delete()

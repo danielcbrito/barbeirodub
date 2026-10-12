@@ -300,43 +300,36 @@ const TenantAdmin = () => {
 
     loadPendingCount();
 
-    let ch1: ReturnType<typeof supabase.channel> | null = null;
-    let ch2: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      ch1 = supabase
-        .channel(`tenant-pending-count-agendamentos-${Math.random().toString(36).slice(2, 9)}`)
-        .on("postgres_changes", {
-          event: "*", schema: "public", table: "agendamentos",
-        }, (payload: any) => {
-          loadPendingCount();
-          if (payload.eventType === "INSERT") {
-            playNotificationSound();
-            sendBrowserNotification("Novo Agendamento!", {
-              body: "Um novo cliente agendou com você. Verifique suas confirmações.",
-              tag: "new-appointment",
-            });
-          }
-        }).subscribe();
+    const ch1 = supabase
+      .channel("tenant-pending-count-agendamentos")
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "agendamentos",
+      }, (payload: any) => {
+        loadPendingCount();
+        if (payload.eventType === "INSERT") {
+          playNotificationSound();
+          sendBrowserNotification("Novo Agendamento!", {
+            body: "Um novo cliente agendou com você. Verifique suas confirmações.",
+            tag: "new-appointment",
+          });
+        }
+      }).subscribe();
 
-      ch2 = supabase
-        .channel(`tenant-pending-count-planos-${Math.random().toString(36).slice(2, 9)}`)
-        .on("postgres_changes", {
-          event: "*", schema: "public", table: "assinaturas",
-        }, (payload: any) => {
-          loadPendingCount();
-        }).subscribe();
-    } catch (err) {
-      console.warn('[TenantAdmin] Erro ao conectar canais Realtime:', err);
-    }
+    const ch2 = supabase
+      .channel("tenant-pending-count-planos")
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "assinaturas",
+      }, (payload: any) => {
+        loadPendingCount();
+        // Notificação silenciosa apenas para INSERTs vindos do próprio cliente (autoatendimento via PIX/cash).
+        // Ativações feitas pelo admin/barbeiro NÃO devem disparar som — esse evento já é gerado por ele mesmo.
+        // Para evitar confusão, removido o som aqui; novos planos pendentes aparecem no badge de contagem.
+      }).subscribe();
 
     return () => {
       isCancelled = true;
-      if (ch1) {
-        try { supabase.removeChannel(ch1); } catch {}
-      }
-      if (ch2) {
-        try { supabase.removeChannel(ch2); } catch {}
-      }
+      supabase.removeChannel(ch1);
+      supabase.removeChannel(ch2);
     };
   }, [adminContext, playNotificationSound, sendBrowserNotification]);
 
@@ -549,21 +542,14 @@ const TenantAdmin = () => {
             </Suspense>
           </div>
         ) : (
-          <main
-            className={cn(
-              "relative min-h-[calc(100dvh-56px)] bg-background",
-              (location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo")) && "pb-0 overflow-hidden"
-            )}
-            style={
-              location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo")
-                ? undefined
-                : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
-            }
-          >
+          <main className={cn(
+            "relative min-h-[calc(var(--app-height,100dvh)-56px)] bg-background",
+            location.pathname.includes("/tenant/admin/promocoes") ? "pb-0 overflow-hidden" : "pb-20"
+          )}>
             <div
-              className={cn("px-4 py-4 lg:px-8", location.pathname.includes("/promocoes") && "p-0", location.pathname.includes("/perfil") && "p-0", location.pathname.includes("/config-barbearia") && "p-0", location.pathname.includes("/unidades") && "h-full p-0", location.pathname.includes("/whatsapp") && "p-0", location.pathname.includes("/disparo") && "p-0")}
+              className={cn("px-4 py-4 lg:px-8", location.pathname.includes("/tenant/admin/promocoes") && "h-full p-0", location.pathname.includes("/perfil") && "p-0", location.pathname.includes("/config-barbearia") && "p-0", location.pathname.includes("/unidades") && "h-full p-0")}
               style={
-                location.pathname.includes("/perfil") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/unidades") || location.pathname.includes("/whatsapp") || location.pathname.includes("/promocoes") || location.pathname.includes("/disparo")
+                location.pathname.includes("/perfil") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/unidades")
                   ? undefined
                   : { paddingTop: "calc(0.75rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }
               }
@@ -604,12 +590,11 @@ const TenantAdmin = () => {
           </main>
         )}
 
-        {/* Bottom Navigation — esconder nas configurações, edição de serviços/planos, horários e disparo */}
-        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("financeiro") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("assinatura") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("loja") && !location.pathname.includes("disparo") && (
+        {/* Bottom Navigation — esconder nas configurações, edição de serviços/planos e horários */}
+        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("financeiro") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("assinatura") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("loja") && (
           <div className="lg:hidden">
             <AdminMobileNavigation
               basePath={BASE}
-              barbeiroId={adminContext?.barbeiroId}
             />
           </div>
         )}
@@ -653,13 +638,7 @@ const TenantAdmin = () => {
           <TrialBanner daysRemaining={subscription.daysRemaining} onSubscribe={goToSubscription} />
         )}
         <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-          <div className={
-            isSubscriptionRoute
-              ? "h-full"
-              : (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/perfil"))
-              ? "p-0 max-w-[1600px] mx-auto"
-              : "p-6 lg:p-8 max-w-[1600px] mx-auto"
-          }>
+          <div className={isSubscriptionRoute ? "h-full" : "p-6 lg:p-8 max-w-[1600px] mx-auto"}>
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
                 <Route index element={<AdminDashboard adminContext={adminContext} basePath={BASE} tenantId={tenantId} />} />

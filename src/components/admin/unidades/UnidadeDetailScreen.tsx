@@ -424,9 +424,6 @@ export function UnidadeDetailScreen({
           <WhatsAppConnectionPage
             hideHeader
             userId={userId}
-            tenantId={tenantId}
-            unidadeId={unidade.id}
-            unidadeNome={unidade.nome}
             tenantNome={unidade.nome}
           />
         );
@@ -538,6 +535,8 @@ export function UnidadeDetailScreen({
                 paddingBottom: keyboardHeight > 0
                   ? "1rem"
                   : "calc(1.25rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))",
+                transform: keyboardHeight > 0 ? `translateY(-${keyboardHeight}px)` : undefined,
+                transition: "transform 0.2s ease-out",
               }}
             >
               {showDeleteButton ? (

@@ -6,11 +6,7 @@ import { AdminMensagens } from "./AdminMensagens";
 import { AdminWebhook } from "./AdminWebhook";
 import { AdminManutencao } from "./AdminManutencao";
 
-interface AdminConfiguracoesProps {
-  hideTitle?: boolean;
-}
-
-export function AdminConfiguracoes({ hideTitle = false }: AdminConfiguracoesProps = {}) {
+export function AdminConfiguracoes() {
   const handleGoogleCalendarInfo = () => {
     toast.info(
       "As credenciais do Google Calendar foram configuradas com sucesso. " +
@@ -21,7 +17,7 @@ export function AdminConfiguracoes({ hideTitle = false }: AdminConfiguracoesProp
 
   return (
     <div className="space-y-6">
-      {!hideTitle && <h1 className="text-2xl font-bold">Configurações</h1>}
+      <h1 className="text-2xl font-bold">Configurações</h1>
 
       <Tabs defaultValue="maintenance" className="w-full">
         <TabsList className="grid w-full grid-cols-4 card-glass">

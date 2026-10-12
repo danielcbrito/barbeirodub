@@ -22,6 +22,7 @@ import {
   ChevronUp,
   ChevronDown,
   Rocket,
+  Sparkles,
   Eye,
   Zap,
   Info,
@@ -34,25 +35,20 @@ import {
   Building2,
   Mic,
   MicOff,
-  X,
-  Pencil,
-  Sparkles,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { getWhatsAppInstance } from "@/lib/whatsappInstanceHelper";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { DispatchScheduleScreen } from "@/components/admin/DispatchScheduleScreen";
-import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
 import { useWhatsAppStatus } from "@/hooks/useWhatsAppStatus";
 import { WhatsAppRequiredBanner } from "@/components/whatsapp/WhatsAppRequiredBanner";
 import { useDeletarDisparo } from "@/hooks/useAdminMutations";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
 import { DisparoSkeleton } from "@/components/ui/loading";
-import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 
 /* ═══════════════════════════════════════════════ */
 /* Types                                          */
@@ -109,7 +105,7 @@ function BackNavButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function StepProgress({ current, total = 3 }: { current: number; total?: number }) {
+function StepProgress({ current, total = 4 }: { current: number; total?: number }) {
   const progress = (current / total) * 100;
 
   return (
@@ -240,7 +236,7 @@ interface AdminDisparoProps {
 }
 
 // Cache síncrono de clientes do disparo — render instantâneo ao entrar na tela.
-const DISPATCH_CLIENTS_CACHE_PREFIX = "dub:disparo-clients:v2:";
+const DISPATCH_CLIENTS_CACHE_PREFIX = "dub:disparo-clients:v1:";
 function dispatchCacheKey(barbeiroId: string | null, tenantId: string | null, audience: string, unitMode: string, unitIds: string[]) {
   const units = unitMode === "specific" ? [...unitIds].sort().join(",") : "";
   return `${DISPATCH_CLIENTS_CACHE_PREFIX}${tenantId ?? "-"}:${barbeiroId ?? "-"}:${audience}:${unitMode}:${units}`;
@@ -248,31 +244,23 @@ function dispatchCacheKey(barbeiroId: string | null, tenantId: string | null, au
 function readDispatchCache(key: string): Client[] | null {
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Client[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    return parsed;
+    return raw ? (JSON.parse(raw) as Client[]) : null;
   } catch {
     return null;
   }
 }
 function writeDispatchCache(key: string, data: Client[]) {
   try {
-    if (Array.isArray(data) && data.length > 0) {
-      localStorage.setItem(key, JSON.stringify(data));
-    }
+    localStorage.setItem(key, JSON.stringify(data));
   } catch {
     /* ignore quota */
   }
 }
 
-export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSelectAllClients }: AdminDisparoProps = {}) {
+export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSelectAllClients = false }: AdminDisparoProps = {}) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const deletarDisparo = useDeletarDisparo(tenantId ?? null);
-
-  const isExplicitBarber = basePath.startsWith("/barbeiro") && !tenantId;
-  const effectiveCanSelectAll = canSelectAllClients ?? !isExplicitBarber;
 
   const [step, setStep] = useState(1);
 
@@ -284,17 +272,12 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [searchParams] = useSearchParams();
-  const initialMode = searchParams.get("mode") === "schedule" ? "schedule" : "now";
-
-  const [sendMode, setSendMode] = useState<SendMode>(initialMode);
+  const [sendMode, setSendMode] = useState<SendMode>("now");
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledDispatches, setScheduledDispatches] = useState<ScheduledDispatch[]>([]);
   const [loadingScheduled, setLoadingScheduled] = useState(false);
   const [scheduling, setScheduling] = useState(false);
-  const [showScheduleOverlay, setShowScheduleOverlay] = useState(initialMode === "schedule");
-  const [showScheduledModal, setShowScheduledModal] = useState(false);
-  const [showWhenToSendDrawer, setShowWhenToSendDrawer] = useState(false);
+  const [showScheduleOverlay, setShowScheduleOverlay] = useState(false);
 
   /** tenant efetivo para contexto (prop ou resolvido via barbeiro) */
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(tenantId ?? null);
@@ -307,10 +290,10 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
   const { isConnected: whatsAppConnected, isLoading: whatsAppLoading } = useWhatsAppStatus(effectiveBarbeiroId);
 
   /** Filtro de audiência: "mine" = só meus clientes, "all" = todos da barbearia */
-  const [audience, setAudience] = useState<"mine" | "all">(effectiveCanSelectAll ? "all" : "mine");
+  const [audience, setAudience] = useState<"mine" | "all">("mine");
 
-  /** Audiência pré-estabelecida sem telas de bloqueio */
-  const [audienceChosen, setAudienceChosen] = useState(true);
+  /** Tela de escolha de audiência — quem tem permissão deve escolher antes de prosseguir */
+  const [audienceChosen, setAudienceChosen] = useState(false);
 
   /** Seleção de unidades para "Todos os clientes" */
   const [units, setUnits] = useState<TenantUnit[]>([]);
@@ -431,27 +414,46 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
     })();
   }, [tenantId, effectiveBarbeiroId]);
 
-  // Configuração automática de audiência: administradores acessam todos os clientes do tenant por padrão
+  // Só faz sentido oferecer "todos os clientes / escolher unidades" quando a
+  // barbearia tem mais de um barbeiro. Admin solo vai direto para "meus clientes".
+  const { hasMultiple: tenantHasMultipleBarbers, loading: barbersCountLoading } =
+    useTenantBarbersCount(effectiveTenantId);
+  const canSendToAllClients = canSelectAllClients && tenantHasMultipleBarbers;
+  // A tela de escolha de audiência só aparece se o usuário TEM permissão para enviar para todos
+  // Barbeiros comuns (canSelectAllClients=false) ou admins solo vão direto para "meus clientes"
+  const shouldChooseAudienceFirst = canSendToAllClients;
+
+  // Regra de entrada da jornada:
+  // - Se pode escolher audiência → mostra tela de seleção
+  // - Se é barbeiro comum / admin solo → pula direto para "mine" sem tela intermediária
   useEffect(() => {
     if (!contextResolved) return;
-    setAudience(effectiveCanSelectAll ? "all" : "mine");
+    if (canSelectAllClients && barbersCountLoading) return;
+
+    if (shouldChooseAudienceFirst) {
+      setAudience(effectiveBarbeiroId ? "mine" : "all");
+      setSelectedClients(new Set());
+      setSelectAll(false);
+      setAudienceChosen(false);
+      return;
+    }
+
+    // Barbeiro comum, admin global ou admin solo → pula tela de audiência
+    setAudience("mine");
     setAudienceChosen(true);
-  }, [contextResolved, effectiveCanSelectAll]);
+  }, [contextResolved, shouldChooseAudienceFirst, effectiveBarbeiroId, canSelectAllClients, barbersCountLoading]);
 
   useEffect(() => {
-    if (audience === "all" && effectiveTenantId && units.length === 0) {
-      loadUnits();
-    }
-  }, [audience, effectiveTenantId, units.length]);
-
-  useEffect(() => {
-    if (contextResolved) {
-      loadClients();
-    }
+    if (audienceChosen) loadClients();
     loadScheduledDispatches();
+    // Refetch de programados a cada 2 min (antes 30s) — reduz carga sem impactar UX.
     const interval = setInterval(() => loadScheduledDispatches(), 120000);
     return () => clearInterval(interval);
-  }, [effectiveTenantId, effectiveBarbeiroId, audience, unitSelectionMode, selectedUnitIds.size, contextResolved]);
+  }, [effectiveTenantId, audienceChosen]);
+
+  useEffect(() => {
+    if (audienceChosen) loadClients();
+  }, [audience, effectiveTenantId, effectiveBarbeiroId, audienceChosen, unitSelectionMode, selectedUnitIds.size]);
 
   /* ═══════════════════════════════════════════════ */
   /* Data Loading                                   */
@@ -479,6 +481,7 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
   };
 
   const loadClients = async () => {
+    // 1) Hidratação síncrona do cache — mostra a lista imediatamente sem spinner.
     const cacheKey = dispatchCacheKey(
       effectiveBarbeiroId ?? null,
       effectiveTenantId ?? null,
@@ -487,173 +490,135 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
       [...selectedUnitIds],
     );
     const cachedClients = readDispatchCache(cacheKey);
-    if (cachedClients && cachedClients.length > 0) {
+    if (cachedClients) {
       setClients(cachedClients);
-      setSelectedClients(new Set(cachedClients.map((c) => c.id)));
-      setSelectAll(true);
       setLoading(false);
     } else {
       setLoading(true);
     }
 
     try {
-      // 1. Obter IDs de barbeiros para não enviá-los como destinatários de clientes
-      const { data: allBarbersData } = await supabase
-        .from("barbeiros")
-        .select("user_id")
-        .not("user_id", "is", null);
-      const barberUserIds = (allBarbersData || [])
-        .map((b) => b.user_id)
-        .filter(Boolean) as string[];
-
-      // 2. Barbeiros do tenant atual
-      let tenantBarberIds: string[] = [];
-      if (effectiveTenantId) {
-        const { data: tbData } = await supabase
-          .from("barbeiros")
-          .select("id")
-          .eq("tenant_id", effectiveTenantId);
-        tenantBarberIds = (tbData || []).map((b) => b.id);
-      }
-
+      // Filtrar clientes por contexto: barbeiro individual ou tenant.
+      // Paralelizamos a busca de barbeiros (para exclusão) com a busca de
+      // IDs permitidos para reduzir o tempo total de round-trip.
+      let allowedClientIds: string[] | null = null;
       const filterByUnits = audience === "all" && unitSelectionMode === "specific" && selectedUnitIds.size > 0;
       const unitIdsArray = filterByUnits ? [...selectedUnitIds] : [];
 
-      if (filterByUnits && tenantBarberIds.length > 0) {
-        const { data: barberUnits } = await supabase
-          .from("barbeiro_unidades")
-          .select("barbeiro_id")
-          .in("unidade_id", unitIdsArray)
-          .in("barbeiro_id", tenantBarberIds);
-        const unitBarberIds = new Set(barberUnits?.map((bu) => bu.barbeiro_id) || []);
-        tenantBarberIds = tenantBarberIds.filter((id) => unitBarberIds.has(id));
+      const barberUserIdsPromise = supabase
+        .from("barbeiros")
+        .select("user_id")
+        .not("user_id", "is", null)
+        .then((r) => r.data?.map((b) => b.user_id).filter(Boolean) || []);
+
+      if (effectiveBarbeiroId && !effectiveTenantId) {
+        const [barberUserIds, { data: agendamentos }] = await Promise.all([
+          barberUserIdsPromise,
+          supabase
+            .from("agendamentos")
+            .select("user_id")
+            .eq("barbeiro_id", effectiveBarbeiroId)
+            .not("user_id", "is", null),
+        ]);
+        allowedClientIds = [...new Set(agendamentos?.map((a) => a.user_id) || [])];
+        return await finishLoad(allowedClientIds, barberUserIds, cacheKey);
       }
 
-      // 3. Agregar IDs de clientes vinculados
-      const targetClientIds = new Set<string>();
+      if (effectiveTenantId && audience === "mine" && effectiveBarbeiroId) {
+        const [barberUserIds, { data: agendamentos }] = await Promise.all([
+          barberUserIdsPromise,
+          supabase
+            .from("agendamentos")
+            .select("user_id")
+            .eq("barbeiro_id", effectiveBarbeiroId)
+            .not("user_id", "is", null),
+        ]);
+        allowedClientIds = [...new Set(agendamentos?.map((a) => a.user_id) || [])];
+        return await finishLoad(allowedClientIds, barberUserIds, cacheKey);
+      }
 
       if (effectiveTenantId) {
-        // Fonte A: Clientes manuais / cadastrados no tenant (tenant_clientes)
-        const { data: tenantClientes } = await supabase
-          .from("tenant_clientes")
-          .select("user_id")
-          .eq("tenant_id", effectiveTenantId)
-          .not("user_id", "is", null);
-        tenantClientes?.forEach((tc) => {
-          if (tc.user_id) targetClientIds.add(tc.user_id);
-        });
+        // "Todos os clientes": rodar todas as fontes em paralelo em vez de sequencial.
+        const [barberUserIds, tenantBarbersRes, tenantClientesRes, preferredProfilesRes] = await Promise.all([
+          barberUserIdsPromise,
+          supabase
+            .from("barbeiros")
+            .select("id")
+            .eq("tenant_id", effectiveTenantId)
+            .eq("ativo", true),
+          supabase
+            .from("tenant_clientes")
+            .select("user_id")
+            .eq("tenant_id", effectiveTenantId)
+            .not("user_id", "is", null),
+          supabase
+            .from("profiles")
+            .select("id")
+            .eq("barbearia_preferida_id", effectiveTenantId),
+        ]);
 
-        // Fonte B: Agendamentos
-        let agQuery = supabase
-          .from("agendamentos")
-          .select("user_id")
-          .not("user_id", "is", null);
-
-        if (audience === "mine" && effectiveBarbeiroId) {
-          agQuery = agQuery.eq("barbeiro_id", effectiveBarbeiroId);
-        } else if (tenantBarberIds.length > 0) {
-          agQuery = agQuery.in("barbeiro_id", tenantBarberIds);
+        let tenantBarberIds = tenantBarbersRes.data?.map((b) => b.id) || [];
+        if (filterByUnits && tenantBarberIds.length > 0) {
+          const { data: barberUnits } = await supabase
+            .from("barbeiro_unidades")
+            .select("barbeiro_id")
+            .in("unidade_id", unitIdsArray)
+            .in("barbeiro_id", tenantBarberIds);
+          const unitBarberIds = new Set(barberUnits?.map((bu) => bu.barbeiro_id) || []);
+          tenantBarberIds = tenantBarberIds.filter((id) => unitBarberIds.has(id));
         }
 
-        if (filterByUnits && unitIdsArray.length > 0) {
-          agQuery = agQuery.in("unidade_id", unitIdsArray);
-        }
-
-        const { data: agendamentos } = await agQuery;
-        agendamentos?.forEach((a) => {
-          if (a.user_id) targetClientIds.add(a.user_id);
-        });
-
-        // Fallback: se 'mine' não retornou nenhum agendamento, mas estamos no admin do tenant,
-        // carrega de todos os barbeiros do tenant para não deixar a tela vazia
-        if (targetClientIds.size === 0 && effectiveCanSelectAll && tenantBarberIds.length > 0) {
-          const { data: allAgData } = await supabase
+        const idsSet = new Set<string>();
+        if (tenantBarberIds.length > 0) {
+          let agQuery = supabase
             .from("agendamentos")
             .select("user_id")
             .in("barbeiro_id", tenantBarberIds)
             .not("user_id", "is", null);
-          allAgData?.forEach((a) => {
-            if (a.user_id) targetClientIds.add(a.user_id);
-          });
+          if (filterByUnits) agQuery = agQuery.in("unidade_id", unitIdsArray);
+          const { data: agendamentos } = await agQuery;
+          agendamentos?.forEach((a) => idsSet.add(a.user_id));
         }
-
-        // Fonte C: Perfis com barbearia preferida vinculada
-        const { data: prefProfiles } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("barbearia_preferida_id", effectiveTenantId);
-        prefProfiles?.forEach((p) => {
-          if (p.id) targetClientIds.add(p.id);
-        });
-      } else if (effectiveBarbeiroId) {
-        // Barbeiro individual sem tenant explícito
-        const { data: agendamentos } = await supabase
-          .from("agendamentos")
-          .select("user_id")
-          .eq("barbeiro_id", effectiveBarbeiroId)
-          .not("user_id", "is", null);
-        agendamentos?.forEach((a) => {
-          if (a.user_id) targetClientIds.add(a.user_id);
-        });
+        tenantClientesRes.data?.forEach((tc) => idsSet.add(tc.user_id));
+        preferredProfilesRes.data?.forEach((p) => idsSet.add(p.id));
+        allowedClientIds = [...idsSet];
+        return await finishLoad(allowedClientIds, barberUserIds, cacheKey);
       }
 
-      // 4. Buscar os perfis no Supabase
-      let profilesQuery = supabase
-        .from("profiles")
-        .select("id, nome, telefone")
-        .not("telefone", "is", null)
-        .order("nome", { ascending: true });
-
-      if (targetClientIds.size > 0) {
-        // Filtra pelos clientes identificados para a barbearia/barbeiro
-        profilesQuery = profilesQuery.in("id", [...targetClientIds]);
-      } else if (effectiveTenantId && !effectiveCanSelectAll) {
-        // Barbeiro sem nenhum cliente registrado ou agendado
-        setClients([]);
-        setLoading(false);
-        return;
-      }
-      // Se targetClientIds está vazio mas o usuário é Admin/Tenant Admin,
-      // deixamos profilesQuery buscar os perfis — o RLS do Supabase
-      // (profile_visible_to_tenant_admin) já garante o isolamento seguro do tenant!
-
-      if (barberUserIds.length > 0) {
-        profilesQuery = (profilesQuery as any).not("id", "in", `(${barberUserIds.join(",")})`);
-      }
-
-      const { data: profiles, error: pError } = await profilesQuery;
-      if (pError) throw pError;
-
-      // 5. Sanitizar clientes: nome e telefone válido (mínimo 8 dígitos numéricos, sem email)
-      const validClients: Client[] = (profiles || [])
-        .filter((c) => {
-          if (!c.nome || !c.telefone) return false;
-          const digits = c.telefone.replace(/\D/g, "");
-          if (digits.length < 8) return false;
-          if (c.telefone.includes("@")) return false;
-          return true;
-        })
-        .map((c) => ({
-          id: c.id,
-          nome: c.nome.trim(),
-          telefone: c.telefone.trim(),
-        }));
-
-      setClients(validClients);
-      setSelectedClients(new Set(validClients.map((c) => c.id)));
-      setSelectAll(true);
-
-      if (validClients.length > 0) {
-        writeDispatchCache(cacheKey, validClients);
-      }
+      const barberUserIds = await barberUserIdsPromise;
+      await finishLoad(null, barberUserIds, cacheKey);
     } catch (error) {
-      console.error("Erro ao carregar clientes do disparo:", error);
-      if (!cachedClients || cachedClients.length === 0) {
-        toast.error("Erro ao carregar clientes");
-      }
+      console.error(error);
+      if (!cachedClients) toast.error("Erro ao carregar clientes");
     } finally {
       setLoading(false);
     }
+  };
+
+  const finishLoad = async (
+    allowedClientIds: string[] | null,
+    barberUserIds: string[],
+    cacheKey: string,
+  ) => {
+    if (allowedClientIds !== null && allowedClientIds.length === 0) {
+      setClients([]);
+      writeDispatchCache(cacheKey, []);
+      return;
+    }
+    let query = supabase
+      .from("profiles")
+      .select("id, nome, telefone")
+      .not("telefone", "is", null)
+      .order("nome", { ascending: true });
+    if (allowedClientIds !== null) query = query.in("id", allowedClientIds);
+    if (barberUserIds.length > 0) {
+      query = (query as any).not("id", "in", `(${barberUserIds.join(",")})`);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    const filtered = (data || []).filter((c) => c.telefone) as Client[];
+    setClients(filtered);
+    writeDispatchCache(cacheKey, filtered);
   };
 
   const loadScheduledDispatches = async () => {
@@ -703,54 +668,23 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
 
   /* ── Selection ── */
 
-  const isAllFilteredSelected = useMemo(
-    () => filteredClients.length > 0 && filteredClients.every((c) => selectedClients.has(c.id)),
-    [filteredClients, selectedClients]
-  );
-
-  const handleToggleSelectAll = () => {
-    if (isAllFilteredSelected) {
-      if (search.trim()) {
-        const next = new Set(selectedClients);
-        filteredClients.forEach((c) => next.delete(c.id));
-        setSelectedClients(next);
-        setSelectAll(false);
-      } else {
-        setSelectedClients(new Set());
-        setSelectAll(false);
-      }
-    } else {
-      const next = new Set(selectedClients);
-      filteredClients.forEach((c) => next.add(c.id));
-      setSelectedClients(next);
-      setSelectAll(next.size === clients.length);
-    }
+  const handleSelectAll = (checked: boolean) => {
+    setSelectAll(checked);
+    setSelectedClients(checked ? new Set(filteredClients.map((c) => c.id)) : new Set());
   };
 
   const handleSelectClient = (clientId: string, checked: boolean) => {
     const next = new Set(selectedClients);
     checked ? next.add(clientId) : next.delete(clientId);
     setSelectedClients(next);
-    setSelectAll(next.size === clients.length && clients.length > 0);
+    setSelectAll(next.size === filteredClients.length && filteredClients.length > 0);
   };
 
   /* ── Insert Variable ── */
 
   const insertVariable = (varKey: string) => {
-    const el = textareaRef.current;
-    if (!el) {
-      setMessage((prev) => prev + varKey);
-      return;
-    }
-    const start = el.selectionStart ?? message.length;
-    const end = el.selectionEnd ?? message.length;
-    const nextMessage = message.slice(0, start) + varKey + message.slice(end);
-    setMessage(nextMessage);
-    setTimeout(() => {
-      el.focus();
-      const newPos = start + varKey.length;
-      el.setSelectionRange(newPos, newPos);
-    }, 50);
+    setMessage((prev) => prev + varKey);
+    textareaRef.current?.focus();
   };
 
   /* ═══════════════════════════════════════════════ */
@@ -795,8 +729,8 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
     setAiResumo("");
     setAiOptions([]);
     toast.success("Mensagem selecionada");
-    // Avança automaticamente para o próximo step (Destinatários)
-    setStep(2);
+    // Avança automaticamente para o próximo step
+    setStep(3);
   };
 
   /** Melhora a mensagem manual com IA */
@@ -814,11 +748,11 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
       }
       if (data?.mensagem) {
         setMessage(data.mensagem);
-        toast.success("Mensagem aprimorada com sucesso");
+        toast.success("Mensagem aprimorada pela IA");
       }
     } catch (err) {
       console.error(err);
-      toast.error("Erro ao aprimorar mensagem");
+      toast.error("Erro ao melhorar mensagem");
     } finally {
       setImproveLoading(false);
     }
@@ -1091,11 +1025,10 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
   const resetFlow = () => {
     setStep(1);
     setMessage("");
-    setSelectedClients(new Set(clients.map((c) => c.id)));
-    setSelectAll(true);
+    setSelectedClients(new Set());
+    setSelectAll(false);
     setScheduledDate("");
     setSendMode("now");
-    setShowWhenToSendDrawer(false);
   };
 
   /* ═══════════════════════════════════════════════ */
@@ -1103,64 +1036,31 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
   /* ═══════════════════════════════════════════════ */
 
   const canAdvance = (): boolean => {
-    if (step === 1) return message.trim().length > 0;
-    if (step === 2) return selectedClients.size > 0;
+    if (step === 1) return selectedClients.size > 0;
+    if (step === 2) return message.trim().length > 0;
+    if (step === 3) return sendMode === "now" || (sendMode === "schedule" && !!scheduledDate);
     return true;
   };
 
   const handleNext = () => {
     if (!canAdvance()) {
-      if (step === 1) toast("Escreva a mensagem antes de avançar.", { icon: "✍️" });
-      if (step === 2) toast("Selecione pelo menos um cliente.", { icon: "👆" });
+      if (step === 1) toast("Selecione pelo menos um cliente.", { icon: "👆" });
+      if (step === 2) toast("Escreva a mensagem antes de avançar.", { icon: "✍️" });
+      if (step === 3) toast("Selecione a data e horário.", { icon: "📅" });
       return;
     }
-    setStep(2);
+    setStep((s) => Math.min(s + 1, 4));
   };
 
-  const handleBack = () => setStep(1);
-
-  const handleHeaderBack = () => {
-    if (showScheduleOverlay) {
-      setShowScheduleOverlay(false);
-      return;
-    }
-    if (showScheduledModal) {
-      setShowScheduledModal(false);
-      return;
-    }
-    if (showWhenToSendDrawer) {
-      setShowWhenToSendDrawer(false);
-      return;
-    }
-    if (step === 1) {
-      if (window.history.length > 1) {
-        navigate(-1);
-      } else {
-        navigate(basePath);
-      }
-    } else {
-      handleBack();
-    }
-  };
+  const handleBack = () => setStep((s) => Math.max(s - 1, 1));
 
   const handleConfirm = () => {
-    if (selectedClients.size === 0) {
-      toast("Selecione pelo menos um cliente.", { icon: "👆" });
-      return;
-    }
     if (sendMode === "now") handleSendMessages();
     else handleScheduleDispatch();
   };
 
-  const shouldLockMobileViewport = isMobile && showScheduleOverlay;
-
-  // Pré-seleciona automaticamente todos os clientes por padrão
-  useEffect(() => {
-    if (clients.length > 0 && selectedClients.size === 0) {
-      setSelectedClients(new Set(clients.map((c) => c.id)));
-      setSelectAll(true);
-    }
-  }, [clients]);
+  const charCount = message.length;
+  const shouldLockMobileViewport = isMobile && (showScheduleOverlay || step === 3);
 
   /* ── Auto-dismiss success ── */
   useEffect(() => {
@@ -1171,8 +1071,308 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
   }, [successScreen]);
 
   /* ═══════════════════════════════════════════════ */
+  /* RENDER                                         */
   /* ═══════════════════════════════════════════════ */
-  /* WhatsApp Gate (se não conectado)              */
+
+  /* ═══════════════════════════════════════════════ */
+  /* Audience Selection Screen — SEMPRE PRIMEIRO     */
+  /* (WhatsApp gate vem DEPOIS para evitar flash)    */
+  /* ═══════════════════════════════════════════════ */
+
+  if (!contextResolved) {
+    return <DisparoSkeleton rows={8} />;
+  }
+
+  if (shouldChooseAudienceFirst && !audienceChosen && !showUnitPicker) {
+    const handleChooseAudience = (choice: "all" | "mine") => {
+      if (choice === "all" && !canSendToAllClients) {
+        toast.error("Este perfil só pode enviar para os próprios clientes.");
+        return;
+      }
+
+      if (choice === "all") {
+        // Ir para seleção de unidades antes de prosseguir
+        setAudience("all");
+        loadUnits();
+        setShowUnitPicker(true);
+        return;
+      }
+
+      setAudience(choice);
+      setSelectedClients(new Set());
+      setSelectAll(false);
+      setAudienceChosen(true);
+    };
+
+    return (
+      <div className={cn(
+        "flex flex-col",
+        isMobile ? "-mx-3 -mt-3 min-h-[100dvh]" : "min-h-[70vh]"
+      )}>
+        {/* Header */}
+        <div className={cn(
+          "flex items-center gap-3",
+          isMobile ? "px-4 h-14" : "px-6 pt-6 pb-3"
+        )}>
+          <BackNavButton onClick={() => navigate(basePath)} />
+          <h1 className="text-[17px] font-semibold text-foreground tracking-tight">
+            Disparo de Mensagens
+          </h1>
+        </div>
+
+        {/* Conteúdo centralizado */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full max-w-sm flex flex-col items-center"
+          >
+            <p className="text-[13px] text-muted-foreground text-center">
+              Para quem deseja enviar?
+            </p>
+
+            {/* Cards */}
+            <div className="w-full mt-8 space-y-2.5">
+              {/* Todos os clientes */}
+              <motion.button
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+                onClick={() => canSendToAllClients && handleChooseAudience("all")}
+                disabled={!canSendToAllClients}
+                className={cn(
+                  "group w-full flex items-center gap-4 rounded-2xl p-4 transition-all duration-200 text-left",
+                  "bg-card border border-border",
+                  canSendToAllClients && "hover:border-foreground/20 active:scale-[0.98]",
+                  !canSendToAllClients && "opacity-40 cursor-not-allowed"
+                )}
+              >
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center shrink-0">
+                  <Users className="w-4.5 h-4.5 text-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-[14px] font-semibold text-foreground">
+                    Todos os clientes
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {canSendToAllClients ? "Toda a base da barbearia" : "Requer vínculo com barbearia"}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+              </motion.button>
+
+              {/* Meus clientes */}
+              <motion.button
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                onClick={() => effectiveBarbeiroId && handleChooseAudience("mine")}
+                disabled={!effectiveBarbeiroId}
+                className={cn(
+                  "group w-full flex items-center gap-4 rounded-2xl p-4 transition-all duration-200 text-left",
+                  "bg-card border border-border",
+                  effectiveBarbeiroId && "hover:border-foreground/20 active:scale-[0.98]",
+                  !effectiveBarbeiroId && "opacity-40 cursor-not-allowed"
+                )}
+              >
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center shrink-0">
+                  <UserCheck className="w-4.5 h-4.5 text-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-[14px] font-semibold text-foreground">
+                    Somente meus clientes
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {effectiveBarbeiroId ? "Clientes que já agendaram com você" : "Requer perfil de barbeiro"}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ═══════════════════════════════════════════════ */
+  /* Unit Selection Screen — Full Page               */
+  /* ═══════════════════════════════════════════════ */
+
+  if (showUnitPicker) {
+    const handleUnitConfirm = () => {
+      if (unitSelectionMode === "specific" && selectedUnitIds.size === 0) {
+        toast("Selecione pelo menos uma unidade.", { icon: "📍" });
+        return;
+      }
+      setSelectedClients(new Set());
+      setSelectAll(false);
+      setShowUnitPicker(false);
+      setAudienceChosen(true);
+    };
+
+    const handleSelectAllUnits = () => {
+      setUnitSelectionMode("all");
+      setSelectedUnitIds(new Set());
+    };
+
+    const handleToggleUnit = (unitId: string) => {
+      // Quando toca numa unidade específica, sai do modo "todas"
+      setUnitSelectionMode("specific");
+      setSelectedUnitIds((prev) => {
+        const next = new Set(prev);
+        next.has(unitId) ? next.delete(unitId) : next.add(unitId);
+        return next;
+      });
+    };
+
+    const allSelected = unitSelectionMode === "all";
+    const canConfirm = allSelected || selectedUnitIds.size > 0;
+
+    return (
+      <div className={cn(
+        "flex flex-col",
+        isMobile ? "-mx-3 -mt-3 min-h-[100dvh]" : "min-h-[70vh]"
+      )}>
+        {/* ── Header ── */}
+        <div className={cn(
+          "sticky top-0 z-10 bg-background",
+          isMobile ? "px-4 h-14 flex items-center" : "px-6 pt-6 pb-4"
+        )}>
+          <div className="flex items-center gap-3 w-full">
+            <BackNavButton
+              onClick={() => {
+                setShowUnitPicker(false);
+                setSelectedUnitIds(new Set());
+                setUnitSelectionMode("all");
+              }}
+            />
+            <h1 className="text-[17px] font-semibold text-foreground tracking-tight flex-1">
+              Unidades
+            </h1>
+          </div>
+        </div>
+
+        {/* ── Corpo ── */}
+        <div className={cn(
+          "flex-1 overflow-y-auto",
+          isMobile ? "px-4 pb-32" : "px-6 pb-8"
+        )}>
+          {loadingUnits ? (
+            <div className="py-20 text-center">
+              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin mx-auto mb-3" />
+              <p className="text-[12px] text-muted-foreground">Carregando...</p>
+            </div>
+          ) : units.length === 0 ? (
+            <div className="py-20 text-center">
+              <Building2 className="w-8 h-8 mx-auto text-muted-foreground/40 mb-3" strokeWidth={1.5} />
+              <p className="text-[13px] text-muted-foreground font-medium">Nenhuma unidade cadastrada</p>
+              <Button
+                onClick={() => {
+                  setUnitSelectionMode("all");
+                  setShowUnitPicker(false);
+                  setAudienceChosen(true);
+                }}
+                className="mt-6 h-11 rounded-2xl text-[13px] font-semibold px-6"
+              >
+                Continuar sem filtro
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-1 pt-1">
+              {/* Todas as unidades — linha compacta */}
+              <button
+                onClick={handleSelectAllUnits}
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-xl px-3.5 py-3 transition-all duration-150 text-left",
+                  allSelected ? "bg-foreground/[0.05]" : "hover:bg-secondary/40"
+                )}
+              >
+                <div className={cn(
+                  "w-[18px] h-[18px] rounded border-[1.5px] flex items-center justify-center shrink-0 transition-all",
+                  allSelected ? "bg-foreground border-foreground" : "border-muted-foreground/30"
+                )}>
+                  {allSelected && <Check className="w-3 h-3 text-background" />}
+                </div>
+                <span className="text-[13px] font-medium text-foreground flex-1">
+                  Todas as unidades
+                </span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {units.length}
+                </span>
+              </button>
+
+              <div className="h-px bg-border/40 mx-3.5" />
+
+              {/* Unidades individuais */}
+              {units.map((unit) => {
+                const isSelected = !allSelected && selectedUnitIds.has(unit.id);
+                return (
+                  <button
+                    key={unit.id}
+                    onClick={() => handleToggleUnit(unit.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 rounded-xl px-3.5 py-3 transition-all duration-150 text-left",
+                      isSelected
+                        ? "bg-foreground/[0.05]"
+                        : allSelected ? "opacity-35" : "hover:bg-secondary/40"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-[18px] h-[18px] rounded border-[1.5px] flex items-center justify-center shrink-0 transition-all",
+                      isSelected ? "bg-foreground border-foreground" : "border-muted-foreground/30"
+                    )}>
+                      {isSelected && <Check className="w-3 h-3 text-background" />}
+                    </div>
+                    <span className="flex-1 text-[13px] font-medium text-foreground truncate">
+                      {unit.nome}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Botão circular fixo ── */}
+        {units.length > 0 && (
+          <div
+            className={cn(
+              "fixed z-[80] pointer-events-none",
+              isMobile ? "right-4" : "right-6"
+            )}
+            style={{
+              bottom: isMobile
+                ? "calc(5rem + env(safe-area-inset-bottom))"
+                : "1.25rem",
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleUnitConfirm}
+              disabled={!canConfirm}
+              aria-label="Continuar"
+              className={cn(
+                "pointer-events-auto w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200 shadow-[0_10px_30px_-8px_rgba(0,0,0,0.45)]",
+                "bg-foreground text-background hover:opacity-90 active:scale-95",
+                "disabled:opacity-35 disabled:cursor-not-allowed"
+              )}
+            >
+              <svg viewBox="0 0 24 24" className="w-[22px] h-[22px] ml-[2px]" fill="currentColor" aria-hidden="true">
+                <path d="M2.5 3.2c-.5-.2-1 .3-.8.8l3 7.3c.1.3.4.5.7.5l9.3.7c.2 0 .2.3 0 .3l-9.3.7c-.3 0-.6.2-.7.5l-3 7.3c-.2.5.3 1 .8.8l19-8.7c.5-.2.5-.9 0-1.1l-19-8.7z" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+      </div>
+    );
+  }
+
+
+
+  /* audiência, nunca antes (evita flash)             */
   /* ═══════════════════════════════════════════════ */
 
   if (effectiveBarbeiroId && !whatsAppLoading && !whatsAppConnected) {
@@ -1184,7 +1384,17 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
   /* ═══════════════════════════════════════════════ */
 
   return (
-    <div className="relative min-h-[100dvh] bg-background pb-32">
+    <div className={cn(
+      "relative",
+      isMobile
+        ? shouldLockMobileViewport
+          ? "h-[100dvh] overflow-hidden overscroll-none -mx-3 -mt-3"
+          : step === 4
+            ? "pb-0 -mx-3 -mt-3"
+            : "pb-28 -mx-3 -mt-3"
+        : "pb-28"
+    )}>
+
       {/* ─── Success Overlay ─── */}
       <AnimatePresence>
         {successScreen && (
@@ -1195,182 +1405,444 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
             className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
           >
-            <div className="pointer-events-auto bg-card/95 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl flex flex-col items-center text-center mx-4 px-8 py-6 max-w-[300px]">
+            <div className="pointer-events-auto bg-card/95 backdrop-blur-xl border border-border/30 rounded-2xl shadow-2xl flex flex-col items-center text-center mx-4 px-8 py-6 max-w-[300px]">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 500, damping: 25, delay: 0.1 }}
-                className="w-11 h-11 rounded-full bg-foreground/10 flex items-center justify-center mb-3"
+                className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center mb-3"
               >
-                <CheckCircle2 className="w-5 h-5 text-foreground" />
+                <CheckCircle2 className="w-5 h-5 text-primary" />
               </motion.div>
               <p className="text-[14px] font-bold text-foreground">
                 {successScreen.type === "sent" ? "Disparo enviado" : "Disparo agendado"}
               </p>
-              <p className="text-[11px] text-muted-foreground mt-1">
+              <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
                 {successScreen.type === "sent"
-                  ? `${selectedClients.size} destinatário${selectedClients.size === 1 ? "" : "s"}`
-                  : format(scheduledDate || new Date(), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                  ? `${successScreen.count} mensagen${successScreen.count > 1 ? "s enviadas" : " enviada"} com sucesso`
+                  : `Agendado para ${successScreen.date}`}
               </p>
+              <motion.div
+                initial={{ scaleX: 1 }}
+                animate={{ scaleX: 0 }}
+                transition={{ duration: 3, ease: "linear" }}
+                className="w-full h-0.5 bg-primary/20 rounded-full mt-3 origin-left"
+              />
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* ═══════════════════════════════════════════ */}
-      {/* Header Padronizado — Sistema (ScheduleHeader) */}
-      {/* Sem subtítulo ou barras, 100% minimalista   */}
+      {/* Header                                     */}
       {/* ═══════════════════════════════════════════ */}
-      {!showScheduleOverlay && (
-        <ScheduleHeader
-          title="Disparo de Mensagens"
-          onBack={handleHeaderBack}
-          right={
-            scheduledDispatches.filter((d) => !d.executado).length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setShowScheduledModal(true)}
-                className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary border border-border/30 flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all"
-                title="Ver disparos agendados"
-                aria-label="Ver disparos agendados"
-              >
-                <CalendarClock className="w-4 h-4" />
-              </button>
-            ) : undefined
-          }
-        />
+
+      {isMobile ? (
+        <AnimatePresence>
+          {!showScheduleOverlay && (
+            <motion.div
+              initial={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="sticky top-0 z-30 bg-background"
+            >
+              <div className="px-4 pt-3 pb-3">
+                <div className="relative flex items-center justify-center h-10">
+                  <div className="absolute left-0">
+                    <BackNavButton onClick={() => {
+                      if (step > 1) handleBack();
+                      else navigate(basePath);
+                    }} />
+                  </div>
+                  <h2 className="text-[15px] font-semibold text-foreground">
+                    Disparo
+                  </h2>
+                </div>
+                <div className="pt-3">
+                  <StepProgress current={step} />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      ) : (
+        <div className={cn("mb-6", showScheduleOverlay && "hidden")}>
+          <div className="relative flex items-center justify-center h-10 mb-4">
+            <div className="absolute left-0">
+              <BackNavButton onClick={() => {
+                if (step > 1) handleBack();
+                else navigate(basePath);
+              }} />
+            </div>
+            <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
+              Disparo de Mensagens
+            </h1>
+          </div>
+          <div className="max-w-[420px] mx-auto">
+            <StepProgress current={step} />
+          </div>
+        </div>
       )}
 
       {/* ═══════════════════════════════════════════ */}
-      {/* Conteúdo das Etapas                         */}
+      {/* Step Content                               */}
       {/* ═══════════════════════════════════════════ */}
+
       <div className={cn(
-        "w-full",
-        showScheduleOverlay && "h-[100dvh] overflow-hidden p-0"
+        isMobile && !showScheduleOverlay && (step === 3 || step === 4 ? "px-4 h-[calc(100dvh-56px)] overflow-hidden" : "px-4 pt-4"),
+        showScheduleOverlay && "h-[100dvh] overflow-hidden"
       )}>
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
-            initial={{ opacity: 0, x: 10 }}
+            initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.16 }}
+            exit={{ opacity: 0, x: -16 }}
+            transition={{ duration: 0.18 }}
+            className={cn(isMobile && (step === 3 || step === 4) && !showScheduleOverlay && "h-full")}
           >
-            {/* ─── ETAPA 1: Composição da Mensagem ─── */}
-            {step === 1 && !showScheduleOverlay && (
-              <div
-                className="max-w-md mx-auto px-4 pt-4 pb-36 space-y-3"
-                style={{
-                  paddingBottom: keyboardHeight > 0 ? `${keyboardHeight + 90}px` : undefined,
-                  transition: "padding-bottom 180ms ease-out",
-                }}
-              >
-                {/* Card Seletor de Modo de Disparo (Abre a Gaveta ao tocar em Alterar) */}
-                <button
-                  type="button"
-                  onClick={() => setShowWhenToSendDrawer(true)}
-                  className="w-full rounded-2xl bg-secondary/50 hover:bg-secondary/70 border border-border/40 p-3 flex items-center justify-between text-left transition-colors shadow-xs group"
+
+            {/* ─── STEP 1: Seleção de Clientes ─── */}
+            {step === 1 && (
+              <div className={cn(!isMobile && "flex gap-6")}>
+                <div className={cn("flex-1 min-w-0 space-y-3")}>
+
+                  {/* Indicador de audiência — discreto, sem ícone */}
+                  {!!shouldChooseAudienceFirst && audienceChosen && (
+                    <button
+                      onClick={() => {
+                        setAudienceChosen(false);
+                        setShowUnitPicker(false);
+                        setSelectedUnitIds(new Set());
+                        setUnitSelectionMode("all");
+                      }}
+                      className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-fit"
+                    >
+                      <span className="font-medium">
+                        {audience === "all" ? "Todos os clientes" : "Meus clientes"}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/60">· Alterar</span>
+                    </button>
+                  )}
+
+                  {/* Barra de busca — estilo Auth (floating, alto, arredondado) */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-5 h-5 text-muted-foreground/50 absolute left-4 top-1/2 -translate-y-1/2" />
+                      <input
+                        placeholder="Buscar cliente"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full pl-12 h-14 rounded-2xl border border-border/30 bg-secondary/30 text-[15px] font-normal placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
+                      />
+                    </div>
+                    {selectedClients.size > 0 && (
+                      <div className="flex items-center gap-1.5 h-14 px-4 rounded-2xl bg-primary/10 text-primary text-[14px] font-bold tabular-nums shrink-0 transition-all">
+                        <UserCheck className="w-4 h-4" />
+                        {selectedClients.size}
+                      </div>
+                    )}
+                  </div>
+
+
+                  {/* Selecionar todos */}
+                  <button
+                    onClick={() => handleSelectAll(!selectAll)}
+                    className="flex items-center gap-2 px-1 py-1"
+                  >
+                    <div className={cn(
+                      "w-[18px] h-[18px] rounded border-[1.5px] flex items-center justify-center shrink-0 transition-all",
+                      selectAll ? "bg-primary border-primary" : "border-muted-foreground/30"
+                    )}>
+                      {selectAll && <Check className="w-3 h-3 text-primary-foreground" />}
+                    </div>
+                    <span className="text-[12px] text-muted-foreground font-medium">
+                      {selectAll ? "Desmarcar todos" : "Selecionar todos"} ({filteredClients.length})
+                    </span>
+                  </button>
+
+                  {/* Lista de clientes */}
+                  <div className="overflow-hidden">
+                    {loading ? (
+                      <div className="py-14 text-center">
+                        <Loader2 className="w-5 h-5 text-muted-foreground animate-spin mx-auto mb-2" />
+                        <p className="text-[11px] text-muted-foreground">Carregando clientes...</p>
+                      </div>
+                    ) : filteredClients.length === 0 ? (
+                      <div className="py-14 text-center">
+                        <p className="text-[12px] text-muted-foreground">Nenhum cliente encontrado</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border/40 pb-[calc(9rem+env(safe-area-inset-bottom))]">
+                        {filteredClients.map((client) => {
+                          const isSelected = selectedClients.has(client.id);
+                          return (
+                            <div
+                              key={client.id}
+                              className="flex items-center gap-3.5 cursor-pointer transition-colors duration-100 px-2 py-4 active:bg-secondary/40"
+                              onClick={() => handleSelectClient(client.id, !isSelected)}
+                              style={{ touchAction: "manipulation" }}
+                            >
+                              <ClientInitials name={client.nome} isSelected={isSelected} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[14px] font-medium text-foreground truncate leading-tight">
+                                  {client.nome}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+                                  {client.telefone}
+                                </p>
+                              </div>
+                              <div className={cn(
+                                "w-[24px] h-[24px] rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-all",
+                                isSelected
+                                  ? "bg-primary border-primary"
+                                  : "border-muted-foreground/25"
+                              )}>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-primary-foreground" />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Desktop: Resumo lateral */}
+                {!isMobile && (
+                  <div className="w-64 shrink-0 space-y-4">
+                    <div className="rounded-xl border border-border bg-card p-5 sticky top-4">
+                      <div className="flex items-center gap-2.5 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                          <Users className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Selecionados</p>
+                          <p className="text-2xl font-bold text-foreground tabular-nums">{selectedClients.size}</p>
+                        </div>
+                      </div>
+                      <div className="h-px bg-border mb-3" />
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {selectedClients.size === 0
+                          ? "Selecione os clientes na lista ao lado."
+                          : `${selectedClients.size} de ${clients.length} clientes receberão a mensagem.`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ─── STEP 2: Mensagem ─── */}
+            {step === 2 && (
+              <div className={cn("flex flex-col justify-center", isMobile ? "min-h-[70vh]" : "min-h-[65vh]")}>
+                <div
+                  className={cn("w-full flex flex-col flex-1 justify-center", isMobile ? "max-w-[98%] mx-auto" : "max-w-2xl mx-auto")}
+                  style={{
+                    transform: isMobile && keyboardHeight > 0
+                      ? `translateY(-${Math.min(keyboardHeight * 0.45, 140)}px)`
+                      : undefined,
+                    transition: "transform 200ms ease-out",
+                  }}
                 >
-                  <div className="flex items-center gap-3 min-w-0 pr-2">
-                    <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-foreground shrink-0 border border-border/30">
-                      {sendMode === "now" ? (
-                        <Send className="w-3.5 h-3.5" />
-                      ) : (
-                        <CalendarClock className="w-3.5 h-3.5" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-semibold text-foreground leading-snug">
-                        {sendMode === "now" ? "Disparar agora" : "Disparo agendado"}
-                      </p>
-                      <p className="text-[11.5px] text-muted-foreground mt-0.5 truncate">
-                        {sendMode === "now"
-                          ? "Envia assim que você confirmar os destinatários"
-                          : scheduledDate
-                          ? format(new Date(scheduledDate), "EEEE, dd 'de' MMMM 'às' HH:mm", { locale: ptBR })
-                          : "Toque para definir data e horário"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground group-hover:text-foreground shrink-0">
-                    <span>Alterar</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </div>
-                </button>
+                  <div className="w-full space-y-4">
+                    {/* Editor estilo WhatsApp — pill branca + botão circular externo */}
+                    <div className="flex items-end gap-2">
+                      <div className="relative flex-1 rounded-3xl bg-white dark:bg-white/5 shadow-sm flex items-end gap-1 pl-3 pr-1 py-1.5 border border-transparent dark:border-white/10">
+                        <textarea
+                          ref={textareaRef}
+                          value={message}
+                          rows={1}
+                          onChange={(e) => {
+                            setMessage(e.target.value);
+                            const el = e.currentTarget;
+                            el.style.height = "auto";
+                            el.style.height = `${el.scrollHeight}px`;
+                          }}
+                          onFocus={(e) => {
+                            const el = e.currentTarget;
+                            el.style.height = "auto";
+                            el.style.height = `${el.scrollHeight}px`;
+                          }}
+                          placeholder="Mensagem"
+                          className="flex-1 resize-none bg-transparent border-0 outline-none focus:outline-none focus:ring-0 !min-h-[36px] max-h-[160px] overflow-y-auto text-[15px] leading-[1.4] px-1 py-[7px] transition-[height] duration-150 ease-out text-[#111b21] dark:text-white placeholder:text-[#8696a0] dark:placeholder:text-white/40"
+                        />
 
-                {/* Quadradinho da Mensagem com ícones dentro e sem tracinho separador */}
-                <div className="relative rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 focus-within:border-foreground/40 transition-colors shadow-xs flex flex-col justify-between min-h-[220px]">
-                  <textarea
-                    ref={textareaRef}
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onFocus={() => {
-                      setTimeout(() => {
-                        textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-                      }, 200);
-                    }}
-                    placeholder="Digite a mensagem do disparo..."
-                    rows={6}
-                    className="w-full bg-transparent border-0 p-0 text-[13.5px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-0 resize-none leading-relaxed flex-1"
-                  />
-
-                  {/* Barra inferior dentro do próprio quadradinho — SEM TRACINHO SEPARADOR */}
-                  <div className="flex items-center justify-between pt-3 gap-2">
-                    {/* Variáveis rápidas compactas e minimalistas */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {VARIABLES.map((v) => (
+                        {/* Botão IA à direita, dentro da pill */}
                         <button
-                          key={v.key}
                           type="button"
-                          onClick={() => insertVariable(v.key)}
-                          className="h-6 px-2 rounded-md bg-secondary/70 hover:bg-secondary text-[11px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all border border-border/30"
+                          onClick={handleImproveMessage}
+                          disabled={improveLoading || message.trim().length < 3}
+                          className="shrink-0 self-end mb-[3px] text-[13px] font-bold tracking-wide rounded-full px-2.5 py-1.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-60"
+                          style={{ color: "#f43f5e" }}
+                          aria-label="Otimizar com IA"
                         >
-                          {v.label}
+                          {improveLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "IA"}
                         </button>
-                      ))}
-                    </div>
+                      </div>
 
-                    {/* Áudio e Botão "Melhorar com IA" (SEM AMARELO, 100% minimalista e neutro) */}
-                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Botão circular externo — enviar/gravar */}
                       <button
                         type="button"
-                        onClick={handleToggleRecording}
-                        title={isRecording ? "Parar gravação" : "Gravar áudio"}
-                        aria-label="Gravar áudio"
+                        onClick={message.trim().length > 0 ? handleNext : handleToggleRecording}
                         className={cn(
-                          "w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-90 border",
-                          isRecording
-                            ? "bg-destructive text-destructive-foreground border-destructive animate-pulse"
-                            : "bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground border-border/30"
+                          "shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95",
+                          message.trim().length > 0
+                            ? "bg-accent-red hover:brightness-110 shadow-sm"
+                            : isRecording
+                              ? "bg-accent-red animate-pulse shadow-sm"
+                              : "bg-transparent border border-white/15 dark:border-white/20 hover:bg-white/5"
                         )}
+                        style={{ color: message.trim().length > 0 || isRecording ? "#ffffff" : "#e5e7eb" }}
+                        aria-label={message.trim().length > 0 ? "Enviar" : isRecording ? "Parar gravação" : "Gravar áudio"}
                       >
-                        {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                      </button>
+                        {message.trim().length > 0
+                          ? (
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="w-[22px] h-[22px] ml-[2px]"
+                                fill="#ffffff"
+                                aria-hidden="true"
+                              >
+                                <path d="M2.5 3.2c-.5-.2-1 .3-.8.8l3 7.3c.1.3.4.5.7.5l9.3.7c.2 0 .2.3 0 .3l-9.3.7c-.3 0-.6.2-.7.5l-3 7.3c-.2.5.3 1 .8.8l19-8.7c.5-.2.5-.9 0-1.1l-19-8.7z" />
+                              </svg>
+                            )
 
-                      <button
-                        type="button"
-                        onClick={handleImproveMessage}
-                        disabled={improveLoading || message.trim().length < 3}
-                        title="Melhorar mensagem com Inteligência Artificial"
-                        aria-label="Melhorar com IA"
-                        className="h-8 px-2.5 rounded-lg bg-secondary/80 hover:bg-secondary active:scale-95 border border-border/40 text-foreground flex items-center gap-1.5 transition-all disabled:opacity-30 disabled:pointer-events-none"
-                      >
-                        {improveLoading ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-                        ) : (
-                          <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
-                        <span className="text-[11.5px] font-medium tracking-tight">Melhorar com IA</span>
+                          : isRecording
+                            ? <MicOff className="w-[19px] h-[19px]" strokeWidth={1.6} />
+                            : <Mic className="w-[19px] h-[19px]" strokeWidth={1.6} />}
                       </button>
                     </div>
+
+
+                    <p className="text-[10.5px] text-white/90 text-center px-2 leading-relaxed">
+                      Toque em <span className="font-semibold" style={{ color: "#f43f5e" }}>IA</span> para deixar sua mensagem mais estratégica, direta e adequada ao WhatsApp.
+                    </p>
+
                   </div>
+
                 </div>
               </div>
             )}
 
-            {/* ─── Modal / Tela Cheia de Agendamento ─── */}
-            {showScheduleOverlay && (
-              <div className="fixed inset-0 z-50 bg-background pt-[env(safe-area-inset-top)]">
+
+            {/* ─── STEP 3: Envio ─── */}
+            {step === 3 && !showScheduleOverlay && (
+              <div className={cn(
+                "flex flex-col items-center justify-center",
+                isMobile ? "h-full" : "min-h-[60vh]"
+              )}>
+                <div className={cn("w-full space-y-3", isMobile ? "max-w-sm" : "max-w-md")}>
+
+                  {/* Contextual label */}
+                  <div className="text-center mb-4">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-semibold">
+                      Quando enviar?
+                    </p>
+                  </div>
+
+                  {/* Enviar Agora */}
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setSendMode("now");
+                      setScheduledDate("");
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all duration-200 text-left",
+                      sendMode === "now"
+                        ? "border-foreground/20 bg-foreground/[0.04]"
+                        : "border-border bg-card hover:bg-card/80"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all",
+                      sendMode === "now" ? "bg-foreground/10" : "bg-secondary"
+                    )}>
+                      <Zap className={cn("w-4 h-4 transition-colors", sendMode === "now" ? "text-foreground" : "text-muted-foreground")} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-foreground">
+                        Enviar agora
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {selectedClients.size} contato{selectedClients.size !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <div className={cn(
+                      "w-[20px] h-[20px] rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-all",
+                      sendMode === "now" ? "bg-foreground border-foreground" : "border-muted-foreground/25"
+                    )}>
+                      {sendMode === "now" && <Check className="w-3 h-3 text-background" />}
+                    </div>
+                  </motion.button>
+
+                  {/* Agendar envio */}
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setSendMode("schedule");
+                      setShowScheduleOverlay(true);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all duration-200 text-left",
+                      sendMode === "schedule" && scheduledDate
+                        ? "border-foreground/20 bg-foreground/[0.04]"
+                        : "border-border bg-card hover:bg-card/80"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all",
+                      sendMode === "schedule" && scheduledDate ? "bg-foreground/10" : "bg-secondary"
+                    )}>
+                      <CalendarClock className={cn("w-4 h-4 transition-colors", sendMode === "schedule" && scheduledDate ? "text-foreground" : "text-muted-foreground")} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-foreground">
+                        Agendar envio
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {scheduledDate
+                          ? format(new Date(scheduledDate), "dd/MM 'às' HH:mm", { locale: ptBR })
+                          : "Escolha data e horário"}
+                      </p>
+                    </div>
+                    <div className={cn(
+                      "w-[20px] h-[20px] rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-all",
+                      sendMode === "schedule" && scheduledDate ? "bg-foreground border-foreground" : "border-muted-foreground/25"
+                    )}>
+                      {sendMode === "schedule" && scheduledDate && <Check className="w-3 h-3 text-background" />}
+                    </div>
+                  </motion.button>
+
+                  {/* Scheduled date badge */}
+                  <AnimatePresence>
+                    {sendMode === "schedule" && scheduledDate && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        className="flex items-center justify-center"
+                      >
+                        <button
+                          onClick={() => setShowScheduleOverlay(true)}
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/50 border border-border text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <CalendarClock className="w-3 h-3" />
+                          <span className="capitalize">
+                            {format(new Date(scheduledDate), "EEEE, dd MMM · HH:mm", { locale: ptBR })}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/60">· editar</span>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
+
+            {/* ─── Schedule Full Screen ─── */}
+            {step === 3 && showScheduleOverlay && (
+              <div className="fixed inset-0 z-40 bg-background pt-[env(safe-area-inset-top)]">
                 <DispatchScheduleScreen
                   initialDate={scheduledDate || undefined}
                   onBack={() => {
@@ -1379,297 +1851,131 @@ export function AdminDisparo({ tenantId, basePath = "/admin", barbeiroId, canSel
                   }}
                   onConfirm={(isoDate) => {
                     setScheduledDate(isoDate);
-                    setSendMode("schedule");
                     setShowScheduleOverlay(false);
                   }}
                 />
               </div>
             )}
 
-            {/* ─── ETAPA 2: Destinatários e Confirmação ─── */}
-            {step === 2 && !showScheduleOverlay && (
-              <div className="max-w-md mx-auto px-4 pt-4 pb-36 space-y-3.5">
-                {/* Resumo compacto da programação */}
-                <div className="rounded-xl bg-card border border-border/60 dark:border-white/[0.08] px-3.5 py-2.5 flex items-center justify-between text-[12px] shadow-xs">
-                  <span className="text-muted-foreground font-normal">Envio:</span>
-                  <span className="font-semibold text-foreground flex items-center gap-1.5">
-                    {sendMode === "now" ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                        Envio imediato
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                        {scheduledDate
-                          ? format(new Date(scheduledDate), "dd/MM 'às' HH:mm", { locale: ptBR })
-                          : "Agendado"}
-                      </>
-                    )}
-                  </span>
-                </div>
+            {/* ─── STEP 4: Revisão ─── */}
+            {step === 4 && (
+              <div className={cn(
+                "flex flex-col",
+                isMobile ? "h-full justify-center" : "max-w-2xl"
+              )}>
 
-                {/* Barra de Busca Estratégica e Limpa */}
-                <div className="w-full h-11 px-3.5 rounded-xl bg-card border border-border/60 dark:border-white/[0.08] text-muted-foreground flex items-center gap-2.5 shadow-xs">
-                  <Search className="w-4 h-4 text-muted-foreground/70 shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Buscar cliente por nome ou telefone..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="bg-transparent flex-1 text-[13px] outline-none text-foreground placeholder:text-muted-foreground/50 font-normal"
-                  />
-                  {search && (
-                    <button
-                      type="button"
-                      onClick={() => setSearch("")}
-                      className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Indicador de clientes selecionados e Ação Marcar/Desmarcar (sem piscar zero) */}
-                {!loading && clients.length > 0 && (
-                  <div className="flex items-center justify-between px-1 text-[12px]">
-                    <span className="text-muted-foreground">
-                      {selectedClients.size} de {clients.length} cliente{clients.length === 1 ? "" : "s"} selecionado{selectedClients.size === 1 ? "" : "s"}
+                {/* Resumo compacto — destinatários + modo de envio */}
+                <div className="flex items-center justify-center gap-3 mb-6">
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-border bg-card">
+                    <UserCheck className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-[13px] font-semibold text-foreground tabular-nums">{selectedClients.size}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {selectedClients.size === 1 ? "destinatário" : "destinatários"}
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleToggleSelectAll}
-                      className="text-[12px] font-semibold text-foreground hover:opacity-80 active:scale-95 transition-all"
-                    >
-                      {isAllFilteredSelected ? "Desmarcar todos" : "Marcar todos"}
-                    </button>
                   </div>
-                )}
 
-                {/* Lista de Clientes com Skeleton suave para evitar gargalo visual */}
-                {loading ? (
-                  <div className="space-y-3 pt-2">
-                    {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="py-2.5 flex items-center justify-between animate-pulse">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-secondary/80" />
-                          <div className="space-y-1.5">
-                            <div className="w-28 h-3.5 rounded-md bg-secondary/80" />
-                            <div className="w-20 h-3 rounded-md bg-secondary/60" />
-                          </div>
-                        </div>
-                        <div className="w-5 h-5 rounded-full bg-secondary/80" />
-                      </div>
-                    ))}
-                  </div>
-                ) : filteredClients.length === 0 ? (
-                  <div className="py-16 text-center px-4">
-                    <Inbox className="w-8 h-8 mx-auto text-muted-foreground/30 mb-2" strokeWidth={1.5} />
-                    <p className="text-[13px] text-muted-foreground font-semibold">Nenhum cliente encontrado</p>
-                    <p className="text-[11.5px] text-muted-foreground/60 mt-0.5">
-                      {search ? "Tente buscar com outro termo" : "Nenhum cliente disponível nesta lista"}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border/20 pt-1">
-                    {filteredClients.map((client) => {
-                      const isSelected = selectedClients.has(client.id);
-                      return (
-                        <div
-                          key={client.id}
-                          onClick={() => handleSelectClient(client.id, !isSelected)}
-                          className="py-2.5 flex items-center justify-between cursor-pointer active:opacity-70 transition-opacity"
-                        >
-                          <div className="flex items-center gap-3 min-w-0 pr-2">
-                            <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-[12.5px] font-semibold text-foreground shrink-0 border border-border/30">
-                              {client.nome.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[13.5px] font-semibold text-foreground truncate leading-snug">
-                                {client.nome}
-                              </p>
-                              <p className="text-[11.5px] text-muted-foreground truncate tabular-nums">
-                                {client.telefone || "Sem telefone"}
-                              </p>
-                            </div>
-                          </div>
+                  <div className="w-px h-5 bg-border" />
 
-                          <div className={cn(
-                            "w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-all",
-                            isSelected
-                              ? "bg-foreground border-foreground text-background"
-                              : "border-muted-foreground/30"
-                          )}>
-                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-border bg-card">
+                    {sendMode === "now" ? (
+                      <Zap className="w-3.5 h-3.5 text-primary" />
+                    ) : (
+                      <CalendarClock className="w-3.5 h-3.5 text-primary" />
+                    )}
+                    <span className="text-[12px] font-medium text-foreground">
+                      {sendMode === "now" 
+                        ? "Envio imediato" 
+                        : scheduledDate 
+                          ? format(new Date(scheduledDate), "dd MMM · HH:mm", { locale: ptBR })
+                          : "—"
+                      }
+                    </span>
                   </div>
-                )}
+                </div>
+
+                {/* WhatsApp Preview — protagonista da tela */}
+                <div>
+                  <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-[0.18em] mb-3 text-center">
+                    Prévia da mensagem
+                  </p>
+                  <WhatsAppPreview message={message} />
+                </div>
+
               </div>
             )}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* ─── Gaveta (Bottom Sheet Drawer): Quando deseja enviar? ─── */}
-      <WhenToSendDrawer
-        isOpen={showWhenToSendDrawer && !showScheduleOverlay}
-        onClose={() => setShowWhenToSendDrawer(false)}
-        selectedMode={sendMode}
-        onSelectNow={() => {
-          setSendMode("now");
-          setScheduledDate("");
-        }}
-        onSelectSchedule={() => {
-          setSendMode("schedule");
-          setShowScheduleOverlay(true);
-        }}
-      />
+      {/* ═══════════════════════════════════════════ */}
+      {/* Botão de ação — simples, branco, centralizado */}
+      {/* ═══════════════════════════════════════════ */}
 
-      {/* ═══════════════════════════════════════════ */}
-      {/* Máscara de fade e Barra de Ação Inferior    */}
-      {/* Sem botão voltar duplicado                  */}
-      {/* ═══════════════════════════════════════════ */}
       <AnimatePresence>
-        {!showScheduleOverlay && !showWhenToSendDrawer && (
-          <>
-            {/* Máscara inferior para evitar sobreposição */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed bottom-0 inset-x-0 h-32 pointer-events-none z-[45] bg-gradient-to-t from-background via-background/90 to-transparent"
-              aria-hidden="true"
-            />
-
-            {/* Container flutuante do botão — 100% centralizado */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 15 }}
-              transition={{ duration: 0.2 }}
-              className="fixed bottom-0 inset-x-0 z-[50] pointer-events-none flex justify-center items-center px-4 pb-[calc(1.1rem+env(safe-area-inset-bottom,0px))]"
-              style={{
-                paddingBottom: keyboardHeight > 0
-                  ? `${keyboardHeight + 12}px`
-                  : undefined,
-                transition: "padding-bottom 180ms ease-out",
-              }}
-            >
-              <div className="w-full max-w-[450px] pointer-events-auto">
-                <button
-                  type="button"
-                  onClick={step === 2 ? handleConfirm : handleNext}
-                  disabled={sending || scheduling || !canAdvance()}
-                  className={cn(
-                    "w-full h-[52px] px-6 rounded-full bg-foreground text-background font-semibold text-[14px] flex items-center justify-center transition-all shadow-[0_16px_40px_rgba(0,0,0,0.35)] active:scale-[0.98]",
-                    !canAdvance() && "opacity-40 cursor-not-allowed"
-                  )}
-                >
-                  {step === 1 ? (
-                    <span>Continuar</span>
-                  ) : sending || scheduling ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Enviando...
-                    </span>
-                  ) : sendMode === "now" ? (
-                    <span>{selectedClients.size > 0 ? `Enviar para ${selectedClients.size} cliente(s)` : "Disparar agora"}</span>
-                  ) : (
-                    <span>{selectedClients.size > 0 ? `Agendar para ${selectedClients.size} cliente(s)` : "Agendar disparo"}</span>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════ */}
-      {/* Modal / Drawer de Disparos Agendados       */}
-      {/* ═══════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showScheduledModal && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
-            <div className="absolute inset-0" onClick={() => setShowScheduledModal(false)} />
-            <motion.div
-              initial={{ y: "100%", opacity: 0.5 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: "100%", opacity: 0 }}
-              transition={{ type: "spring", damping: 28, stiffness: 320 }}
-              className="relative w-full sm:max-w-md max-h-[85vh] rounded-t-[28px] sm:rounded-2xl border border-border/70 dark:border-white/[0.1] bg-card p-5 pb-8 sm:pb-5 shadow-2xl flex flex-col space-y-4"
-            >
-              <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-1 sm:hidden" />
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-[17px] font-semibold text-foreground tracking-tight">
-                    Disparos Agendados
-                  </h4>
-                  <p className="text-[12px] text-muted-foreground mt-0.5">
-                    Mensagens programadas para envio automático
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowScheduledModal(false)}
-                  className="w-8 h-8 rounded-full bg-secondary/80 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="overflow-y-auto space-y-2.5 flex-1 pr-1">
-                {scheduledDispatches.filter((d) => !d.executado).length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-8">
-                    Nenhum disparo agendado pendente.
-                  </p>
-                ) : (
-                  scheduledDispatches
-                    .filter((d) => !d.executado)
-                    .map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-xl border border-border/60 dark:border-white/[0.08] p-3.5 space-y-2 bg-secondary/20"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-secondary text-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-muted-foreground" />
-                            {format(new Date(item.data_programada), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground">
-                            {item.contatos_ids?.length || 0} destinatários
-                          </span>
-                        </div>
-                        <p className="text-[12.5px] text-foreground/90 line-clamp-2 leading-relaxed">
-                          {item.mensagem}
-                        </p>
-                        <div className="flex items-center justify-end gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => handleCancelScheduled(item.id)}
-                            className="px-2.5 py-1 text-[11px] font-medium text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleExecuteNow(item)}
-                            className="px-3 py-1 text-[11px] font-semibold bg-foreground text-background rounded-lg active:scale-95 transition-all"
-                          >
-                            Disparar agora
-                          </button>
-                        </div>
-                      </div>
-                    ))
+        {!showScheduleOverlay && !(step === 1 && selectedClients.size === 0) && step !== 2 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.2 }}
+            className={cn(
+              "z-[80] pointer-events-none",
+              isMobile ? "fixed right-4" : "fixed right-6"
+            )}
+            style={
+              isMobile
+                ? {
+                    bottom:
+                      keyboardHeight > 0
+                        ? `calc(${keyboardHeight}px + 12px)`
+                        : "calc(5rem + env(safe-area-inset-bottom))",
+                    transition: "bottom 180ms ease-out",
+                  }
+                : { bottom: "1.25rem" }
+            }
+          >
+            {step < 4 ? (
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                onClick={handleNext}
+                disabled={!canAdvance()}
+                aria-label="Continuar"
+                className={cn(
+                  "pointer-events-auto w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200 shadow-[0_10px_30px_-8px_rgba(0,0,0,0.45)]",
+                  "bg-foreground text-background hover:opacity-90",
+                  "disabled:opacity-35 disabled:cursor-not-allowed"
                 )}
-              </div>
-            </motion.div>
-          </div>
+              >
+                <svg viewBox="0 0 24 24" className="w-[22px] h-[22px] ml-[2px]" fill="currentColor" aria-hidden="true">
+                  <path d="M2.5 3.2c-.5-.2-1 .3-.8.8l3 7.3c.1.3.4.5.7.5l9.3.7c.2 0 .2.3 0 .3l-9.3.7c-.3 0-.6.2-.7.5l-3 7.3c-.2.5.3 1 .8.8l19-8.7c.5-.2.5-.9 0-1.1l-19-8.7z" />
+                </svg>
+              </motion.button>
+            ) : (
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                onClick={handleConfirm}
+                disabled={sending || scheduling}
+                aria-label="Confirmar envio"
+                className={cn(
+                  "pointer-events-auto w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200 shadow-[0_10px_30px_-8px_rgba(0,0,0,0.45)]",
+                  "bg-foreground text-background hover:opacity-90 disabled:opacity-40"
+                )}
+              >
+                {(sending || scheduling) ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <svg viewBox="0 0 24 24" className="w-[22px] h-[22px] ml-[2px]" fill="currentColor" aria-hidden="true">
+                    <path d="M2.5 3.2c-.5-.2-1 .3-.8.8l3 7.3c.1.3.4.5.7.5l9.3.7c.2 0 .2.3 0 .3l-9.3.7c-.3 0-.6.2-.7.5l-3 7.3c-.2.5.3 1 .8.8l19-8.7c.5-.2.5-.9 0-1.1l-19-8.7z" />
+                  </svg>
+                )}
+              </motion.button>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
+
+
+
     </div>
   );
 }

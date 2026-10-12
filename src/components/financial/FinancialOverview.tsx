@@ -59,21 +59,20 @@ export function FinancialOverview({ role, userId, barbeiroId, userName, userPhot
       }, 1500);
     };
 
-    const rand = Math.random().toString(36).slice(2, 9);
     const paymentsChannel = supabase
-      .channel(`financial-payments-sync-${userId}-${rand}`)
+      .channel(`financial-payments-sync-${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pagamentos', filter: `user_id=eq.${userId}` }, invalidate)
       .subscribe();
 
     const appointmentsChannel = supabase
-      .channel(`financial-appointments-sync-${userId}-${rand}`)
+      .channel(`financial-appointments-sync-${userId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'agendamentos', ...(barbeiroId ? { filter: `barbeiro_id=eq.${barbeiroId}` } : {}) }, (payload) => {
         if ((payload.new as Record<string, unknown>)?.status === 'completed') invalidate();
       })
       .subscribe();
 
     const saquesChannel = supabase
-      .channel(`financial-saques-sync-${userId}-${rand}`)
+      .channel(`financial-saques-sync-${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'saques', filter: `user_id=eq.${userId}` }, invalidate)
       .subscribe();
 

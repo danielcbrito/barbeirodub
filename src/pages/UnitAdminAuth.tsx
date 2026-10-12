@@ -33,28 +33,6 @@ const UnitAdminAuth = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const [deniedEmail, setDeniedEmail] = useState("");
 
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-
-    const onResize = () => {
-      setViewportHeight(vv.height);
-      setIsKeyboardOpen(window.innerHeight - vv.height > 100);
-    };
-
-    vv.addEventListener("resize", onResize);
-    vv.addEventListener("scroll", onResize);
-    onResize();
-
-    return () => {
-      vv.removeEventListener("resize", onResize);
-      vv.removeEventListener("scroll", onResize);
-    };
-  }, []);
-
   useEffect(() => {
     checkExistingSession();
   }, []);
@@ -205,16 +183,10 @@ const UnitAdminAuth = () => {
   }
 
   const inputClass =
-    "h-12 pl-11 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground/50 rounded-xl focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all text-[16px]";
+    "h-12 pl-11 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground/50 rounded-xl focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all text-sm";
 
   return (
-    <div
-      className="w-full flex flex-col bg-background relative overflow-hidden"
-      style={{
-        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
-        maxHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
-      }}
-    >
+    <div className="min-h-[100dvh] flex flex-col bg-background relative">
       {/* Botão voltar */}
       <button
         onClick={() => navigate("/")}
@@ -225,12 +197,7 @@ const UnitAdminAuth = () => {
         <span className="text-[13px] font-medium">Voltar</span>
       </button>
 
-      <div
-        className="flex-1 flex flex-col justify-center px-6 py-8 overflow-y-auto overscroll-contain"
-        style={{
-          paddingBottom: isKeyboardOpen ? "16px" : "max(24px, env(safe-area-inset-bottom, 24px))",
-        }}
-      >
+      <div className="flex-1 flex flex-col justify-center px-6 py-16 overflow-y-auto overscroll-contain">
         <div className="w-full max-w-sm mx-auto">
 
           {/* Logo + Title */}

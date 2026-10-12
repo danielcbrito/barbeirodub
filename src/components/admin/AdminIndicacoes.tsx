@@ -17,7 +17,6 @@ import {
   CalendarDays,
   ChevronLeft,
 } from "lucide-react";
-import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   useIndicacoesResumo,
@@ -126,12 +125,20 @@ function IndicacoesContent() {
     (resumo.data?.total ?? 0) >= 10 && (resumo.data?.taxaInvalidacao ?? 0) > 0.2;
 
   return (
-    <div className="space-y-5">
-      <ScheduleHeader
-        title="Programa de Indicação"
-        onBack={() => navigate(-1)}
-      />
-      <div className="p-4 md:p-8 space-y-5 max-w-7xl mx-auto pt-0">
+    <div className="p-4 md:p-8 space-y-5 max-w-7xl mx-auto">
+      <header className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="Voltar"
+          className="shrink-0 -ml-1 h-10 w-10 inline-flex items-center justify-center rounded-full text-foreground/85 active:scale-95 transition-transform"
+        >
+          <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
+        </button>
+        <h1 className="text-lg md:text-2xl font-semibold truncate">
+          Programa de Indicação
+        </h1>
+      </header>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <TabsList className="h-auto p-1 gap-1 w-full grid grid-cols-3">
@@ -213,7 +220,6 @@ function IndicacoesContent() {
           <PossiveisFraudes />
         </TabsContent>
       </Tabs>
-      </div>
     </div>
   );
 }

@@ -62,9 +62,8 @@ export function TenantLandingPage({ tenantId, tenantName, tenantSlug }: TenantLa
     loadAllData();
 
     // Realtime: auto-refresh quando tenant for atualizado (ex: logo, nome, slogan)
-    const channelId = `tenant-landing-${tenantId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(channelId)
+      .channel(`tenant-landing-${tenantId}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "tenants", filter: `id=eq.${tenantId}` },

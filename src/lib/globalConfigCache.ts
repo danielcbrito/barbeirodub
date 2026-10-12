@@ -71,12 +71,6 @@ export function getGlobalConfigSync(): GlobalConfigSnapshot | null {
 
 export function invalidateGlobalConfig() {
   fetchedAt = 0;
-  memoryCache = null;
-  if (typeof window !== 'undefined') {
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {}
-  }
 }
 
 export function isGlobalConfigFresh(): boolean {
@@ -139,7 +133,7 @@ function ensureRealtime() {
   if (realtimeStarted || typeof window === 'undefined') return;
   realtimeStarted = true;
   const channel = supabase
-    .channel(`global-config-shared-${Math.random().toString(36).slice(2, 9)}`)
+    .channel('global-config-shared')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'webhook_config' },

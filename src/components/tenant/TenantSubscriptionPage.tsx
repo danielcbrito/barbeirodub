@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Crown, CheckCircle2, ChevronDown, ChevronUp, ChevronLeft,
+  Crown, CheckCircle2, ChevronDown, ChevronUp, ChevronLeft, Sparkles,
   Users, Shield, Calendar, Star, Zap,
 } from "lucide-react";
 import type { TenantSubscriptionInfo } from "@/hooks/useTenantSubscription";

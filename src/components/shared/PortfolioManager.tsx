@@ -1,11 +1,10 @@
-import { Wand2 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Trash2, Loader2, ImageIcon, ChevronRight,
-  Crop, RotateCcw, ZoomIn, ZoomOut, Copy, Check,
+  Crop, RotateCcw, ZoomIn, ZoomOut, Sparkles, Copy, Check, Wand2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import Cropper from "react-easy-crop";
@@ -94,12 +93,12 @@ function AICaptionEnhancer({
 
       if (data?.suggestions?.length > 0) {
         onSelect(data.suggestions[0]);
-        toast.success("Legenda aplicada com sucesso");
+        toast.success("Legenda aplicada ✨");
       } else {
         toast.error("Não foi possível gerar a legenda");
       }
     } catch {
-      toast.error("Erro ao aprimorar legenda");
+      toast.error("Erro ao gerar legenda com IA");
     } finally {
       setLoading(false);
     }
@@ -109,8 +108,8 @@ function AICaptionEnhancer({
     <button
       onClick={handleGenerate}
       disabled={loading}
-      title={caption.trim() ? "Aprimorar legenda" : "Sugerir legenda"}
-      className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 active:scale-90 transition-all disabled:opacity-40"
+      title={caption.trim() ? "Melhorar legenda com IA" : "Criar legenda com IA"}
+      className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 active:scale-90 transition-all disabled:opacity-40"
     >
       {loading ? (
         <Loader2 className="w-4 h-4 animate-spin" />
@@ -459,9 +458,8 @@ export function PortfolioManager({
 
   useEffect(() => {
     loadImages();
-    const channelId = `portfolio-${barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(channelId)
+      .channel(`portfolio-${barbeiroId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "portfolio_images", filter: `barbeiro_id=eq.${barbeiroId}` }, () => loadImages())
       .subscribe();
     return () => { supabase.removeChannel(channel); };

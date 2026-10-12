@@ -106,9 +106,7 @@ export function ConfirmAttendanceModal({ appointment, open, onClose, onUpdate }:
                       PLANO
                     </span>
                   ) : (
-                    <span className="text-primary font-medium">
-                      R$ {typeof appointment.preco === 'number' && !isNaN(appointment.preco) ? appointment.preco.toFixed(2).replace('.', ',') : '0,00'}
-                    </span>
+                    <span className="text-primary font-medium">R$ {appointment.preco.toFixed(2).replace('.', ',')}</span>
                   )}
                 </p>
               </div>

@@ -86,7 +86,7 @@ export function PendingPaymentCard({
           </div>
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-foreground">
-              R$ {typeof booking.preco === 'number' && !isNaN(booking.preco) ? booking.preco.toFixed(2).replace('.', ',') : '0,00'}
+              R$ {booking.preco.toFixed(2)}
             </span>
           </div>
         </div>

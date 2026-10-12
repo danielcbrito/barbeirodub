@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.release_plan_charge_on_first_cut() FROM PUBLIC, anon, authenticated;

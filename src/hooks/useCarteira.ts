@@ -92,7 +92,7 @@ export function useCarteira(barbeiroId: string | null | undefined) {
   useEffect(() => {
     if (!barbeiroId) return;
     const channel = supabase
-      .channel(`carteira-${barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
+      .channel(`carteira-${barbeiroId}`)
       .on("postgres_changes", {
         event: "*", schema: "public", table: "carteiras",
         filter: `barbeiro_id=eq.${barbeiroId}`,

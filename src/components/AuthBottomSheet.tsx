@@ -1,3 +1,4 @@
+import { signInWithRetry } from "@/lib/signInWithRetry";
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkle, ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
@@ -203,10 +204,7 @@ export default function AuthBottomSheet({ isOpen, onClose }: AuthBottomSheetProp
 
     setIsLoading(true);
     try {
-      const { error: loginError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const { data: loginData, error: loginError } = await signInWithRetry(email.trim(), password);
 
       if (loginError) {
         if (loginError.message.includes("Invalid login credentials")) {
@@ -217,10 +215,8 @@ export default function AuthBottomSheet({ isOpen, onClose }: AuthBottomSheetProp
         return;
       }
 
-      // Invalida cache de permissões para forçar refetch com sessão autenticada
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Usa o usuário retornado pelo login (evita outra chamada lenta ao servidor)
+      const user = loginData.user;
 
       await queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.shared.permissoes(user?.id),

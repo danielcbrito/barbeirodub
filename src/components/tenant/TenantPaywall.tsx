@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, Zap, Calendar, Users, BarChart3, MessageSquare,
-  Crown, CheckCircle2, ArrowRight, Lock, Star
+  Crown, CheckCircle2, ArrowRight, Sparkles, Lock, Star
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -199,6 +199,7 @@ export function TenantPaywall({ tenantNome, onLogout }: TenantPaywallProps) {
             }}
             className="w-full h-13 text-[14px] font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all duration-300 group"
           >
+            <Sparkles className="w-4 h-4 mr-2" />
             Assinar Agora
             <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-0.5" />
           </Button>

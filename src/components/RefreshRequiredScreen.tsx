@@ -1,83 +1,107 @@
-import { useState } from "react";
+import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import logoDub from "@/assets/logo-dub.png";
 
 interface RefreshRequiredScreenProps {
-  onRefresh: () => void | Promise<void>;
+  onRefresh: () => void;
 }
 
 export function RefreshRequiredScreen({ onRefresh }: RefreshRequiredScreenProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const handleUpdate = () => {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-
-    // Dispara a atualização imediata
-    try {
-      void onRefresh();
-    } catch (err) {
-      console.warn("[RefreshRequiredScreen] erro em onRefresh:", err);
-    }
-
-    // Garante que o navegador recarregue instantaneamente sem latência
-    window.setTimeout(() => {
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.set("v_refresh", String(Date.now()));
-        window.location.replace(url.toString());
-      } catch {
-        window.location.reload();
-      }
-    }, 120);
-  };
-
   return (
-    <div className="fixed inset-0 z-[9999] bg-background text-foreground flex flex-col items-center justify-center p-6 select-none pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
-      <div className="flex flex-col items-center text-center max-w-xs w-full">
-        {/* Logo oficial DUB: Preta no tema claro, Branca no tema escuro */}
-        <div className="flex items-center gap-1.5 select-none mb-8">
-          <img
-            src="/auth-assets/dub_logo_d.png"
-            alt="D"
-            className="h-10 sm:h-11 w-auto object-contain block dark:invert"
-            draggable={false}
-          />
-          <span
-            className="text-[40px] sm:text-[44px] font-bold text-foreground tracking-[-0.04em] lowercase leading-none"
-            style={{ fontFamily: "'Plus Jakarta Sans', Inter, -apple-system, sans-serif" }}
-          >
-            ub
-          </span>
-        </div>
-
-        {/* Título direto */}
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground mb-2">
-          Nova versão disponível
-        </h1>
-
-        {/* Mensagem simples e objetiva */}
-        <p className="text-sm text-muted-foreground leading-relaxed mb-8 font-normal">
-          Uma atualização foi publicada. Toque abaixo para atualizar.
-        </p>
-
-        {/* Botão de Ação: Cápsula Apple preto/branco sem vermelho */}
-        <Button
-          type="button"
-          onClick={handleUpdate}
-          disabled={isRefreshing}
-          className="w-full h-12 rounded-full bg-foreground text-background hover:bg-foreground/90 font-medium text-sm gap-2 shadow-xs transition-all active:scale-[0.98] disabled:opacity-75"
-        >
-          <RefreshCw
-            className={cn(
-              "w-4 h-4 transition-transform duration-300",
-              isRefreshing && "animate-spin"
-            )}
-          />
-          <span>{isRefreshing ? "Atualizando..." : "Atualizar"}</span>
-        </Button>
+    <div className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center p-6 overflow-hidden pt-[env(safe-area-inset-top)]">
+      {/* Subtle background pattern (matching MaintenanceScreen) */}
+      <div className="absolute inset-0 opacity-[0.02]">
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }}
+        />
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="relative z-10 flex flex-col items-center text-center max-w-sm w-full"
+      >
+        {/* Logo */}
+        <motion.img
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+          src={logoDub}
+          alt="Barbearia DUB"
+          className="w-20 h-20 object-contain mb-6"
+        />
+
+        {/* Update indicator */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 mb-6"
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-primary animate-[spin_4s_linear_infinite]" />
+          <span className="text-xs font-medium text-primary">Atualização Obrigatória</span>
+        </motion.div>
+
+        {/* Title */}
+        <motion.h1
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.25 }}
+          className="text-xl font-semibold text-foreground mb-3"
+        >
+          Nova versão disponível
+        </motion.h1>
+
+        {/* Message */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="text-sm text-muted-foreground mb-8 leading-relaxed"
+        >
+          Uma atualização foi publicada. Recarregue a página para continuar.
+        </motion.p>
+
+        {/* Divider */}
+        <motion.div
+          initial={{ opacity: 0, scaleX: 0 }}
+          animate={{ opacity: 1, scaleX: 1 }}
+          transition={{ delay: 0.35 }}
+          className="w-16 h-px bg-border mb-8"
+        />
+
+        {/* Action Button */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="w-full"
+        >
+          <Button
+            onClick={onRefresh}
+            className="w-full h-11 text-sm font-medium gap-2 shadow-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Atualizar Agora
+          </Button>
+        </motion.div>
+      </motion.div>
+
+      {/* Footer */}
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="absolute bottom-4 text-muted-foreground/60 text-[10px] tracking-wide uppercase"
+      >
+        Sistema em constante evolução
+      </motion.p>
     </div>
   );
 }

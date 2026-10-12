@@ -1,136 +1,98 @@
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, Sparkles, MessageCircle, Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
-import bannerAiBarber from "@/assets/banner_ai_barber.jpg";
-import bannerCampaignsBarber from "@/assets/banner_campaigns_barber.jpg";
-import { useTenantSubscription } from "@/hooks/useTenantSubscription";
+import { BarberMascotIcon } from "./BarberMascotIcon";
 
 interface CampaignPromoBannersProps {
   /** Base de rota (ex.: "/admin" ou "/barbeiro"). */
   basePath?: string;
   className?: string;
-  tenantId?: string | null;
 }
 
-export function CampaignPromoBanners({ basePath = "/admin", className, tenantId }: CampaignPromoBannersProps) {
+
+const CAMPAIGNS = [
+  {
+    key: "convide",
+    index: "01",
+    title: "Convide e ganhe",
+    subtitle: "O cliente indica, o cliente ganha.",
+  },
+  {
+    key: "fidelidade",
+    index: "02",
+    title: "Fidelidade",
+    subtitle: "A cada X cortes, uma recompensa.",
+  },
+  {
+    key: "cliente-mes",
+    index: "03",
+    title: "Cliente do mês",
+    subtitle: "Quem mais indicar leva o prêmio.",
+  },
+] as const;
+
+/**
+ * Bloco de campanhas — peça de anúncio dentro do app.
+ * Banner vermelho com mascote em preto e branco + cards de campanha.
+ */
+export function CampaignPromoBanners({ basePath = "/admin", className }: CampaignPromoBannersProps) {
   const navigate = useNavigate();
-
-  const effectiveTenantId = tenantId || localStorage.getItem("admin_tenant_id") || localStorage.getItem("tenant_id") || null;
-  const subscription = useTenantSubscription(effectiveTenantId);
-
-  const handleGoToAiAgent = () => {
-    const hasAccess = (subscription.isActive || subscription.isTrial) && !subscription.isExpired;
-
-    if (hasAccess) {
-      navigate(`${basePath}/whatsapp?highlight=agente`, { state: { highlight: "agente" } });
-    } else {
-      navigate(`${basePath}/planos`);
-    }
-  };
-
-  const handleGoToCampaigns = () => {
-    navigate(`${basePath}/promocoes`);
-  };
+  const go = () => navigate(`${basePath}/promocoes`);
 
   return (
-    <div className={cn("space-y-3.5", className)}>
-      {/* ─── 1. BANNER: Agente de IA (Barbeiro cortando sem parar pro WhatsApp) ─── */}
-      <div
-        onClick={handleGoToAiAgent}
-        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 dark:border-white/10 shadow-md transition-all duration-300 active:scale-[0.99] h-[215px] sm:h-[235px] flex flex-col justify-between p-5 select-none"
+    <div className={cn("space-y-3", className)}>
+      {/* ─── Anúncio principal ─── */}
+      <button
+        onClick={go}
+        className="group relative block w-full overflow-hidden rounded-2xl text-left transition-opacity active:opacity-95"
+        style={{
+          background:
+            "linear-gradient(105deg, hsl(10 78% 36%) 0%, hsl(10 78% 44%) 62%, hsl(10 78% 40%) 100%)",
+        }}
       >
-        {/* Foto de Fundo com Zoom Suave no Hover */}
-        <img
-          src={bannerAiBarber}
-          alt="Barbeiro atendendo cliente"
-          className="absolute inset-0 w-full h-full object-cover object-center filter brightness-[0.72] contrast-[1.05] transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none"
-        />
-
-        {/* Gradiente Cinematográfico Apple Dark */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#09090b] via-[#09090b]/65 to-[#09090b]/25"
-        />
-
-        {/* Topo do Card: Badge Apple Liquid Glass */}
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-[11px] font-medium text-white shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-[#25D366] animate-pulse" />
-            <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
-            <span>Agente de IA no WhatsApp</span>
-          </div>
-
-          <span className="text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-md text-white/80 border border-white/10">
-            24h Ativo
-          </span>
-        </div>
-
-        {/* Conteúdo Inferior */}
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3 mt-auto">
-          <div className="max-w-md">
-            <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
-              Corte sem parar para responder
+        <div className="relative flex min-h-[116px] items-stretch gap-3 px-5 py-4 sm:min-h-[144px] sm:px-7 sm:py-5">
+          <div className="relative z-10 flex min-w-0 flex-1 flex-col justify-center">
+            <h3 className="text-[13.5px] font-bold leading-tight tracking-tight text-primary-foreground sm:text-[22px]">
+              Crie sua primeira campanha
             </h3>
-            <p className="text-[12.5px] text-zinc-300 mt-1 leading-relaxed font-normal line-clamp-2">
-              Seu assistente virtual responde dúvidas, envia preços e fecha horários na sua agenda enquanto você trabalha.
+            <p className="mt-1 whitespace-nowrap text-[12px] leading-snug text-primary-foreground/75 sm:text-[14px]">
+              Atraia novos clientes para você.
             </p>
+            <span className="mt-3 inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-primary-foreground px-4 py-1.5 text-[12.5px] font-semibold text-[hsl(10_78%_36%)] sm:px-5 sm:py-1.5 sm:text-[13.5px]">
+              Criar campanha
+              <span className="transition-transform group-hover:translate-x-0.5">&rarr;</span>
+            </span>
           </div>
 
-          {/* Botão Cápsula Apple HIG */}
-          <div className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black font-semibold text-xs shadow-md group-hover:bg-zinc-100 group-hover:scale-[1.02] transition-all">
-            <span>Configurar e ativar</span>
-            <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+          {/* mascote como ícone do sistema — máscara CSS, cor herdada, encostado na base */}
+          <div className="pointer-events-none relative -mb-4 -mr-2 flex w-[34%] min-w-[96px] max-w-[170px] shrink-0 items-end justify-end self-stretch text-primary-foreground sm:-mb-5 sm:-mr-3 sm:w-[38%] sm:min-w-[150px] sm:max-w-[250px]">
+
+            <BarberMascotIcon
+              className="-scale-x-100"
+              lineClassName="bg-[hsl(0_0%_10%)]"
+            />
           </div>
+
+
         </div>
-      </div>
+      </button>
 
-      {/* ─── 2. BANNER: Campanhas para Novos Clientes (Barbeiro com cliente satisfeito) ─── */}
-      <div
-        onClick={handleGoToCampaigns}
-        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 dark:border-white/10 shadow-md transition-all duration-300 active:scale-[0.99] h-[215px] sm:h-[235px] flex flex-col justify-between p-5 select-none"
-      >
-        {/* Foto de Fundo com Zoom Suave no Hover */}
-        <img
-          src={bannerCampaignsBarber}
-          alt="Barbeiro satisfeito cumprimentando novo cliente"
-          className="absolute inset-0 w-full h-full object-cover object-center filter brightness-[0.70] contrast-[1.05] transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none"
-        />
-
-        {/* Gradiente Cinematográfico Apple Dark */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#09090b] via-[#09090b]/65 to-[#09090b]/25"
-        />
-
-        {/* Topo do Card: Badge Apple Liquid Glass */}
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-[11px] font-medium text-white shadow-xs">
-            <Gift className="w-3.5 h-3.5 text-amber-400" />
-            <span>Fidelidade & Novos Clientes</span>
-          </div>
-
-          <span className="text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-md text-white/80 border border-white/10">
-            Crescimento
-          </span>
-        </div>
-
-        {/* Conteúdo Inferior */}
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3 mt-auto">
-          <div className="max-w-md">
-            <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
-              Lote sua cadeira com novos clientes
-            </h3>
-            <p className="text-[12.5px] text-zinc-300 mt-1 leading-relaxed font-normal line-clamp-2">
-              Atraia clientes com cupons de primeiro corte, programa de indicação e cartão fidelidade automático.
-            </p>
-          </div>
-
-          {/* Botão Cápsula Apple HIG */}
-          <div className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black font-semibold text-xs shadow-md group-hover:bg-zinc-100 group-hover:scale-[1.02] transition-all">
-            <span>Criar campanhas</span>
-            <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
-          </div>
-        </div>
+      {/* ─── Cards de campanha ─── */}
+      <div className="grid grid-cols-3 gap-2.5">
+        {CAMPAIGNS.map((c) => (
+          <button
+            key={c.key}
+            onClick={go}
+            className="group flex h-full flex-col rounded-2xl border border-border bg-card px-3.5 py-3.5 text-left transition-colors hover:border-primary/40 hover:bg-card-elevated active:bg-card-elevated"
+          >
+            <span className="text-[10px] font-semibold tabular-nums text-primary">{c.index}</span>
+            <span className="mt-2 text-[12.5px] font-semibold leading-tight text-foreground">
+              {c.title}
+            </span>
+            <span className="mt-1 text-[11px] leading-snug text-muted-foreground">
+              {c.subtitle}
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );

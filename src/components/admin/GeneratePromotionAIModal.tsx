@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wand2, Loader2, Calendar, Check } from "lucide-react";
+import { Sparkles, Loader2, Calendar } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCriarPromocao } from "@/hooks/useAdminMutations";
@@ -113,13 +113,13 @@ export function GeneratePromotionAIModal({ open, onOpenChange, onSuccess }: Gene
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto card-glass border-border-glow">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 text-2xl tracking-wide">
-            <div className="w-10 h-10 rounded-xl bg-foreground/[0.06] flex items-center justify-center">
-              <Wand2 className="w-5 h-5 text-foreground" />
+            <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow-red">
+              <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
-            Criador Estratégico de Promoção
+            Gerar Promoção com IA
           </DialogTitle>
           <DialogDescription className="text-muted-foreground mt-2 tracking-wide">
-            Defina os parâmetros para simular e estruturar propostas de campanhas de alta conversão
+            Preencha os detalhes e deixe a IA criar 3 propostas de promoções premium personalizadas
           </DialogDescription>
         </DialogHeader>
 
@@ -177,8 +177,8 @@ export function GeneratePromotionAIModal({ open, onOpenChange, onSuccess }: Gene
                 </>
               ) : (
                 <>
-                  <Wand2 className="w-5 h-5" />
-                  GERAR PROPOSTAS
+                  <Sparkles className="w-5 h-5" />
+                  GERAR PROPOSTAS COM IA
                 </>
               )}
             </Button>
@@ -251,9 +251,9 @@ export function GeneratePromotionAIModal({ open, onOpenChange, onSuccess }: Gene
               <Button
                 onClick={handleApprove}
                 disabled={selectedProposta === null}
-                className="w-full gap-3 h-14 text-base font-bold tracking-wide rounded-xl bg-foreground text-background hover:bg-foreground/90"
+                className="w-full gap-3 h-16 text-lg font-bold tracking-widest bg-foreground text-background hover:bg-foreground/90"
               >
-                <Check className="w-5 h-5" />
+                <Sparkles className="w-6 h-6" />
                 APROVAR E PUBLICAR PROMOÇÃO
               </Button>
             </div>

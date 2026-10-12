@@ -20,20 +20,16 @@ export function useViewportHeight() {
   };
 
   const getInitial = () => {
-    if (typeof window === "undefined") return { h: 0, vh: 0, kb: false, offset: 0 };
+    if (typeof window === "undefined") return { h: 0, kb: false };
     const vv = window.visualViewport;
     const h = getStableHeight();
-    const vh = vv ? vv.height : h;
-    const offset = Math.max(0, h - vh);
-    const kb = offset > 140;
-    return { h, vh, kb, offset };
+    const kb = vv ? h - vv.height > 150 : false;
+    return { h, kb };
   };
 
   const initial = getInitial();
   const [height, setHeight] = useState<string>(`${initial.h}px`);
-  const [visualHeight, setVisualHeight] = useState<string>(`${initial.vh}px`);
   const [keyboardOpen, setKeyboardOpen] = useState<boolean>(initial.kb);
-  const [keyboardOffset, setKeyboardOffset] = useState<number>(initial.offset);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -41,13 +37,9 @@ export function useViewportHeight() {
 
     const update = () => {
       const h = getStableHeight();
-      const vh = vv ? vv.height : h;
-      const offset = Math.max(0, h - vh);
-      const kb = offset > 140;
+      const kb = vv ? h - vv.height > 150 : false;
       setHeight(`${h}px`);
-      setVisualHeight(`${vh}px`);
       setKeyboardOpen(kb);
-      setKeyboardOffset(offset);
     };
 
     update();
@@ -69,5 +61,5 @@ export function useViewportHeight() {
     };
   }, []);
 
-  return { height, visualHeight, keyboardOpen, keyboardOffset };
+  return { height, keyboardOpen };
 }

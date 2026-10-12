@@ -7,8 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AvatarEditSheet } from "@/components/admin/mobile/AvatarEditSheet";
 import {
   Loader2, ImagePlus,
-  ChevronRight, Megaphone, LogOut,
-  Send, Star,
+  ChevronRight, Headset, Wallet, Store, Megaphone, LogOut,
 } from "lucide-react";
 import { CopyCode } from "@/components/ui/copy-code-button";
 
@@ -22,8 +21,6 @@ import { ApplyScopeSheet, type ApplyScope } from "@/components/admin/mobile/Appl
 import { ThemeSegmentedToggle } from "@/components/profile/ThemeSegmentedToggle";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
-import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
-import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
 
 
 interface AdminMobileProfileProps {
@@ -83,8 +80,6 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
 
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [showWhenToSend, setShowWhenToSend] = useState(false);
-  const [barbeariaDrawerOpen, setBarbeariaDrawerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const atualizarBanner = useAtualizarBannerAdmin();
@@ -245,54 +240,6 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
     }
   };
 
-  const handleHorariosClick = () => {
-    const goWithScope = (scope: ApplyScope) => {
-      const qs =
-        scope.type === "self"
-          ? "?scope=self"
-          : `?scope=units&unit_ids=${scope.unitIds.join(",")}`;
-      navigate(`${basePath}/horarios${qs}`);
-    };
-
-    if (!hasMultipleBarbers) {
-      goWithScope({ type: "self" });
-      return;
-    }
-
-    setScopeConfig({
-      title: "Aplicar horário a...",
-      description: "Escolha se esse horário vale só pra você ou pras barbearias.",
-      onConfirm: goWithScope,
-    });
-    setScopeOpen(true);
-  };
-
-  const handleConfigBarbeariaClick = async () => {
-    const tid = tenantId;
-    if (!tid) {
-      navigate(`${basePath}/config-barbearia`);
-      return;
-    }
-
-    try {
-      const { data: units } = await supabase
-        .from("tenant_unidades")
-        .select("id, nome")
-        .eq("tenant_id", tid);
-
-      // Se só existir uma barbearia (ou nenhuma cadastrada ainda), entra DIRETO sem subir a gaveta!
-      if (!units || units.length <= 1) {
-        const singleId = units?.[0]?.id;
-        navigate(singleId ? `${basePath}/config-barbearia?unidade=${singleId}` : `${basePath}/config-barbearia`);
-      } else {
-        // Se houver mais de uma barbearia, aí sim abre a gaveta de escolha
-        setBarbeariaDrawerOpen(true);
-      }
-    } catch {
-      navigate(`${basePath}/config-barbearia`);
-    }
-  };
-
   const initials = email ? email.charAt(0).toUpperCase() : "A";
 
   useStatusBarColor("app-background");
@@ -318,10 +265,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
 
   return (
     <>
-      <div
-        className="min-h-[var(--app-height,100dvh)] bg-background"
-        style={{ paddingBottom: "calc(6.5rem + var(--app-safe-bottom, 8px))" }}
-      >
+      <div className="min-h-[var(--app-height,100dvh)] bg-background pb-24">
         {/* ═══ BANNER FINO NO TOPO (edge-to-edge, sob a status bar) ═══ */}
         <div className="relative isolate bg-background">
           <div
@@ -381,33 +325,16 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
               )}
             </button>
 
-            {/* Nome + subtítulo — 100% clean & sério, sem badge Admin e sem status Ativo */}
+            {/* Nome + subtítulo — alinhado à base do avatar */}
             <div className="min-w-0 flex-1 pb-1">
-              <h2 className="text-[19px] font-bold text-foreground leading-tight truncate">
+              <h2 className="text-[18px] font-bold text-foreground leading-tight truncate">
                 {profileName || "Administrador"}
               </h2>
-              <div className="flex items-center gap-2 mt-1">
-                {tenantName && (
-                  <span className="text-[12.5px] text-muted-foreground truncate">
-                    {tenantName}
-                  </span>
-                )}
-                {tenantName && (
-                  <span className="text-muted-foreground/30 text-[10px]">•</span>
-                )}
-                <span className="inline-flex items-center gap-1 text-[11.5px] text-muted-foreground shrink-0">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                  <span className="font-semibold text-foreground">4.9</span>
-                </span>
-                {unitsCount > 1 && (
-                  <>
-                    <span className="text-muted-foreground/30 text-[10px]">•</span>
-                    <span className="text-[11px] text-muted-foreground shrink-0">
-                      {unitsCount} unidades
-                    </span>
-                  </>
-                )}
-              </div>
+              {tenantName && (
+                <p className="text-[12px] text-muted-foreground/80 leading-tight mt-0.5 truncate">
+                  {tenantName}
+                </p>
+              )}
             </div>
           </div>
 
@@ -417,7 +344,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
-              className="mt-4"
+              className="mt-7"
             >
               <CopyCode code={fullLink} label={displayLink} />
             </motion.div>
@@ -427,123 +354,12 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
         <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerChange} className="hidden" />
 
-        {/* ═══ ACESSOS PRINCIPAIS ESTRATÉGICOS (3 CARDS 100% SÉRIOS & MINIMALISTAS) ═══ */}
-        <div className="grid grid-cols-3 gap-2.5 mt-5 mx-5">
-          {/* Card 1: Disparo */}
-          <button
-            onClick={() => setShowWhenToSend(true)}
-            className="relative overflow-hidden flex flex-col justify-between p-3.5 rounded-2xl bg-card border border-border/70 dark:border-white/[0.08] hover:border-foreground/30 active:scale-[0.97] transition-all shadow-xs group text-left min-h-[106px]"
-          >
-            {/* Ícone de fundo transparente elegante */}
-            <Send className="absolute -right-3 -bottom-3 w-16 h-16 text-foreground/[0.035] dark:text-white/[0.04] -rotate-12 transition-transform duration-300 group-hover:scale-110 pointer-events-none stroke-[1.2]" />
-
-            <div className="w-8 h-8 rounded-xl bg-foreground/[0.05] dark:bg-white/[0.07] flex items-center justify-center mb-2.5 relative z-10">
-              <Send className="w-4 h-4 text-foreground stroke-[1.8]" />
-            </div>
-
-            <div className="relative z-10">
-              <span className="text-[13px] font-semibold text-foreground tracking-tight block leading-tight">
-                Disparo
-              </span>
-              <span className="text-[11px] text-muted-foreground block truncate mt-0.5 font-normal">
-                Mensagens
-              </span>
-            </div>
-          </button>
-
-          {/* Card 2: WhatsApp (com o tema verdinho aprovado pelo usuário) */}
-          <button
-            onClick={() => navigate(`${basePath}/whatsapp`)}
-            className="relative overflow-hidden flex flex-col justify-between p-3.5 rounded-2xl bg-[#25D366]/[0.03] dark:bg-[#25D366]/[0.05] border border-[#25D366]/25 dark:border-[#25D366]/30 hover:border-[#25D366]/50 active:scale-[0.97] transition-all shadow-xs group text-left min-h-[106px]"
-          >
-            {/* Efeito de luz sutil no fundo */}
-            <div className="absolute top-0 right-0 w-24 h-24 bg-[#25D366]/[0.08] dark:bg-[#25D366]/[0.10] rounded-full blur-xl pointer-events-none" />
-            {/* Ícone de fundo transparente estratégico do WhatsApp */}
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="absolute -right-2.5 -bottom-2.5 w-16 h-16 text-[#25D366]/[0.10] dark:text-[#25D366]/[0.14] -rotate-12 transition-transform duration-300 group-hover:scale-110 pointer-events-none"
-              aria-hidden="true"
-            >
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-            </svg>
-
-            <div className="w-8 h-8 rounded-xl bg-[#25D366]/15 dark:bg-[#25D366]/20 flex items-center justify-center mb-2.5 relative z-10">
-              <svg
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-4 h-4 text-[#25D366]"
-                aria-hidden="true"
-              >
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-              </svg>
-            </div>
-
-            <div className="relative z-10">
-              <span className="text-[13px] font-semibold text-foreground tracking-tight block leading-tight">
-                WhatsApp
-              </span>
-              <span className="text-[11px] text-muted-foreground block truncate mt-0.5 font-normal">
-                Atendimento
-              </span>
-            </div>
-          </button>
-
-          {/* Card 3: Campanhas & Promoções */}
-          <button
-            onClick={() => navigate(`${basePath}/promocoes`)}
-            className="relative overflow-hidden flex flex-col justify-between p-3.5 rounded-2xl bg-card border border-border/70 dark:border-white/[0.08] hover:border-foreground/30 active:scale-[0.97] transition-all shadow-xs group text-left min-h-[106px]"
-          >
-            {/* Ícone de fundo transparente elegante de campanhas */}
-            <Megaphone className="absolute -right-2.5 -bottom-2.5 w-16 h-16 text-foreground/[0.035] dark:text-white/[0.04] -rotate-12 transition-transform duration-300 group-hover:scale-110 pointer-events-none stroke-[1.2]" />
-
-            <div className="w-8 h-8 rounded-xl bg-foreground/[0.05] dark:bg-white/[0.07] flex items-center justify-center mb-2.5 relative z-10">
-              <Megaphone className="w-4 h-4 text-foreground stroke-[1.8]" />
-            </div>
-
-            <div className="relative z-10">
-              <span className="text-[13px] font-semibold text-foreground tracking-tight block leading-tight">
-                Campanhas
-              </span>
-              <span className="text-[11px] text-muted-foreground block truncate mt-0.5 font-normal">
-                Promoções
-              </span>
-            </div>
-          </button>
-        </div>
-
-        {/* ═══ BANNER DE DESTAQUE: CONFIGURAÇÕES DA BARBEARIA (100% SÉRIO & MINIMALISTA, SEM LOGO) ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="mt-4 mx-5"
-        >
-          <button
-            type="button"
-            onClick={handleConfigBarbeariaClick}
-            className="w-full relative overflow-hidden rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 text-left active:scale-[0.99] transition-all group shadow-xs hover:border-foreground/30 flex items-center justify-between gap-4"
-          >
-            <div className="min-w-0 flex-1">
-              <span className="text-[14px] font-semibold text-foreground block truncate leading-tight">
-                Configurações da Barbearia
-              </span>
-              <p className="text-[11.5px] text-muted-foreground mt-1 truncate">
-                Catálogo, horários, equipe e dados da empresa
-              </p>
-            </div>
-            <div className="w-7 h-7 rounded-full bg-secondary/60 flex items-center justify-center shrink-0 text-muted-foreground group-hover:text-foreground group-hover:bg-secondary transition-colors">
-              <ChevronRight className="w-4 h-4" />
-            </div>
-          </button>
-        </motion.div>
-
         {/* ═══ BANNER DE CONFIGURAÇÃO INICIAL ═══ */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.15 }}
-          className="mt-4 mx-5"
+          className="mt-6 mx-5"
         >
           <SetupCompletionBanner
             percentage={setupCompletion.percentage}
@@ -553,96 +369,184 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
           />
         </motion.div>
 
-        {/* ═══ ITENS DE CONFIGURAÇÃO AGRUPADOS (PADRÃO ATENDIMENTO & NOTIFICAÇÕES) ═══ */}
-        <div className="mt-5 mx-5 space-y-4">
-          {/* Grupo: Gestão & Atendimento Pessoal */}
-          <div>
-            <p className="text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">
-              Gestão & Atendimento Pessoal
-            </p>
-            <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] overflow-hidden divide-y divide-border/25 dark:divide-white/[0.06] shadow-xs">
-              <ProfileMenuItem
-                label="Horário de funcionamento"
-                description="Seus dias e horários de trabalho"
-                onClick={handleHorariosClick}
-              />
-              <ProfileMenuItem
-                label="Serviços"
-                description="Duração pessoal e serviços que você atende"
-                onClick={() => navigate(`${basePath}/servicos/cortes`)}
-              />
-              <ProfileMenuItem
-                label="Clientes"
-                description="Clientes atendidos por você"
-                onClick={() => navigate(`${basePath}/meus-clientes`)}
-              />
-              <ProfileMenuItem
-                label="Avaliações"
-                description="Notas e comentários dos seus clientes"
-                onClick={() => navigate(`${basePath}/avaliacoes`)}
-              />
-              <ProfileMenuItem
-                label="Portfólio"
-                description="Fotos dos melhores cortes da barbearia"
-                onClick={() => navigate(`${basePath}/portfolio`)}
-              />
-              <ProfileMenuItem
-                label="Relatórios"
-                description="Dados e métricas do seu negócio"
-                onClick={() => navigate(`${basePath}/relatorios`)}
-              />
-              <ProfileMenuItem
-                label="Suporte"
-                description="Fale com nosso time de atendimento"
-                onClick={() => window.open("https://wa.me/5511963390043?text=" + encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"), "_blank", "noopener,noreferrer")}
-              />
+        {/* ═══ CARD PREMIUM: DUB PAGO (Carteira) ═══ */}
+        <motion.button
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          onClick={() => navigate(`${basePath}/carteira`)}
+          className="relative w-full mt-1 px-5 text-left active:scale-[0.99] transition-transform"
+        >
+          <div className="relative rounded-2xl bg-muted/60 dark:bg-muted/30 overflow-hidden">
+            {/* Cartão branco flutuante */}
+            <div className="relative bg-card rounded-2xl border border-border/60 shadow-sm px-4 pt-3 pb-3.5">
+              <div className="flex items-baseline mb-5">
+                <span className="text-[12px] font-bold text-primary tracking-tight leading-none">Dub</span>
+                <span className="text-[12px] font-bold text-primary italic tracking-tight leading-none">Pago</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Wallet className="h-[18px] w-[18px] text-foreground flex-shrink-0" strokeWidth={1.6} />
+                <p className="flex-1 text-[14px] font-medium text-foreground leading-tight">
+                  Minha Carteira
+                </p>
+                <ChevronRight className="h-[15px] w-[15px] text-muted-foreground/60" strokeWidth={1.8} />
+              </div>
+            </div>
+
+            {/* Base cinza exposta */}
+            <div className="relative px-4 py-2.5">
+              <p className="text-[11.5px] font-normal text-muted-foreground leading-tight">
+                Gerencie seus recebimentos e saques
+              </p>
             </div>
           </div>
+        </motion.button>
 
-          {/* Grupo 2: Conta & Segurança */}
-          <div>
-            <p className="text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">
-              Conta & Segurança
-            </p>
-            <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] overflow-hidden divide-y divide-border/25 dark:divide-white/[0.06] shadow-xs">
-              <ProfileMenuItem
-                label="Segurança"
-                description="Senha, autenticação e acessos"
-                onClick={() => navigate(`${basePath}/seguranca`)}
-              />
-            </div>
+        {/* ═══ CAMPANHA — item destacado, separado da lista ═══ */}
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          className="mt-5 mx-5"
+        >
+          <CampaignMenuItem onClick={() => navigate(`${basePath}/promocoes/preparando`)} />
+        </motion.div>
+
+        {/* ═══ ITENS DE CONFIGURAÇÃO ═══ */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.24 }}
+          className="mt-6 mx-5"
+        >
+
+
+          <ProfileMenuItem
+            label="Barbearias"
+            description={
+              unitsCount > 0
+                ? `${unitsCount === 1 ? "1 barbearia" : `${unitsCount} barbearias`} · toque para gerenciar`
+                : "Visualize e gerencie suas barbearias"
+            }
+            onClick={() => navigate(`${basePath}/unidades`)}
+          />
+
+
+          <div className="h-px bg-border/40" />
+
+          <ProfileMenuItem
+            label="Clientes"
+            description="Seus clientes atendidos"
+            onClick={() => navigate(`${basePath}/meus-clientes`)}
+          />
+          <div className="h-px bg-border/40" />
+
+          <ProfileMenuItem
+            label="Avaliação"
+            description="Notas e comentários dos seus clientes"
+            onClick={() => navigate(`${basePath}/avaliacoes`)}
+          />
+          <div className="h-px bg-border/40" />
+
+          <ProfileMenuItem
+            label="Horário de funcionamento"
+            description="Dias e horários de trabalho"
+            onClick={() => {
+              const goWithScope = (scope: ApplyScope) => {
+                const qs =
+                  scope.type === "self"
+                    ? "?scope=self"
+                    : `?scope=units&unit_ids=${scope.unitIds.join(",")}`;
+                navigate(`${basePath}/horarios${qs}`);
+              };
+
+              // Se só existe o próprio admin, pula a pergunta e vai direto
+              if (!hasMultipleBarbers) {
+                goWithScope({ type: "self" });
+                return;
+              }
+
+              setScopeConfig({
+                title: "Aplicar horário a...",
+                description: "Escolha se esse horário vale só pra você ou pras barbearias.",
+                onConfirm: goWithScope,
+              });
+              setScopeOpen(true);
+            }}
+          />
+          <div className="h-px bg-border/40" />
+
+          <ProfileMenuItem
+            label="Portfólio"
+            description="Fotos dos melhores cortes da barbearia"
+            onClick={() => navigate(`${basePath}/portfolio`)}
+          />
+          <div className="h-px bg-border/40" />
+
+          <ProfileMenuItem
+            label="Relatórios"
+            description="Dados e métricas do seu negócio"
+            onClick={() => navigate(`${basePath}/relatorios`)}
+          />
+        </motion.div>
+
+        {/* ═══ RODAPÉ: Sair da conta (esq) + Tema claro/escuro (dir) ═══ */}
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.28 }}
+          className="mt-8 mb-2 px-5 flex items-center justify-between gap-3"
+        >
+          <button
+            onClick={async () => {
+              if (loggingOut) return;
+              setLoggingOut(true);
+              try {
+                await supabase.auth.signOut();
+                localStorage.removeItem("userRole");
+                localStorage.removeItem("barbeiroId");
+                toast.success("Sessão encerrada");
+                window.location.href = "/login";
+              } catch {
+                toast.error("Erro ao sair");
+                setLoggingOut(false);
+              }
+            }}
+            disabled={loggingOut}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-medium text-accent-red hover:bg-accent-red/10 active:scale-[0.97] transition-all disabled:opacity-60"
+          >
+            {loggingOut
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <LogOut className="w-3.5 h-3.5" />}
+            Sair da conta
+          </button>
+
+          <ThemeSegmentedToggle />
+        </motion.div>
+
+      </div>
+
+
+
+
+      {/* ═══ BOTÃO FLUTUANTE: Suporte ═══ */}
+      <div
+        className="fixed right-4 z-40 flex flex-col gap-2.5 items-end"
+        style={{ bottom: "calc(5rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))" }}
+      >
+        <motion.button
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          onClick={() => window.open("https://wa.me/5511963390043?text=" + encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"), "_blank", "noopener,noreferrer")}
+          className="flex items-center gap-2 h-11 px-5 rounded-full bg-foreground text-background shadow-premium hover:shadow-premium-hover active:scale-[0.97] transition-all"
+        >
+          <div className="relative">
+            <Headset className="w-4 h-4" />
+            <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-background" />
           </div>
-
-          {/* ═══ RODAPÉ: Sair da conta (esq) + Tema claro/escuro (dir) ═══ */}
-          <div className="pt-4 pb-8 flex items-center justify-between">
-            <button
-              onClick={async () => {
-                if (loggingOut) return;
-                setLoggingOut(true);
-                try {
-                  await supabase.auth.signOut();
-                  localStorage.removeItem("userRole");
-                  localStorage.removeItem("barbeiroId");
-                  toast.success("Sessão encerrada");
-                  window.location.href = "/login";
-                } catch {
-                  toast.error("Erro ao sair");
-                  setLoggingOut(false);
-                }
-              }}
-              disabled={loggingOut}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-[13px] font-medium text-accent-red hover:bg-accent-red/10 active:scale-[0.97] transition-all disabled:opacity-60"
-            >
-              {loggingOut
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <LogOut className="w-3.5 h-3.5" />}
-              Sair da conta
-            </button>
-
-            <ThemeSegmentedToggle />
-          </div>
-        </div>
-
+          <span className="text-[13px] font-semibold">Suporte</span>
+        </motion.button>
       </div>
 
       <AvatarEditSheet
@@ -666,66 +570,45 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
         description={scopeConfig?.description}
         onConfirm={(scope) => scopeConfig?.onConfirm(scope)}
       />
-
-      <WhenToSendDrawer
-        isOpen={showWhenToSend}
-        onClose={() => setShowWhenToSend(false)}
-        onSelectNow={() => navigate(`${basePath}/disparo`)}
-        onSelectSchedule={() => navigate(`${basePath}/disparo?mode=schedule`)}
-      />
-
-      <SelectBarbeariaDrawer
-        open={barbeariaDrawerOpen}
-        onClose={() => setBarbeariaDrawerOpen(false)}
-        tenantId={tenantId}
-        onSelectUnit={(unit) => {
-          setBarbeariaDrawerOpen(false);
-          navigate(`${basePath}/config-barbearia?unidade=${unit.id}`);
-        }}
-      />
     </>
   );
 }
 
-/* ─── Subcomponent: item 100% sério, alinhado à tipografia do Atendimento & Notificações ─── */
+/* ─── Subcomponent ─── */
 function ProfileMenuItem({ label, description, onClick }: { label: string; description: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-muted/20 active:bg-muted/40 transition-colors group"
+      className="w-full flex items-center justify-between py-4 text-left active:opacity-70 transition-opacity"
     >
-      <div className="min-w-0 pr-3">
-        <span className="text-[13.5px] font-semibold text-foreground block truncate leading-tight group-hover:text-foreground transition-colors">
-          {label}
-        </span>
-        <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 leading-snug font-normal">
-          {description}
-        </span>
+      <div>
+        <span className="text-[15px] font-medium text-foreground block">{label}</span>
+        <span className="text-[12px] text-muted-foreground">{description}</span>
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/35 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+      <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
     </button>
   );
 }
 
-/* ─── Campanha: item sério, limpo e sem caixas coloridas ─── */
+/* ─── Campanha: item diferenciado com micro-CTA ─── */
 function CampaignMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full bg-card rounded-2xl border border-border/60 shadow-sm p-4 text-left hover:border-border active:scale-[0.99] transition-all flex items-center justify-between gap-3"
+      className="w-full flex items-center justify-between py-4 text-left active:opacity-80 transition-opacity"
     >
       <div className="flex items-center gap-3 min-w-0">
-        <Megaphone className="h-5 w-5 text-foreground flex-shrink-0" strokeWidth={1.8} />
+        <div className="h-9 w-9 rounded-xl bg-accent-red/12 flex items-center justify-center flex-shrink-0">
+          <Megaphone className="h-[18px] w-[18px] text-accent-red" strokeWidth={1.9} />
+        </div>
         <div className="min-w-0">
-          <span className="text-[14.5px] font-semibold text-foreground block leading-tight">
-            Ative uma campanha
+          <span className="text-[15px] font-semibold text-foreground block leading-tight">
+            Ative uma <span className="text-accent-red">campanha</span>
           </span>
-          <span className="text-[12px] text-muted-foreground block truncate mt-0.5">
-            Atraia mais clientes com promoções
-          </span>
+          <span className="text-[12px] text-muted-foreground">Atraia mais clientes com promoções</span>
         </div>
       </div>
-      <span className="text-[11.5px] font-bold bg-foreground text-background px-3.5 py-1.5 rounded-full flex-shrink-0 shadow-sm">
+      <span className="text-[11.5px] font-bold bg-foreground text-background px-3 py-1.5 rounded-full flex-shrink-0 shadow-sm">
         Criar
       </span>
     </button>

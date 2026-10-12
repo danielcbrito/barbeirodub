@@ -130,7 +130,7 @@ const Cliente = () => {
     if (!user?.id) return;
 
     const channel = supabase
-      .channel(`assinatura-realtime-${user.id}-${Math.random().toString(36).slice(2, 9)}`)
+      .channel(`assinatura-realtime-${user.id}`)
       .on(
         "postgres_changes",
         {
@@ -185,7 +185,7 @@ const Cliente = () => {
     if (!user?.id) return;
 
     const channel = supabase
-      .channel(`promocoes-realtime-${user.id}-${Math.random().toString(36).slice(2, 9)}`)
+      .channel(`promocoes-realtime-${user.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'promocoes' },

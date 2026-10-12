@@ -11,6 +11,7 @@ import {
   Copy, 
   CheckCircle2, 
   TrendingDown,
+  Sparkles,
   Zap,
   Crown,
   Scissors,

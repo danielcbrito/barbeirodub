@@ -17,7 +17,6 @@ import {
   QrCode,
   Filter,
   X,
-  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { extractWalkInName, isWhatsAppAppointment, extractWhatsAppName } from "@/lib/walkInName";
@@ -31,9 +30,6 @@ import { ConfirmAttendanceModal } from "./ConfirmAttendanceModal";
 import { CancelAllAppointmentsModal } from "./CancelAllAppointmentsModal";
 import { MobileManualBookingModal } from "./mobile/MobileManualBookingModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAdminBarbeiroId } from "@/hooks/useAdminBarbeiroId";
-import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
-import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 
 export interface TimelineAppointment {
   id: string;
@@ -121,29 +117,12 @@ const getPaymentBadge = (apt: { tipo_agendamento: string | null; payment_method:
 
 export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   const isMobile = useIsMobile();
-  const navigate = useNavigate();
-  const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
-  const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
-  const overdueState = useOverdueAppointments(effectiveBarbeiroId, { enabled: !isMobile });
-  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
-  const hasAutoPromptedOverdueRef = useRef(false);
-
-  // Auto-abertura da gaveta ao entrar na Agenda quando houver agendamentos para finalizar
-  useEffect(() => {
-    if (isMobile || overdueState.isLoading) return;
-    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
-      setIsOverdueModalOpen(true);
-      hasAutoPromptedOverdueRef.current = true;
-    } else if (overdueState.count === 0) {
-      hasAutoPromptedOverdueRef.current = false;
-    }
-  }, [isMobile, overdueState.count, overdueState.isLoading]);
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
   const syncKey = (dateStr: string) =>
-    `admin-agenda-desktop:${effectiveBarbeiroId || tenantId || "all"}:${dateStr}`;
+    `admin-agenda-desktop:${adminContext.barbeiroId || tenantId || "all"}:${dateStr}`;
   const initialKey = format(new Date(), "yyyy-MM-dd");
   const [appointments, setAppointments] = useState<TimelineAppointment[]>(
     () => readSyncCache<TimelineAppointment[]>(syncKey(initialKey))?.data || []
@@ -159,6 +138,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [services, setServices] = useState<Array<{ id: string; nome: string }>>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const navigate = useNavigate();
   const [tenantBarberIds, setTenantBarberIds] = useState<string[] | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -410,33 +390,22 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       ? { event: '*' as const, schema: 'public' as const, table: 'agendamentos' as const, filter: `barbeiro_id=eq.${adminContext.barbeiroId}` }
       : { event: '*' as const, schema: 'public' as const, table: 'agendamentos' as const };
 
-    if (isMobile) return;
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      const channelId = `admin-agenda-desktop-v3-${isTenantScope ? tenantId : (adminContext.barbeiroId || 'all')}-${Math.random().toString(36).slice(2, 9)}`;
-      channel = supabase
-        .channel(channelId)
-        .on('postgres_changes', channelConfig as any, (payload) => {
-          loadAppointments(selectedDate, true);
-          if (payload.eventType === 'INSERT') {
-            toast.success("Novo agendamento recebido!");
-          }
-        })
-        .subscribe();
-    } catch (err) {
-      console.warn('[AdminAgenda] Erro ao conectar canal Realtime:', err);
-    }
+    const channel = supabase
+      .channel(`admin-agenda-desktop-v3-${isTenantScope ? tenantId : (adminContext.barbeiroId || 'all')}`)
+      .on('postgres_changes', channelConfig as any, (payload) => {
+        loadAppointments(selectedDate, true);
+        if (payload.eventType === 'INSERT') {
+          toast.success("Novo agendamento recebido!");
+        }
+      })
+      .subscribe();
 
     const pollingInterval = setInterval(() => {
       loadAppointments(selectedDate, true);
     }, 15000);
 
     return () => {
-      if (channel) {
-        try {
-          supabase.removeChannel(channel);
-        } catch {}
-      }
+      supabase.removeChannel(channel);
       clearInterval(pollingInterval);
     };
   }, [selectedDate, loadAppointments, adminContext.barbeiroId, isTenantScope, tenantBarberIds, tenantId]);
@@ -446,16 +415,15 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
     const checkAppointmentCompletion = () => {
       const now = new Date();
       const currentDateStr = format(now, 'yyyy-MM-dd');
-      const todaysAppointments = appointments.filter(apt => apt?.data === currentDateStr);
+      const todaysAppointments = appointments.filter(apt => apt.data === currentDateStr);
 
       todaysAppointments.forEach(apt => {
-        if (!apt || !apt.hora) return;
         if (apt.status === 'completed' || apt.status === 'cancelled_by_admin' ||
             apt.status === 'cancelled_by_user' || apt.status === 'no_show') return;
 
-        const [hours, minutes] = (apt.hora || "00:00").split(':').map(Number);
+        const [hours, minutes] = apt.hora.split(':').map(Number);
         const aptStart = new Date(now);
-        aptStart.setHours(hours || 0, minutes || 0, 0, 0);
+        aptStart.setHours(hours, minutes, 0, 0);
         const aptEnd = new Date(aptStart.getTime() + (apt.servico?.duracao_minutos || 30) * 60000);
 
         if (now >= aptEnd && now.getTime() - aptEnd.getTime() < 120000) {
@@ -496,7 +464,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
         onAppointmentClick={(apt) =>
           navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt as any } })
         }
-        barbeiroId={effectiveBarbeiroId}
+        barbeiroId={adminContext.barbeiroId}
         tenantId={tenantId}
       />
     );
@@ -509,39 +477,14 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       <div className="flex-shrink-0 px-6 pt-2 pb-4">
         {/* Title + Controls */}
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <span className="text-[20px] font-bold text-foreground capitalize tracking-tight">
+          <div>
+            <h1 className="text-2xl font-bold tracking-wide text-foreground">Agenda</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
               {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
-            </span>
-            {!isToday(selectedDate) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDate(today);
-                  scrollToDate(today);
-                }}
-                className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
-              >
-                Hoje
-              </button>
-            )}
-            <span className="text-[12px] font-medium text-muted-foreground/75 tabular-nums">
-              • {filteredAppointments.length} {filteredAppointments.length === 1 ? "agendamento" : "agendamentos"}
-            </span>
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
-            {overdueState.count > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsOverdueModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold bg-foreground text-background hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-xs"
-              >
-                <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>Finalizar ({overdueState.count})</span>
-              </button>
-            )}
-
             {/* Filters Toggle */}
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -608,7 +551,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
               scrollToDate(today);
             }}
             className={cn(
-              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200",
+              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-opacity duration-200",
               isToday(selectedDate) ? "opacity-0 pointer-events-none" : "opacity-100"
             )}
           >
@@ -645,35 +588,39 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                           setSelectedDate(day);
                           scrollToDate(day);
                         }}
-                        className={cn(
-                          "w-full flex flex-col items-center gap-1 py-1 transition-all duration-200 select-none cursor-pointer",
-                          isSelected ? "opacity-100 scale-105" : "opacity-40 hover:opacity-75 scale-95"
-                        )}
+                        className="w-full flex flex-col items-center gap-1.5 py-1.5 hover:opacity-80 transition-all"
                       >
                         <span className={cn(
-                          "text-[11px] uppercase leading-none tracking-tight transition-colors duration-200",
-                          isSelected ? "text-foreground font-semibold" : "text-muted-foreground/70 font-medium"
+                          "text-[10px] font-semibold uppercase leading-none tracking-wider transition-colors duration-150",
+                          isSelected ? "text-foreground" : "text-muted-foreground/40"
                         )}>
                           {shortDayName(day)}
                         </span>
 
                         <div
                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full will-change-transform transition-all duration-200 ease-out",
-                            isSelected
-                              ? "bg-foreground text-background shadow-xs font-semibold"
-                              : dayIsToday
-                                ? "text-foreground font-semibold ring-1.5 ring-foreground/40 bg-transparent"
-                                : "text-foreground font-normal bg-transparent hover:bg-secondary/40"
+                            "w-10 h-10 flex items-center justify-center rounded-full will-change-transform",
+                            isSelected && "bg-foreground shadow-md shadow-foreground/20",
+                            dayIsToday && !isSelected && "ring-1 ring-primary/30"
                           )}
+                          style={{
+                            transform: isSelected ? "scale(1.08)" : "scale(1)",
+                            transition: "transform 200ms ease-out, background-color 200ms ease-out",
+                          }}
                         >
                           <span className={cn(
-                            "leading-none tabular-nums transition-all duration-200",
-                            isSelected ? "text-[16px] text-background font-semibold" : dayIsToday ? "text-[15px] font-semibold" : "text-[15px] font-normal"
-                          )}>
+                            "font-bold leading-none",
+                            isSelected ? "text-[17px] text-background" : "text-[15px] text-foreground"
+                          )}
+                          style={{ transition: "font-size 200ms ease-out" }}
+                          >
                             {format(day, "d")}
                           </span>
                         </div>
+
+                        {isSelected && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        )}
                       </button>
                     </div>
                   );
@@ -715,26 +662,21 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
             {/* Cards — 2 columns on large screens */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
               {filteredAppointments.map((apt, idx) => {
-                if (!apt) return null;
                 const statusConfig = getStatusColorConfig(apt.status, apt.barbeiro_confirmou);
                 const paymentBadge = getPaymentBadge(apt);
                 const PayIcon = paymentBadge.icon;
                 const duration = (apt as any).duracao || apt.servico?.duracao_minutos || 30;
-                const rawHora = apt.hora || "00:00";
-                const horaFormatted = rawHora.slice(0, 5);
-
-                const isCompleted = apt.status === "completed" || apt.status === "no_show";
+                const horaFormatted = apt.hora.substring(0, 5);
 
                 return (
                   <div
                     key={apt.id}
                     onClick={() => navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt } })}
-                    style={{ opacity: isCompleted ? 0.48 : 1 }}
                     className={cn(
-                      "rounded-xl border-l-[3px] p-4 border transition-all cursor-pointer",
-                      isCompleted
-                        ? "dark:bg-white/[0.015] bg-muted/20 border-border/30"
-                        : "hover:scale-[1.01] dark:bg-card/60 bg-card backdrop-blur-sm dark:shadow-none shadow-[0_2px_10px_rgba(0,0,0,0.06)]",
+                      "rounded-xl border-l-[3px] p-4 border",
+                      "hover:scale-[1.01] transition-all cursor-pointer",
+                      "dark:bg-card/60 bg-card backdrop-blur-sm",
+                      "dark:shadow-none shadow-[0_2px_10px_rgba(0,0,0,0.06)]",
                       statusConfig.border, statusConfig.accent, statusConfig.lightBg
                     )}
                   >
@@ -803,34 +745,13 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                           "text-sm font-semibold tabular-nums",
                           apt.is_free ? "text-muted-foreground/40 line-through" : "text-foreground"
                         )}>
-                          {apt.is_free
-                            ? "Grátis"
-                            : `R$ ${typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco.toFixed(2).replace('.', ',') : "0,00"}`}
+                          {apt.is_free ? "Grátis" : `R$ ${apt.preco.toFixed(2).replace('.', ',')}`}
                         </span>
                       )}
                     </div>
                   </div>
                 );
               })}
-
-              {/* Botão estratégico inferior para finalizar todos ao final dos atendimentos */}
-              {overdueState.count > 0 && (
-                <div className="pt-8 pb-4 flex flex-col items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsOverdueModalOpen(true)}
-                    className="h-12 px-8 rounded-full bg-foreground text-background text-[14px] font-semibold flex items-center justify-center gap-2 active:opacity-70 hover:opacity-90 transition-all cursor-pointer shadow-sm"
-                  >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>Finalizar todos ({overdueState.count})</span>
-                  </button>
-                  <p className="text-[12px] text-muted-foreground font-normal">
-                    {overdueState.count === 1
-                      ? "1 atendimento pendente de confirmação"
-                      : `${overdueState.count} atendimentos pendentes de confirmação`}
-                  </p>
-                </div>
-              )}
             </div>
           </>
         )}
@@ -843,7 +764,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
           setManualBookingModalOpen(true);
         }}
         className={cn(
-          "fixed bottom-28 right-8 z-40",
+          "fixed bottom-8 right-8 z-50",
           "w-13 h-13 rounded-full",
           "bg-foreground text-background",
           "flex items-center justify-center",
@@ -879,17 +800,8 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
         initialTime={selectedEmptySlot.time}
         onSuccess={() => loadAppointments(selectedDate)}
         skipValidation={true}
-        barbeiroId={effectiveBarbeiroId || undefined}
+        barbeiroId={adminContext.barbeiroId || undefined}
         tenantId={tenantId}
-      />
-
-      {/* Modal de confirmação em lote de agendamentos pendentes */}
-      <PendingAppointmentsModal
-        open={isOverdueModalOpen}
-        onOpenChange={setIsOverdueModalOpen}
-        appointments={overdueState.overdueAppointments}
-        onCompleteBulk={overdueState.completeBulk}
-        isCompleting={overdueState.isCompleting}
       />
     </div>
   );

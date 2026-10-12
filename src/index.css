@@ -41,20 +41,20 @@ All colors MUST be HSL. */
   .dark {
 
 
-    /* DARK THEME - #0f0f0f Neutral Dark */
+    /* DARK THEME - Red Premium (tweakcn) */
     
-    /* Backgrounds — #0f0f0f */
-    --background: 0 0% 5.9%;
-    --background-elevated: 0 0% 8.5%;
-    --foreground: 210 15% 98%;
+    /* Backgrounds — alinhado com paleta da tela de login (#0A0A0A) */
+    --background: 0 0% 4%;
+    --background-elevated: 0 0% 8%;
+    --foreground: 0 0% 100%;
 
-    /* Cards — contraste refinado e nítido sobre o fundo #0f0f0f */
-    --card: 0 0% 10%;
-    --card-elevated: 0 0% 13.5%;
-    --card-foreground: 210 15% 98%;
+    /* Cards */
+    --card: 0 0% 6%;
+    --card-elevated: 0 0% 10%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 0 0% 10%;
-    --popover-foreground: 210 15% 98%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 100%;
 
     /* Primary - vivid red */
     --primary: 10 78% 42%;
@@ -62,12 +62,12 @@ All colors MUST be HSL. */
     --primary-foreground: 0 0% 97%;
 
     /* Secondary */
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 210 15% 98%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 97%;
 
     /* Muted */
-    --muted: 0 0% 13%;
-    --muted-foreground: 0 0% 60%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 56%;
 
     --accent: 22 40% 12%;
     --accent-foreground: 18 35% 85%;
@@ -93,9 +93,9 @@ All colors MUST be HSL. */
     --success-foreground: 0 0% 100%;
 
     /* Borders */
-    --border: 0 0% 15%;
+    --border: 0 0% 18%;
     --border-glow: 10 78% 42% / 0.2;
-    --input: 0 0% 15%;
+    --input: 0 0% 18%;
     --ring: 10 78% 42%;
 
     --radius: 0.5rem;
@@ -108,13 +108,13 @@ All colors MUST be HSL. */
     --chart-5: 12 35% 32%;
 
     /* Sidebar */
-    --sidebar: 0 0% 7%;
-    --sidebar-foreground: 210 15% 92%;
+    --sidebar: 0 0% 9%;
+    --sidebar-foreground: 0 0% 89%;
     --sidebar-primary: 10 78% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 14%;
-    --sidebar-accent-foreground: 210 15% 90%;
-    --sidebar-border: 0 0% 14%;
+    --sidebar-accent: 22 40% 12%;
+    --sidebar-accent-foreground: 18 35% 85%;
+    --sidebar-border: 0 0% 18%;
     --sidebar-ring: 10 78% 42%;
 
     /* Gradients Dark */
@@ -162,12 +162,12 @@ All colors MUST be HSL. */
   /* LIGHT THEME - Red Premium (tweakcn) — default */
   :root:not(.dark),
   .light {
-    --background: 220 14% 96.5%;
-    --background-elevated: 220 14% 94%;
+    --background: 0 0% 100%;
+    --background-elevated: 0 0% 97%;
     --foreground: 0 0% 9%;
 
     --card: 0 0% 100%;
-    --card-elevated: 0 0% 98%;
+    --card-elevated: 0 0% 97%;
     --card-foreground: 0 0% 9%;
 
     --popover: 0 0% 100%;
@@ -286,17 +286,10 @@ All colors MUST be HSL. */
     overscroll-behavior: none;
     scroll-behavior: smooth;
     min-height: 100%;
-    min-height: 100dvh;
-    min-height: -webkit-fill-available;
-    overflow-x: clip;
+    min-height: 100svh;
+    min-height: var(--app-height, 100svh);
+    overflow-x: hidden;
     margin: 0;
-    scroll-padding-top: calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 1rem);
-    scroll-padding-bottom: max(var(--kb-offset, 0px), 5.5rem);
-  }
-
-  input, textarea, select, [contenteditable="true"] {
-    scroll-margin-top: calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 1rem);
-    scroll-margin-bottom: 2rem;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -319,12 +312,12 @@ All colors MUST be HSL. */
     -moz-osx-font-smoothing: grayscale;
     background: hsl(var(--background));
     width: 100%;
-    min-height: 100%;
-    min-height: 100dvh;
-    min-height: -webkit-fill-available;
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: var(--app-height, 100svh);
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
-    overflow-x: clip;
+    overflow-x: hidden;
     margin: 0;
     padding: 0;
   }
@@ -334,14 +327,14 @@ All colors MUST be HSL. */
   }
 
   #root {
-    min-height: 100%;
-    min-height: 100dvh;
-    min-height: -webkit-fill-available;
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: var(--app-height, 100svh);
     width: 100%;
     display: flex;
     flex-direction: column;
     background: hsl(var(--background));
-    overflow-x: clip;
+    overflow-x: hidden;
   }
 
   @supports (-webkit-touch-callout: none) {
@@ -392,10 +385,10 @@ All colors MUST be HSL. */
   }
 
   html.dark {
-    --background: 210 25% 6.3%;
+    --background: 0 0% 4%;
     --foreground: 0 0% 100%;
     --muted-foreground: 0 0% 80%;
-    --border: 210 18% 25%;
+    --border: 0 0% 32%;
   }
 }
 
@@ -1299,15 +1292,14 @@ button, a, [role="button"] {
   padding-bottom: calc(24px + var(--app-safe-bottom, var(--safe-bottom, 0px)));
 }
 
-/* App viewport utilities */
+/* App viewport utilities: use the stable JS-backed height instead of raw 100dvh.
+   This prevents iOS Safari/PWA from shrinking the whole app when chrome/keyboard changes. */
 .min-h-app {
-  min-height: 100%;
-  min-height: 100dvh;
+  min-height: var(--app-height, 100svh);
 }
 
 .h-app {
-  min-height: 100%;
-  min-height: 100dvh;
+  height: var(--app-height, 100svh);
 }
 
 .pt-safe-app {
@@ -1324,86 +1316,36 @@ button, a, [role="button"] {
 }
 
 /* ============================================================
-   Viewport & Bottom Nav — Comportamento Nativo Multiplataforma
-   (iPhone PWA / Tela de Início, Safari iOS, Android PWA / Tela de Início, Chrome Android)
+   Bottom nav — comportamento por plataforma
+   4 contextos: iPhone PWA, iPhone Safari, Android PWA, Android browser
    ============================================================ */
 
-/* Garantir que em TODAS as plataformas o fundo cubra 100% da tela física,
-   inclusive atrás do notch / Dynamic Island e atrás da barra de gestos / home indicator,
-   sem cortes, sem travar o scroll e sem bordas brancas expostas. */
-html {
-  min-height: 100%;
-  min-height: -webkit-fill-available;
-  background-color: hsl(var(--background));
-}
-
-body {
-  min-height: 100%;
-  min-height: 100dvh;
-  min-height: -webkit-fill-available;
-  background-color: hsl(var(--background));
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-#root {
-  min-height: 100%;
-  min-height: 100dvh;
-  min-height: -webkit-fill-available;
-  background-color: hsl(var(--background));
-  display: flex;
-  flex-direction: column;
-}
-
-/* Permitir scroll nativo fluído em todas as plataformas móveis */
-html.platform-ios-pwa body,
-html.platform-ios-browser body,
-html.platform-android-pwa body,
-html.platform-android-browser body {
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+/* iPhone instalado (PWA): a nav recebe um overdraw via --app-bottom-nav-bleed
+   para o fundo preto cobrir a área nativa do home indicator sem levantar ícones. */
+html.platform-ios-pwa nav[class*="fixed"][class*="bottom-0"] {
+  bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
   background-color: hsl(var(--background)) !important;
 }
 
-/* ══════════════════════════════════════════════════════════════════════
-   AGENDA MOBILE - REGRA DE TIPOGRAFIA EXCLUSIVA DO TEMA CLARO
-   - Todos os textos da agenda em negrito no tema claro
-   - Textos destacados / principais: nível mais forte de negrito (font-weight: 800)
-   - Demais textos: nível menor de negrito (font-weight: 600)
-/* ══════════════════════════════════════════════════════════════════════
-   APPLE HIG TYPOGRAPHY & CLARITY STANDARDS (iOS)
-   SF Pro system hierarchy: Body & notes regular/medium, Headlines semibold.
-   Removes exaggerated bolding to maintain clarity, deference, and minimalism.
-   ══════════════════════════════════════════════════════════════════════ */
-.admin-mobile-agenda {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
+html.platform-ios-pwa,
+html.platform-ios-pwa body,
+html.platform-ios-pwa #root {
+  height: var(--app-height, 100svh);
+  min-height: var(--app-height, 100svh);
+  max-height: var(--app-height, 100svh);
+  background-color: hsl(var(--background)) !important;
 }
 
-.admin-mobile-agenda .agenda-subtle {
-  font-weight: 400;
+html.platform-ios-pwa body {
+  overflow: hidden;
 }
 
-.admin-mobile-agenda .agenda-strong {
-  font-weight: 600;
+/* iPhone Safari (navegador): respiro extra pra não ficar atrás da UI do Safari */
+html.platform-ios-browser nav[class*="fixed"][class*="bottom-0"] {
+  padding-bottom: calc(var(--app-safe-bottom, 0px) + 4px) !important;
 }
 
-
-/* Animação suave e minimalista de piscada para o próximo horário verde */
-@keyframes soft-pulse-blink {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.15;
-  }
-}
-
-.animate-soft-blink {
-  display: inline-block !important;
-  animation: soft-pulse-blink 1.8s ease-in-out infinite !important;
-  will-change: opacity;
-}
+/* Android PWA e Android browser: manter comportamento atual, sem override */
 

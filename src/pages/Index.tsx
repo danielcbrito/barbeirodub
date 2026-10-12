@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowRight } from "lucide-react";
+import sceneBarberSad from "@/assets/scene-barber-sad.png";
+import sceneBarberHappy from "@/assets/scene-barber-happy.png";
+import { AmbientEffects } from "@/components/landing/AmbientEffects";
 import { SplashScreen } from "@/components/SplashScreen";
 import AuthBottomSheet from "@/components/AuthBottomSheet";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,27 +15,32 @@ import { QUERY_KEYS } from "@/lib/queryKeys";
 import { LoadingScreen } from "@/components/shared/LoadingScreen";
 import { resolveOldestOwnedTenant } from "@/lib/tenantOwnership";
 
-/**
- * Tela de Boas-Vindas (Index)
- * Minimalista, estratégica e sem sobrecarga de informação:
- * - Fundo com gradiente suave e clarinho
- * - Logo oficial "d" estilizado da marca + "ub"
- * - Ilustração dos barbeiros de canto a canto (full bleed)
- * - Botão "Criar conta" branco com sombra suave
- * - Sem frases de efeito, badges ou slogans poluídos
- */
+const SLIDES = [
+  {
+    id: "sad",
+    image: sceneBarberSad,
+    alt: "Barbeiro estressado com agenda bagunçada",
+  },
+  {
+    id: "happy",
+    image: sceneBarberHappy,
+    alt: "Barbeiro feliz com clientes satisfeitos",
+  },
+];
+
+const CAROUSEL_INTERVAL = 7000;
+
 const Index = () => {
+  const [showAuth, setShowAuth] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [activeSlide, setActiveSlide] = useState(0);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { isAuthenticated, isLoading, globalRole, isBarber, userId } = usePermissions();
-  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem("dub_welcome_visited"));
-  const [showAuth, setShowAuth] = useState(false);
+  const { globalRole, isBarber, isLoading, isAuthenticated, userId } = usePermissions();
 
-  /* ═══ Listener global de auth ═══ */
+  /* ═══ Listener global de auth — invalida cache ao logar/deslogar ═══ */
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN") {
         void supabase.auth.getUser().then(({ data: { user } }) => {
           queryClient.invalidateQueries({ queryKey: QUERY_KEYS.shared.permissoes(user?.id) });
@@ -46,12 +55,17 @@ const Index = () => {
 
   /* ═══ Splash timer ═══ */
   useEffect(() => {
-    if (!showSplash) return;
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-      sessionStorage.setItem("dub_welcome_visited", "true");
-    }, 1100);
+    const timer = setTimeout(() => setShowSplash(false), 2200);
     return () => clearTimeout(timer);
+  }, []);
+
+  /* ═══ Carrossel auto-play ═══ */
+  useEffect(() => {
+    if (showSplash) return;
+    const interval = setInterval(() => {
+      setActiveSlide((prev) => (prev + 1) % SLIDES.length);
+    }, CAROUSEL_INTERVAL);
+    return () => clearInterval(interval);
   }, [showSplash]);
 
   /* ═══ Auto-redirect se autenticado ═══ */
@@ -82,6 +96,7 @@ const Index = () => {
         return;
       }
 
+      // Cliente autenticado sem role especial → tela do cliente
       navigate("/cliente", { replace: true });
     };
 
@@ -92,100 +107,164 @@ const Index = () => {
     return <LoadingScreen message="Redirecionando..." />;
   }
 
+  const currentSlide = SLIDES[activeSlide];
+
   return (
     <>
       <SplashScreen visible={showSplash} />
 
-      <div
-        className="fixed inset-0 w-full h-[100dvh] text-zinc-900 overflow-hidden flex flex-col justify-between items-center select-none"
-        style={{
-          background:
-            "linear-gradient(175deg, #EAF1F7 0%, #FAF5F2 32%, #F6F2F7 65%, #EFF3F8 100%)",
-        }}
-      >
-        {/* Luzes difusas sutis para profundidade do gradiente claro */}
-        <div className="absolute -top-20 -left-16 w-96 h-96 bg-[#DEEAF5]/50 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -top-20 -right-16 w-96 h-96 bg-[#FDF1E8]/40 rounded-full blur-3xl pointer-events-none" />
-
-        {/* ─── 1. Header: Apenas a Logo dub (D oficial estilizado + ub) ─── */}
-        <header
-          className="relative z-20 w-full max-w-[430px] px-6 sm:px-8 flex items-center justify-center shrink-0"
-          style={{
-            paddingTop: "max(calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 18px), 24px)",
-          }}
+      <div className="fixed inset-0 flex items-center justify-center bg-background pt-[env(safe-area-inset-top)]">
+        <div
+          className="relative w-full h-full overflow-hidden bg-background"
+          style={{ maxWidth: 480 }}
         >
-          <div className="flex items-center gap-1 select-none">
-            <img
-              src="/auth-assets/dub_logo_d.png"
-              alt="D"
-              className="h-[27px] sm:h-[29px] w-auto object-contain block drop-shadow-sm"
-              draggable={false}
-            />
-            <span
-              className="text-[28px] sm:text-[30px] font-bold text-zinc-800 tracking-[-0.04em] lowercase"
-              style={{ fontFamily: "'Plus Jakarta Sans', Inter, -apple-system, sans-serif" }}
-            >
-              ub
-            </span>
-          </div>
-        </header>
-
-        {/* ─── 2. Hero: Ilustração dos Barbeiros de Canto a Canto (Tela Toda) ─── */}
-        <div className="relative z-10 w-full flex-1 min-h-0 flex items-center justify-center overflow-hidden">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: showSplash ? 0 : 1, scale: showSplash ? 0.97 : 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="w-full max-w-[500px] flex items-center justify-center"
+          {/* ═══ CAMADA 1: Fundo + Efeitos ═══ */}
+          <div
+            className="absolute inset-0 overflow-hidden"
+            style={{ zIndex: 0 }}
           >
-            <img
-              src="/auth-assets/barber_crew_edge.png"
-              alt="Barbeiros Dub"
-              className="w-full h-auto max-h-[46dvh] object-contain px-2 sm:px-4 select-none pointer-events-none"
-              draggable={false}
-              loading="eager"
-            />
+            <AmbientEffects />
+          </div>
+
+          {/* ═══ CAMADA 2: Personagem (atrás do painel, na frente do fundo) ═══ */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentSlide.id}
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.03 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="absolute left-0 right-0 flex items-center justify-center"
+              style={{
+                top: "4%",
+                bottom: "22%",
+                zIndex: 1,
+                padding: "0 6%",
+              }}
+            >
+              <img
+                src={currentSlide.image}
+                alt={currentSlide.alt}
+                draggable={false}
+                className="w-full h-full block dark:invert"
+                style={{
+                  objectFit: "contain",
+                  objectPosition: "center center",
+                }}
+              />
+            </motion.div>
+          </AnimatePresence>
+
+          {/* ═══ CAMADA 3: Painel sólido arredondado — cobre parte inferior do barbeiro ═══ */}
+          <div
+            className="absolute left-0 right-0 bottom-0 bg-background"
+            style={{
+              height: "24%",
+              zIndex: 2,
+            }}
+          />
+
+          {/* ═══ CAMADA 4: Título + CTA — por cima de tudo ═══ */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: showSplash ? 0 : 1, y: showSplash ? 12 : 0 }}
+            transition={{ duration: 0.5, delay: 1.0 }}
+            className="absolute bottom-0 left-0 right-0 px-6"
+            style={{ zIndex: 3 }}
+          >
+            {/* ═══ Carousel dots ═══ */}
+            <div className="flex items-center gap-2 mb-4">
+              {SLIDES.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveSlide(i)}
+                  className={`h-1 rounded-full transition-all duration-300 ${
+                    i === activeSlide
+                      ? "w-6 bg-primary"
+                      : "w-2 bg-muted-foreground/30"
+                  }`}
+                />
+              ))}
+            </div>
+
+            <span
+              className="block mb-1.5 text-[10px] font-semibold text-muted-foreground/40 uppercase"
+              style={{ letterSpacing: "2.5px" }}
+            >
+              DUB
+            </span>
+
+            <div className="flex flex-col items-start gap-1 mb-5">
+              <h1
+                style={{
+                  fontFamily: "'Plus Jakarta Sans', 'Space Grotesk', Inter, sans-serif",
+                  fontWeight: 900,
+                  fontSize: 27,
+                  lineHeight: 1.18,
+                  margin: 0,
+                }}
+                className="text-foreground"
+              >
+                Leve sua barbearia{" "}
+                <br />
+                para o{" "}
+                <span className="text-primary">próximo nível.</span>
+              </h1>
+              <p className="text-[12px] text-muted-foreground/60 leading-relaxed m-0">
+                Agenda inteligente, clientes fiéis e zero estresse.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2.5" style={{ marginBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}>
+              <button
+                onClick={() => navigate("/login?mode=signup")}
+                className="w-full flex items-center justify-between active:scale-[0.97] transition-all bg-primary text-primary-foreground"
+                style={{
+                  fontFamily: "'Plus Jakarta Sans', 'Space Grotesk', Inter, sans-serif",
+                  fontWeight: 700,
+                  fontSize: 15,
+                  borderRadius: 14,
+                  padding: "14px 18px",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <span>Criar conta</span>
+                <span
+                  className="flex items-center justify-center bg-primary-foreground"
+                  style={{ width: 28, height: 28, borderRadius: 8 }}
+                >
+                  <ArrowRight className="w-3.5 h-3.5 text-primary" />
+                </span>
+              </button>
+
+              <button
+                onClick={() => navigate("/login")}
+                className="w-full flex items-center justify-between active:scale-[0.97] transition-all border-foreground text-foreground"
+                style={{
+                  fontFamily: "'Plus Jakarta Sans', 'Space Grotesk', Inter, sans-serif",
+                  fontWeight: 700,
+                  fontSize: 15,
+                  background: "transparent",
+                  borderRadius: 14,
+                  padding: "14px 18px",
+                  borderWidth: "1.8px",
+                  borderStyle: "solid",
+                  cursor: "pointer",
+                }}
+              >
+                <span>Entrar no App</span>
+                <span
+                  className="flex items-center justify-center bg-foreground"
+                  style={{ width: 28, height: 28, borderRadius: 8 }}
+                >
+                  <ArrowRight className="w-3.5 h-3.5 text-background" />
+                </span>
+              </button>
+            </div>
+
           </motion.div>
         </div>
-
-        {/* ─── 3. Seção Inferior: Título Curto + Botão Branco + Link Entrar ─── */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: showSplash ? 0 : 1, y: showSplash ? 12 : 0 }}
-          transition={{ duration: 0.45, delay: 0.1 }}
-          className="relative z-20 w-full max-w-[380px] px-6 sm:px-8 flex flex-col items-center text-center shrink-0 mb-6 sm:mb-8"
-          style={{
-            paddingBottom: "max(calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 12px), 24px)",
-          }}
-        >
-          {/* Título direto, sem poluição de texto */}
-          <h1
-            className="text-[30px] sm:text-[34px] font-extrabold tracking-[-0.035em] text-zinc-900 leading-[1.12] mb-6 max-w-[340px]"
-            style={{ fontFamily: "'Plus Jakarta Sans', Inter, -apple-system, sans-serif" }}
-          >
-            Eleve sua barbearia<br />ao próximo nível
-          </h1>
-
-          {/* Botão Branco: Criar Conta */}
-          <button
-            onClick={() => navigate("/login?mode=signup")}
-            className="w-full max-w-[340px] h-[54px] sm:h-[56px] rounded-full bg-white hover:bg-zinc-50 text-zinc-950 font-semibold text-[16px] sm:text-[16.5px] tracking-tight flex items-center justify-center shadow-[0_10px_28px_rgba(0,0,0,0.08)] border border-white/80 active:scale-[0.985] transition-all cursor-pointer"
-          >
-            Criar conta
-          </button>
-
-          {/* Link Secundário: Já tem uma barbearia? Entrar */}
-          <p className="text-[13.5px] sm:text-[14px] text-zinc-500 font-normal mt-3.5">
-            Já tem uma barbearia?{" "}
-            <button
-              type="button"
-              onClick={() => navigate("/login")}
-              className="text-zinc-900 font-semibold underline underline-offset-4 hover:text-black transition-colors cursor-pointer inline-flex"
-            >
-              Entrar
-            </button>
-          </p>
-        </motion.div>
       </div>
 
       <AuthBottomSheet isOpen={showAuth} onClose={() => setShowAuth(false)} />

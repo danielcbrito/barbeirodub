@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Wallet, TrendingUp, Users, CreditCard, QrCode,
   ChevronRight, ChevronLeft, Loader2, CheckCircle2,
-  Landmark, ShieldCheck, X,
+  Landmark, Sparkles, ShieldCheck, X,
 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -156,7 +156,7 @@ export function WalletActivationModal({
                       desc="Pagamentos caem direto na sua carteira digital"
                     />
                     <BenefitRow
-                      icon={ShieldCheck}
+                      icon={Sparkles}
                       title="Profissionalismo"
                       desc="Destaque-se dos concorrentes com pagamento moderno"
                     />
@@ -281,7 +281,7 @@ export function WalletActivationModal({
                     onClick={handleClose}
                     className="w-full mt-8 flex items-center justify-center gap-2 h-12 rounded-xl bg-emerald-500 text-foreground font-bold text-[14px] transition-all active:scale-[0.98] hover:opacity-90"
                   >
-                    <CheckCircle2 className="w-5 h-5" />
+                    <Sparkles className="w-5 h-5" />
                     Começar a receber!
                   </button>
                 </div>

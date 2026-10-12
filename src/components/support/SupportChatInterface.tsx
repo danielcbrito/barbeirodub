@@ -1,4 +1,4 @@
-import { Send, Paperclip, Mic, X, Image as ImageIcon, FileText, StopCircle, AlertTriangle, CreditCard, Lock, Bug, RefreshCw, Loader2 } from "lucide-react";
+import { Send, Paperclip, Mic, X, Image as ImageIcon, FileText, StopCircle, AlertTriangle, CreditCard, Lock, Bug, Sparkles, RefreshCw, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -306,17 +306,22 @@ export function SupportChatInterface() {
       >
         {/* Logo/Avatar */}
         <div className="relative mb-8">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-muted flex items-center justify-center border border-border/80 shadow-md">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-foreground/10 shadow-2xl">
             <img src={logoImage} alt="DUB" className="w-12 h-12 object-contain" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 left-1/2 transform translate-x-4">
+            <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
+              <Sparkles className="w-3 h-3 text-emerald-400" />
+            </div>
           </div>
         </div>
 
         {/* Título */}
-        <h2 className="text-2xl font-bold tracking-tight text-foreground mb-2">
-          Suporte Dub
+        <h2 className="text-2xl font-semibold text-foreground mb-3">
+          Como posso ajudar?
         </h2>
-        <p className="text-muted-foreground text-sm leading-relaxed mb-8">
-          Atendimento técnico especializado para auxiliar você com seu sistema e suas operações.
+        <p className="text-foreground/50 text-sm leading-relaxed mb-10">
+          Sou um agente inteligente com acesso aos seus dados. Posso diagnosticar e resolver problemas automaticamente.
         </p>
       </motion.div>
 

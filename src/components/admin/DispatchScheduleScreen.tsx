@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { TimeWheelPicker } from "@/components/shared/TimeWheelPicker";
-import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import {
   format,
   startOfMonth,
@@ -33,20 +32,20 @@ interface DispatchScheduleScreenProps {
 }
 
 /* ═══════════════════════════════════════════════ */
-/* Helpers                                        */
+/* Curved back arrow                              */
 /* ═══════════════════════════════════════════════ */
 
-function getDefaultFutureTime(): string {
-  const now = new Date();
-  const d = new Date(now.getTime() + 30 * 60 * 1000);
-  const m = Math.ceil(d.getMinutes() / 5) * 5;
-  if (m === 60) {
-    d.setHours(d.getHours() + 1);
-    d.setMinutes(0);
-  } else {
-    d.setMinutes(m);
-  }
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+function CurvedBackArrow({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+      className={cn("pointer-events-none", className)}
+    >
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+    </svg>
+  );
 }
 
 /* ═══════════════════════════════════════════════ */
@@ -64,7 +63,7 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
   const [selectedTime, setSelectedTime] = useState<string>(
     parsedInitial && !isNaN(parsedInitial.getTime())
       ? `${String(parsedInitial.getHours()).padStart(2, "0")}:${String(parsedInitial.getMinutes()).padStart(2, "0")}`
-      : getDefaultFutureTime()
+      : "10:00"
   );
   const [currentMonth, setCurrentMonth] = useState(parsedInitial || new Date());
 
@@ -90,18 +89,7 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
     return setMinutes(setHours(new Date(selectedDate), h), m);
   }, [selectedDate, selectedTime]);
 
-  const isValid = finalDateTime ? finalDateTime > new Date() : false;
-
-  const handleSelectDate = (day: Date) => {
-    setSelectedDate(day);
-    if (isToday(day)) {
-      const [h, m] = selectedTime.split(":").map(Number);
-      const testDate = setMinutes(setHours(new Date(day), h), m);
-      if (testDate <= new Date()) {
-        setSelectedTime(getDefaultFutureTime());
-      }
-    }
-  };
+  const isValid = finalDateTime && finalDateTime > new Date();
 
   const handleConfirm = () => {
     if (!finalDateTime || !isValid) return;
@@ -110,22 +98,7 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
 
   const handleGoToTime = () => {
     if (!selectedDate) return;
-    if (isToday(selectedDate)) {
-      const [h, m] = selectedTime.split(":").map(Number);
-      const testDate = setMinutes(setHours(new Date(selectedDate), h), m);
-      if (testDate <= new Date()) {
-        setSelectedTime(getDefaultFutureTime());
-      }
-    }
     setInternalStep(1);
-  };
-
-  const handleStepBack = () => {
-    if (internalStep === 1) {
-      setInternalStep(0);
-    } else {
-      onBack();
-    }
   };
 
   /* ── Step dots ── */
@@ -153,43 +126,66 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.2 }}
-      className="flex flex-col h-[100dvh] bg-background overflow-hidden relative"
+      className="flex flex-col h-[100dvh] overflow-hidden"
     >
-      {/* ── Header Padrão do Sistema ── */}
-      <ScheduleHeader
-        title={internalStep === 0 ? "Escolha a data" : "Escolha o horário"}
-        onBack={handleStepBack}
-        right={<StepDots />}
-      />
+      {/* ── Header ── */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+        {/* Seta voltar — centralizada verticalmente com título */}
+        <button
+          onClick={() => {
+            if (internalStep === 1) setInternalStep(0);
+            else onBack();
+          }}
+          className="relative z-10 w-10 h-10 rounded-xl flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all shrink-0"
+          aria-label="Voltar"
+        >
+          <CurvedBackArrow className="text-foreground w-[22px] h-[22px]" />
+        </button>
 
-      {/* ── Conteúdo principal ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col items-center justify-center pb-36">
+        {/* Título — menor que a seta, alinhado ao centro vertical */}
+        <h2 className="flex-1 text-[15px] font-semibold text-foreground tracking-tight leading-none">
+          {internalStep === 0 ? "Escolha a data" : "Escolha o horário"}
+        </h2>
+
+        {/* Step dots — canto direito */}
+        <div className="flex items-center mr-1 shrink-0">
+          <StepDots />
+        </div>
+      </div>
+
+      {/* ── Divider ── */}
+      <div className="h-px bg-border/20 mx-1" />
+
+      {/* ── Conteúdo principal — centralizado verticalmente ── */}
+      <div className={cn(
+        "flex-1 flex flex-col items-center",
+        internalStep === 0
+          ? (isMobile ? "justify-center px-4 -mt-24" : "justify-center -mt-16")
+          : (isMobile ? "justify-center px-4 -mt-24" : "justify-center -mt-16")
+      )}>
 
         {/* Month nav row (only on calendar step) */}
         {internalStep === 0 && (
-          <div className="flex items-center justify-between w-full max-w-[400px] px-2 pb-3 shrink-0">
+          <div className="flex items-center justify-between w-full max-w-[430px] px-2 pb-4">
             <button
-              type="button"
               onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all text-foreground border border-border/30"
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary/40 active:scale-95 transition-all"
               aria-label="Mês anterior"
             >
-              <ChevronLeft className="w-4 h-4 text-foreground/80" />
+              <ChevronLeft className="w-4 h-4 text-foreground/60" />
             </button>
-            <span className="text-[15px] font-semibold text-foreground capitalize tracking-tight">
+            <span className="text-[14px] font-bold text-foreground capitalize tracking-tight">
               {format(currentMonth, "MMMM yyyy", { locale: ptBR })}
             </span>
             <button
-              type="button"
               onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all text-foreground border border-border/30"
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary/40 active:scale-95 transition-all"
               aria-label="Próximo mês"
             >
-              <ChevronRight className="w-4 h-4 text-foreground/80" />
+              <ChevronRight className="w-4 h-4 text-foreground/60" />
             </button>
           </div>
         )}
-
         <AnimatePresence mode="wait">
           {/* ═══════════════════════════════════════ */}
           {/* STEP 0: Calendar                       */}
@@ -201,20 +197,21 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
-              className="w-full max-w-[400px] flex flex-col"
+              className="w-full max-w-[430px] flex flex-col"
             >
-              <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 shadow-xs">
+              <div className="rounded-2xl border border-border/15 bg-secondary/5 p-4">
+
                 {/* Weekday headers */}
-                <div className="grid grid-cols-7 gap-1 mb-2">
+                <div className="grid grid-cols-7 gap-0.5 mb-1">
                   {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => (
-                    <div key={d} className="text-center text-[11px] font-semibold text-muted-foreground/60 py-1 uppercase tracking-wider">
+                    <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground/30 py-2 uppercase tracking-wider">
                       {d}
                     </div>
                   ))}
                 </div>
 
-                {/* Days grid */}
-                <div className="grid grid-cols-7 gap-1">
+                {/* Days grid — cells mais compactas e preenchidas */}
+                <div className="grid grid-cols-7 gap-0.5">
                   {calendarDays.map((day, index) => {
                     if (!day) return <div key={`e-${index}`} className="aspect-square" />;
 
@@ -226,17 +223,16 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
                     return (
                       <button
                         key={day.toISOString()}
-                        type="button"
-                        onClick={() => !isPast && handleSelectDate(day)}
+                        onClick={() => !isPast && setSelectedDate(day)}
                         disabled={isPast}
                         className={cn(
-                          "aspect-square rounded-xl text-[13.5px] font-medium transition-all duration-200 flex items-center justify-center relative",
+                          "aspect-square rounded-xl text-[13px] font-medium transition-all duration-200 flex items-center justify-center relative",
                           !inMonth && "opacity-20",
                           isPast && "opacity-20 cursor-not-allowed",
-                          !isPast && !isSelected && "hover:bg-secondary/60 text-foreground",
-                          isCurrentDay && !isSelected && "ring-1 ring-foreground/25 font-semibold",
+                          !isPast && !isSelected && "hover:bg-secondary/30 text-foreground/70",
+                          isCurrentDay && !isSelected && "ring-1 ring-foreground/25",
                           isSelected &&
-                            "bg-foreground text-background font-bold shadow-md scale-[1.04]"
+                            "bg-foreground text-background font-bold shadow-lg shadow-foreground/15 scale-[1.05]"
                         )}
                       >
                         {format(day, "d")}
@@ -253,10 +249,10 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
-                    className="flex items-center justify-center gap-2 mt-3.5 py-2.5 px-4 rounded-xl bg-secondary/60 border border-border/40"
+                    className="flex items-center justify-center gap-2 mt-4 py-2.5 rounded-xl bg-foreground/[0.06] border border-foreground/15"
                   >
-                    <CheckCircle2 className="w-4 h-4 text-foreground/80" />
-                    <span className="text-[12.5px] font-medium text-foreground capitalize">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-foreground/50" />
+                    <span className="text-[11px] font-semibold text-foreground/70 capitalize">
                       {format(selectedDate, "EEEE, dd 'de' MMMM", { locale: ptBR })}
                     </span>
                   </motion.div>
@@ -278,16 +274,16 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
               className="flex-1 flex flex-col items-center justify-center w-full max-w-[320px]"
             >
               {/* Label sutil */}
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1">
+              <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/35 font-semibold mb-1">
                 Horário do disparo
               </span>
 
-              {/* Data selecionada */}
-              <span className="text-[13px] text-foreground font-medium capitalize mb-5">
+              {/* Data selecionada — pequena e discreta */}
+              <span className="text-[11px] text-muted-foreground/40 capitalize mb-6">
                 {format(selectedDate, "EEEE, dd 'de' MMMM", { locale: ptBR })}
               </span>
 
-              {/* Wheel picker */}
+              {/* Wheel picker — grande e centralizado */}
               <div className="flex items-center justify-center w-full">
                 <TimeWheelPicker
                   value={selectedTime}
@@ -296,55 +292,52 @@ export function DispatchScheduleScreen({ onConfirm, onBack, initialDate }: Dispa
                 />
               </div>
 
-              {/* Confirmação ou aviso de horário no passado */}
-              {isValid && finalDateTime ? (
+              {/* Confirmação sutil */}
+              {isValid && finalDateTime && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-5 py-2.5 px-4 rounded-xl bg-secondary/60 border border-border/40 text-center"
+                  className="mt-6 py-2 px-4 rounded-xl bg-foreground/[0.04] border border-border/10"
                 >
-                  <span className="text-[13px] font-semibold text-foreground">
+                  <span className="text-[12px] font-semibold text-foreground/60">
                     Envio às {selectedTime}
                   </span>
                 </motion.div>
-              ) : (
-                <div className="mt-5 py-2.5 px-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-[12px] font-medium text-center">
-                  Escolha um horário futuro (após {format(new Date(), "HH:mm")})
-                </div>
               )}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* ═══════════════════════════════════════════ */}
-      {/* Máscara de fade e Barra de Ação Inferior    */}
-      {/* Apenas botão principal — sem botão voltar duplicado */}
-      {/* ═══════════════════════════════════════════ */}
-      <>
-        {/* Máscara inferior para evitar que o conteúdo passe por baixo */}
-        <div
-          className="fixed bottom-0 inset-x-0 h-32 pointer-events-none z-[45] bg-gradient-to-t from-background via-background/90 to-transparent"
-          aria-hidden="true"
-        />
-
-        {/* Container flutuante do botão — 100% centralizado */}
-        <div
-          className="fixed bottom-0 inset-x-0 z-[50] pointer-events-none flex justify-center items-center px-4 pb-[calc(1.1rem+env(safe-area-inset-bottom,0px))]"
-        >
-          <div className="w-full max-w-[450px] pointer-events-auto">
-            <button
-              type="button"
-              onClick={internalStep === 0 ? handleGoToTime : handleConfirm}
-              disabled={internalStep === 0 ? !selectedDate : !isValid}
-              className="w-full h-[52px] px-6 rounded-full bg-foreground text-background font-semibold text-[14px] flex items-center justify-center transition-all shadow-[0_16px_40px_rgba(0,0,0,0.35)] active:scale-[0.98] disabled:opacity-30 disabled:pointer-events-none"
-            >
-              {internalStep === 0 ? "Continuar" : "Confirmar Agendamento"}
-            </button>
-          </div>
-        </div>
-      </>
+      {/* ═══════════════════════════════════════ */}
+      {/* Bottom Action — fixo na base           */}
+      {/* ═══════════════════════════════════════ */}
+      <div className={cn(
+        "px-4",
+        isMobile
+          ? "fixed bottom-0 left-0 right-0 z-40 pb-[calc(16px+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background to-transparent pt-8"
+          : "mt-auto pb-6"
+      )}>
+        {internalStep === 0 ? (
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={handleGoToTime}
+            disabled={!selectedDate}
+            className="w-full py-4 rounded-2xl bg-foreground text-background text-[14px] font-semibold hover:bg-foreground/90 transition-all duration-300 disabled:opacity-25 text-center"
+          >
+            Continuar
+          </motion.button>
+        ) : (
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={handleConfirm}
+            disabled={!isValid}
+            className="w-full py-4 rounded-2xl bg-foreground text-background text-[14px] font-semibold hover:bg-foreground/90 transition-all duration-300 disabled:opacity-25 text-center"
+          >
+            Confirmar Agendamento
+          </motion.button>
+        )}
+      </div>
     </motion.div>
   );
 }
-

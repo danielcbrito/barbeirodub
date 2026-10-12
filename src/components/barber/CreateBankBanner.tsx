@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import {
   Wallet, CheckCircle2, Loader2, ChevronRight, QrCode,
-  CreditCard, TrendingUp, X,
+  CreditCard, Sparkles, TrendingUp, X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -183,10 +183,15 @@ export function CreateBankBanner({ barbeiroId, basePath = "/barbeiro", variant =
       </button>
 
       <div className="relative px-4 py-5">
-        {/* Ícone principal */}
+        {/* Ícone principal com sparkle */}
         <div className="flex items-center gap-3 mb-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-foreground/[0.06] flex items-center justify-center transition-transform group-hover:scale-105">
-            <Wallet className="w-5 h-5 text-foreground" />
+          <div className="relative">
+            <div className="w-12 h-12 rounded-2xl bg-primary/15 flex items-center justify-center transition-transform group-hover:scale-105">
+              <Wallet className="w-6 h-6 text-primary" />
+            </div>
+            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+              <Sparkles className="w-2.5 h-2.5 text-foreground" />
+            </div>
           </div>
           <div className="text-left">
             <p className="text-[15px] font-bold text-foreground leading-tight">

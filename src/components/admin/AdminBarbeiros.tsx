@@ -75,15 +75,9 @@ type FilterType = "all" | "active" | "inactive";
 /* ═══════════════════════════════════════ */
 interface AdminBarbeirosProps {
   basePath?: string;
-  hideHeader?: boolean;
-  onBack?: () => void;
 }
 
-export function AdminBarbeiros({
-  basePath = "/admin",
-  hideHeader = false,
-  onBack,
-}: AdminBarbeirosProps = {}) {
+export function AdminBarbeiros({ basePath = "/admin" }: AdminBarbeirosProps = {}) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -155,7 +149,7 @@ export function AdminBarbeiros({
     loadBarbeiros();
 
     const channel = supabase
-      .channel(`admin-barbeiros-${Math.random().toString(36).slice(2, 9)}`)
+      .channel("admin-barbeiros")
       .on("postgres_changes", { event: "*", schema: "public", table: "barbeiros" }, () => {
         loadBarbeiros();
       })
@@ -723,27 +717,25 @@ export function AdminBarbeiros({
   return (
     <div className="pb-28 lg:pb-8">
       {isMobile ? (
-        <div className={cn(!hideHeader && "-mx-3 -mt-3")}>
-          {/* Header + Filters sticky bar */}
+        <div className="-mx-3 -mt-3">
+          {/* Header */}
           <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
-            {!hideHeader && (
-              <div className="flex items-center gap-2 px-4 h-16">
-                <button
-                  onClick={() => (onBack ? onBack() : navigate(`${basePath}/configuracoes-perfil`))}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
-                  aria-label="Voltar"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                    <path d="M9 14L4 9l5-5" />
-                    <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-                  </svg>
-                </button>
-                <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1 ml-1">Barbeiros</h1>
-                <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
-                  {totalBarbeiros} cadastrados
-                </span>
-              </div>
-            )}
+            <div className="flex items-center gap-2 px-4 h-16">
+              <button
+                onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
+                aria-label="Voltar"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+                  <path d="M9 14L4 9l5-5" />
+                  <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+                </svg>
+              </button>
+              <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1 ml-1">Barbeiros</h1>
+              <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
+                {totalBarbeiros} cadastrados
+              </span>
+            </div>
 
             {/* Segmented filter */}
             <div className="px-4 pb-2">

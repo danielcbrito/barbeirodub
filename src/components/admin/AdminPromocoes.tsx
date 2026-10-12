@@ -21,7 +21,6 @@ import {
   useDeletePromocao,
   useUpdatePromocao,
 } from "@/hooks/useAdminMutations";
-import { ScheduleHeader, CurvedBackArrow } from "@/components/shared/ScheduleHeader";
 
 interface Promocao {
   id: string;
@@ -145,9 +144,8 @@ export function AdminPromocoes({ tenantId, basePath = "/admin", initialTab = "cu
 
   // Realtime subscription for invalidation
   useEffect(() => {
-    const channelId = `admin-promocoes-${resolvedTenantId || 'global'}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(channelId)
+      .channel(`admin-promocoes-${resolvedTenantId || 'global'}`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
@@ -234,11 +232,23 @@ export function AdminPromocoes({ tenantId, basePath = "/admin", initialTab = "cu
   /* ─── Mobile: Full-screen Edit ─── */
   if (isMobile && mobileEditOpen && editingPromo) {
     return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col">
-        <ScheduleHeader
-          title="Editar Fidelidade"
-          onBack={() => { setMobileEditOpen(false); setEditingPromo(null); }}
-        />
+      <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[env(safe-area-inset-top)]">
+        {/* Header */}
+        <div className="sticky top-0 z-30 bg-background">
+          <div className="flex items-center gap-2.5 px-4 h-14">
+            <button
+              onClick={() => { setMobileEditOpen(false); setEditingPromo(null); }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
+              aria-label="Voltar"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+                <path d="M9 14L4 9l5-5" />
+                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+              </svg>
+            </button>
+            <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">Editar Promoção</h1>
+          </div>
+        </div>
 
         {/* Form content */}
         <div className="flex-1 overflow-y-auto px-4 pt-5 pb-28 scrollbar-none">
@@ -293,10 +303,10 @@ export function AdminPromocoes({ tenantId, basePath = "/admin", initialTab = "cu
                         type="button"
                         onClick={() => setEditPontos(p)}
                         className={cn(
-                          "flex-1 py-2.5 rounded-xl text-[12.5px] font-semibold transition-all active:scale-95 border",
+                          "flex-1 py-3 rounded-xl text-[13px] font-bold transition-all duration-200 border",
                           editPontos === p
-                            ? "bg-foreground text-background border-foreground shadow-xs"
-                            : "bg-secondary/40 border-border/60 text-muted-foreground hover:text-foreground"
+                            ? "bg-foreground/10 border-foreground/40 text-foreground"
+                            : "bg-transparent border-border/40 text-muted-foreground hover:border-foreground/30 hover:text-foreground"
                         )}
                       >
                         {p}
@@ -364,10 +374,22 @@ export function AdminPromocoes({ tenantId, basePath = "/admin", initialTab = "cu
   if (isMobile) {
     return (
       <div className="flex flex-col min-h-[100dvh] bg-background overflow-hidden">
-        <ScheduleHeader
-          title={singleTab ? screenTitle : "Programa de Fidelidade"}
-          onBack={() => (onBack ? onBack() : navigate(basePath))}
-        />
+        <div className="sticky top-0 z-20 bg-background">
+          <div className="flex items-center gap-2.5 px-4 h-14">
+            <button
+              onClick={() => (onBack ? onBack() : navigate(basePath))}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
+              aria-label="Voltar"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+                <path d="M9 14L4 9l5-5" />
+                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+              </svg>
+            </button>
+            <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">
+              {singleTab ? screenTitle : "Promoções"}
+            </h1>
+          </div>
 
           {singleTab ? (
             <p className="px-4 pb-3 pt-1 text-[12.5px] text-muted-foreground leading-relaxed">
@@ -393,6 +415,8 @@ export function AdminPromocoes({ tenantId, basePath = "/admin", initialTab = "cu
               </div>
             </div>
           )}
+        </div>
+
 
         <div className={cn("flex-1 px-4 pt-4 pb-28 min-h-0", activeTab === "cupons" ? "overflow-hidden" : "overflow-y-auto scrollbar-none")}>
           {activeTab === "cupons" ? (
@@ -497,7 +521,10 @@ export function AdminPromocoes({ tenantId, basePath = "/admin", initialTab = "cu
             className="w-8 h-8 rounded-lg flex items-center justify-center text-foreground hover:bg-secondary/50 active:scale-95 transition-all"
             aria-label="Voltar"
           >
-            <CurvedBackArrow className="w-5 h-5" />
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 14L4 9l5-5" />
+              <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+            </svg>
           </button>
         )}
         <div>

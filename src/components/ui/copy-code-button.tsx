@@ -1,91 +1,141 @@
-import { useState, useRef } from "react";
-import { Link2, Copy, Check } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
 
 interface CopyCodeProps {
   code: string;
   label?: string;
-  className?: string;
 }
 
 /**
- * Botão 100% minimalista e sério de copiar link/código.
- * Design institucional com feedback instantâneo, ícones precisos
- * e adaptação perfeita aos temas claro e escuro.
+ * Botão premium de copiar código/link com animação blur + progress.
+ * Adapta-se ao tema claro/escuro via tokens semânticos.
  */
-function CopyCode({ code, label, className }: CopyCodeProps) {
+export function CopyCode({ code, label }: CopyCodeProps) {
   const [copied, setCopied] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const duration = 4000;
+
+  useEffect(() => {
+    if (copied) {
+      const showTimer = setTimeout(() => setShowConfirmation(true), 400);
+
+      setProgress(0);
+      const startTime = Date.now();
+
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const newProgress = Math.min((elapsed / duration) * 100, 100);
+        setProgress(newProgress);
+
+        if (elapsed >= duration) {
+          clearInterval(interval);
+          setShowConfirmation(false);
+          setTimeout(() => {
+            setCopied(false);
+            setProgress(0);
+          }, 400);
+        }
+      }, 16);
+
+      return () => {
+        clearInterval(interval);
+        clearTimeout(showTimer);
+      };
+    }
+  }, [copied]);
 
   const handleCopy = async () => {
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(code);
-      } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = code;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-9999px";
-        textArea.style.top = "-9999px";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textArea);
-      }
+      await navigator.clipboard.writeText(code);
     } catch {
-      // fallback
+      const textArea = document.createElement("textarea");
+      textArea.value = code;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
     }
-
     setCopied(true);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      setCopied(false);
-    }, 2000);
   };
 
   return (
     <div
-      className={cn(
-        "relative overflow-hidden flex items-center justify-between gap-2.5 bg-card border border-border/60 dark:border-white/[0.08] shadow-xs rounded-2xl px-3.5 h-11 w-full transition-colors",
-        className
-      )}
+      className="relative overflow-hidden flex items-center justify-center bg-secondary rounded-full px-6 py-2.5 h-12 w-full"
     >
-      {/* Lado esquerdo: Ícone discreto de link + URL limpa */}
-      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        <Link2 className="w-4 h-4 text-muted-foreground/70 shrink-0 stroke-[1.8]" />
-        <span
-          title={label || code}
-          className="text-[12.5px] font-mono font-medium text-muted-foreground hover:text-foreground select-all truncate tracking-tight transition-colors"
-        >
+      {/* Progress background */}
+      <div
+        className="absolute left-0 top-0 bottom-0 bg-muted"
+        style={{
+          width: `${progress}%`,
+          opacity: copied ? 1 : 0,
+          transition: "opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      />
+
+      {/* Original content */}
+      <div
+        className="absolute inset-0 flex items-center justify-between pl-5 pr-2"
+        style={{
+          opacity: copied ? 0 : 1,
+          filter: copied ? "blur(12px)" : "blur(0px)",
+          transform: copied ? "scale(0.92)" : "scale(1)",
+          transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
+          pointerEvents: copied ? "none" : "auto",
+          zIndex: copied ? 0 : 20,
+        }}
+      >
+        <span className="text-[13px] font-medium tracking-wide text-muted-foreground select-all truncate mr-2">
           {label || code}
         </span>
+        <button
+          onClick={handleCopy}
+          className="bg-background hover:bg-accent text-foreground font-semibold text-[12px] px-5 py-2 rounded-full shadow-sm transition-all duration-300 hover:shadow-md active:scale-95 cursor-pointer select-none shrink-0"
+        >
+          Copiar
+        </button>
       </div>
 
-      {/* Lado direito: Botão 100% minimalista apenas com o ícone dos dois papéis */}
-      <button
-        type="button"
-        onClick={handleCopy}
-        className={cn(
-          "w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer select-none shrink-0",
-          copied
-            ? "bg-foreground text-background opacity-85"
-            : "bg-foreground text-background hover:opacity-90"
-        )}
-        aria-label={copied ? "Link copiado" : "Copiar link"}
-        title={copied ? "Link copiado!" : "Copiar link"}
+      {/* Confirmation */}
+      <div
+        className="relative flex items-center gap-2"
+        style={{
+          opacity: showConfirmation ? 1 : 0,
+          filter: showConfirmation ? "blur(0px)" : "blur(12px)",
+          transform: showConfirmation ? "scale(1)" : "scale(1.08)",
+          transition: "all 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
+          pointerEvents: "none",
+          zIndex: 10,
+        }}
       >
-        {copied ? (
-          <Check className="w-4 h-4 stroke-[2.2]" />
-        ) : (
-          <Copy className="w-3.5 h-3.5 stroke-[1.9]" />
-        )}
-      </button>
+        <div className="w-6 h-6 bg-foreground rounded-full flex items-center justify-center">
+          <svg
+            className="w-3.5 h-3.5 text-background"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={3}
+              d="M5 13l4 4L19 7"
+              style={{
+                strokeDasharray: 24,
+                strokeDashoffset: showConfirmation ? 0 : 24,
+                transition:
+                  "stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.3s",
+              }}
+            />
+          </svg>
+        </div>
+        <span className="text-[14px] font-semibold text-foreground">
+          Link copiado!
+        </span>
+      </div>
     </div>
   );
 }
-
-export { CopyCode };
-export default CopyCode;
-
-

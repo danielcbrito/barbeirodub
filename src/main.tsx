@@ -59,8 +59,8 @@ const isStandalone =
   window.matchMedia?.("(display-mode: standalone)").matches ||
   (navigator as any).standalone === true;
 
-const DARK_APP_BACKGROUND = "#0f0f0f";
-const LIGHT_APP_BACKGROUND = "#F4F5F7";
+const DARK_APP_BACKGROUND = "#0A0A0A";
+const LIGHT_APP_BACKGROUND = "#FFFFFF";
 
 const platformClass = isIOS
   ? (isStandalone ? "platform-ios-pwa" : "platform-ios-browser")
@@ -83,23 +83,27 @@ const syncViewportVars = () => {
   root.style.setProperty("--app-safe-top", "var(--sat)");
   root.style.setProperty("--app-safe-right", "var(--sar)");
   root.style.setProperty("--app-safe-left", "var(--sal)");
-  root.style.setProperty("--app-bottom-nav-bleed", "0px");
+  // iPhone PWA instalado: o iOS cria a área física do home indicator.
+  // Se essa área entrar como padding normal, a bottom nav fica alta e parece
+  // haver uma “barra cinza” abaixo do app. A correção é separar:
+  // - --app-safe-bottom: espaço de layout/conteúdo (0px no PWA instalado)
+  // - --app-bottom-nav-bleed: fundo extra da nav que sangra para baixo
+  // - --app-bottom-nav-offset: desloca só esse fundo extra para fora do layout
+  const iosStandaloneBottomBleed = "env(safe-area-inset-bottom, 0px)";
+  root.style.setProperty("--app-bottom-nav-bleed", isIOS && isStandalone ? iosStandaloneBottomBleed : "0px");
   root.style.setProperty("--app-bottom-nav-offset", "0px");
 
-  // --app-safe-bottom = espaço para controles inferiores
-  // No iPhone agora usamos a mesma altura compacta e elegante do Android (8px),
-  // eliminando o vão excessivo de 34px que empurrava e espremia o app para cima no iOS.
+  // --app-safe-bottom = espaço de layout que sobe conteúdo/controles.
+  // No iPhone PWA ele precisa ser 0px para a navegação não nascer acima da
+  // área nativa; a cobertura visual da área inferior fica por conta do bleed.
   let safeBottom: string;
   if (isIOS && isStandalone) {
-    safeBottom = "8px";
+    safeBottom = "0px";
   } else if (isIOS) {
-    safeBottom = "8px";
-  } else if (isAndroid && isStandalone) {
-    safeBottom = "max(env(safe-area-inset-bottom, 0px), 8px)";
-  } else if (isAndroid) {
-    safeBottom = "max(env(safe-area-inset-bottom, 0px), 8px)";
+    // iPhone Safari: respiro extra pra não colidir com a barra do navegador
+    safeBottom = `max(env(safe-area-inset-bottom, 0px), 12px)`;
   } else {
-    safeBottom = "8px";
+    safeBottom = `env(safe-area-inset-bottom, 0px)`;
   }
   root.style.setProperty("--app-safe-bottom", safeBottom);
 
@@ -107,35 +111,8 @@ const syncViewportVars = () => {
   root.style.setProperty("--app-height", `${layoutHeight}px`);
   root.style.setProperty("--kb-viewport-height", `${visualHeight}px`);
   root.style.setProperty("--kb-offset", `${keyboardOffset}px`);
-
-  if (keyboardOffset > 140) {
-    root.classList.add("keyboard-open");
-    root.style.setProperty("--kb-state", "open");
-  } else {
-    root.classList.remove("keyboard-open");
-    root.style.setProperty("--kb-state", "closed");
-  }
 };
 
-const scrollActiveInputIntoView = (el?: Element | null) => {
-  const target = (el || document.activeElement) as HTMLElement | null;
-  if (!target) return;
-  const isInput = target.matches?.("input, textarea, select, [contenteditable='true']");
-  if (!isInput || target.closest("[data-no-auto-scroll]")) return;
-
-  const rect = target.getBoundingClientRect();
-  const visualH = window.visualViewport?.height || window.innerHeight;
-  // Se o campo já está visível dentro da área útil da tela, não faz scroll desnecessário
-  if (rect.top >= 48 && rect.bottom <= visualH - 96) {
-    return;
-  }
-
-  try {
-    target.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-  } catch {
-    target.scrollIntoView(false);
-  }
-};
 
 const scheduleViewportSync = () => {
   syncViewportVars();
@@ -151,22 +128,8 @@ window.addEventListener("pageshow", scheduleViewportSync);
 window.addEventListener("focus", scheduleViewportSync);
 document.addEventListener("visibilitychange", scheduleViewportSync);
 document.addEventListener("fullscreenchange", scheduleViewportSync);
-
-// Auto-recentralização suave em todo o app quando qualquer campo de texto ganha foco
-document.addEventListener("focusin", (e) => {
-  const target = e.target as HTMLElement | null;
-  if (!target || !target.matches?.("input, textarea, select, [contenteditable='true']")) return;
-  window.setTimeout(() => scrollActiveInputIntoView(target), 280);
-});
-
 if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", () => {
-    scheduleViewportSync();
-    const active = document.activeElement;
-    if (active && active.matches?.("input, textarea, select, [contenteditable='true']")) {
-      window.setTimeout(() => scrollActiveInputIntoView(active), 120);
-    }
-  });
+  window.visualViewport.addEventListener("resize", scheduleViewportSync);
   window.visualViewport.addEventListener("scroll", scheduleViewportSync);
 }
 

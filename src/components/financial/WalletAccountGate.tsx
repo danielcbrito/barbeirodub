@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Wallet, MessageCircle, ShieldCheck } from "lucide-react";
+import { Wallet, MessageCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
@@ -120,7 +120,7 @@ export function WalletAccountGate({
               className="mb-5"
             >
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/[0.06] border border-primary/[0.08]">
-                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
                 <span className="text-[10px] font-semibold text-primary tracking-wide uppercase">
                   Atendimento Personalizado
                 </span>

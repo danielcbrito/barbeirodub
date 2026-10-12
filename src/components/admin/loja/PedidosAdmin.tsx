@@ -59,9 +59,8 @@ export function PedidosAdmin({ tenantId, readOnly = false, showAdminNotes = true
 
   // ── Realtime ─────────────────────────────────────────────
   useEffect(() => {
-    const channelId = `pedidos-loja-${tenantId}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(channelId)
+      .channel("pedidos-loja-" + tenantId)
       .on(
         "postgres_changes",
         {

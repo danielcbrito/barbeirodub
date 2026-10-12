@@ -24,6 +24,7 @@ import {
   DollarSign, 
   Users, 
   Download, 
+  Sparkles, 
   ArrowLeft, 
   Search, 
   Trash2, 
@@ -561,13 +562,13 @@ Sistema de Gestão - Barbearia
                           </CardContent>
                         </Card>
 
-                        {/* Diagnóstico Estratégico */}
+                        {/* Análise IA */}
                         {selectedReport.resumo_ia && (
-                          <Card className="bg-card border border-border/80 shadow-sm">
+                          <Card className="bg-gradient-to-br from-primary/5 to-transparent border-primary/20">
                             <CardHeader className="pb-3">
-                              <CardTitle className="text-base flex items-center gap-2 font-bold text-foreground">
-                                <BarChart3 className="w-4 h-4 text-foreground" />
-                                Diagnóstico Estratégico
+                              <CardTitle className="text-base flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-primary" />
+                                Análise Inteligente
                               </CardTitle>
                             </CardHeader>
                             <CardContent>

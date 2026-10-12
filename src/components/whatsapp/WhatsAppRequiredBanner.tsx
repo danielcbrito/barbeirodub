@@ -30,13 +30,13 @@ export function WhatsAppRequiredBanner({
   if (variant === "fullblock") {
     return (
       <div className="relative flex flex-col items-center justify-center min-h-[80vh] px-6 text-center animate-fade-in">
-        {/* Botão voltar — Padrão do sistema */}
+        {/* Botão voltar */}
         <button
           onClick={handleBack}
-          className="absolute top-4 left-4 w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary border border-border/30 flex items-center justify-center active:scale-95 transition-all text-foreground"
+          className="absolute top-4 left-2 p-2 rounded-full hover:bg-muted/60 transition-colors"
           aria-label="Voltar"
         >
-          <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+          <ChevronLeft className="w-5 h-5 text-foreground" />
         </button>
 
         {/* Logo WhatsApp */}

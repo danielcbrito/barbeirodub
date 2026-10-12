@@ -1,4 +1,4 @@
-import { Bell, RefreshCw, Headset } from "lucide-react";
+import { Bell, RefreshCw } from "lucide-react";
 import logoDub from "@/assets/logo-dub.png";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -51,17 +51,8 @@ export function BarberMobileHeader({
             </div>
           </div>
 
-          {/* Right - Suporte + Refresh + Notificações */}
+          {/* Right - Refresh + Notificações */}
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              onClick={() => window.open("https://wa.me/5511963390043?text=" + encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"), "_blank", "noopener,noreferrer")}
-              className="w-9 h-9 rounded-xl flex items-center justify-center bg-secondary/40 text-muted-foreground hover:text-foreground active:scale-95 transition-all"
-              title="Suporte"
-              aria-label="Suporte"
-            >
-              <Headset className="w-4 h-4" />
-            </button>
-
             <button
               onClick={handleRefresh}
               className={cn(

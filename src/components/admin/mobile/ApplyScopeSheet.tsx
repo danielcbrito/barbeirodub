@@ -69,27 +69,6 @@ export function ApplyScopeSheet({
     setSelected(next);
   };
 
-  const selectAll = () => {
-    setSelected(new Set(unidades.map((u) => u.id)));
-  };
-
-  const clearAll = () => {
-    setSelected(new Set());
-  };
-
-  const handleSelectMode = (newMode: "self" | "units") => {
-    setMode(newMode);
-    if (newMode === "units") {
-      // Se tiver só 1 unidade ou nenhuma explícita, já seleciona direto
-      if (unidades.length <= 1) {
-        setSelected(new Set(unidades.map((u) => u.id)));
-      } else {
-        // Se tiver várias unidades, começa com todas selecionadas por padrão (comportamento "todas")
-        setSelected(new Set(unidades.map((u) => u.id)));
-      }
-    }
-  };
-
   const confirm = () => {
     if (mode === "self") {
       onConfirm({ type: "self" });
@@ -98,20 +77,18 @@ export function ApplyScopeSheet({
     }
     if (mode === "units") {
       const ids = Array.from(selected);
-      // Se não tem unidades explícitas no banco, passa array vazio para escopo geral
+      if (ids.length === 0) return;
       onConfirm({ type: "units", unitIds: ids });
       onOpenChange(false);
     }
   };
 
   const canConfirm =
-    mode === "self" || (mode === "units" && (unidades.length <= 1 || selected.size > 0));
-
-  const allSelected = unidades.length > 1 && selected.size === unidades.length;
+    mode === "self" || (mode === "units" && selected.size > 0);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-2xl border-border/50 max-h-[85vh] overflow-y-auto">
+      <SheetContent side="bottom" className="rounded-t-2xl border-border/50">
         <SheetHeader className="text-left">
           <SheetTitle className="text-[17px] font-semibold text-foreground">{title}</SheetTitle>
           <SheetDescription className="text-[12.5px] text-muted-foreground">
@@ -121,7 +98,7 @@ export function ApplyScopeSheet({
 
         <div className="mt-5 space-y-2.5">
           <button
-            onClick={() => handleSelectMode("self")}
+            onClick={() => setMode("self")}
             className={cn(
               "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all text-left",
               mode === "self"
@@ -134,13 +111,13 @@ export function ApplyScopeSheet({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[14px] font-medium text-foreground">Somente para mim</p>
-              <p className="text-[11.5px] text-muted-foreground">Aplica só ao seu perfil de atendimento</p>
+              <p className="text-[11.5px] text-muted-foreground">Aplica só ao seu perfil</p>
             </div>
             {mode === "self" && <Check className="h-4 w-4 text-foreground" />}
           </button>
 
           <button
-            onClick={() => handleSelectMode("units")}
+            onClick={() => setMode("units")}
             className={cn(
               "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all text-left",
               mode === "units"
@@ -153,68 +130,27 @@ export function ApplyScopeSheet({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[14px] font-medium text-foreground">Toda a barbearia</p>
-              <p className="text-[11.5px] text-muted-foreground">
-                {unidades.length > 1
-                  ? "Configurar uma ou todas as barbearias"
-                  : "Horário geral de funcionamento da barbearia"}
-              </p>
+              <p className="text-[11.5px] text-muted-foreground">Escolha uma ou mais unidades</p>
             </div>
             {mode === "units" && <Check className="h-4 w-4 text-foreground" />}
           </button>
         </div>
 
-        {/* Só exibe seleção de barbearias SE HOUVER MAIS DE UMA UNIDADE */}
-        {mode === "units" && unidades.length > 1 && (
-          <div className="mt-4 border-t border-border/40 pt-4 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <p className="text-[11.5px] uppercase tracking-wide text-muted-foreground/80 font-semibold">
-                Barbearias ({selected.size}/{unidades.length})
-              </p>
-              <button
-                type="button"
-                onClick={allSelected ? clearAll : selectAll}
-                className="text-[11.5px] text-primary hover:underline font-medium"
-              >
-                {allSelected ? "Desmarcar todas" : "Selecionar todas"}
-              </button>
-            </div>
-
+        {mode === "units" && (
+          <div className="mt-4 border-t border-border/40 pt-4">
+            <p className="text-[11.5px] uppercase tracking-wide text-muted-foreground/80 font-semibold mb-2">
+              Selecione as barbearias
+            </p>
             {loading ? (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
+            ) : unidades.length === 0 ? (
+              <p className="text-[12.5px] text-muted-foreground py-3">
+                Nenhuma barbearia encontrada.
+              </p>
             ) : (
-              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                {/* Opção Rápida: Aplicar a Todas de uma vez */}
-                <button
-                  type="button"
-                  onClick={allSelected ? clearAll : selectAll}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all mb-2",
-                    allSelected
-                      ? "border-primary/60 bg-primary/5"
-                      : "border-border/50 hover:bg-muted/40"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors",
-                      allSelected ? "border-primary bg-primary" : "border-border"
-                    )}
-                  >
-                    {allSelected && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[13.5px] font-semibold text-foreground block">
-                      Todas as barbearias
-                    </span>
-                    <span className="text-[11px] text-muted-foreground block">
-                      Aplica as configurações para todas as unidades de uma vez
-                    </span>
-                  </div>
-                </button>
-
-                {/* Lista individual */}
+              <div className="space-y-1 max-h-56 overflow-y-auto">
                 {unidades.map((u) => {
                   const on = selected.has(u.id);
                   return (
@@ -234,7 +170,7 @@ export function ApplyScopeSheet({
                       >
                         {on && <Check className="h-3 w-3 text-background" strokeWidth={3} />}
                       </div>
-                      <span className="text-[13px] text-foreground flex-1 truncate">
+                      <span className="text-[13.5px] text-foreground flex-1 truncate">
                         {u.nome}
                         {u.is_sede && (
                           <span className="ml-2 text-[10px] text-muted-foreground uppercase tracking-wide">

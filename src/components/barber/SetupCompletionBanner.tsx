@@ -10,8 +10,6 @@ interface SetupCompletionBannerProps {
   loading: boolean;
   /** Modo compacto para dashboard, expandido para perfil */
   variant?: "compact" | "detailed";
-  /** Se deve vir expandido por padrão (padrão: true para variant detailed) */
-  defaultExpanded?: boolean;
 }
 
 /**
@@ -24,10 +22,9 @@ export function SetupCompletionBanner({
   steps,
   loading,
   variant = "compact",
-  defaultExpanded,
 }: SetupCompletionBannerProps) {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(() => defaultExpanded ?? (variant === "detailed"));
+  const [expanded, setExpanded] = useState(false);
 
   // Não mostrar se 100% ou carregando
   if (loading || percentage === 100) return null;
@@ -51,7 +48,7 @@ export function SetupCompletionBanner({
           const firstPending = pendingSteps[0];
           if (firstPending?.route) navigate(firstPending.route);
         }}
-        className="w-full rounded-2xl bg-card border border-border/40 p-4 text-left active:scale-[0.99] transition-all shadow-xs hover:border-border"
+        className="w-full rounded-xl bg-card border border-border/40 p-4 text-left active:scale-[0.99] transition-all"
       >
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-2">
@@ -61,7 +58,7 @@ export function SetupCompletionBanner({
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[12px] font-semibold text-foreground tabular-nums">
+            <span className="text-[12px] font-bold text-foreground tabular-nums">
               {percentage}%
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />

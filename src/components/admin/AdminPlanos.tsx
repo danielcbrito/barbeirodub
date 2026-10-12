@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   Loader2, Plus, Crown, Clock, Search, ChevronRight,
-  DollarSign, Trash2, Check, Calendar, Users,
+  DollarSign, Trash2, Check, Sparkles, Calendar, Users,
   Scissors, X,
 } from "lucide-react";
 import {
@@ -165,9 +165,8 @@ export function AdminPlanos({ tenantId, basePath = "/admin", hideHeader = false 
 
   // Realtime invalidation
   useEffect(() => {
-    const channelId = `admin-planos-${resolvedTenantId || 'global'}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(channelId)
+      .channel(`admin-planos-${resolvedTenantId || 'global'}`)
       .on("postgres_changes", {
         event: "*", schema: "public", table: "planos",
         ...(resolvedTenantId ? { filter: `tenant_id=eq.${resolvedTenantId}` } : {}),

@@ -1,4 +1,4 @@
-import { Gift, ChevronRight } from "lucide-react";
+import { Gift, Sparkles, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
@@ -97,7 +97,7 @@ export function LoyaltyCard({ points, redemptions, requiredPoints, onViewDetails
                 boxShadow: "0 0 20px rgba(255,255,255,0.3)",
               }}
             >
-              <Gift className="w-3 h-3 text-foreground" />
+              <Sparkles className="w-3 h-3 text-yellow-200" />
               <span className="text-foreground text-xs font-bold">
                 {redemptions}
               </span>

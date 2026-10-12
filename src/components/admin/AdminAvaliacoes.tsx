@@ -1,4 +1,3 @@
-// @ts-nocheck — tipos do banco desatualizados para este arquivo; comportamento em produção validado.
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -38,8 +37,6 @@ interface Barber {
 interface AdminAvaliacoesProps {
   tenantId?: string;
   basePath?: string;
-  hideHeader?: boolean;
-  onBack?: () => void;
 }
 
 /** Fetch avaliações e barbeiros */
@@ -84,12 +81,7 @@ async function fetchAvaliacoes(tenantId?: string) {
  * Painel de avaliações do Admin — design premium unificado.
  * Exibe todas as avaliações da barbearia com filtro por barbeiro e estrela.
  */
-export function AdminAvaliacoes({
-  tenantId,
-  basePath = "/admin",
-  hideHeader = false,
-  onBack,
-}: AdminAvaliacoesProps) {
+export function AdminAvaliacoes({ tenantId, basePath = "/admin" }: AdminAvaliacoesProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [filterStar, setFilterStar] = useState<number | null>(null);
@@ -109,7 +101,7 @@ export function AdminAvaliacoes({
   // Realtime — invalida cache quando avaliações mudam
   useEffect(() => {
     const channel = supabase
-      .channel(`admin-all-reviews-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`)
+      .channel(`admin-all-reviews-${Date.now()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "barbeiro_avaliacoes" }, () => {
         queryClient.invalidateQueries({ queryKey });
       })
@@ -118,40 +110,35 @@ export function AdminAvaliacoes({
     return () => { supabase.removeChannel(channel); };
   }, [queryClient, queryKey]);
 
-  // KPIs
-  const totalReviews = reviews.length;
-  const averageRating = useMemo(() => {
-    if (totalReviews === 0) return 0;
-    const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
-    return Number((sum / totalReviews).toFixed(1));
-  }, [reviews, totalReviews]);
+  /* ─── Computed data ─── */
+  const baseReviews = useMemo(
+    () => (filterBarber ? reviews.filter((r) => r.barber_id === filterBarber) : reviews),
+    [reviews, filterBarber]
+  );
 
-  const distribution = useMemo(() => {
-    const counts = [0, 0, 0, 0, 0];
-    reviews.forEach(r => {
-      const idx = Math.min(5, Math.max(1, Math.round(r.rating))) - 1;
-      counts[idx]++;
-    });
-    return counts;
-  }, [reviews]);
+  const totalReviews = baseReviews.length;
+  const averageRating = totalReviews > 0
+    ? baseReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews
+    : 0;
 
-  const fiveStarPercent = useMemo(() => {
-    if (totalReviews === 0) return 0;
-    return Math.round((distribution[4] / totalReviews) * 100);
-  }, [distribution, totalReviews]);
+  const distribution = useMemo(
+    () => [5, 4, 3, 2, 1].map((star) => ({
+      star,
+      count: baseReviews.filter((r) => r.rating === star).length,
+      percent: totalReviews > 0
+        ? (baseReviews.filter((r) => r.rating === star).length / totalReviews) * 100
+        : 0,
+    })),
+    [baseReviews, totalReviews]
+  );
 
-  const withComments = useMemo(() => {
-    return reviews.filter(r => r.comment && r.comment.trim().length > 0).length;
-  }, [reviews]);
+  const fiveStarPercent = distribution[0].percent;
+  const withComments = baseReviews.filter((r) => r.comment).length;
 
-  // Filtragem
-  const filteredReviews = useMemo(() => {
-    return reviews.filter(r => {
-      if (filterStar !== null && Math.round(r.rating) !== filterStar) return false;
-      if (filterBarber !== null && r.barber_id !== filterBarber) return false;
-      return true;
-    });
-  }, [reviews, filterStar, filterBarber]);
+  const filteredReviews = useMemo(
+    () => (filterStar ? baseReviews.filter((r) => r.rating === filterStar) : baseReviews),
+    [baseReviews, filterStar]
+  );
 
   const barberMap = useMemo(
     () => Object.fromEntries(barbers.map((b) => [b.id, b])),
@@ -160,40 +147,37 @@ export function AdminAvaliacoes({
 
   const hasActiveFilter = filterStar !== null || filterBarber !== null;
 
-  // Loading skeleton
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className={cn("pb-28", !hideHeader && "-mx-3 -mt-3")}>
+    <div className="pb-28 -mx-3 -mt-3">
       {/* ── Header ── */}
-      {!hideHeader && (
-        <div className="sticky top-0 z-30 bg-background">
-          <div className="flex items-center gap-2 px-4 h-16">
-            <button
-              onClick={() => (onBack ? onBack() : navigate(`${basePath}/configuracoes-perfil`))}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
-              aria-label="Voltar"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                <path d="M9 14L4 9l5-5" />
-                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-              </svg>
-            </button>
-            <h1 className="text-[19px] font-medium tracking-tight text-foreground ml-1">Avaliações</h1>
-          </div>
-          <div className="h-px bg-border/30" />
-          <div className="px-4 py-2.5">
-            <p className="text-[11px] text-muted-foreground/50">Todas as avaliações da barbearia</p>
-          </div>
-          <div className="h-px bg-border/20" />
+      <div className="sticky top-0 z-30 bg-background">
+        <div className="flex items-center gap-2 px-4 h-16">
+          <button
+            onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
+            aria-label="Voltar"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+              <path d="M9 14L4 9l5-5" />
+              <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+            </svg>
+          </button>
+          <h1 className="text-[19px] font-medium tracking-tight text-foreground ml-1">Avaliações</h1>
         </div>
-      )}
+        <div className="h-px bg-border/30" />
+        <div className="px-4 py-2.5">
+          <p className="text-[11px] text-muted-foreground/50">Todas as avaliações da barbearia</p>
+        </div>
+        <div className="h-px bg-border/20" />
+      </div>
 
       <div className="pt-4">
 

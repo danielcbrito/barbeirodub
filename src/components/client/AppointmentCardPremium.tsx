@@ -200,7 +200,7 @@ export function AppointmentCardPremium({
                   ) : (
                     <>
                       <span className="font-bold text-foreground">
-                        R$ {typeof appointment.preco === 'number' && !isNaN(appointment.preco) ? appointment.preco.toFixed(2).replace('.', ',') : '0,00'}
+                        R$ {appointment.preco.toFixed(2)}
                       </span>
                       {isPaid && (
                         <span className="text-[10px] text-green-500 font-medium">• Pago</span>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   CheckCircle2, 
+  Sparkles, 
   AlertCircle, 
   Loader2,
   ChevronLeft,
@@ -273,7 +274,7 @@ export function SubscribePlanSheet({ open, onOpenChange, userId }: SubscribePlan
       className="text-center py-12 space-y-6"
     >
       <div className="w-20 h-20 bg-zinc-800/50 rounded-full flex items-center justify-center mx-auto">
-        <Crown className="w-10 h-10 text-zinc-600" />
+        <Sparkles className="w-10 h-10 text-zinc-600" />
       </div>
       <div className="space-y-2">
         <p className="text-lg font-semibold text-zinc-400">Nenhum plano disponível</p>
@@ -346,7 +347,7 @@ export function SubscribePlanSheet({ open, onOpenChange, userId }: SubscribePlan
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2">
-              <Crown className="w-5 h-5 text-foreground" />
+              <Sparkles className="w-5 h-5 text-red-500" />
               <h2 className="text-lg font-bold">Escolha seu Plano</h2>
             </div>
           </div>

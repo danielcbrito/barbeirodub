@@ -1,3 +1,4 @@
+import { signInWithRetry } from "@/lib/signInWithRetry";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -8,9 +9,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Eye, EyeOff, ChevronLeft } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
+import { useViewportHeight } from "@/hooks/useViewportHeight";
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
 import { QUERY_KEYS } from "@/lib/queryKeys";
-import { cn } from "@/lib/utils";
 
 /* ─── Schemas ─────────────────────────────────────────────────────── */
 const emailSchema = z.string().trim().email("E-mail inválido").max(255);
@@ -155,7 +156,6 @@ type FloatingInputProps = {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  placeholder?: string;
   type?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   autoComplete?: string;
@@ -166,7 +166,6 @@ type FloatingInputProps = {
   rightSlot?: React.ReactNode;
   inputRef?: React.Ref<HTMLInputElement>;
   maxLength?: number;
-  autoFocus?: boolean;
 };
 
 const FloatingInput = ({
@@ -174,7 +173,6 @@ const FloatingInput = ({
   label,
   value,
   onChange,
-  placeholder,
   type = "text",
   inputMode,
   autoComplete,
@@ -185,27 +183,24 @@ const FloatingInput = ({
   rightSlot,
   inputRef,
   maxLength,
-  autoFocus,
 }: FloatingInputProps) => {
   const [focused, setFocused] = useState(false);
   const active = focused || value.length > 0;
 
   return (
     <div
-      className={`relative h-[62px] rounded-2xl transition-all duration-150 ${
+      className={`relative rounded-2xl transition-colors ${
         focused
-          ? "border-2 border-primary bg-transparent shadow-sm"
-          : "border border-transparent bg-foreground/[0.06] hover:bg-foreground/[0.08]"
+          ? "border border-primary bg-transparent"
+          : "border border-transparent bg-foreground/[0.06]"
       }`}
     >
       <label
         htmlFor={id}
-        className={`pointer-events-none absolute left-5 select-none transition-all duration-150 ${
+        className={`pointer-events-none absolute left-5 transition-all ${
           active
-            ? `top-[9px] text-[11.5px] font-medium tracking-wide leading-none ${
-                focused ? "text-primary" : "text-foreground/55"
-              }`
-            : "top-1/2 -translate-y-1/2 text-[15.5px] font-normal text-foreground/45"
+            ? `top-2 text-[11px] ${focused ? "text-primary" : "text-foreground/60"}`
+            : "top-1/2 -translate-y-1/2 text-[15px] text-foreground/55"
         }`}
       >
         {label}
@@ -222,21 +217,18 @@ const FloatingInput = ({
         autoCorrect={autoCorrect}
         spellCheck={spellCheck}
         maxLength={maxLength}
-        autoFocus={autoFocus}
-        placeholder={active && placeholder ? placeholder : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        data-no-auto-scroll="true"
-        className={`peer h-full w-full rounded-2xl bg-transparent px-5 pt-[22px] pb-[6px] ${
+        className={`peer h-[68px] w-full rounded-2xl bg-transparent px-5 pt-5 pb-1 ${
           rightSlot ? "pr-12" : ""
-        } text-[15.5px] text-foreground placeholder:text-foreground/35 caret-primary outline-none leading-normal font-normal`}
+        } text-[15px] text-foreground caret-primary outline-none`}
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
 
       {rightSlot && (
-        <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2">
           {rightSlot}
         </div>
       )}
@@ -269,7 +261,7 @@ const CountryPicker = ({
         <button
           type="button"
           aria-label={`País: ${value.name} +${value.dial}`}
-          className="flex h-[62px] shrink-0 items-center gap-1.5 rounded-2xl border border-transparent bg-foreground/[0.06] hover:bg-foreground/[0.08] px-3.5 outline-none transition-colors focus-visible:border-primary"
+          className="flex h-[68px] shrink-0 items-center gap-1.5 rounded-2xl border border-transparent bg-foreground/[0.06] px-3 outline-none transition-colors focus-visible:border-primary"
         >
           <FlagIcon code={value.code} className="w-7 h-5" />
           <span className="text-[15px] font-medium text-foreground">+{value.dial}</span>
@@ -335,11 +327,11 @@ const Auth = () => {
   const initialSignup = (searchParams.get("mode") || "login") === "signup";
 
   useStatusBarColor("app-background");
+  const { height: viewportHeight, keyboardOpen } = useViewportHeight();
 
   // Modo global
   const [mode, setMode] = useState<"login" | "signup">(initialSignup ? "signup" : "login");
 
-  // Estados do formulário
   // Login state
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -364,44 +356,6 @@ const Auth = () => {
   const emailValid = emailSchema.safeParse(email).success;
   const passwordValid = passwordSchema.safeParse(senha).success;
   const canSubmit = emailValid && passwordValid;
-
-  /* ─── Visual Viewport & Teclado Móvel ─────────────────────────── */
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-
-    const handleResize = () => {
-      setViewportHeight(vv.height);
-      const keyboardActive = window.innerHeight - vv.height > 100;
-      setIsKeyboardOpen(keyboardActive);
-    };
-
-    vv.addEventListener("resize", handleResize);
-    vv.addEventListener("scroll", handleResize);
-    handleResize();
-
-    return () => {
-      vv.removeEventListener("resize", handleResize);
-      vv.removeEventListener("scroll", handleResize);
-    };
-  }, []);
-
-  // Garante que o campo com foco nunca fique oculto pelo teclado
-  useEffect(() => {
-    const handleFocus = (e: FocusEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
-        setTimeout(() => {
-          target.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 150);
-      }
-    };
-    window.addEventListener("focusin", handleFocus);
-    return () => window.removeEventListener("focusin", handleFocus);
-  }, []);
 
   /* ─── Session bootstrap ─────────────────────────────────────────── */
   useEffect(() => {
@@ -447,15 +401,12 @@ const Auth = () => {
     if (!canSubmit || isLoading || cooldown > 0) return;
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: senha,
-      });
+      const { data, error } = await signInWithRetry(email.trim(), senha);
       if (error) {
         if (error.message.includes("Invalid login")) toast.error("E-mail ou senha incorretos");
         else if (error.message.includes("Email not confirmed"))
           toast.error("Confirme seu cadastro pelo WhatsApp antes de entrar");
-        else toast.error("Erro ao fazer login");
+        else toast.error("Servidor demorou para responder. Tente novamente em instantes.");
         return;
       }
       if (data.user && !data.user.email_confirmed_at) {
@@ -834,31 +785,32 @@ const Auth = () => {
 
   return (
     <div
-      data-no-auto-scroll="true"
-      className="w-full flex flex-col bg-background text-foreground overflow-hidden"
-      style={{
-        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
-        maxHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
-        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 8px)",
-      }}
+      className="fixed inset-0 flex flex-col overflow-hidden"
+      style={{ minHeight: viewportHeight, background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
     >
-      {/* ─── Header: idêntico ao modelo anterior com < na esquerda e título centralizado ─── */}
-      <header className="relative flex items-center justify-center px-4 shrink-0 pb-2">
+      {/* ─── Header ───────────────────────────────────────────────── */}
+      <header
+        className="relative flex items-center justify-center px-4"
+        style={{
+          paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
+          paddingBottom: 12,
+        }}
+      >
         <button
           type="button"
           onClick={onBackClick}
           aria-label="Voltar"
-          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/80 hover:bg-foreground/5 active:scale-95 transition-all"
+          className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full text-foreground/85 active:scale-95"
           style={{ touchAction: "manipulation" }}
         >
           <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
         </button>
-        <h2 className="text-[16px] font-semibold text-foreground/90">{title}</h2>
+        <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
       </header>
 
       {/* Progress bar (signup) */}
       {mode === "signup" && (
-        <div className="px-6 pb-2 shrink-0 max-w-md mx-auto w-full">
+        <div className="px-6 pb-1">
           <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
@@ -870,182 +822,145 @@ const Auth = () => {
         </div>
       )}
 
-      {/* ─── Content: Área de rolagem dos campos (ScrollView) ─── */}
-      <div className="w-full max-w-md mx-auto px-6 pt-2 pb-2 flex-1 overflow-y-auto overscroll-contain flex flex-col">
+      {/* ─── Content ──────────────────────────────────────────────── */}
+      <main className="flex-1 overflow-y-auto px-6">
         <AnimatePresence mode="wait">
           <motion.div
             key={mode === "login" ? "login" : `signup-${step}`}
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-full flex-1 flex flex-col justify-start"
+            transition={{ duration: 0.24, ease: "easeOut" }}
+            className="w-full pt-6"
           >
             {mode === "login" ? (
-              <form
-                id="auth-login-form"
-                onSubmit={handleLoginSubmit}
-                className="w-full"
-                noValidate
-              >
-                <div>
-                  <h1 className="text-[25px] sm:text-[27px] font-extrabold tracking-tight text-foreground leading-tight mb-5">
-                    Entrar na sua conta
-                  </h1>
-
-                  <div className="space-y-3.5">
-                    <FloatingInput
-                      id="email-input"
-                      label="E-mail"
-                      value={email}
-                      onChange={setEmail}
-                      type="email"
-                      inputMode="email"
-                      autoComplete="username"
-                      enterKeyHint="next"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                    />
-                    <FloatingInput
-                      id="senha-input"
-                      label="Senha"
-                      value={senha}
-                      onChange={setSenha}
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      enterKeyHint="done"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      rightSlot={
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((v) => !v)}
-                          aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                          className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/60 hover:text-foreground active:scale-95 transition-all"
-                          style={{ touchAction: "manipulation" }}
-                        >
-                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                        </button>
-                      }
-                    />
-
-                    <div className="pt-0.5 flex justify-start">
+              <>
+                <h1 className="text-[26px] font-extrabold tracking-tight text-foreground leading-tight">
+                  Entrar na sua conta
+                </h1>
+                <form onSubmit={handleLoginSubmit} className="mt-6 space-y-3" noValidate>
+                  <FloatingInput
+                    id="email-input"
+                    label="E-mail"
+                    value={email}
+                    onChange={setEmail}
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    enterKeyHint="next"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  <FloatingInput
+                    id="senha-input"
+                    label="Senha"
+                    value={senha}
+                    onChange={setSenha}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    enterKeyHint="done"
+                    rightSlot={
                       <button
                         type="button"
-                        onClick={() => navigate("/esqueci-senha")}
-                        className="text-[13.5px] font-semibold text-primary hover:underline underline-offset-4 active:opacity-70 transition-opacity"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                        className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 active:scale-95"
                         style={{ touchAction: "manipulation" }}
                       >
-                        Esqueci minha senha
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
-                    </div>
+                    }
+                  />
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/esqueci-senha")}
+                      className="text-[13px] font-semibold text-primary underline underline-offset-4 active:opacity-70"
+                      style={{ touchAction: "manipulation" }}
+                    >
+                      Esqueci minha senha
+                    </button>
                   </div>
-                </div>
-              </form>
+                  <button type="submit" className="sr-only" tabIndex={-1}>
+                    Continuar
+                  </button>
+                </form>
+              </>
             ) : (
-              <form
-                id="auth-signup-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSignupNext();
-                }}
-                className="w-full"
-                noValidate
-              >
-                <div>
-                  <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-2">
-                    {signupContent!.heading}
-                  </h1>
-                  <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
-                    {signupContent!.hint}
-                  </p>
+              <>
+                <h1 className="text-[24px] font-extrabold tracking-tight text-foreground leading-tight">
+                  {signupContent!.heading}
+                </h1>
+                <p className="mt-1.5 text-[13px] text-foreground/55">{signupContent!.hint}</p>
+                <div className="mt-6 space-y-3">{signupContent!.input}</div>
+                {step === "cpf" && sCpfError && (
+                  <p className="mt-2 text-[13px] font-medium text-destructive">{sCpfError}</p>
+                )}
 
-                  <div className="space-y-3.5">
-                    {signupContent!.input}
-
-                    {step === "cpf" && sCpfError && (
-                      <p className="text-[13px] font-medium text-destructive">{sCpfError}</p>
-                    )}
-
-                    {step === "otp" && (
-                      <div className="pt-1">
-                        <button
-                          type="button"
-                          onClick={handleResendCode}
-                          disabled={sResendCooldown > 0 || isLoading}
-                          className="text-[13px] font-semibold text-primary underline underline-offset-4 active:opacity-70 disabled:opacity-40 disabled:no-underline"
-                          style={{ touchAction: "manipulation" }}
-                        >
-                          {sResendCooldown > 0
-                            ? `Reenviar em ${sResendCooldown}s`
-                            : "Reenviar código"}
-                        </button>
-                      </div>
-                    )}
+                {step === "otp" && (
+                  <div className="pt-4">
+                    <button
+                      type="button"
+                      onClick={handleResendCode}
+                      disabled={sResendCooldown > 0 || isLoading}
+                      className="text-[13px] font-semibold text-primary underline underline-offset-4 active:opacity-70 disabled:opacity-40 disabled:no-underline"
+                      style={{ touchAction: "manipulation" }}
+                    >
+                      {sResendCooldown > 0
+                        ? `Reenviar em ${sResendCooldown}s`
+                        : "Reenviar código"}
+                    </button>
                   </div>
-                </div>
-              </form>
+                )}
+              </>
             )}
           </motion.div>
         </AnimatePresence>
-      </div>
+      </main>
 
-      {/* ─── Botão Continuar Fixo Acima do Teclado (Fora do ScrollView) ─── */}
-      <div
-        className="shrink-0 w-full max-w-md mx-auto px-6 bg-background/95 backdrop-blur-xs transition-all duration-150 pt-2"
+      {/* ─── Footer / CTA ─────────────────────────────────────────── */}
+      <footer
+        className="px-6 pt-3"
         style={{
-          paddingBottom: isKeyboardOpen
-            ? "12px"
-            : "max(16px, env(safe-area-inset-bottom, 16px))",
+          background: "hsl(var(--background))",
+          paddingBottom: keyboardOpen
+            ? 12
+            : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
         }}
       >
         <button
-          type={mode === "login" ? "submit" : "button"}
-          form={mode === "login" ? "auth-login-form" : "auth-signup-form"}
+          type="button"
           onClick={onCtaClick}
           disabled={!canGoCta || isLoading}
-          className="w-full h-[52px] sm:h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full h-[48px] rounded-xl bg-foreground text-background font-semibold text-[15px] active:scale-[0.99] transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           style={{ touchAction: "manipulation" }}
         >
-          {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+          {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
           {ctaLabel}
         </button>
 
-        {mode === "login" ? (
-          <p className="pt-3 text-center text-[13.5px] text-foreground/60">
-            Não tem uma conta?{" "}
+        {step !== "otp" && (
+          <p className="mt-3 text-center text-[13px] text-foreground/60">
+            {mode === "signup" ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
             <button
               type="button"
               onClick={() => {
-                setMode("signup");
-                setStep("name");
+                if (mode === "login") {
+                  setMode("signup");
+                  setStep("name");
+                } else {
+                  setMode("login");
+                }
               }}
-              className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
+              className="font-semibold text-primary active:opacity-70"
               style={{ touchAction: "manipulation" }}
             >
-              Criar conta
+              {mode === "signup" ? "Entrar" : "Criar conta"}
             </button>
           </p>
-        ) : (
-          step !== "otp" && (
-            <p className="pt-3 text-center text-[13.5px] text-foreground/60">
-              Já tem uma conta?{" "}
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("login");
-                }}
-                className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                style={{ touchAction: "manipulation" }}
-              >
-                Entrar
-              </button>
-            </p>
-          )
         )}
-      </div>
+      </footer>
     </div>
   );
 };

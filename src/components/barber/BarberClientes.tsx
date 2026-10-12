@@ -13,7 +13,6 @@ import {
   Award,
   Inbox,
   ChevronRight,
-  ChevronLeft,
   Loader2,
   Users,
   UserPlus,
@@ -79,7 +78,6 @@ interface BarberClientesProps {
   basePath?: string;
   forceViewMode?: ViewMode;
   initialUnitId?: string | null;
-  hideHeader?: boolean;
 }
 
 /* ═══════════════════════════════════════ */
@@ -90,7 +88,6 @@ export function BarberClientes({
   basePath = "/barbeiro",
   forceViewMode,
   initialUnitId = null,
-  hideHeader = false,
 }: BarberClientesProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -396,7 +393,7 @@ export function BarberClientes({
     };
 
     const channel = supabase
-      .channel(`barber-clientes-realtime-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
+      .channel(`barber-clientes-realtime-${barberContext.barbeiroId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "assinaturas" }, handleChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "plano_agendamentos_usos" }, handleChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "tenant_clientes" }, handleChange)
@@ -674,16 +671,19 @@ export function BarberClientes({
     return (
       <div className="pb-8 -mx-3 -mt-3">
         {/* Header fixo */}
-        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
-          <div className="flex items-center gap-3 px-4 h-14">
+        <div className="sticky top-0 z-30 bg-background">
+          <div className="flex items-center gap-2.5 px-4 h-14">
             <button
               onClick={goBack}
-              className="w-9 h-9 rounded-full flex items-center justify-center bg-card border border-border/60 hover:bg-secondary/50 active:scale-95 transition-all text-foreground shrink-0 shadow-sm"
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
               aria-label="Voltar"
             >
-              <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+                <path d="M9 14L4 9l5-5" />
+                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+              </svg>
             </button>
-            <h1 className="text-[18px] font-semibold tracking-tight text-foreground flex-1 truncate">
+            <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1 truncate">
               {client.nome}
             </h1>
             {client.activePlan ? (
@@ -778,10 +778,10 @@ export function BarberClientes({
           {/* Detalhes do plano */}
           {client.activePlan && (
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
+              <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
                 Detalhes do plano
               </p>
-              <div className="space-y-0 rounded-2xl bg-card border border-border/60 overflow-hidden shadow-sm">
+              <div className="space-y-0 rounded-xl border border-border/30 overflow-hidden">
                 <DetailRow
                   icon={Calendar}
                   label="Assinou em"
@@ -815,10 +815,10 @@ export function BarberClientes({
 
           {/* Dados de contato */}
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
+            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
               Informações de contato
             </p>
-            <div className="space-y-0 rounded-2xl bg-card border border-border/60 overflow-hidden shadow-sm">
+            <div className="space-y-0 rounded-xl border border-border/30 overflow-hidden">
               <DetailRow icon={Mail} label="Email" value={client.email || "Não informado"} />
               <DetailRow icon={Phone} label="Telefone" value={client.telefone || "Não informado"} />
             </div>
@@ -833,21 +833,21 @@ export function BarberClientes({
 
           {/* Ações */}
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
+            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
               Ações
             </p>
 
             {/* CTA primário monocromático */}
             <button
               onClick={() => openWhatsApp(client.telefone)}
-              className="w-full flex items-center justify-center gap-2.5 h-12 rounded-2xl bg-foreground text-background hover:bg-foreground/90 active:scale-[0.99] transition-all duration-200 mb-3 shadow-sm"
+              className="w-full flex items-center justify-center gap-2.5 h-12 rounded-xl bg-foreground text-background hover:bg-foreground/90 active:scale-[0.99] transition-all duration-200 mb-3"
             >
               <img src={whatsappLogo} alt="" className="w-5 h-5" />
               <span className="text-[14px] font-semibold tracking-tight">Conversar no WhatsApp</span>
             </button>
 
             {/* Lista de ações secundárias agrupadas */}
-            <div className="rounded-2xl bg-card border border-border/60 overflow-hidden divide-y divide-border/40 shadow-sm">
+            <div className="rounded-xl border border-border/30 overflow-hidden divide-y divide-border/30">
               {!client.activePlan && (
                 <ActionRow
                   icon={CreditCard}
@@ -893,7 +893,7 @@ export function BarberClientes({
 
             {/* Detalhes dos bloqueios ativos */}
             {client.blocked && client.blockDetails.length > 0 && (
-              <div className="mt-3 rounded-2xl border border-border/60 bg-secondary/20 p-3.5 space-y-1.5 shadow-sm">
+              <div className="mt-3 rounded-xl border border-border/30 bg-secondary/20 p-3 space-y-1.5">
                 <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider">
                   Bloqueios ativos
                 </p>
@@ -1064,27 +1064,25 @@ export function BarberClientes({
   return (
     <div className="pb-28 lg:pb-8">
       {isMobile ? (
-        <div className={cn(!hideHeader && "-mx-3 -mt-3")}>
-          {/* Header + Filters sticky bar */}
+        <div className="-mx-3 -mt-3">
+          {/* Header */}
           <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
-            {!hideHeader && (
-              <div className="flex items-center gap-2.5 px-4 h-14">
-                <button
-                  onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
-                  aria-label="Voltar"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                    <path d="M9 14L4 9l5-5" />
-                    <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-                  </svg>
-                </button>
-                <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">Clientes</h1>
-                <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
-                  {filteredClients.length} cliente{filteredClients.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-            )}
+            <div className="flex items-center gap-2.5 px-4 h-14">
+              <button
+                onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
+                aria-label="Voltar"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+                  <path d="M9 14L4 9l5-5" />
+                  <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+                </svg>
+              </button>
+              <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">Clientes</h1>
+              <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
+                {filteredClients.length} cliente{filteredClients.length !== 1 ? "s" : ""}
+              </span>
+            </div>
 
             {/* ── View Mode Toggle: Todos / Meus ── */}
             {showViewModeToggle && (
@@ -1621,10 +1619,10 @@ function KpiCard({
   accentClass?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-card border border-border/60 p-4 text-center shadow-sm">
-      <Icon className={cn("w-4 h-4 mx-auto mb-1.5", accentClass || "text-foreground/70")} />
-      <p className="text-[16px] font-bold text-foreground leading-none tabular-nums">{value}</p>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1.5">{label}</p>
+    <div className="rounded-xl bg-secondary/30 border border-border/20 p-3.5 text-center">
+      <Icon className={cn("w-4 h-4 mx-auto mb-1.5", accentClass || "text-muted-foreground/50")} />
+      <p className="text-[15px] font-bold text-foreground leading-none tabular-nums">{value}</p>
+      <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider mt-1">{label}</p>
     </div>
   );
 }
@@ -1639,12 +1637,12 @@ function DetailRow({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/40 last:border-b-0">
-      <Icon className="w-4 h-4 text-muted-foreground/60 flex-shrink-0" />
-      <span className="text-[11px] text-muted-foreground uppercase tracking-[0.08em] w-20 flex-shrink-0">
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20 last:border-b-0">
+      <Icon className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
+      <span className="text-[10px] text-muted-foreground/50 uppercase tracking-[0.08em] w-16 flex-shrink-0">
         {label}
       </span>
-      <span className="text-[13px] font-medium text-foreground truncate flex-1">{value}</span>
+      <span className="text-[13px] text-foreground truncate flex-1">{value}</span>
     </div>
   );
 }
@@ -1694,7 +1692,19 @@ function ActionRow({
       >
         {label}
       </span>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/40 shrink-0" />
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="text-muted-foreground/40 flex-shrink-0"
+      >
+        <path d="M9 6l6 6-6 6" />
+      </svg>
     </button>
   );
 }

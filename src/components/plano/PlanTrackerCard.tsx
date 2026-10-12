@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Crown,
+  Sparkles,
   CalendarClock,
   RefreshCw,
   Lock,
@@ -131,9 +132,9 @@ export function PlanTrackerCard({ userId }: PlanTrackerCardProps) {
                   animate={{ scale: [1, 1.05, 1] }}
                   transition={{ repeat: Infinity, duration: 2 }}
                 >
-                  <Badge className="bg-foreground/[0.08] text-foreground border border-border/80 text-[10px] font-semibold">
-                    <RefreshCw className="w-3 h-3 mr-1" />
-                    Pronto para renovar
+                  <Badge className="bg-primary/15 text-primary border-0 text-[10px] font-semibold">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    Pronto para renovar!
                   </Badge>
                 </motion.div>
               )}

@@ -22,7 +22,6 @@ import { useWhatsAppStatus } from "@/hooks/useWhatsAppStatus";
 import { WalletActivationModal } from "@/components/barber/WalletActivationModal";
 import { PendingSetupModal } from "@/components/tenant/PendingSetupModal";
 
-
 /* ── Abas primárias (bottom nav): carregadas eager para navegação instantânea ── */
 import { BarberDashboard } from "@/components/barber/BarberDashboard";
 import { BarberAgenda } from "@/components/barber/BarberAgenda";
@@ -58,11 +57,6 @@ const WhatsAppConnectionPage = lazy(() => import("@/components/whatsapp/WhatsApp
 const InstagramCallbackHandler = lazy(() => import("@/components/barber/InstagramCallbackHandler").then(m => ({ default: m.InstagramCallbackHandler })));
 const PortfolioManager = lazy(() => import("@/components/shared/PortfolioManager").then(m => ({ default: m.PortfolioManager })));
 const BarberConfigBarbearia = lazy(() => import("@/components/barber/BarberConfigBarbearia").then(m => ({ default: m.BarberConfigBarbearia })));
-const AdminDadosEmpresa = lazy(() => import("@/components/admin/AdminDadosEmpresa").then(m => ({ default: m.AdminDadosEmpresa })));
-const AdminAvaliacoes = lazy(() => import("@/components/admin/AdminAvaliacoes").then(m => ({ default: m.AdminAvaliacoes })));
-const AdminBarbeiros = lazy(() => import("@/components/admin/AdminBarbeiros").then(m => ({ default: m.AdminBarbeiros })));
-const AdminConfiguracoes = lazy(() => import("@/components/admin/AdminConfiguracoes").then(m => ({ default: m.AdminConfiguracoes })));
-const AdminUnidades = lazy(() => import("@/components/admin/unidades/AdminUnidades").then(m => ({ default: m.AdminUnidades })));
 import { BarberPushPermissionBanner } from "@/components/barber/BarberPushPermissionBanner";
 import { SupportChatBubble } from "@/components/support/SupportChatBubble";
 import { usePerformanceMonitor } from "@/hooks/usePerformanceMonitor";
@@ -228,8 +222,6 @@ const Barbeiro = () => {
     }
   }, [authChecked, barberContext, whatsAppStatus.isLoading, whatsAppStatus.isConnected, whatsAppStatus.resolvedBarbeiroId, walletPrompt.isLoading, walletPrompt.walletActive, walletPrompt.resolvedBarbeiroId]);
 
-
-
   // Verificação de manutenção
   const { 
     isMaintenanceMode, 
@@ -337,64 +329,54 @@ const Barbeiro = () => {
       }
     };
 
-    let ch1: ReturnType<typeof supabase.channel> | null = null;
-    let ch2: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      ch1 = supabase
-        .channel(`barber-pending-agendamentos-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
-        .on('postgres_changes', {
-          event: '*', schema: 'public', table: 'agendamentos',
-          filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
-        }, async (payload) => {
-          loadPendingCount();
-          if (payload.eventType === 'INSERT') {
-            playNotificationSound();
+    const ch1 = supabase
+      .channel(`barber-pending-agendamentos-${barberContext.barbeiroId}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'agendamentos',
+        filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
+      }, async (payload) => {
+        loadPendingCount();
+        if (payload.eventType === 'INSERT') {
+          playNotificationSound();
 
-            // Buscar detalhes do agendamento para notificação rica
-            const details = await fetchAppointmentDetails(
-              (payload.new as Record<string, unknown>).id as string
-            );
+          // Buscar detalhes do agendamento para notificação rica
+          const details = await fetchAppointmentDetails(
+            (payload.new as Record<string, unknown>).id as string
+          );
 
-            if (details) {
-              sendBrowserNotification("✂️ Novo Agendamento!", {
-                body: `${details.clienteNome} agendou ${details.servicoNome} para ${details.data} às ${details.hora}`,
-                tag: `new-appointment-${(payload.new as Record<string, unknown>).id}`,
-              });
-            } else {
-              sendBrowserNotification("✂️ Novo Agendamento!", {
-                body: "Um novo cliente agendou com você. Confira sua agenda.",
-                tag: "new-appointment",
-              });
-            }
-          }
-        }).subscribe();
-
-      ch2 = supabase
-        .channel(`barber-pending-planos-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
-        .on('postgres_changes', {
-          event: '*', schema: 'public', table: 'assinaturas',
-          filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
-        }, (payload) => {
-          loadPendingCount();
-          if (payload.eventType === 'INSERT' && (payload.new as Record<string, unknown>)?.payment_method === 'cash') {
-            playNotificationSound();
-            sendBrowserNotification("💈 Novo Plano Pendente!", {
-              body: "Um cliente solicitou ativação de plano. Confirme o pagamento.",
-              tag: "new-plan-payment",
+          if (details) {
+            sendBrowserNotification("✂️ Novo Agendamento!", {
+              body: `${details.clienteNome} agendou ${details.servicoNome} para ${details.data} às ${details.hora}`,
+              tag: `new-appointment-${(payload.new as Record<string, unknown>).id}`,
+            });
+          } else {
+            sendBrowserNotification("✂️ Novo Agendamento!", {
+              body: "Um novo cliente agendou com você. Confira sua agenda.",
+              tag: "new-appointment",
             });
           }
-        }).subscribe();
-    } catch (err) {
-      console.warn('[Barbeiro] Erro ao conectar canais de pendencias:', err);
-    }
+        }
+      }).subscribe();
+
+    const ch2 = supabase
+      .channel(`barber-pending-planos-${barberContext.barbeiroId}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'assinaturas',
+        filter: `barbeiro_id=eq.${barberContext.barbeiroId}`
+      }, (payload) => {
+        loadPendingCount();
+        if (payload.eventType === 'INSERT' && (payload.new as Record<string, unknown>)?.payment_method === 'cash') {
+          playNotificationSound();
+          sendBrowserNotification("💈 Novo Plano Pendente!", {
+            body: "Um cliente solicitou ativação de plano. Confirme o pagamento.",
+            tag: "new-plan-payment",
+          });
+        }
+      }).subscribe();
 
     return () => {
-      if (ch1) {
-        try { supabase.removeChannel(ch1); } catch {}
-      }
-      if (ch2) {
-        try { supabase.removeChannel(ch2); } catch {}
-      }
+      supabase.removeChannel(ch1);
+      supabase.removeChannel(ch2);
     };
   }, [barberContext, playNotificationSound, sendBrowserNotification]);
 
@@ -640,16 +622,12 @@ const Barbeiro = () => {
     return <div className="min-h-app bg-background" />;
   }
 
-  // Setup incompleto: se ainda não foi dispensado pelo usuário nesta sessão
-  const isSetupDismissed = typeof window !== "undefined" && window.sessionStorage.getItem("barber_setup_dismissed") === "1";
-  if (needsSetup && !isSetupDismissed) {
+  // Setup incompleto: bloqueia acesso até completar o wizard
+  if (needsSetup) {
     return (
       <BarberSetupScreen
         barberContext={barberContext}
-        onSetupComplete={() => {
-          setNeedsSetup(false);
-          try { window.sessionStorage.setItem("barber_setup_dismissed", "1"); } catch {}
-        }}
+        onSetupComplete={() => setNeedsSetup(false)}
       />
     );
   }
@@ -699,8 +677,6 @@ const Barbeiro = () => {
           onSuccess={walletPrompt.onActivated}
         />
 
-
-
         {/* Banner de aviso de manutenção (barbeiro/ambos) */}
         {showBarberBanner && (
           <MaintenanceWarningBanner message={warningMessage!} />
@@ -720,32 +696,25 @@ const Barbeiro = () => {
         <GracePeriodBanner />
 
         {/* Conteúdo Principal */}
-        <main
-          className={cn(
-            "flex-1 min-h-0 bg-background",
-            (location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp")) && "pb-0"
-          )}
-          style={
-            location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp")
-              ? undefined
-              : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
-          }
-        >
+        <main className={cn(
+          "flex-1 min-h-0 bg-background",
+          location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") ? "pb-0" : "pb-24"
+        )}>
           <div
             className={cn(
-              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/config-barbearia")
+              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes")
                 ? "p-0"
                 : "px-3 sm:px-4 py-2"
             )}
             style={
-              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/config-barbearia")
+              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes")
                 ? undefined
                 : { paddingTop: "calc(0.5rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }
             }
           >
 
 
-            {!location.pathname.includes("/barbeiro/promocoes") && !location.pathname.includes("/perfil") && !location.pathname.includes("/config-barbearia") && !location.pathname.includes("/whatsapp") && !isInGracePeriod && (
+            {!location.pathname.includes("/barbeiro/promocoes") && !location.pathname.includes("/perfil") && !isInGracePeriod && (
               <div className="mb-3">
                 <BarberPushPermissionBanner barbeiroId={barberContext.barbeiroId} />
               </div>
@@ -762,7 +731,7 @@ const Barbeiro = () => {
                   </>
                 ) : (
                   <>
-                    <Route index element={<BarberDashboard barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} tenantNome={tenantNome || undefined} />} />
+                    <Route index element={<BarberDashboard barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} />} />
                     <Route path="confirmacoes" element={<BarberConfirmacoesPendentes barberContext={barberContext} />} />
                     <Route path="agenda" element={<BarberAgenda barberContext={barberContext} />} />
                     <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/barbeiro" />} />
@@ -784,18 +753,11 @@ const Barbeiro = () => {
                     <Route path="perfil" element={<BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} />} />
                     <Route path="carteira" element={<CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" />} />
                     <Route path="configuracoes-perfil" element={<BarberSettingsPage />} />
-                    <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
+                    <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} />} />
                     <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
                     <Route path="portfolio" element={<PortfolioManager barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} title="Meu Portfólio" showBack onBack={() => navigate("/barbeiro/perfil")} />} />
                     {barberContext.isTenantAdmin && (
-                      <>
-                        <Route path="config-barbearia" element={<BarberConfigBarbearia barberContext={barberContext} />} />
-                        <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/barbeiro" tenantId={barberContext.tenantId} />} />
-                        <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
-                        <Route path="barbeiros" element={<AdminBarbeiros basePath="/barbeiro" />} />
-                        <Route path="configuracoes" element={<AdminConfiguracoes />} />
-                        <Route path="unidades" element={<AdminUnidades basePath="/barbeiro" />} />
-                      </>
+                      <Route path="config-barbearia" element={<BarberConfigBarbearia barberContext={barberContext} />} />
                     )}
                   </>
                 )}
@@ -804,9 +766,9 @@ const Barbeiro = () => {
           </div>
         </main>
 
-        {/* Bottom Navigation Mobile — esconder no período de graça, configurações, horários, financeiro e disparo */}
-        {!isInGracePeriod && !location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("horarios") && !location.pathname.includes("financeiro") && !location.pathname.includes("meus-dados") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("relatorios") && !location.pathname.includes("servicos") && !location.pathname.includes("planos") && !location.pathname.includes("cupons") && !location.pathname.includes("promocoes") && !location.pathname.includes("whatsapp") && !location.pathname.includes("portfolio") && !location.pathname.includes("loja") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("configuracoes") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
-          <BarberMobileNavigation barbeiroId={barberContext?.barbeiroId} />
+        {/* Bottom Navigation Mobile — esconder no período de graça, configurações, horários e financeiro */}
+        {!isInGracePeriod && !location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("horarios") && !location.pathname.includes("financeiro") && !location.pathname.includes("meus-dados") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("relatorios") && !location.pathname.includes("servicos") && !location.pathname.includes("planos") && !location.pathname.includes("cupons") && !location.pathname.includes("promocoes") && !location.pathname.includes("whatsapp") && !location.pathname.includes("portfolio") && !location.pathname.includes("loja") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("agendamento") && (
+          <BarberMobileNavigation />
         )}
         <SupportChatBubble />
       </div>
@@ -824,8 +786,6 @@ const Barbeiro = () => {
         walletActive={walletPrompt.walletActive === true}
         basePath="/barbeiro"
       />
-
-
       {showBarberBanner && (
         <MaintenanceWarningBanner message={warningMessage!} />
       )}
@@ -851,12 +811,7 @@ const Barbeiro = () => {
             </div>
           )}
           <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-            <div className={cn(
-              "max-w-[1600px] mx-auto",
-              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/perfil"))
-                ? "p-0"
-                : "p-6 lg:p-8"
-            )}>
+            <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
               <Suspense fallback={<LoadingFallback />}>
                 <Routes>
                   {isInGracePeriod ? (
@@ -889,7 +844,7 @@ const Barbeiro = () => {
                       <Route path="seguranca/*" element={<BarberSeguranca />} />
                       <Route path="perfil" element={<div className="max-w-2xl mx-auto"><BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} /></div>} />
                       <Route path="carteira" element={<div className="max-w-2xl mx-auto"><CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" /></div>} />
-                      <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
+                      <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} />} />
                       <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
                       <Route path="portfolio" element={<PortfolioManager barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} title="Meu Portfólio" showBack onBack={() => navigate("/barbeiro/perfil")} />} />
                       {barberContext.isTenantAdmin && (

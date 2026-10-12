@@ -1,6 +1,4 @@
-// @ts-nocheck — tipos do banco desatualizados para este arquivo; comportamento em produção validado.
-import { useEffect, useState, useMemo, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,20 +16,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  Search,
-  Building2,
-  MapPin,
-  ChevronDown,
-  UserX,
 } from "lucide-react";
-import {
-  IconBarbearia3D,
-  IconHorarios3D,
-  IconClientes3D,
-  IconServicos3D,
-  PinLocationSolid,
-} from "@/components/shared/Category3DIcons";
-import { GlobalSearchModal } from "@/components/shared/GlobalSearchModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, subDays, startOfMonth, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -53,36 +38,21 @@ import { WhatsAppRequiredBanner } from "@/components/whatsapp/WhatsAppRequiredBa
 import { SetupCompletionBanner } from "@/components/barber/SetupCompletionBanner";
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import { useAdminBarbeiroId } from "@/hooks/useAdminBarbeiroId";
+import { CampaignPromoBanners } from "@/components/admin/CampaignPromoBanners";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
-import { NotificationBell } from "@/components/NotificationBell";
-import { resolveClienteDisplayName } from "@/lib/walkInName";
-import { NextAppointmentCard, NextAppointmentData } from "@/components/shared/NextAppointmentCard";
-import { toast } from "sonner";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
-import { OverdueAppointmentsBanner } from "@/components/barber/OverdueAppointmentsBanner";
 
 
 interface AdminDashboardProps {
   adminContext: AdminContext;
   basePath?: string;
   tenantId?: string | null;
-  tenantNome?: string;
 }
 
 interface DashboardData {
   todayCount: number;
   yesterdayCount: number;
   pendingCount: number;
-  todayRevenue?: number;
-  todayCompletedCount?: number;
-  todayWaitingCount?: number;
-  nextAppointment: NextAppointmentData | null;
+  nextAppointment: { hora: string; clientName: string; serviceName: string } | null;
   monthRevenue: number;
   lastMonthRevenue: number;
   monthCuts: number;
@@ -114,118 +84,18 @@ const ChartTooltipContent = ({ active, payload, label }: any) => {
   );
 };
 
-const formatBRL = (n: number) =>
-  `R$\u00A0${n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-
-export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = null, tenantNome: propTenantNome }: AdminDashboardProps) {
+export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = null }: AdminDashboardProps) {
   const scopeKey = `admin-dashboard:${adminContext.barbeiroId || tenantId || "global"}`;
   const cachedDash = readSyncCache<DashboardData>(scopeKey);
   const [data, setData] = useState<DashboardData | null>(cachedDash?.data ?? null);
   const [loading, setLoading] = useState(!cachedDash?.data);
   const [showChart, setShowChart] = useState(false);
   const [revenueVisible, setRevenueVisible] = useState(true);
-  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
-  const [tenantNome, setTenantNome] = useState<string>(propTenantNome || "Barbearia DUB");
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-
-  useEffect(() => {
-    if (propTenantNome) {
-      setTenantNome(propTenantNome);
-      return;
-    }
-    const tId = tenantId || adminContext.tenantId;
-    if (!tId) return;
-    supabase
-      .from("tenants")
-      .select("nome")
-      .eq("id", tId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.nome) setTenantNome(data.nome);
-      });
-  }, [propTenantNome, tenantId, adminContext.tenantId]);
   const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
   const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
-  const overdueState = useOverdueAppointments(effectiveBarbeiroId);
-
-
   const { isConnected: whatsAppConnected, isLoading: whatsAppLoading } = useWhatsAppStatus(effectiveBarbeiroId);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith("dub:barber-profile:v1:")) {
-          try {
-            const parsed = JSON.parse(localStorage.getItem(k) || "");
-            if (parsed?.avatarUrl) return parsed.avatarUrl;
-          } catch {}
-        }
-      }
-    }
-    return null;
-  });
-
-  useEffect(() => {
-    const uId = adminContext?.userId;
-    const bId = effectiveBarbeiroId;
-
-    async function loadAvatar() {
-      // 1. Tentar profiles por uId
-      if (uId) {
-        const { data: prof } = await supabase.from("profiles").select("avatar_url").eq("id", uId).maybeSingle();
-        if (prof?.avatar_url) {
-          setAvatarUrl(prof.avatar_url);
-          return;
-        }
-      }
-      // 2. Tentar barbeiros por bId
-      if (bId) {
-        const { data: barb } = await supabase.from("barbeiros").select("foto_url").eq("id", bId).maybeSingle();
-        if (barb?.foto_url) {
-          setAvatarUrl(barb.foto_url);
-          return;
-        }
-      }
-      // 3. Tentar barbeiros por user_id
-      if (uId) {
-        const { data: barbUser } = await supabase.from("barbeiros").select("foto_url").eq("user_id", uId).maybeSingle();
-        if (barbUser?.foto_url) {
-          setAvatarUrl(barbUser.foto_url);
-          return;
-        }
-      }
-      // 4. Tentar barbeiro por apelido / nome (ex: Túlio)
-      const searchName = adminContext?.apelido || "Túlio";
-      const { data: barbByName } = await supabase
-        .from("barbeiros")
-        .select("foto_url")
-        .ilike("apelido", `%${searchName}%`)
-        .not("foto_url", "is", null)
-        .limit(1)
-        .maybeSingle();
-      if (barbByName?.foto_url) {
-        setAvatarUrl(barbByName.foto_url);
-        return;
-      }
-      // 5. Tentar qualquer barbeiro do tenant com foto
-      const tId = tenantId || adminContext?.tenantId;
-      if (tId) {
-        const { data: tenantBarbs } = await supabase
-          .from("barbeiros")
-          .select("foto_url")
-          .eq("tenant_id", tId)
-          .eq("ativo", true)
-          .not("foto_url", "is", null)
-          .limit(1)
-          .maybeSingle();
-        if (tenantBarbs?.foto_url) {
-          setAvatarUrl(tenantBarbs.foto_url);
-        }
-      }
-    }
-    loadAvatar();
-  }, [adminContext?.userId, effectiveBarbeiroId, adminContext?.apelido, tenantId, adminContext?.tenantId]);
 
   const [tenantBarberIds, setTenantBarberIds] = useState<string[] | null>(null);
   const setupCompletion = useSetupCompletion({
@@ -267,23 +137,12 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       : { event: "*" as const, schema: "public" as const, table: "agendamentos" };
 
     const channelId = adminContext.barbeiroId || tenantId || 'global';
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase
-        .channel(`admin-dash-realtime-${channelId}-${Math.random().toString(36).slice(2, 9)}`)
-        .on("postgres_changes", channelConfig as any, () => loadData())
-        .subscribe();
-    } catch (err) {
-      console.warn('[AdminDashboard] Erro ao conectar canal Realtime:', err);
-    }
+    const channel = supabase
+      .channel(`admin-dash-realtime-${channelId}`)
+      .on("postgres_changes", channelConfig as any, () => loadData())
+      .subscribe();
 
-    return () => {
-      if (channel) {
-        try {
-          supabase.removeChannel(channel);
-        } catch {}
-      }
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [adminContext.barbeiroId, adminContext.isAdmin, tenantId, tenantBarberIds]);
 
   /**
@@ -306,27 +165,9 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
         pendingCount: Number(raw.pendingCount) || 0,
         nextAppointment: raw.nextAppointment
           ? {
-              id: raw.nextAppointment.id ? String(raw.nextAppointment.id) : undefined,
               hora: String(raw.nextAppointment.hora ?? ""),
               clientName: String(raw.nextAppointment.clientName ?? "Cliente"),
               serviceName: String(raw.nextAppointment.serviceName ?? "Serviço"),
-              status: String(raw.nextAppointment.status ?? "confirmed"),
-              duracao: Number(raw.nextAppointment.duracao) || 30,
-              preco: Number(raw.nextAppointment.preco) || 0,
-              payment_method: raw.nextAppointment.payment_method ?? null,
-              tipo_agendamento: raw.nextAppointment.tipo_agendamento ?? null,
-              is_free: Boolean(raw.nextAppointment.is_free),
-              barbeiro_confirmou: raw.nextAppointment.barbeiro_confirmou ?? null,
-              observacoes: raw.nextAppointment.observacoes ?? null,
-              avatarUrl: raw.nextAppointment.avatarUrl ?? null,
-              isBlinking: (() => {
-                const [h, m] = String(raw.nextAppointment.hora ?? "").split(":").map(Number);
-                const sMin = (h || 0) * 60 + (m || 0);
-                const dur = Number(raw.nextAppointment.duracao) || 30;
-                const now = new Date();
-                const nowMin = now.getHours() * 60 + now.getMinutes();
-                return nowMin >= (sMin - 5) && nowMin < (sMin + dur);
-              })(),
             }
           : null,
         monthRevenue: Number(raw.monthRevenue) || 0,
@@ -353,75 +194,6 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
             }))
           : [],
       };
-
-      // Busca agendamentos de hoje para garantir dados completos, métricas do dia e próximo corte
-      const todayStr = format(new Date(), "yyyy-MM-dd");
-      const now = new Date();
-      const nowMinutes = now.getHours() * 60 + now.getMinutes();
-      let todayQuery = supabase
-        .from("agendamentos")
-        .select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
-        .eq("data", todayStr)
-        .not("status", "in", '("cancelled_by_admin","cancelled_by_user")')
-        .order("hora", { ascending: true });
-
-      if (adminContext.barbeiroId) {
-        todayQuery = todayQuery.eq("barbeiro_id", adminContext.barbeiroId);
-      } else if (!adminContext.isAdmin && tenantId && tenantBarberIds && tenantBarberIds.length > 0) {
-        todayQuery = todayQuery.in("barbeiro_id", tenantBarberIds);
-      }
-
-      const { data: realTodayApts } = await todayQuery;
-      if (realTodayApts && realTodayApts.length > 0) {
-        const completed = realTodayApts.filter((a: any) => a.status === "completed");
-        const waiting = realTodayApts.filter((a: any) => a.status === "pending" || a.status === "confirmed");
-
-        parsed.todayCount = realTodayApts.length;
-        parsed.todayCompletedCount = completed.length;
-        parsed.todayWaitingCount = waiting.length;
-        parsed.todayRevenue = completed.reduce((acc: number, a: any) => {
-          if (a.is_free) return acc;
-          const p = a.preco ?? (a.servicos as any)?.preco ?? 0;
-          return acc + (typeof p === "number" ? p : 0);
-        }, 0);
-
-        const upcoming = realTodayApts.find((apt: any) => {
-          if (apt.status === "completed" || apt.status === "no_show") return false;
-          const [h, m] = (apt.hora || "00:00").split(":").map(Number);
-          const startMin = (h || 0) * 60 + (m || 0);
-          const dur = apt.duracao || (apt.servicos as any)?.duracao_minutos || 30;
-          return (startMin + dur) > nowMinutes;
-        }) || realTodayApts.find((apt: any) => apt.status !== "completed") || realTodayApts[0];
-
-        if (upcoming) {
-          const realClientName = resolveClienteDisplayName(
-            upcoming.observacoes,
-            (upcoming.profiles as any)?.nome,
-            "Cliente"
-          );
-          const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
-          const uStartMin = (uh || 0) * 60 + (um || 0);
-          const uDur = upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30;
-          const isBlinkingNow = nowMinutes >= (uStartMin - 5) && nowMinutes < (uStartMin + uDur);
-
-          parsed.nextAppointment = {
-            id: upcoming.id,
-            hora: (upcoming.hora || "").slice(0, 5),
-            clientName: realClientName,
-            serviceName: (upcoming.servicos as any)?.nome || "Atendimento",
-            status: upcoming.status || "confirmed",
-            duracao: upcoming.duracao || (upcoming.servicos as any)?.duracao_minutos || 30,
-            preco: upcoming.preco ?? (upcoming.servicos as any)?.preco ?? 0,
-            payment_method: upcoming.payment_method || null,
-            tipo_agendamento: upcoming.tipo_agendamento || null,
-            is_free: Boolean(upcoming.is_free),
-            barbeiro_confirmou: upcoming.barbeiro_confirmou,
-            observacoes: upcoming.observacoes,
-            avatarUrl: (upcoming.profiles as any)?.avatar_url || null,
-            isBlinking: isBlinkingNow,
-          };
-        }
-      }
 
       setData(parsed);
       writeSyncCache(scopeKey, parsed);
@@ -478,7 +250,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
         addFilter(supabase.from("agendamentos").select("*", { count: "exact", head: true }).eq("data", today).in("status", ["pending", "confirmed", "completed"])),
         addFilter(supabase.from("agendamentos").select("*", { count: "exact", head: true }).eq("data", yesterday).in("status", ["pending", "confirmed", "completed"])),
         addFilter(supabase.from("assinaturas").select("*", { count: "exact", head: true }).eq("payment_method", "cash").or("status.in.(suspended,pending_cash),and(status.eq.active,cash_payment_confirmed.eq.false)")),
-        addFilter(supabase.from("agendamentos").select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, user_id, servico_id").eq("data", today).in("status", ["pending", "confirmed"]).order("hora", { ascending: true }).limit(20)),
+        addFilter(supabase.from("agendamentos").select("hora, user_id, servico_id").eq("data", today).in("status", ["pending", "confirmed"]).gte("hora", format(new Date(), "HH:mm")).order("hora", { ascending: true }).limit(1)),
         addFilter(supabase.from("agendamentos").select("preco").gte("data", firstDayOfMonth).eq("status", "completed").limit(1000)),
         addFilter(supabase.from("agendamentos").select("preco").gte("data", firstDayLastMonth).lte("data", lastDayLastMonth).eq("status", "completed").limit(1000)),
         addFilter(supabase.from("agendamentos").select("*", { count: "exact", head: true }).gte("data", firstDayOfMonth).eq("status", "completed")),
@@ -489,7 +261,7 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
         // Novos clientes: basear em agendamentos do barbeiro para ser "certeiro"
         addFilter(supabase.from("agendamentos").select("user_id, data").gte("data", weekAgo).in("status", ["confirmed", "completed"]).limit(1000)),
         addFilter(supabase.from("agendamentos").select("user_id, data").gte("data", firstDayOfMonth).in("status", ["confirmed", "completed"]).limit(1000)),
-        addFilter(supabase.from("agendamentos").select("id, data, hora, status, observacoes, user_id, servico_id").order("data", { ascending: false }).order("hora", { ascending: false }).limit(5)),
+        addFilter(supabase.from("agendamentos").select("id, data, hora, status, user_id, servico_id").order("data", { ascending: false }).order("hora", { ascending: false }).limit(5)),
         // Pagamentos de planos cash (confirmados na barbearia) - mês atual
         addFilter(supabase.from("pagamentos_plano_barbearia").select("valor").gte("created_at", `${firstDayOfMonth}T00:00:00`)),
         // Pagamentos de planos cash - mês anterior
@@ -512,58 +284,29 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       // Next appointment
       let nextAppointment = null;
       if (nextAptRes.data && nextAptRes.data.length > 0) {
-        const now = new Date();
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        const upcoming = nextAptRes.data.find((apt: any) => {
-          const [h, m] = (apt.hora || "00:00").split(":").map(Number);
-          const startMin = (h || 0) * 60 + (m || 0);
-          const dur = apt.duracao || 30;
-          return (startMin + dur) > nowMinutes;
-        }) || nextAptRes.data[0];
-
+        const apt = nextAptRes.data[0];
         const [pRes, sRes] = await Promise.all([
-          supabase.from("profiles").select("nome, avatar_url").eq("id", upcoming.user_id).single(),
-          supabase.from("servicos").select("nome, duracao_minutos, preco").eq("id", upcoming.servico_id).single(),
+          supabase.from("profiles").select("nome").eq("id", apt.user_id).single(),
+          supabase.from("servicos").select("nome").eq("id", apt.servico_id).single(),
         ]);
-        const realClientName = resolveClienteDisplayName(
-          upcoming.observacoes,
-          pRes.data?.nome,
-          "Cliente"
-        );
-        const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
-        const uStartMin = (uh || 0) * 60 + (um || 0);
-        const uDur = upcoming.duracao || sRes.data?.duracao_minutos || 30;
-        const isBlinkingNow = nowMinutes >= (uStartMin - 5) && nowMinutes < (uStartMin + uDur);
-
         nextAppointment = {
-          id: upcoming.id,
-          hora: (upcoming.hora || "").slice(0, 5),
-          clientName: realClientName,
+          hora: apt.hora,
+          clientName: pRes.data?.nome || "Cliente",
           serviceName: sRes.data?.nome || "Serviço",
-          status: upcoming.status || "confirmed",
-          duracao: upcoming.duracao || sRes.data?.duracao_minutos || 30,
-          preco: upcoming.preco ?? sRes.data?.preco ?? 0,
-          payment_method: upcoming.payment_method || null,
-          tipo_agendamento: upcoming.tipo_agendamento || null,
-          is_free: Boolean(upcoming.is_free),
-          barbeiro_confirmou: upcoming.barbeiro_confirmou,
-          observacoes: upcoming.observacoes,
-          avatarUrl: pRes.data?.avatar_url || null,
-          isBlinking: isBlinkingNow,
         };
       }
 
       // Recent with details
       const recentAppointments = await Promise.all(
-        (recentRes.data || []).map(async (apt: any) => {
+        (recentRes.data || []).map(async (apt) => {
           const [p, s] = await Promise.all([
             supabase.from("profiles").select("nome").eq("id", apt.user_id).single(),
             supabase.from("servicos").select("nome").eq("id", apt.servico_id).single(),
           ]);
           return {
-            id: apt.id, data: apt.data, hora: (apt.hora || "").slice(0, 5),
+            id: apt.id, data: apt.data, hora: apt.hora,
             status: apt.status || "pending",
-            clientName: resolveClienteDisplayName(apt.observacoes, p.data?.nome, "Cliente"),
+            clientName: p.data?.nome || "Cliente",
             serviceName: s.data?.nome || "Serviço",
           };
         })
@@ -621,23 +364,8 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       const currentMonthUserIds = new Set((newMonthRes.data || []).map((a: any) => a.user_id));
       const newClientsMonth = Array.from(currentMonthUserIds).filter(id => !prevMonthUserIds.has(id)).length;
 
-      const todayCompletedRes = await addFilter(
-        supabase
-          .from("agendamentos")
-          .select("preco, is_free")
-          .eq("data", today)
-          .eq("status", "completed")
-      );
-      const todayCompletedCount = (todayCompletedRes.data || []).length;
-      const todayRevenue = (todayCompletedRes.data || []).reduce(
-        (acc: number, a: any) => acc + (a.is_free ? 0 : (a.preco || 0)),
-        0
-      );
-
       setData({
         todayCount: todayRes.count || 0,
-        todayCompletedCount,
-        todayRevenue,
         yesterdayCount: yesterdayRes.count || 0,
         pendingCount: pendingRes.count || 0,
         nextAppointment,
@@ -656,43 +384,6 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
     } catch (error) {
       console.error("Error loading admin dashboard:", error);
       setLoading(false);
-    }
-  };
-
-  const handleUpdateAppointmentStatus = async (
-    appointmentId?: string,
-    newStatus?: "completed" | "no_show" | "cancelled_by_admin"
-  ) => {
-    if (!appointmentId || !newStatus) return;
-
-    try {
-      const updates: Record<string, any> = { status: newStatus };
-      if (newStatus === "completed") {
-        updates.barbeiro_confirmou = true;
-      } else if (newStatus === "no_show") {
-        updates.barbeiro_confirmou = false;
-        updates.ponto_liberado = false;
-      }
-
-      const { error } = await supabase
-        .from("agendamentos")
-        .update(updates)
-        .eq("id", appointmentId);
-
-      if (error) throw error;
-
-      if (newStatus === "completed") {
-        toast.success("Atendimento concluído com sucesso!");
-      } else if (newStatus === "no_show") {
-        toast.info("Agendamento marcado como falta.");
-      } else if (newStatus === "cancelled_by_admin") {
-        toast.success("Agendamento cancelado.");
-      }
-
-      loadData();
-    } catch (err: any) {
-      console.error("Erro ao atualizar status do agendamento:", err);
-      toast.error("Não foi possível atualizar o agendamento.");
     }
   };
 
@@ -728,216 +419,149 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
 
   if (!data) return null;
 
-  const todayDate = new Date();
-  const dayOfWeek = format(todayDate, "EEEE", { locale: ptBR });
-  const dayNumber = format(todayDate, "d");
-  const monthName = format(todayDate, "MMMM", { locale: ptBR });
-  const formattedDateToday = format(todayDate, "d 'de' MMM, yyyy", { locale: ptBR });
-  const todayFormatted = format(todayDate, "EEEE, d 'de' MMMM", { locale: ptBR });
+  const todayFormatted = format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR });
 
   // ═══════════════════════════════════════
-  // MOBILE LAYOUT - Fiel à Referência de Design
+  // MOBILE LAYOUT - Strategic Command Center
   // ═══════════════════════════════════════
   if (isMobile) {
     return (
-      <div className="w-full max-w-lg mx-auto space-y-4 pb-32 pt-1 animate-fade-in">
-        {/* 1. Header (Hello + Localização / Sino + Avatar) */}
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground truncate">
-              Olá, {adminContext.apelido || "Administrador"}
-            </h1>
-            <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground mt-0.5">
-              <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="font-semibold text-foreground/90 truncate">
-                {tenantNome || "Barbearia DUB"}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-            </div>
-          </div>
+      <div className="pt-5 pb-6 px-4 space-y-5 animate-fade-in">
 
-          <div className="flex items-center gap-2.5 shrink-0">
-            <NotificationBell
-              userId={adminContext.userId}
-              className="w-11 h-11 rounded-full bg-white dark:bg-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-white/90 dark:border-white/10 flex items-center justify-center hover:bg-zinc-50 transition-all active:scale-95"
-              iconClassName="w-5 h-5 text-zinc-900 fill-zinc-900 dark:text-white dark:fill-white"
-            />
-            <button
-              onClick={() => navigate(`${basePath}/perfil`)}
-              aria-label="Perfil"
-              className="w-11 h-11 rounded-full overflow-hidden border-2 border-white dark:border-white/20 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-foreground shadow-[0_2px_10px_rgba(0,0,0,0.04)] active:scale-95 transition-all hover:ring-2 hover:ring-foreground/20"
-            >
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt="Avatar"
-                  className="w-full h-full object-cover"
-                  onError={() => setAvatarUrl(null)}
-                />
-              ) : (
-                <span>{adminContext.apelido ? adminContext.apelido.slice(0, 2).toUpperCase() : "AD"}</span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Aviso estratégico no topo se houver configuração pendente */}
-        {setupCompletion.percentage < 100 && !setupCompletion.loading && (
-          <button
-            type="button"
-            onClick={() => navigate(`${basePath}/perfil`)}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-secondary/50 dark:bg-white/[0.04] border border-border/40 dark:border-white/[0.08] text-xs hover:bg-secondary/70 active:scale-[0.99] transition-all group shadow-xs"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-pulse" />
-              <span className="text-[12.5px] font-medium text-foreground/90 truncate">
-                Configure sua barbearia ({setupCompletion.percentage}% concluído)
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-muted-foreground group-hover:text-foreground shrink-0 text-[11.5px] font-medium">
-              <span>Concluir no Mais</span>
-              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </button>
-        )}
-
-
-
-        {/* Notificação estratégica de atendimentos para finalizar na tela inicial */}
-        {overdueState.count > 0 && (
-          <OverdueAppointmentsBanner
-            count={overdueState.count}
-            hasPastDays={overdueState.hasOverduePastDays}
-            onOpenModal={() => navigate(`${basePath}/agenda`)}
-          />
-        )}
-
-        {/* 2. Barra de Busca Arredondada Confortável e Larga (Fiel ao Mockup) */}
-        <div
-          onClick={() => setIsGlobalSearchOpen(true)}
-          className="w-full h-11 px-3.5 rounded-full bg-secondary/50 dark:bg-zinc-900 border border-border/40 text-muted-foreground flex items-center gap-2.5 cursor-pointer hover:border-border active:scale-[0.99] transition-all shadow-2xs"
-        >
-          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="text-[13px] text-muted-foreground truncate font-normal">
-            Buscar cliente, corte, serviço, financeiro...
-          </span>
-        </div>
-
-        {/* 3. Grid Acesso Rápido — 4 Itens (Barbearia, Horários, Clientes, Serviços) com Toques Sutis Apple */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <button
-            onClick={() => navigate(`${basePath}/dados-empresa`)}
-            className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-amber-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
-          >
-            <div className="w-10 h-10 rounded-xl bg-amber-500/[0.08] dark:bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <IconBarbearia3D className="w-6 h-6 object-contain" />
-            </div>
-            <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
-              Barbearia
-            </span>
-          </button>
-
-          <button
-            onClick={() => navigate(`${basePath}/horarios`)}
-            className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-sky-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
-          >
-            <div className="w-10 h-10 rounded-xl bg-sky-500/[0.08] dark:bg-sky-500/15 border border-sky-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <IconHorarios3D className="w-6 h-6 object-contain" />
-            </div>
-            <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
-              Horários
-            </span>
-          </button>
-
-          <button
-            onClick={() => navigate(`${basePath}/clientes`)}
-            className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-emerald-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
-          >
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/[0.08] dark:bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <IconClientes3D className="w-6 h-6 object-contain" />
-            </div>
-            <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
-              Clientes
-            </span>
-          </button>
-
-          <button
-            onClick={() => navigate(`${basePath}/servicos/cortes`)}
-            className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-card border border-border/40 dark:border-white/[0.08] shadow-xs hover:border-violet-500/30 active:scale-[0.98] transition-all group min-h-[64px]"
-          >
-            <div className="w-10 h-10 rounded-xl bg-violet-500/[0.08] dark:bg-violet-500/15 border border-violet-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <IconServicos3D className="w-6 h-6 object-contain" />
-            </div>
-            <span className="text-[13.5px] font-semibold text-foreground tracking-tight leading-tight truncate">
-              Serviços
-            </span>
-          </button>
-        </div>
-
-        {/* 4. Próximo Atendimento: Minimalista, Idêntico ao Card da Agenda com Horário Verde Piscando */}
-        <div>
-          <div className="flex items-center justify-between px-0.5 mb-2">
-            <span className="text-[13px] font-semibold text-foreground tracking-tight">
-              Próximo corte
-            </span>
-            <button
-              onClick={() => navigate(`${basePath}/agenda`)}
-              className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors group"
-            >
-              <span>Ver agenda</span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/70 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
-            </button>
-          </div>
-          <NextAppointmentCard appointment={data.nextAppointment} basePath={basePath} />
-        </div>
-
-        {/* 5. Card Faturamento do Mês — Estratégico, Simples e 100% Funcional */}
-        <div
-          onClick={() => navigate(`${basePath}/financeiro`)}
-          className="w-full rounded-2xl border border-border/40 dark:border-white/[0.08] bg-card p-4 sm:p-5 shadow-xs hover:border-border transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between pb-2">
-            <span className="text-[12.5px] font-medium text-muted-foreground">
-              Faturamento deste mês
-            </span>
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setRevenueVisible((v) => !v);
-                }}
-                className="w-8 h-8 rounded-full bg-secondary/60 dark:bg-white/[0.06] border border-border/40 dark:border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all"
-                aria-label={revenueVisible ? "Ocultar faturamento" : "Mostrar faturamento"}
-              >
-                {revenueVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              </button>
-              <div className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground group-hover:text-foreground transition-colors">
-                <span>Ver financeiro</span>
-                <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-1">
-            <p className="text-[32px] sm:text-[38px] font-extrabold tracking-tight text-foreground tabular-nums leading-tight">
-              {revenueVisible ? formatBRL(data?.monthRevenue || 0) : "R$\u00A0••••"}
-            </p>
-            <p className="text-[13px] text-muted-foreground mt-1 font-medium">
-              {(data?.monthCuts || 0)} {(data?.monthCuts || 0) === 1 ? "corte concluído" : "cortes concluídos"}
-            </p>
-          </div>
-        </div>
-
-
-
-        {/* Modal de Busca Global Inteligente no Mobile */}
-        <GlobalSearchModal
-          open={isGlobalSearchOpen}
-          onOpenChange={setIsGlobalSearchOpen}
-          basePath={basePath}
-          tenantId={tenantId}
+        {/* Banner de configuração */}
+        <SetupCompletionBanner
+          percentage={setupCompletion.percentage}
+          steps={setupCompletion.steps}
+          loading={setupCompletion.loading}
+          variant="compact"
         />
+
+        {/* Header simples */}
+        <div>
+          <p className="text-[11px] text-muted-foreground uppercase tracking-widest font-medium capitalize">
+            {todayFormatted}
+          </p>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-2xl font-bold text-foreground leading-none tabular-nums">
+              {data.todayCount}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              agendamento{data.todayCount !== 1 ? "s" : ""} hoje
+            </span>
+            {todayDiff !== 0 && (
+              <span className={cn(
+                "inline-flex items-center gap-0.5 text-[11px] font-medium ml-1",
+                todayDiff > 0 ? "text-emerald-500" : "text-red-500"
+              )}>
+                {todayDiff > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                {todayDiff > 0 ? "+" : ""}{todayDiff}
+              </span>
+            )}
+        </div>
+
+        {/* Banner moved to bottom */}
+        </div>
+
+        {/* Próximo atendimento — compacto */}
+        {data.nextAppointment && (
+          <div className="flex items-center gap-3 rounded-xl bg-card border border-border px-4 py-3">
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">Próximo</span>
+              <p className="text-sm font-semibold text-foreground truncate mt-0.5">{data.nextAppointment.clientName}</p>
+              <p className="text-xs text-muted-foreground truncate">{data.nextAppointment.serviceName}</p>
+            </div>
+            <span className="text-base font-bold text-foreground font-mono shrink-0">
+              {data.nextAppointment.hora}
+            </span>
+          </div>
+        )}
+
+        {/* Card de confirmações pendentes removido do dashboard */}
+
+
+        {/* Banners de WhatsApp e Carteira removidos — o PendingSetupModal cuida disso */}
+
+        {/* Performance — 2 métricas compactas */}
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium mb-2">Resumo do mês</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-card border border-border px-4 py-3">
+              <div className="flex items-center gap-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Receita</p>
+                <button onClick={() => setRevenueVisible(!revenueVisible)} className="ml-auto p-0.5 rounded-full hover:bg-foreground/[0.06] transition-colors">
+                  {revenueVisible ? <Eye className="w-3 h-3 text-muted-foreground" /> : <EyeOff className="w-3 h-3 text-muted-foreground" />}
+                </button>
+              </div>
+              <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">
+                {revenueVisible ? `R$ ${data.monthRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "R$ ••••"}
+              </p>
+              {revenueVisible && revenueGrowth !== 0 && (
+                <span className={cn(
+                  "inline-flex items-center gap-0.5 text-[10px] font-medium",
+                  revenueGrowth > 0 ? "text-emerald-500" : "text-red-500"
+                )}>
+                  {revenueGrowth > 0 ? "+" : ""}{revenueGrowth}%
+                </span>
+              )}
+            </div>
+            <div className="rounded-xl bg-card border border-border px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cortes</p>
+              <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">{data.monthCuts}</p>
+              {cutsDiff !== 0 && (
+                <span className={cn(
+                  "inline-flex items-center gap-0.5 text-[10px] font-medium",
+                  cutsDiff > 0 ? "text-emerald-500" : "text-red-500"
+                )}>
+                  {cutsDiff > 0 ? "+" : ""}{cutsDiff}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <CampaignPromoBanners basePath={basePath} />
+
+        {/* Atividade recente */}
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium mb-2">Atividade recente</p>
+          <div className="space-y-1">
+            {data.recentAppointments.map((apt) => {
+              const statusInfo = statusLabels[apt.status] || statusLabels.pending;
+              const dotColor = apt.status === "pending" ? "bg-amber-400"
+                : apt.status === "confirmed" ? "bg-emerald-400"
+                : apt.status === "completed" ? "bg-sky-400"
+                : apt.status?.startsWith("cancelled") ? "bg-red-400"
+                : "bg-muted-foreground";
+              return (
+                <div key={apt.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card transition-colors">
+                  <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                    <span className="text-[11px] font-semibold text-muted-foreground">
+                      {apt.clientName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-foreground truncate">{apt.clientName}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {apt.serviceName} · {new Date(`${apt.data}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} {apt.hora}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={cn("w-1.5 h-1.5 rounded-full", dotColor)} />
+                    <span className="text-[10px] text-muted-foreground font-medium">{statusInfo.label}</span>
+                  </div>
+                </div>
+              );
+            })}
+            {data.recentAppointments.length === 0 && (
+              <div className="text-center py-8">
+                <Calendar className="w-6 h-6 text-muted-foreground mx-auto mb-1.5" />
+                <p className="text-xs text-muted-foreground">Nenhuma atividade</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Banner de ativação removido — o PendingSetupModal cuida disso */}
       </div>
     );
   }
@@ -981,14 +605,21 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
       {/* Banner de ativação removido — o PendingSetupModal cuida disso */}
       </div>
 
+      {/* Next + Pending row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {data.nextAppointment && (
+          <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-5 space-y-1">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-primary/70 font-semibold">Próximo cliente</p>
+              <span className="text-xl font-bold text-primary font-mono">{data.nextAppointment.hora}</span>
+            </div>
+            <p className="text-base font-semibold text-foreground">{data.nextAppointment.clientName}</p>
+            <p className="text-sm text-muted-foreground">{data.nextAppointment.serviceName}</p>
+          </div>
+        )}
+        {/* Card de confirmações pendentes removido do dashboard */}
 
-
-      {/* Next row */}
-      {data.nextAppointment && (
-        <div className="max-w-md mb-4">
-          <NextAppointmentCard appointment={data.nextAppointment} basePath={basePath} />
-        </div>
-      )}
+      </div>
 
       {/* Performance Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1054,6 +685,8 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
         </div>
       </div>
 
+      <CampaignPromoBanners basePath={basePath} />
+
       {/* Recent Appointments - Desktop */}
       <div className="space-y-3">
         <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">Atividade Recente</p>
@@ -1087,16 +720,6 @@ export function AdminDashboard({ adminContext, basePath = "/admin", tenantId = n
           )}
         </div>
       </div>
-
-
-
-      {/* Modal de Busca Global Inteligente */}
-      <GlobalSearchModal
-        open={isGlobalSearchOpen}
-        onOpenChange={setIsGlobalSearchOpen}
-        basePath={basePath}
-        tenantId={tenantId}
-      />
     </div>
   );
 }
