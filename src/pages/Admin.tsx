@@ -377,7 +377,7 @@ const Admin = () => {
   // ========== LAYOUT MOBILE ==========
   if (isMobile) {
     return (
-      <div className="relative min-h-app w-full bg-background">
+      <div className={cn("relative min-h-app w-full", isCarteiraRoute ? "bg-[#144439]" : "bg-background")}>
         {/* Background limpo */}
 
         {/* Drawer Menu */}
@@ -391,6 +391,7 @@ const Admin = () => {
         <main
           className={cn(
             "relative min-h-[calc(100dvh-56px)]",
+            isCarteiraRoute ? "bg-[#144439]" : "bg-background",
             isImmersiveRoute && "pb-0"
           )}
           style={

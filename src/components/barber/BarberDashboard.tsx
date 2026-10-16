@@ -389,6 +389,12 @@ export function BarberDashboard({
         paddingTop: "max(calc(env(safe-area-inset-top, 0px) + 0.5rem), 0.75rem)",
       }}
     >
+      {/* Scrim sutil de proteção na status bar para contraste perfeito dos ícones de hora/bateria */}
+      <div
+        className="fixed top-0 left-0 right-0 z-40 pointer-events-none bg-gradient-to-b from-black/25 via-black/10 to-transparent"
+        style={{ height: "max(env(safe-area-inset-top, 0px), 24px)" }}
+        aria-hidden="true"
+      />
       {/* ─── 1. Header Original Apple HIG: Olá Barbeiro + Barbearia / Notificação + Sino + Avatar ─── */}
       <header className="flex items-center justify-between gap-3 pt-1">
         <div className="min-w-0">
