@@ -443,3 +443,61 @@ export function PinLocationSolid({ className = "w-3.5 h-3.5 shrink-0" }: { class
     </svg>
   );
 }
+
+/** 10. Configurações: Engrenagem 3D usinada em titânio e aço escovado Apple */
+export function IconConfiguracoes3D({ className = "w-11 h-11" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <defs>
+        <radialGradient id="cfgCoreGrad" cx="35%" cy="30%" r="65%">
+          <stop offset="0%" stopColor="#3F3F46" />
+          <stop offset="65%" stopColor="#18181B" />
+          <stop offset="100%" stopColor="#09090B" />
+        </radialGradient>
+        <linearGradient id="cfgGearGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#71717A" />
+          <stop offset="35%" stopColor="#52525B" />
+          <stop offset="70%" stopColor="#27272A" />
+          <stop offset="100%" stopColor="#18181B" />
+        </linearGradient>
+        <linearGradient id="cfgHighlight" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#3F3F46" stopOpacity="0.15" />
+        </linearGradient>
+        <filter id="cfgShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="4" stdDeviation="3.5" floodColor="#000000" floodOpacity="0.4" />
+        </filter>
+      </defs>
+
+      <g filter="url(#cfgShadow)">
+        {/* Corpo externo da engrenagem 3D */}
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M21 7 H27 V10.2 C28.1 10.6 29.2 11.1 30.1 11.8 L32.6 9.7 L36.9 14 L34.8 16.5 C35.5 17.4 36 18.5 36.4 19.6 H39.6 V25.6 H36.4 C36 26.7 35.5 27.8 34.8 28.7 L36.9 31.2 L32.6 35.5 L30.1 33.4 C29.2 34.1 28.1 34.6 27 35 V38.2 H21 V35 C19.9 34.6 18.8 34.1 17.9 33.4 L15.4 35.5 L11.1 31.2 L13.2 28.7 C12.5 27.8 12 26.7 11.6 25.6 H8.4 V19.6 H11.6 C12 18.5 12.5 17.4 13.2 16.5 L11.1 14 L15.4 9.7 L17.9 11.8 C18.8 11.1 19.9 10.6 21 10.2 V7 Z"
+          fill="url(#cfgGearGrad)"
+          stroke="url(#cfgHighlight)"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
+
+        {/* Anel intermediário em relevo usinado */}
+        <circle cx="24" cy="22.6" r="8.5" fill="url(#cfgCoreGrad)" stroke="#52525B" strokeWidth="1" />
+
+        {/* Eixo central com profundidade mecânica */}
+        <circle cx="24" cy="22.6" r="4.2" fill="#09090B" stroke="#71717A" strokeWidth="0.9" />
+        <circle cx="24" cy="22.6" r="2.8" fill="#18181B" />
+
+        {/* Brilho chanfrado de topo */}
+        <path
+          d="M19 12.2 C21 11.2 27 11.2 29 12.2"
+          stroke="#FFFFFF"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          opacity="0.6"
+        />
+      </g>
+    </svg>
+  );
+}
+

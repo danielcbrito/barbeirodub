@@ -29,9 +29,8 @@ import {
   IconHorarios3D,
   IconClientes3D,
   IconServicos3D,
-  IconFinanceiro3D,
-  IconCampanhas3D,
   IconRelatorios3D,
+  IconConfiguracoes3D,
   CampaignAdIcon3D,
   PinLocationSolid,
 } from "@/components/shared/Category3DIcons";
@@ -452,7 +451,7 @@ export function BarberDashboard({
 
       {/* ─── 3. Acessos Rápidos com Ícones 3D (Sempre lá em cima, abaixo da busca, sem nada por trás) ─── */}
       <section className="pt-1 pb-1">
-        <div className="grid grid-cols-6 gap-1.5 sm:gap-3">
+        <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
           <button
             type="button"
             onClick={() => navigate(`${basePath}/horarios`)}
@@ -494,32 +493,6 @@ export function BarberDashboard({
 
           <button
             type="button"
-            onClick={() => navigate(`${basePath}/carteira`)}
-            className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
-          >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
-              <IconFinanceiro3D className="w-11 h-11 sm:w-12 sm:h-12" />
-            </div>
-            <span className="text-[11.5px] sm:text-[12px] font-medium text-foreground tracking-tight text-center truncate w-full">
-              Carteira
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate(`${basePath}/promocoes`)}
-            className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
-          >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
-              <IconCampanhas3D className="w-11 h-11 sm:w-12 sm:h-12" />
-            </div>
-            <span className="text-[11.5px] sm:text-[12px] font-medium text-foreground tracking-tight text-center truncate w-full">
-              Campanhas
-            </span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => navigate(`${basePath}/relatorios`)}
             className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
           >
@@ -528,6 +501,25 @@ export function BarberDashboard({
             </div>
             <span className="text-[11.5px] sm:text-[12px] font-medium text-foreground tracking-tight text-center truncate w-full">
               Relatórios
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (isTenantAdmin) {
+                navigate(`${basePath}/config-barbearia`);
+              } else {
+                navigate(`${basePath}/configuracoes-perfil`);
+              }
+            }}
+            className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
+          >
+            <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
+              <IconConfiguracoes3D className="w-11 h-11 sm:w-12 sm:h-12" />
+            </div>
+            <span className="text-[11.5px] sm:text-[12px] font-medium text-foreground tracking-tight text-center truncate w-full">
+              Configurações
             </span>
           </button>
         </div>
