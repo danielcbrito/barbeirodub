@@ -1103,15 +1103,15 @@ export function CarteiraPage({
     <div className="min-h-app bg-background text-foreground pb-32 w-full pt-0">
       {/* 0. BLEED VERDE NA STATUS BAR (Garante que a área do relógio/bateria fique 100% verde sem falhas no iOS) */}
       <div
-        className="fixed top-0 left-0 right-0 z-0 pointer-events-none bg-[#144439]"
-        style={{ height: "max(calc(env(safe-area-inset-top, 0px) + 24px), 54px)" }}
+        className="fixed top-0 left-0 right-0 pointer-events-none bg-[#144439] z-50"
+        style={{ height: "max(calc(env(safe-area-inset-top, 0px) + 24px), 56px)" }}
         aria-hidden="true"
       />
       {/* 1. HEADER VERDE FULL-BLEED (Ocupa 100% da largura e todo o topo da tela, cobrindo notch/dynamic island/relógio/bateria) */}
       <header
         className="w-full bg-gradient-to-b from-[#144439] via-[#0d2e27] to-[#071a16] text-white rounded-b-[28px] sm:rounded-b-[32px] shadow-lg relative z-10 overflow-hidden"
         style={{
-          paddingTop: "max(18px, calc(env(safe-area-inset-top, 0px) + 12px))",
+          paddingTop: "max(24px, calc(env(safe-area-inset-top, 0px) + 16px))",
         }}
       >
         {/* Glow sutil de fundo */}

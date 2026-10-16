@@ -1415,7 +1415,6 @@ html.platform-android-browser body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y pinch-zoom;
-  background-color: hsl(var(--background)) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

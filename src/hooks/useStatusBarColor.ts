@@ -39,14 +39,24 @@ export function applyStatusBarColor(color: string) {
   // Garante que o topo absoluto (notch, Dynamic Island, relógio e bateria) fique 100% verde na carteira
   upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
   if (resolvedColor === "#144439") {
-    document.documentElement.style.backgroundColor = "#144439";
-    document.body.style.backgroundColor = "#144439";
+    document.documentElement.style.setProperty("background-color", "#144439", "important");
+    document.body.style.setProperty("background-color", "#144439", "important");
+    const rootEl = document.getElementById("root");
+    if (rootEl) rootEl.style.setProperty("background-color", "#144439", "important");
+    // Forçar reflow para o Safari iOS recalcular a cor da barra de status
+    if (typeof document.body.offsetHeight === "number") {
+      void document.body.offsetHeight;
+    }
   } else if (resolvedColor === "#0D0D0D" || resolvedColor === "#0A0A0A" || resolvedColor === "#0f0f0f") {
-    document.documentElement.style.backgroundColor = resolvedColor;
-    document.body.style.backgroundColor = resolvedColor;
+    document.documentElement.style.setProperty("background-color", resolvedColor, "important");
+    document.body.style.setProperty("background-color", resolvedColor, "important");
+    const rootEl = document.getElementById("root");
+    if (rootEl) rootEl.style.setProperty("background-color", resolvedColor, "important");
   } else {
-    document.documentElement.style.backgroundColor = resolvedColor || "#F4F5F7";
-    document.body.style.backgroundColor = resolvedColor || "#F4F5F7";
+    document.documentElement.style.removeProperty("background-color");
+    document.body.style.removeProperty("background-color");
+    const rootEl = document.getElementById("root");
+    if (rootEl) rootEl.style.removeProperty("background-color");
   }
 }
 
