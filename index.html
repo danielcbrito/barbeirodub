@@ -23,8 +23,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Barbeiros" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-touch-fullscreen" content="yes" />
 
     <!-- Manifest & icons -->
+    <link rel="manifest" href="/manifest.json" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="shortcut icon" type="image/png" href="/favicon.png" />
@@ -84,6 +86,23 @@
         else document.addEventListener('DOMContentLoaded', function () {
           document.body.style.backgroundColor = brand;
         });
+      })();
+    </script>
+    <script>
+      // Garante que navegações internas no iOS WebClip permaneçam em tela cheia sem abrir o Safari
+      (function() {
+        if (("standalone" in window.navigator) && window.navigator.standalone) {
+          document.addEventListener("click", function(event) {
+            var node = event.target;
+            while (node && node.nodeName !== "A" && node.nodeName !== "HTML") {
+              node = node.parentNode;
+            }
+            if (node && node.nodeName === "A" && node.href && node.href.indexOf("http") !== -1 && node.href.indexOf(window.location.host) !== -1 && !node.target) {
+              event.preventDefault();
+              window.location.href = node.href;
+            }
+          }, false);
+        }
       })();
     </script>
 

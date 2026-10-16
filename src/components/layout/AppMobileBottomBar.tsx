@@ -232,7 +232,12 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
     >
         <nav
           aria-label="Navegação do aplicativo"
-          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] rounded-full border border-white/25 dark:border-white/15 shadow-[0_14px_40px_rgba(0,0,0,0.32),inset_0_1px_1px_rgba(255,255,255,0.24)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300 bg-background/55 dark:bg-[#121216]/55 backdrop-blur-3xl backdrop-saturate-[190%]"
+          className="pointer-events-auto flex items-center justify-between p-2 sm:p-2.5 h-[76px] rounded-full border border-white/15 shadow-[0_16px_44px_rgba(0,0,0,0.42),inset_0_1px_1px_rgba(255,255,255,0.22)] w-[calc(100%-1rem)] max-w-[460px] transition-all duration-300"
+          style={{
+            backgroundColor: "rgba(16, 16, 20, 0.86)",
+            backdropFilter: "blur(24px) saturate(180%)",
+            WebkitBackdropFilter: "blur(24px) saturate(180%)",
+          }}
         >
           {items.map(({ key, label, path, end, Icon, countKey }) => {
             const to = `${basePath}${path}`;
@@ -275,8 +280,8 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                       className={cn(
                         "relative flex items-center justify-center transition-all duration-300 active:scale-95 shrink-0",
                         active
-                          ? "h-[56px] px-3.5 sm:px-4 bg-white/95 text-[#09090b] rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.18)] gap-2 dark:bg-white/[0.18] dark:border dark:border-white/25 dark:text-white dark:shadow-[0_2px_12px_rgba(0,0,0,0.3)] dark:backdrop-blur-md"
-                          : "w-[54px] sm:w-[58px] h-[56px] rounded-full flex flex-col items-center justify-center gap-1 text-foreground/60 dark:text-white/60 hover:text-foreground dark:hover:text-white"
+                          ? "h-[58px] px-4 sm:px-4.5 bg-white text-zinc-950 rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.25)] gap-2.5 dark:bg-white/15 dark:border dark:border-white/20 dark:text-white dark:shadow-xs"
+                          : "w-[56px] sm:w-[60px] h-[58px] rounded-full flex flex-col items-center justify-center gap-1 text-white/70 hover:text-white"
                       )}
                     >
                       <div className="relative flex items-center justify-center shrink-0">
@@ -285,8 +290,8 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                           className={cn(
                             "shrink-0 block",
                             active
-                              ? "w-[22px] h-[22px] text-[#09090b] dark:text-white"
-                              : "w-[21px] h-[21px] text-foreground/75 dark:text-white/75"
+                              ? "w-[22px] h-[22px] text-zinc-950 dark:text-white"
+                              : "w-[22px] h-[22px] text-white/80"
                           )}
                           aria-hidden="true"
                         />
@@ -294,7 +299,7 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                           <span
                             className={cn(
                               "absolute -top-1.5 -right-2 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none shadow-sm bg-red-500 text-white",
-                              active ? "ring-2 ring-white dark:ring-white/20" : "ring-2 ring-background dark:ring-[#141416]"
+                              active ? "ring-2 ring-white dark:ring-white/20" : "ring-2 ring-[#141416]"
                             )}
                             aria-label={`${count} pendências`}
                           >
@@ -303,11 +308,11 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                         )}
                       </div>
                       {active ? (
-                        <span className="text-[13px] font-semibold text-[#09090b] dark:text-white tracking-tight leading-none whitespace-nowrap">
+                        <span className="text-[13px] font-semibold text-zinc-950 dark:text-white tracking-tight leading-none whitespace-nowrap">
                           {label}
                         </span>
                       ) : (
-                        <span className="text-[9.5px] sm:text-[10px] font-medium tracking-tight text-foreground/60 dark:text-white/60 leading-none whitespace-nowrap">
+                        <span className="text-[10px] sm:text-[10.5px] font-medium tracking-tight text-white/65 leading-none whitespace-nowrap">
                           {label}
                         </span>
                       )}
