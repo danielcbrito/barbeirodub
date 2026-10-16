@@ -434,7 +434,7 @@ export function CarteiraPage({
   const [pinError, setPinError] = useState<string | null>(null);
   const [savingPinSession, setSavingPinSession] = useState(false);
 
-  useStatusBarColor(withdrawOpen ? "app-background" : "#144439");
+  useStatusBarColor("app-background");
 
   const handleNumpadPress = useCallback((digit: string) => {
     setWithdrawValue((prev) => {
@@ -1100,65 +1100,62 @@ export function CarteiraPage({
   };
 
   return (
-    <div className="min-h-app bg-background text-foreground pb-32 w-full">
-      {/* 1. HERO FINANCIAL HEADER FULL-WIDTH (PADRÃO IMAGEM 1)
-          Ocupa 100% da largura da tela, invade o topo / status bar do celular (onde fica horário, bateria, etc.)
-          e tem apenas as bordas arredondadas na base, abaixo dos botões Extrato e Sacar */}
-      <header
-        className="w-full bg-gradient-to-b from-[#144439] via-[#0d2e27] to-[#071a16] text-white rounded-b-[28px] sm:rounded-b-[32px] shadow-xl relative overflow-hidden border-b border-emerald-500/20"
-        style={{
-          paddingTop: "max(18px, calc(env(safe-area-inset-top, 0px) + 12px))",
-        }}
-      >
-        {/* Glow sutil de fundo */}
-        <div className="absolute -top-10 -right-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="mx-auto w-full max-w-md px-5 sm:px-6 pb-6 sm:pb-7">
-          {/* Linha de cabeçalho dentro do card (Image 1) */}
-          <div className="flex items-center justify-between relative z-10">
-            <div className="flex items-center gap-3">
-              {onBack && (
-                <button
-                  onClick={onBack}
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 active:scale-95 transition-all -ml-1"
-                  aria-label="Voltar"
-                >
-                  <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
-                </button>
-              )}
-              <div className="flex flex-col">
-                <span className="text-[13px] text-emerald-200/80 font-normal lowercase tracking-wide">
-                  {getGreeting()}
-                </span>
-                <span className="text-[17px] font-semibold text-white tracking-tight leading-tight">
-                  {firstName}
-                </span>
-              </div>
-            </div>
-
-            {/* Botão de sino de notificação com ponto indicador / refresh */}
+    <div
+      className="min-h-app bg-background text-foreground pb-32 w-full"
+      style={{
+        paddingTop: "var(--app-safe-top, env(safe-area-inset-top, 0px))",
+      }}
+    >
+      {/* 1. Barra de Topo Nativa Apple HIG / Android (Preserva a área de status bar, relógio 9:45, wifi e notificações) */}
+      <div className="mx-auto w-full max-w-md px-4 pt-2.5 pb-2 flex items-center justify-between relative z-10">
+        <div className="flex items-center gap-2">
+          {onBack && (
             <button
-              onClick={handleRefreshAll}
-              disabled={refreshing}
-              className="relative p-2.5 rounded-full hover:bg-white/10 text-white/85 hover:text-white active:scale-95 transition-all"
-              title="Atualizar carteira"
-              aria-label="Notificações e atualização"
+              onClick={onBack}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-foreground hover:bg-secondary/70 active:scale-95 transition-all -ml-1 cursor-pointer"
+              aria-label="Voltar"
             >
-              <Bell className={`w-5 h-5 stroke-[1.8] ${refreshing ? "animate-spin text-white" : ""}`} />
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-white ring-2 ring-[#13443a]" />
+              <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
             </button>
+          )}
+          <div className="flex flex-col">
+            <span className="text-[12px] text-muted-foreground font-normal lowercase tracking-wide">
+              {getGreeting()}
+            </span>
+            <span className="text-[17px] font-semibold text-foreground tracking-tight leading-tight">
+              {firstName}
+            </span>
           </div>
+        </div>
 
-          {/* Seção de Saldo (Image 1) */}
-          <div className="relative z-10 mt-7 mb-6">
+        {/* Botão de sino de notificação / refresh */}
+        <button
+          onClick={handleRefreshAll}
+          disabled={refreshing}
+          className="relative p-2 rounded-full hover:bg-secondary/70 text-foreground active:scale-95 transition-all cursor-pointer"
+          title="Atualizar carteira"
+          aria-label="Notificações e atualização"
+        >
+          <Bell className={`w-5 h-5 stroke-[1.8] ${refreshing ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      {/* 2. CARD FINANCEIRO VERDE (Dentro da tela, com cantos arredondados rounded-3xl e SEM invadir a área de status bar) */}
+      <div className="mx-auto w-full max-w-md px-4 pt-1">
+        <div className="w-full bg-gradient-to-b from-[#144439] via-[#0d2e27] to-[#071a16] text-white rounded-3xl shadow-xl relative overflow-hidden border border-emerald-500/20 p-5 sm:p-6">
+          {/* Glow sutil de fundo */}
+          <div className="absolute -top-10 -right-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          {/* Seção de Saldo */}
+          <div className="relative z-10">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[14px] text-emerald-100/75 font-normal tracking-wide">
+              <span className="text-[13.5px] text-emerald-100/75 font-normal tracking-wide">
                 seu saldo total
               </span>
               <button
                 onClick={() => setShowBalance((v) => !v)}
                 aria-label="Mostrar ou ocultar saldo"
-                className="text-emerald-100/75 hover:text-white transition-colors p-1"
+                className="text-emerald-100/75 hover:text-white transition-colors p-1 cursor-pointer"
               >
                 {showBalance ? (
                   <Eye className="w-5 h-5 stroke-[1.8]" />
@@ -1168,7 +1165,7 @@ export function CarteiraPage({
               </button>
             </div>
 
-            <p className="text-[36px] sm:text-[42px] font-bold tracking-tight text-white tabular-nums leading-none">
+            <p className="text-[34px] sm:text-[40px] font-bold tracking-tight text-white tabular-nums leading-none">
               {showBalance ? fmtBRL(availableCentavos) : "R$ ••••••"}
             </p>
 
@@ -1179,12 +1176,12 @@ export function CarteiraPage({
             )}
           </div>
 
-          {/* Dois botões em cápsula lado a lado (Image 1: request & send) */}
-          <div className="flex items-center gap-3 relative z-10 pt-1">
+          {/* Dois botões em cápsula lado a lado (extrato & sacar) */}
+          <div className="flex items-center gap-3 relative z-10 pt-5">
             <button
               type="button"
               onClick={() => setExtratoOpen(true)}
-              className="flex-1 h-12 rounded-full bg-[#0a1815]/90 hover:bg-[#0a1815] text-white text-[14px] font-medium flex items-center justify-center border border-white/10 active:scale-98 transition-all shadow-xs"
+              className="flex-1 h-11 rounded-full bg-[#0a1815]/90 hover:bg-[#0a1815] text-white text-[13.5px] font-medium flex items-center justify-center border border-white/10 active:scale-98 transition-all shadow-xs cursor-pointer"
             >
               extrato
             </button>
@@ -1193,13 +1190,13 @@ export function CarteiraPage({
               type="button"
               onClick={() => setWithdrawOpen(true)}
               disabled={availableCentavos <= 0}
-              className="flex-1 h-12 rounded-full bg-white hover:bg-white/95 text-[#0a1815] text-[14px] font-semibold flex items-center justify-center active:scale-98 transition-all shadow-md disabled:opacity-40 disabled:pointer-events-none"
+              className="flex-1 h-11 rounded-full bg-white hover:bg-white/95 text-[#0a1815] text-[13.5px] font-semibold flex items-center justify-center active:scale-98 transition-all shadow-md disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
             >
               sacar
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* CONTEÚDO PRINCIPAL (ABAIXO DO HEADER VERDE) */}
       <div className="relative z-10 px-4 pt-5 sm:px-6">

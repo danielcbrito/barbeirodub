@@ -30,7 +30,6 @@ import {
   IconClientes3D,
   IconServicos3D,
   IconRelatorios3D,
-  IconConfiguracoes3D,
   CampaignAdIcon3D,
   PinLocationSolid,
 } from "@/components/shared/Category3DIcons";
@@ -561,20 +560,7 @@ export function AdminDashboard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* Chip sutil de Atendimentos Pendentes no Header (Não invade a tela) */}
-          {overdueState.count > 0 && (
-            <button
-              type="button"
-              onClick={() => navigate(`${basePath}/agenda`, { state: { openOverdueModal: true } })}
-              className="h-9 px-3 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-500 hover:bg-amber-500/15 active:scale-95 transition-all flex items-center gap-1.5 text-[12px] font-medium cursor-pointer shadow-2xs"
-              title="Toque para conferir atendimentos pendentes na agenda"
-            >
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span>{overdueState.count} {overdueState.count === 1 ? "pendente" : "pendentes"}</span>
-            </button>
-          )}
-
+        <div className="flex items-center gap-2.5 shrink-0">
           <NotificationBell
             userId={adminContext.userId}
             className="w-11 h-11 rounded-full bg-card border border-border/40 flex items-center justify-center hover:bg-secondary/80 transition-all active:scale-95 shadow-xs"
@@ -612,7 +598,7 @@ export function AdminDashboard({
 
       {/* ─── 3. Acessos Rápidos com Ícones 3D (Sempre lá em cima, abaixo da busca, sem nada por trás) ─── */}
       <section className="pt-1 pb-1">
-        <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
+        <div className="grid grid-cols-4 gap-2 sm:gap-4">
           <button
             type="button"
             onClick={() => navigate(`${basePath}/horarios`)}
@@ -662,19 +648,6 @@ export function AdminDashboard({
             </div>
             <span className="text-[11.5px] sm:text-[12px] font-medium text-foreground tracking-tight text-center truncate w-full">
               Relatórios
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate(`${basePath}/config-barbearia`)}
-            className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
-          >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
-              <IconConfiguracoes3D className="w-11 h-11 sm:w-12 sm:h-12" />
-            </div>
-            <span className="text-[11.5px] sm:text-[12px] font-medium text-foreground tracking-tight text-center truncate w-full">
-              Configurações
             </span>
           </button>
         </div>
