@@ -30,7 +30,7 @@ All colors MUST be HSL. */
     --app-height: 100svh;
     --app-safe-top: var(--sat);
     --app-safe-right: var(--sar);
-    --app-safe-bottom: var(--sab);
+    --app-safe-bottom: 8px;
     --app-safe-left: var(--sal);
     --app-bottom-nav-bleed: 0px;
     --app-bottom-nav-offset: 0px;
@@ -1407,6 +1407,10 @@ body {
 }
 
 /* Permitir scroll nativo fluído em todas as plataformas móveis */
+html.platform-ios-pwa {
+  --app-safe-bottom: 8px;
+}
+
 html.platform-ios-pwa body,
 html.platform-ios-browser body,
 html.platform-android-pwa body,

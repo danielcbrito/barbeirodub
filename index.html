@@ -74,10 +74,8 @@
           var meta = document.querySelector('meta[name="' + name + '"]');
           if (meta) meta.setAttribute('content', brand);
         });
-        if (isFinancial) {
-          var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-          if (appleMeta) appleMeta.setAttribute('content', 'black-translucent');
-        }
+        var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+        if (appleMeta) appleMeta.setAttribute('content', 'black-translucent');
         if (theme === 'dark') document.documentElement.classList.add('dark');
         else document.documentElement.classList.add('light');
         if (document.body) document.body.style.backgroundColor = brand;

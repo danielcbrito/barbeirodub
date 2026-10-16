@@ -227,7 +227,7 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
         isKeyboardOpen ? "opacity-0 translate-y-16 pointer-events-none" : "opacity-100 translate-y-0"
       )}
       style={{
-        bottom: "calc(0.75rem + var(--app-safe-bottom, 8px))",
+        bottom: "max(calc(env(safe-area-inset-bottom, 0px) - 24px), 8px)",
       }}
     >
         <nav
