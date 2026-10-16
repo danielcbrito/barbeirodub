@@ -36,18 +36,19 @@ export function applyStatusBarColor(color: string) {
   META_NAMES.forEach((name) => upsertMeta(name, resolvedColor));
 
   // No iOS Safari, Chrome e PWA standalone ("Adicionar à Tela de Início"):
-  // Sempre mantém black-translucent para o app rodar edge-to-edge sem barra de sistema indesejada no rodapé.
-  upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
-
+  // Garante que o topo absoluto (notch, Dynamic Island, relógio e bateria) fique 100% verde
   if (resolvedColor === "#144439") {
+    upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
     document.documentElement.style.backgroundColor = "#144439";
     document.body.style.backgroundColor = "#144439";
   } else if (resolvedColor === "#0D0D0D" || resolvedColor === "#0A0A0A" || resolvedColor === "#0f0f0f") {
+    upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
     document.documentElement.style.backgroundColor = resolvedColor;
     document.body.style.backgroundColor = resolvedColor;
   } else {
-    document.documentElement.style.backgroundColor = resolvedColor || "#F4F5F7";
-    document.body.style.backgroundColor = resolvedColor || "#F4F5F7";
+    upsertMeta("apple-mobile-web-app-status-bar-style", "default");
+    document.documentElement.style.backgroundColor = "";
+    document.body.style.backgroundColor = "";
   }
 }
 

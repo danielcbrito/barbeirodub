@@ -20,7 +20,7 @@
 
     <!-- PWA iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Barbeiros" />
     <meta name="mobile-web-app-capable" content="yes" />
 
@@ -74,8 +74,10 @@
           var meta = document.querySelector('meta[name="' + name + '"]');
           if (meta) meta.setAttribute('content', brand);
         });
-        var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-        if (appleMeta) appleMeta.setAttribute('content', 'black-translucent');
+        if (isFinancial) {
+          var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+          if (appleMeta) appleMeta.setAttribute('content', 'black-translucent');
+        }
         if (theme === 'dark') document.documentElement.classList.add('dark');
         else document.documentElement.classList.add('light');
         if (document.body) document.body.style.backgroundColor = brand;

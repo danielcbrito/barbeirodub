@@ -544,7 +544,12 @@ export function AdminDashboard({
   }, [availableMonths, selectedMonthIndex, data.monthRevenue, data.lastMonthRevenue, historicalAppointments, metaMensal]);
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-32 space-y-4 select-none animate-fade-in">
+    <div
+      className="w-full max-w-5xl mx-auto px-4 sm:px-6 pb-32 space-y-4 select-none animate-fade-in"
+      style={{
+        paddingTop: "max(calc(env(safe-area-inset-top, 0px) + 0.5rem), 0.75rem)",
+      }}
+    >
       {/* ─── 1. Header Original Apple HIG: Olá Admin + Barbearia / Sino + Avatar ─── */}
       <header className="flex items-center justify-between gap-3 pt-1">
         <div className="min-w-0">
