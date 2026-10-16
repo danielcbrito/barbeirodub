@@ -659,7 +659,7 @@ const TenantAdmin = () => {
           <div className={
             isSubscriptionRoute
               ? "h-full"
-              : (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/relatorios"))
+              : (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/relatorios") || location.pathname.includes("/carteira") || location.pathname.includes("/financeiro"))
               ? "p-0 max-w-[1600px] mx-auto"
               : "p-6 lg:p-8 max-w-[1600px] mx-auto"
           }>

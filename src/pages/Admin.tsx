@@ -519,7 +519,7 @@ const Admin = () => {
           <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
             <div className={cn(
               "max-w-[1600px] mx-auto",
-              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/relatorios"))
+              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/relatorios") || location.pathname.includes("/carteira") || location.pathname.includes("/financeiro"))
                 ? "p-0"
                 : "p-6 lg:p-8"
             )}>
@@ -533,7 +533,7 @@ const Admin = () => {
                   <Route path="clientes" element={<AdminClientes />} />
                   <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: adminContext.tenantId || null, isTenantAdmin: false, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: false }} basePath="/admin" forceViewMode="meus" /> : null} />
                   <Route path="avaliacoes" element={<AdminAvaliacoes />} />
-                  <Route path="financeiro" element={<AdminFinanceiro />} />
+                  <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId} userName={adminContext?.apelido || "Admin"} />} />
                   <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} basePath="/admin/perfil" />} />
                   <Route path="servicos/*" element={<AdminServicos />} />
                   <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />

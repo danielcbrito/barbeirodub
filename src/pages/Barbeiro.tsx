@@ -942,7 +942,7 @@ const Barbeiro = () => {
           <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
             <div className={cn(
               "max-w-[1600px] mx-auto",
-              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil"))
+              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/carteira") || location.pathname.includes("/financeiro"))
                 ? "p-0"
                 : "p-6 lg:p-8"
             )}>

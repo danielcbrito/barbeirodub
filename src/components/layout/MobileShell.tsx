@@ -28,14 +28,15 @@ export default function MobileShell() {
     return () => observer.disconnect();
   }, []);
 
-  // Rotas de perfil controlam sua própria status bar (banner immersivo)
+  // Rotas de perfil e financeiro controlam sua própria status bar
   const location = useLocation();
   const isImmersiveRoute = /\/perfil(\/|$)/.test(location.pathname);
+  const isFinancialRoute = /carteira|financeiro/.test(location.pathname);
 
-  // Cores derivadas do próprio fundo do app. Em perfil, a status bar fica escura
-  // para fundir com o banner enquanto o conteúdo continua usando bg-background.
+  // Cores derivadas do próprio fundo do app. Em carteira/financeiro, a status bar
+  // fica verde #144439 para cobrir todo o topo, relógio, bateria e notch.
   useStatusBarColor(
-    isImmersiveRoute ? "#0D0D0D" : isDark ? "#0D0D0D" : "#FFFFFF",
+    isFinancialRoute ? "#144439" : isImmersiveRoute ? "#0D0D0D" : isDark ? "#0D0D0D" : "#FFFFFF",
   );
 
   return (
@@ -44,8 +45,8 @@ export default function MobileShell() {
       style={{
         minHeight: "var(--app-height, 100svh)",
         // Reserva a área da status bar (notch/dynamic island no iPhone)
-        // exceto em rotas imersivas, que gerenciam o topo por conta própria.
-        paddingTop: isImmersiveRoute ? 0 : "var(--app-safe-top, env(safe-area-inset-top, 0px))",
+        // exceto em rotas imersivas e financeiras, que gerenciam o topo por conta própria.
+        paddingTop: (isImmersiveRoute || isFinancialRoute) ? 0 : "var(--app-safe-top, env(safe-area-inset-top, 0px))",
         paddingBottom: "calc(6rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))",
       }}
     >

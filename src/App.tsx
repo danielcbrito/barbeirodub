@@ -125,9 +125,16 @@ function QueryCacheHousekeeping() {
 
 function AppStatusBarSync() {
   useEffect(() => {
-    const sync = () => applyStatusBarColor("app-background");
+    const sync = () => {
+      const path = typeof window !== "undefined" ? window.location.pathname : "";
+      if (path.includes("carteira") || path.includes("financeiro")) {
+        applyStatusBarColor("#144439");
+      } else {
+        applyStatusBarColor("app-background");
+      }
+    };
 
-    applyStatusBarColor("app-background");
+    sync();
 
     const observer = new MutationObserver(() => {
       sync();
@@ -262,7 +269,11 @@ function AppRoutes() {
   const location = useLocation();
 
   useEffect(() => {
-    applyStatusBarColor("app-background");
+    if (location.pathname.includes("carteira") || location.pathname.includes("financeiro")) {
+      applyStatusBarColor("#144439");
+    } else {
+      applyStatusBarColor("app-background");
+    }
   }, [location.pathname]);
 
   // Captura o código de indicação (?ref=) de qualquer rota de entrada

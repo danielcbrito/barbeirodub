@@ -62,7 +62,8 @@
         } catch (e) {
           theme = 'light';
         }
-        var brand = theme === 'dark' ? '#0f0f0f' : '#F4F5F7';
+        var isFinancial = window.location.pathname.indexOf('carteira') !== -1 || window.location.pathname.indexOf('financeiro') !== -1;
+        var brand = isFinancial ? '#144439' : (theme === 'dark' ? '#0f0f0f' : '#F4F5F7');
         document.documentElement.style.backgroundColor = brand;
         var metas = [
           'theme-color',
@@ -73,6 +74,10 @@
           var meta = document.querySelector('meta[name="' + name + '"]');
           if (meta) meta.setAttribute('content', brand);
         });
+        if (isFinancial) {
+          var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+          if (appleMeta) appleMeta.setAttribute('content', 'black-translucent');
+        }
         if (theme === 'dark') document.documentElement.classList.add('dark');
         else document.documentElement.classList.add('light');
         if (document.body) document.body.style.backgroundColor = brand;

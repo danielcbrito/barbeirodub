@@ -34,9 +34,22 @@ export function applyStatusBarColor(color: string) {
   const resolvedColor = color === "app-background" ? resolveAppBackground() : color;
 
   META_NAMES.forEach((name) => upsertMeta(name, resolvedColor));
-  // NÃO forçamos background inline em html/body — isso sobrescreve o fundo
-  // real do app (banner do perfil, temas, etc.) e cria a "faixa" no topo do
-  // iPhone quando o app roda em PWA standalone com black-translucent.
+
+  // No iOS Safari, Chrome e PWA standalone ("Adicionar à Tela de Início"):
+  // Garante que o topo absoluto (notch, Dynamic Island, relógio e bateria) fique 100% verde
+  if (resolvedColor === "#144439") {
+    upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
+    document.documentElement.style.backgroundColor = "#144439";
+    document.body.style.backgroundColor = "#144439";
+  } else if (resolvedColor === "#0D0D0D" || resolvedColor === "#0A0A0A" || resolvedColor === "#0f0f0f") {
+    upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
+    document.documentElement.style.backgroundColor = resolvedColor;
+    document.body.style.backgroundColor = resolvedColor;
+  } else {
+    upsertMeta("apple-mobile-web-app-status-bar-style", "default");
+    document.documentElement.style.backgroundColor = "";
+    document.body.style.backgroundColor = "";
+  }
 }
 
 /**
@@ -53,6 +66,12 @@ export function useStatusBarColor(color: string) {
     if (typeof document === "undefined") return;
     applyStatusBarColor(color);
     return () => {
+      if (typeof window !== "undefined") {
+        const path = window.location.pathname;
+        if (path.includes("carteira") || path.includes("financeiro")) {
+          return;
+        }
+      }
       applyStatusBarColor("app-background");
     };
   }, [color]);
