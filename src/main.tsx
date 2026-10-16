@@ -87,8 +87,7 @@ const syncViewportVars = () => {
   root.style.setProperty("--app-bottom-nav-offset", "0px");
 
   // --app-safe-bottom = espaço para controles inferiores
-  // No iPhone agora usamos a mesma altura compacta e elegante do Android (8px),
-  // eliminando o vão excessivo de 34px que empurrava e espremia o app para cima no iOS.
+  // Altura compacta e uniforme em todas as plataformas (8px).
   let safeBottom: string;
   if (isIOS && isStandalone) {
     safeBottom = "8px";
