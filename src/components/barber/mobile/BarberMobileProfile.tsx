@@ -209,7 +209,7 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
     <>
       <div
         className="min-h-screen bg-background text-foreground"
-        style={{ paddingBottom: "calc(6.5rem + var(--app-safe-bottom, 8px))" }}
+        style={{ paddingBottom: "calc(2rem + var(--app-safe-bottom, 8px))" }}
       >
       {/* Container principal */}
       <div className="max-w-lg mx-auto">

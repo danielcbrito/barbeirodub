@@ -396,7 +396,7 @@ const Admin = () => {
           style={
             isImmersiveRoute
               ? undefined
-              : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
+              : { paddingBottom: "calc(1.5rem + var(--app-safe-bottom, 8px))" }
           }
         >
           <div
@@ -495,12 +495,6 @@ const Admin = () => {
           </div>
         </main>
 
-        {/* Bottom Navigation Mobile — esconder nas configurações, edição de serviços, horários e disparo */}
-        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("meus-clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("instagram") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
-          <div className="lg:hidden">
-            <AdminMobileNavigation barbeiroId={adminContext?.barbeiroId} />
-          </div>
-        )}
         <SupportChatBubble />
       </div>
     );

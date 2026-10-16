@@ -816,7 +816,7 @@ const Barbeiro = () => {
           style={
             location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/financeiro") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/relatorios")
               ? undefined
-              : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
+              : { paddingBottom: "calc(1.5rem + var(--app-safe-bottom, 8px))" }
           }
         >
           <div
@@ -893,10 +893,6 @@ const Barbeiro = () => {
           </div>
         </main>
 
-        {/* Bottom Navigation Mobile — esconder no período de graça, configurações, horários e disparo */}
-        {!isInGracePeriod && !location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("horarios") && !location.pathname.includes("meus-dados") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("relatorios") && !location.pathname.includes("servicos") && !location.pathname.includes("planos") && !location.pathname.includes("cupons") && !location.pathname.includes("promocoes") && !location.pathname.includes("whatsapp") && !location.pathname.includes("instagram") && !location.pathname.includes("portfolio") && !location.pathname.includes("loja") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("configuracoes") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
-          <BarberMobileNavigation barbeiroId={barberContext?.barbeiroId} />
-        )}
         <SupportChatBubble />
       </div>
     );
