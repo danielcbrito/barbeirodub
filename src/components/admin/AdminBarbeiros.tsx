@@ -4,15 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveOldestOwnedTenant } from "@/lib/tenantOwnership";
 import { useToggleBarberAtivo, useDeletarBarbeiro } from "@/hooks/useAdminMutations";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,37 +14,53 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  Plus,
   Search,
-  Eye,
-  EyeOff,
   Users,
-  UserCheck,
-  UserX,
   Loader2,
-  Scissors,
-  Mail,
-  Phone,
-  Lock,
   Trash2,
   AlertTriangle,
   Inbox,
   ChevronRight,
-  Calendar,
-  CreditCard,
-  Percent,
-  CheckCircle,
+  Clock,
+  CheckCircle2,
   XCircle,
+  X,
+  Copy,
+  Check,
+  Phone,
+  Mail,
+  UserCheck,
+  UserX,
+  Sparkles,
+  Percent,
+  Scissors,
+  ShieldCheck,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, AnimatePresence } from "framer-motion";
+import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 
-/* ─── Types ─── */
+/* ─── Ícone SVG oficial do WhatsApp ─── */
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      stroke="currentColor"
+      strokeWidth="0"
+      fill="currentColor"
+      className={className}
+    >
+      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2ZM12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.59 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19.01L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 14.99 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67ZM8.83 7.34C8.63 7.34 8.43 7.35 8.25 7.68C8.04 8.06 7.42 8.64 7.42 9.85C7.42 11.06 8.3 12.23 8.42 12.39C8.55 12.56 10.15 15.02 12.6 16.08C13.18 16.33 13.64 16.48 13.99 16.59C14.58 16.78 15.12 16.75 15.54 16.69C16.01 16.62 16.99 16.1 17.19 15.52C17.4 14.95 17.4 14.46 17.34 14.36C17.27 14.25 17.1 14.19 16.84 14.06C16.58 13.93 15.34 13.32 15.11 13.23C14.88 13.15 14.71 13.11 14.54 13.36C14.37 13.61 13.88 14.19 13.73 14.36C13.58 14.53 13.44 14.55 13.18 14.42C12.93 14.29 12.11 14.02 11.14 13.16C10.39 12.49 9.88 11.66 9.73 11.41C9.58 11.16 9.71 11.02 9.84 10.9C9.96 10.78 10.1 10.6 10.23 10.45C10.36 10.3 10.4 10.19 10.48 10.02C10.57 9.85 10.53 9.7 10.46 9.57C10.4 9.44 9.9 8.23 9.69 7.73C9.49 7.24 9.28 7.31 9.13 7.3C8.98 7.3 8.81 7.3 8.64 7.3L8.83 7.34Z" />
+    </svg>
+  );
+}
+
+/* ─── Tipagem ─── */
 interface Barbeiro {
   id: string;
   apelido: string;
@@ -66,59 +73,58 @@ interface Barbeiro {
   updated_at: string | null;
   user_id: string | null;
   email?: string | null;
+  telefone?: string | null;
+  nome_completo?: string | null;
+  isAdmin?: boolean;
 }
 
-type FilterType = "all" | "active" | "inactive";
-
-/* ═══════════════════════════════════════ */
-/*          MAIN COMPONENT                 */
-/* ═══════════════════════════════════════ */
-interface AdminBarbeirosProps {
+export interface AdminBarbeirosProps {
   basePath?: string;
+  tenantId?: string | null;
   hideHeader?: boolean;
   onBack?: () => void;
 }
 
 export function AdminBarbeiros({
   basePath = "/admin",
+  tenantId,
   hideHeader = false,
   onBack,
 }: AdminBarbeirosProps = {}) {
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const viewId = searchParams.get("view");
 
   const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [showCreateScreen, setShowCreateScreen] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [filter, setFilter] = useState<FilterType>("all");
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  /* Form fields */
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [nomeCompleto, setNomeCompleto] = useState("");
-
-  /* Deactivate confirmation */
+  /* Ações de aprovação/rejeição/remoção */
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Barbeiro | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Barbeiro | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Barbeiro | null>(null);
 
-  /* Delete dialog */
-  const [deleteTarget, setDeleteTarget] = useState<Barbeiro | null>(null);
-  
+  /* Nível de Acesso */
+  const [updatingRole, setUpdatingRole] = useState(false);
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
 
-  /* ─── Resolver tenant_id do admin logado ─── */
-  const [adminTenantId, setAdminTenantId] = useState<string | null | undefined>(undefined);
+  /* ─── Resolver tenant_id específico ou do admin logado ─── */
+  const [adminTenantId, setAdminTenantId] = useState<string | null | undefined>(
+    tenantId !== undefined ? tenantId : undefined
+  );
 
   useEffect(() => {
+    if (tenantId !== undefined) {
+      setAdminTenantId(tenantId);
+      return;
+    }
+
     const resolveAdminTenant = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.user) return;
 
       const { data: tenant } = await resolveOldestOwnedTenant<{ id: string }>(
@@ -147,7 +153,7 @@ export function AdminBarbeiros({
     };
 
     resolveAdminTenant();
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     if (adminTenantId === undefined) return;
@@ -166,161 +172,225 @@ export function AdminBarbeiros({
     };
   }, [adminTenantId]);
 
-  /* ─── Data loading ─── */
+  /* ─── Carga de Barbeiros da Barbearia ─── */
   const loadBarbeiros = async () => {
-    if (adminTenantId === undefined) return; // ainda resolvendo
+    if (adminTenantId === undefined) return;
 
     try {
-      // Filtrar barbeiros pelo tenant do admin
       let query = supabase
         .from("barbeiros")
-        .select("id, apelido, foto_url, ativo, comissao_pct, user_id, tenant_id, unidade_id, setup_completed, google_calendar_connected, created_at, updated_at")
+        .select(
+          "id, apelido, foto_url, ativo, comissao_pct, user_id, tenant_id, unidade_id, setup_completed, google_calendar_connected, created_at, updated_at"
+        )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
       if (adminTenantId === null) {
-        // Admin global → apenas barbeiros sem tenant
         query = query.is("tenant_id", null);
       } else {
-        // Admin de tenant → apenas barbeiros desse tenant
         query = query.eq("tenant_id", adminTenantId);
       }
 
       const { data, error } = await query;
-
       if (error) throw error;
 
       const barberIds = (data || []).map((b) => b.id);
-      let emailsMap: Record<string, string> = {};
+      let privatesMap: Record<string, { email?: string; telefone?: string; nome_completo?: string }> = {};
 
       if (barberIds.length > 0) {
         const { data: privateData } = await supabase
           .from("barbeiros_private")
-          .select("barbeiro_id, email")
+          .select("barbeiro_id, email, telefone, nome_completo")
           .in("barbeiro_id", barberIds);
 
         if (privateData) {
           privateData.forEach((p) => {
-            if (p.email) emailsMap[p.barbeiro_id] = p.email;
+            privatesMap[p.barbeiro_id] = {
+              email: p.email || undefined,
+              telefone: p.telefone || undefined,
+              nome_completo: p.nome_completo || undefined,
+            };
           });
         }
       }
 
-      const enriched = (data || []).map((b) => ({
+      // Buscar quais barbeiros possuem role tenant_admin ou admin
+      const userIds = (data || [])
+        .map((b) => b.user_id)
+        .filter((uid): uid is string => Boolean(uid));
+
+      const adminUserIds = new Set<string>();
+      if (userIds.length > 0) {
+        const { data: rolesData } = await supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .in("user_id", userIds)
+          .in("role", ["tenant_admin", "admin"]);
+
+        if (rolesData) {
+          rolesData.forEach((r) => adminUserIds.add(r.user_id));
+        }
+      }
+
+      const enriched: Barbeiro[] = (data || []).map((b) => ({
         ...b,
-        email: emailsMap[b.id] || null,
+        email: privatesMap[b.id]?.email || null,
+        telefone: privatesMap[b.id]?.telefone || null,
+        nome_completo: privatesMap[b.id]?.nome_completo || null,
+        isAdmin: b.user_id ? adminUserIds.has(b.user_id) : false,
       }));
 
       setBarbeiros(enriched);
     } catch (error) {
       console.error("Erro ao carregar barbeiros:", error);
-      toast.error("Erro ao carregar barbeiros");
+      toast.error("Erro ao carregar equipe");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ─── Filtered & searched list ─── */
-  const filteredBarbeiros = useMemo(() => {
-    let result = barbeiros;
-
-    switch (filter) {
-      case "active":
-        result = result.filter((b) => b.ativo);
-        break;
-      case "inactive":
-        result = result.filter((b) => !b.ativo);
-        break;
+  /* ─── Link Oficial de Convite da Barbearia ─── */
+  const inviteUrl = useMemo(() => {
+    let origin = "https://barbeirodub.lovable.app";
+    if (typeof window !== "undefined" && window.location.origin) {
+      if (!window.location.origin.includes("localhost")) {
+        origin = window.location.origin.replace("dubadmin.lovable.app", "barbeirodub.lovable.app");
+      }
     }
 
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
-      result = result.filter(
-        (b) =>
-          b.apelido.toLowerCase().includes(q) ||
-          b.email?.toLowerCase().includes(q)
-      );
-    }
+    const params = new URLSearchParams();
+    params.set("mode", "signup");
+    params.set("invite", "barbeiro");
+    if (adminTenantId) params.set("tenant", adminTenantId);
 
-    return result;
-  }, [barbeiros, filter, searchTerm]);
+    return `${origin}/login?${params.toString()}`;
+  }, [adminTenantId]);
 
-  /* ─── Stats ─── */
-  const totalBarbeiros = barbeiros.length;
-
-  /* ─── Create barber ─── */
-  const handleCreateBarbeiro = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!nome.trim() || !email.trim() || !senha.trim() || !nomeCompleto.trim() || !cpf.trim()) {
-      toast.error("Preencha todos os campos obrigatórios");
-      return;
-    }
-
-    if (senha.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
-      return;
-    }
-
-    setCreating(true);
+  const handleCopyInviteLink = async () => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      if (!token) {
-        toast.error("Sessão expirada. Faça login novamente.");
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke("create-barber", {
-        body: {
-          email: email.trim(),
-          password: senha,
-          nome: nome.trim(),
-          telefone: telefone.trim() || null,
-          cpf: cpf.trim() || null,
-          nome_completo: nomeCompleto.trim() || null,
-        },
-      });
-
-      if (error) {
-        let errorMsg = "Erro ao criar barbeiro";
-        if (data?.error) {
-          errorMsg = data.error;
-        } else if (error?.message) {
-          try {
-            const match = error.message.match(/\{.*\}/);
-            if (match) {
-              const parsed = JSON.parse(match[0]);
-              errorMsg = parsed.error || errorMsg;
-            }
-          } catch {
-            errorMsg = error.message;
-          }
-        }
-        toast.error(errorMsg);
-        return;
-      }
-
-      if (!data?.success) {
-        toast.error(data?.error || "Erro ao criar barbeiro");
-        return;
-      }
-
-      toast.success("Barbeiro cadastrado com sucesso!");
-      resetForm();
-      setIsDialogOpen(false);
-      setShowCreateScreen(false);
-      loadBarbeiros();
-    } catch (error) {
-      console.error("Erro ao criar barbeiro:", error);
-      toast.error("Erro ao criar barbeiro");
-    } finally {
-      setCreating(false);
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopiedLink(true);
+      toast.success("Link de cadastro de barbeiro copiado!");
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      toast.error("Não foi possível copiar o link");
     }
   };
 
-  /* ─── Toggle status (via mutation hook) ─── */
+  const handleSendViaWhatsApp = () => {
+    const mensagem = `Olá! Você foi convidado para fazer parte da nossa equipe na barbearia.\n\nClique no link abaixo para criar seu cadastro e configurar seus atendimentos:\n${inviteUrl}`;
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
+    window.open(waUrl, "_blank");
+  };
+
+  /* ─── Alternar Papel: Barbeiro vs Administrador ─── */
+  const handleToggleAdminRole = async (targetBarbeiro: Barbeiro, makeAdmin: boolean) => {
+    if (!targetBarbeiro.user_id) {
+      toast.error("Este barbeiro ainda não concluiu o vínculo da sua conta de login.");
+      return;
+    }
+    setUpdatingRole(true);
+    try {
+      if (makeAdmin) {
+        const { error } = await supabase
+          .from("user_roles")
+          .upsert(
+            { user_id: targetBarbeiro.user_id, role: "tenant_admin" as any },
+            { onConflict: "user_id,role" }
+          );
+        if (error) throw error;
+
+        setBarbeiros((prev) =>
+          prev.map((b) => (b.id === targetBarbeiro.id ? { ...b, isAdmin: true } : b))
+        );
+        toast.success(`${targetBarbeiro.apelido} agora é Administrador com acesso total!`);
+      } else {
+        const { error } = await supabase
+          .from("user_roles")
+          .delete()
+          .eq("user_id", targetBarbeiro.user_id)
+          .eq("role", "tenant_admin" as any);
+        if (error) throw error;
+
+        setBarbeiros((prev) =>
+          prev.map((b) => (b.id === targetBarbeiro.id ? { ...b, isAdmin: false } : b))
+        );
+        toast.success(`${targetBarbeiro.apelido} agora tem acesso padrão de Barbeiro.`);
+      }
+    } catch (err: any) {
+      console.error("Erro ao alterar nível de acesso:", err);
+      toast.error(err?.message || "Erro ao alterar nível de acesso");
+    } finally {
+      setUpdatingRole(false);
+    }
+  };
+
+
+  /* ─── Filtros Estratégicos: Pendentes de Aprovação vs Ativos ─── */
+  const pendingBarbeiros = useMemo(() => {
+    return barbeiros.filter((b) => b.ativo === false);
+  }, [barbeiros]);
+
+  const activeBarbeiros = useMemo(() => {
+    let list = barbeiros.filter((b) => b.ativo === true);
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      list = list.filter(
+        (b) =>
+          b.apelido.toLowerCase().includes(q) ||
+          b.email?.toLowerCase().includes(q) ||
+          b.nome_completo?.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [barbeiros, searchTerm]);
+
+  /* ─── Ações de Aprovação e Recusa ─── */
+  const handleAprovarBarbeiro = async (barbeiro: Barbeiro) => {
+    setApprovingId(barbeiro.id);
+    try {
+      const { error } = await supabase
+        .from("barbeiros")
+        .update({
+          ativo: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", barbeiro.id);
+
+      if (error) throw error;
+
+      toast.success(`${barbeiro.apelido} foi aprovado e agora faz parte da equipe! 🎉`);
+      setSearchParams({});
+      loadBarbeiros();
+    } catch (err: any) {
+      console.error("Erro ao aprovar barbeiro:", err);
+      toast.error(err?.message || "Erro ao aprovar barbeiro");
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleRecusarBarbeiro = async () => {
+    if (!rejectTarget) return;
+    try {
+      const { error } = await supabase
+        .from("barbeiros")
+        .delete()
+        .eq("id", rejectTarget.id);
+
+      if (error) throw error;
+
+      toast.success("Solicitação de cadastro recusada.");
+      setRejectTarget(null);
+      setSearchParams({});
+      loadBarbeiros();
+    } catch (err: any) {
+      console.error("Erro ao recusar cadastro:", err);
+      toast.error(err?.message || "Erro ao recusar cadastro");
+    }
+  };
+
+  /* ─── Desativação / Exclusão de Membro Ativo ─── */
   const toggleAtivoMutation = useToggleBarberAtivo(adminTenantId || "");
   const deletarMutation = useDeletarBarbeiro(adminTenantId || "");
 
@@ -345,7 +415,6 @@ export function AdminBarbeiros({
     }
   };
 
-  /* ─── Delete barber (via mutation hook com cascade completo) ─── */
   const handleDeleteBarbeiro = () => {
     if (!deleteTarget) return;
     deletarMutation.mutate(deleteTarget.id, {
@@ -356,26 +425,15 @@ export function AdminBarbeiros({
     });
   };
 
-  const resetForm = () => {
-    setNome("");
-    setEmail("");
-    setSenha("");
-    setTelefone("");
-    setCpf("");
-    setNomeCompleto("");
-    setShowPassword(false);
-  };
-
-  /* ─── Navigation helpers ─── */
   const openBarberView = (id: string) => {
     setSearchParams({ view: id });
   };
 
   const goBack = () => {
     setSearchParams({});
+    setRoleModalOpen(false);
   };
 
-  /* ─── Loading ─── */
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -384,9 +442,9 @@ export function AdminBarbeiros({
     );
   }
 
-  // ═══════════════════════════════════
-  // BARBER DETAIL FULL-PAGE VIEW
-  // ═══════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  // TELA 1: DETALHES DO BARBEIRO (APROVAÇÃO OU GESTÃO)
+  // ═══════════════════════════════════════════════════════════
   if (viewId) {
     const barbeiro = barbeiros.find((b) => b.id === viewId);
     if (!barbeiro) {
@@ -394,740 +452,485 @@ export function AdminBarbeiros({
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
           <Users className="w-10 h-10 text-muted-foreground/20" strokeWidth={1.5} />
           <p className="text-sm text-muted-foreground">Barbeiro não encontrado</p>
-          <button onClick={goBack} className="text-xs text-primary hover:underline">Voltar</button>
+          <button onClick={goBack} className="text-xs text-primary hover:underline">
+            Voltar
+          </button>
         </div>
       );
     }
 
-    return (
-      <div className="pb-8 -mx-3 -mt-3">
-        {/* Header fixo */}
-        <div className="sticky top-0 z-30 bg-background">
-          <div className="flex items-center gap-2 px-4 h-16">
-            <button
-              onClick={goBack}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
-              aria-label="Voltar"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                <path d="M9 14L4 9l5-5" />
-                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-              </svg>
-            </button>
-            <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1 truncate ml-1">
-              {barbeiro.apelido}
-            </h1>
-            <span
-              className={cn(
-                "px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider flex-shrink-0",
-                barbeiro.ativo
-                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                  : "bg-muted/50 text-muted-foreground/60 border border-border/30"
-              )}
-            >
-              {barbeiro.ativo ? "Ativo" : "Inativo"}
-            </span>
-          </div>
-        </div>
+    const isPendingApproval = barbeiro.ativo === false;
 
-        <div className="px-4 pt-5 space-y-6">
-          {/* Avatar + nome */}
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 overflow-hidden">
+    return (
+      <div className="pb-10 min-h-app bg-background">
+        <ScheduleHeader
+          title={isPendingApproval ? "Revisar Solicitação" : barbeiro.apelido}
+          onBack={goBack}
+          right={
+            isPendingApproval ? (
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                Em Análise
+              </span>
+            ) : null
+          }
+        />
+
+        <div className="px-4 pt-4 space-y-5 max-w-md mx-auto">
+          {/* Card de Perfil */}
+          <div className="flex items-center gap-4 p-4 rounded-2xl bg-secondary/30 border border-border/20">
+            <div className="w-16 h-16 rounded-2xl bg-foreground/5 border border-border/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
               {barbeiro.foto_url ? (
                 <img src={barbeiro.foto_url} alt={barbeiro.apelido} className="w-16 h-16 object-cover" />
               ) : (
-                <span className="text-2xl font-bold text-primary">
+                <span className="text-2xl font-bold text-foreground">
                   {barbeiro.apelido.charAt(0).toUpperCase()}
                 </span>
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-lg font-semibold text-foreground truncate">{barbeiro.apelido}</p>
-              <p className="text-xs text-muted-foreground/60 mt-0.5">
-                {barbeiro.created_at
-                  ? `Cadastro em ${format(new Date(barbeiro.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`
-                  : "Data de cadastro indisponível"}
+              <div className="flex items-center gap-2">
+                <h2 className="text-[18px] font-semibold text-foreground truncate">{barbeiro.apelido}</h2>
+                {barbeiro.isAdmin && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-foreground/10 text-foreground border border-foreground/20 shrink-0">
+                    Admin
+                  </span>
+                )}
+              </div>
+              <p className="text-[13px] text-muted-foreground/75 truncate mt-0.5">
+                {barbeiro.nome_completo || "Nome não informado"}
+              </p>
+              {barbeiro.created_at && (
+                <p className="text-[11px] text-muted-foreground/50 mt-1">
+                  Cadastrou em {format(new Date(barbeiro.created_at), "dd 'de' MMMM", { locale: ptBR })}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Banner de Solicitação se estiver pendente */}
+          {isPendingApproval && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                <p className="text-[13px] font-semibold text-amber-500">Aguardando sua aprovação</p>
+              </div>
+              <p className="text-[12px] text-foreground/80 leading-relaxed">
+                Este profissional realizou o cadastro pelo link de convite. Aprove o cadastro para liberar o acesso dele à agenda da barbearia.
               </p>
             </div>
-          </div>
+          )}
 
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard
-              icon={Percent}
-              label="Comissão"
-              value={barbeiro.comissao_pct ? `${barbeiro.comissao_pct}%` : "—"}
-            />
-            <KpiCard
-              icon={Calendar}
-              label="Google Cal"
-              value={barbeiro.google_calendar_connected ? "Conectado" : "Não"}
-              accentClass={barbeiro.google_calendar_connected ? "text-emerald-500" : undefined}
-            />
-          </div>
+          {/* ─── Informações do Profissional (Contato) ─── */}
+          <div className="space-y-2">
+            <h3 className="text-[13.5px] font-semibold text-foreground px-1">
+              Informações do profissional
+            </h3>
+            <div className="rounded-2xl border border-border/20 bg-secondary/20 overflow-hidden divide-y divide-border/15">
+              {/* Telefone */}
+              <div className="flex items-center justify-between p-3.5">
+                <div className="flex items-center gap-2.5">
+                  <Phone className="w-4 h-4 text-muted-foreground/60" />
+                  <span className="text-[12.5px] text-muted-foreground">Telefone / WhatsApp</span>
+                </div>
+                {barbeiro.telefone ? (
+                  <a
+                    href={`https://wa.me/55${barbeiro.telefone.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[13px] font-semibold text-emerald-500 hover:underline flex items-center gap-1.5"
+                  >
+                    <WhatsAppIcon className="w-3.5 h-3.5" />
+                    {barbeiro.telefone}
+                  </a>
+                ) : (
+                  <span className="text-[12.5px] text-muted-foreground/50">Não informado</span>
+                )}
+              </div>
 
-          {/* Informações */}
-          <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
-              Informações
-            </p>
-            <div className="space-y-0 rounded-xl border border-border/30 overflow-hidden">
-              <DetailRow icon={Mail} label="Email" value={barbeiro.email || "Sem e-mail"} />
-              <DetailRow
-                icon={Calendar}
-                label="Cadastro"
-                value={
-                  barbeiro.created_at
-                    ? format(new Date(barbeiro.created_at), "dd/MM/yyyy", { locale: ptBR })
-                    : "—"
-                }
-              />
-              <DetailRow
-                icon={Scissors}
-                label="Comissão"
-                value={barbeiro.comissao_pct ? `${barbeiro.comissao_pct}%` : "Não definida"}
-              />
-              <DetailRow
-                icon={CheckCircle}
-                label="Setup"
-                value={barbeiro.setup_completed ? "Completo" : "Incompleto"}
-              />
+              {/* E-mail */}
+              <div className="flex items-center justify-between p-3.5">
+                <div className="flex items-center gap-2.5">
+                  <Mail className="w-4 h-4 text-muted-foreground/60" />
+                  <span className="text-[12.5px] text-muted-foreground">E-mail</span>
+                </div>
+                <span className="text-[13px] text-foreground font-medium truncate max-w-[190px]">
+                  {barbeiro.email || "Não informado"}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Ações */}
-          <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-3 px-1">
-              Ações
-            </p>
-            <div className="space-y-2">
-              {/* Toggle status */}
+          {/* BOTÕES DE AÇÃO DECISIVOS */}
+          {isPendingApproval ? (
+            /* ─── AÇÕES PARA BARBEIRO EM ANÁLISE ─── */
+            <div className="space-y-2.5 pt-2">
+              {/* Configuração Formal de Nível de Acesso */}
+              <button
+                type="button"
+                disabled={updatingRole || !barbeiro.user_id}
+                onClick={() => setRoleModalOpen(true)}
+                className="w-full h-11 rounded-full text-[13px] font-medium flex items-center justify-between px-4 border border-border/25 bg-secondary/30 hover:bg-secondary/45 text-foreground transition-all active:scale-95 disabled:opacity-50"
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-foreground/75" />
+                  <span>Permissão de Acesso</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground">
+                  {updatingRole ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <>
+                      <span>{barbeiro.isAdmin ? "Administrador" : "Barbeiro"}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
+                    </>
+                  )}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={approvingId === barbeiro.id}
+                onClick={() => handleAprovarBarbeiro(barbeiro)}
+                className="w-full h-12 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[14.5px] flex items-center justify-center gap-2 shadow-xs transition-all active:scale-95 disabled:opacity-50"
+              >
+                {approvingId === barbeiro.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <UserCheck className="w-4 h-4" />
+                    Aprovar Barbeiro
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRejectTarget(barbeiro)}
+                className="w-full h-11 rounded-full text-destructive hover:bg-destructive/10 border border-destructive/25 font-semibold text-[13px] flex items-center justify-center gap-2 transition-all active:scale-95"
+              >
+                <UserX className="w-4 h-4" />
+                Recusar Cadastro
+              </button>
+            </div>
+          ) : (
+            /* ─── AÇÕES PARA BARBEIRO JÁ ATIVO ─── */
+            <div className="space-y-2.5 pt-2">
+              {/* Configuração Formal de Nível de Acesso (acima de Desativar Temporariamente) */}
+              <button
+                type="button"
+                disabled={updatingRole || !barbeiro.user_id}
+                onClick={() => setRoleModalOpen(true)}
+                className="w-full h-11 rounded-full text-[13px] font-medium flex items-center justify-between px-4 border border-border/25 bg-secondary/30 hover:bg-secondary/45 text-foreground transition-all active:scale-95 disabled:opacity-50"
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-foreground/75" />
+                  <span>Permissão de Acesso</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground">
+                  {updatingRole ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <>
+                      <span>{barbeiro.isAdmin ? "Administrador" : "Barbeiro"}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
+                    </>
+                  )}
+                </div>
+              </button>
+
               <button
                 onClick={() => handleToggleStatus(barbeiro)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-colors",
+                  "w-full h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 border",
                   barbeiro.ativo
-                    ? "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
-                    : "border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10"
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/15"
+                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/15"
                 )}
               >
-                {barbeiro.ativo ? (
-                  <>
-                    <XCircle className="w-4.5 h-4.5 text-amber-500" />
-                    <span className="text-[13px] font-medium text-amber-500">Desativar barbeiro</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4.5 h-4.5 text-emerald-500" />
-                    <span className="text-[13px] font-medium text-emerald-400">Ativar barbeiro</span>
-                  </>
-                )}
+                {barbeiro.ativo ? "Desativar Temporariamente" : "Reativar Barbeiro"}
               </button>
 
-              {/* Delete */}
               <button
                 onClick={() => setDeleteTarget(barbeiro)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 transition-colors"
+                className="w-full h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 text-destructive border border-destructive/20 hover:bg-destructive/10 transition-all active:scale-95"
               >
-                <Trash2 className="w-4.5 h-4.5 text-destructive" />
-                <span className="text-[13px] font-medium text-destructive">Remover barbeiro</span>
+                Remover da Equipe
               </button>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Dialogs */}
+        {/* Dialogs de Confirmação */}
+        <AlertDialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
+          <AlertDialogContent className="max-w-xs rounded-2xl">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-base font-semibold">
+                Recusar solicitação?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-xs text-muted-foreground">
+                O cadastro de {rejectTarget?.apelido} será recusado e o acesso à barbearia não será liberado.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="gap-2">
+              <AlertDialogCancel className="h-9 text-xs rounded-full">Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleRecusarBarbeiro}
+                className="h-9 text-xs rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Recusar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <RoleDialog
+          open={roleModalOpen}
+          onOpenChange={setRoleModalOpen}
+          barbeiro={barbeiro}
+          updating={updatingRole}
+          onSelectRole={async (makeAdmin) => {
+            await handleToggleAdminRole(barbeiro, makeAdmin);
+            setRoleModalOpen(false);
+          }}
+        />
+
         <DeactivateDialog
           open={!!deactivateTarget}
           onOpenChange={(open) => !open && setDeactivateTarget(null)}
           barbeiro={deactivateTarget}
           onConfirm={confirmDeactivate}
         />
+
         <DeleteDialog
           open={!!deleteTarget}
           onOpenChange={(open) => !open && setDeleteTarget(null)}
           barbeiro={deleteTarget}
-        deleting={deletarMutation.isPending}
+          deleting={deletarMutation.isPending}
           onConfirm={handleDeleteBarbeiro}
         />
       </div>
     );
   }
 
-  // ═══════════════════════════════════
-  // FULL-SCREEN CREATE BARBER VIEW
-  // ═══════════════════════════════════
-  if (showCreateScreen) {
-    const charCount = nome.length;
-
-    return (
-      <div className="pb-8 -mx-3 -mt-3">
-        {/* Header fixo */}
-        <div className="sticky top-0 z-30 bg-background">
-          <div className="flex items-center gap-2.5 px-4 h-14">
-            <button
-              onClick={() => { setShowCreateScreen(false); resetForm(); }}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
-              aria-label="Voltar"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                <path d="M9 14L4 9l5-5" />
-                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-              </svg>
-            </button>
-            <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">Novo Barbeiro</h1>
-          </div>
-        </div>
-
-        <form onSubmit={handleCreateBarbeiro} className="px-4 pt-5 space-y-6">
-          {/* Seção: Dados de Exibição */}
-          <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-4 px-1">
-              Dados de exibição (obrigatório)
-            </p>
-
-            <div className="space-y-4">
-              {/* Apelido */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium px-1">
-                  Apelido / Nome de exibição
-                </label>
-                <Input
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  placeholder="Ex: Pedro"
-                  maxLength={30}
-                  className="h-12 text-[15px] font-medium bg-transparent border-border/40 rounded-xl px-4 placeholder:text-muted-foreground/30"
-                  required
-                />
-                <p className="text-[10px] text-muted-foreground/40 text-right px-1">{charCount} / 30</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Seção: Dados Pessoais */}
-          <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-4 px-1">
-              Dados pessoais
-            </p>
-
-            <div className="space-y-4">
-              {/* Nome Completo */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium px-1">
-                  Nome Completo
-                </label>
-                <Input
-                  value={nomeCompleto}
-                  onChange={(e) => setNomeCompleto(e.target.value)}
-                  placeholder="Nome completo do barbeiro"
-                  className="h-12 text-[15px] font-medium bg-transparent border-border/40 rounded-xl px-4 placeholder:text-muted-foreground/30"
-                  required
-                />
-              </div>
-
-              {/* CPF e Telefone */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium px-1">
-                    CPF
-                  </label>
-                  <Input
-                    value={cpf}
-                    onChange={(e) => setCpf(e.target.value)}
-                    placeholder="000.000.000-00"
-                    className="h-12 text-[15px] font-medium bg-transparent border-border/40 rounded-xl px-4 placeholder:text-muted-foreground/30"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium px-1">
-                    Telefone
-                  </label>
-                  <Input
-                    value={telefone}
-                    onChange={(e) => setTelefone(e.target.value)}
-                    placeholder="(00) 00000-0000"
-                    className="h-12 text-[15px] font-medium bg-transparent border-border/40 rounded-xl px-4 placeholder:text-muted-foreground/30"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Seção: Credenciais de Acesso */}
-          <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-4 px-1">
-              Credenciais de acesso
-            </p>
-
-            <div className="space-y-4">
-              {/* Email */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium px-1">
-                  Email
-                </label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="email@exemplo.com"
-                  className="h-12 text-[15px] font-medium bg-transparent border-border/40 rounded-xl px-4 placeholder:text-muted-foreground/30"
-                  required
-                />
-              </div>
-
-              {/* Senha */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium px-1">
-                  Senha
-                </label>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    value={senha}
-                    onChange={(e) => setSenha(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    className="h-12 text-[15px] font-medium bg-transparent border-border/40 rounded-xl px-4 pr-12 placeholder:text-muted-foreground/30"
-                    required
-                    minLength={6}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer fixo: botão salvar */}
-          <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/30 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+16px)] flex items-center gap-3 lg:static lg:border-t-0 lg:px-0 lg:pt-4">
-            <Button
-              type="submit"
-              disabled={creating}
-              className="flex-1 h-12 rounded-xl text-[14px] font-semibold uppercase tracking-wider bg-foreground text-background hover:bg-foreground/90 dark:bg-foreground dark:text-background dark:hover:bg-foreground/90"
-            >
-              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cadastrar"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
+  // ═══════════════════════════════════════════════════════════
+  // TELA 2: LISTA DE BARBEIROS (ORGANIZADA & ESTRATÉGICA)
+  // ═══════════════════════════════════════════════════════════
   return (
-    <div className="pb-28 lg:pb-8">
-      {isMobile ? (
-        <div className={cn(!hideHeader && "-mx-3 -mt-3")}>
-          {/* Header + Filters sticky bar */}
-          <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
-            {!hideHeader && (
-              <div className="flex items-center gap-2 px-4 h-16">
-                <button
-                  onClick={() => (onBack ? onBack() : navigate(`${basePath}/configuracoes-perfil`))}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
-                  aria-label="Voltar"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                    <path d="M9 14L4 9l5-5" />
-                    <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-                  </svg>
-                </button>
-                <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1 ml-1">Barbeiros</h1>
-                <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
-                  {totalBarbeiros} cadastrados
-                </span>
-              </div>
-            )}
+    <div className="pb-28 min-h-app bg-background">
+      {!hideHeader && (
+        <ScheduleHeader
+          title="Barbeiros & Equipe"
+          onBack={onBack ? onBack : () => navigate(`${basePath}/configuracoes-perfil`)}
+          right={
+            <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
+              {activeBarbeiros.length} {activeBarbeiros.length === 1 ? "ativo" : "ativos"}
+            </span>
+          }
+        />
+      )}
 
-            {/* Segmented filter */}
-            <div className="px-4 pb-2">
-              <div className="flex bg-secondary/30 rounded-lg p-0.5 border border-border/20">
-                {([
-                  { key: "all" as FilterType, label: "Todos" },
-                  { key: "active" as FilterType, label: "Ativos" },
-                  { key: "inactive" as FilterType, label: "Inativos" },
-                ] as const).map((f) => (
-                  <button
-                    key={f.key}
-                    onClick={() => setFilter(f.key)}
-                    className={cn(
-                      "flex-1 py-1.5 text-[11px] font-medium rounded-md transition-all",
-                      filter === f.key
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground/60"
-                    )}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+      <div className="px-4 pt-3 max-w-md mx-auto space-y-5">
+        <p className="text-sm text-muted-foreground/60 leading-relaxed font-light">
+          Cadastre profissionais, gerencie os barbeiros ativos da equipe e defina as permissões de acesso.
+        </p>
 
-            {/* Search */}
-            <div className="px-4 pb-3 pt-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar por nome ou e-mail..."
-                  className="w-full h-10 pl-9 pr-3 rounded-xl bg-secondary/30 border border-border/20 text-[13px] font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
-                />
-              </div>
-            </div>
+        {/* ─── CARD ESTRATÉGICO: CONVITE DA BARBEARIA (1 CLIQUE) ─── */}
+        <div className="p-4 rounded-3xl bg-secondary/35 border border-border/30 space-y-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-foreground/80" />
+            <h3 className="text-[14px] font-semibold text-foreground">Convidar Novo Barbeiro</h3>
           </div>
+          <p className="text-[12px] text-muted-foreground/75 leading-relaxed">
+            Envie este link para qualquer barbeiro entrar na sua equipe. Ao se cadastrar, o profissional passará pela sua aprovação.
+          </p>
 
-          {/* Barber list */}
-          <div className="px-4 pt-2">
-            {filteredBarbeiros.length === 0 ? (
-              <div className="text-center py-16">
-                <Inbox className="w-10 h-10 mx-auto text-muted-foreground/20 mb-3" strokeWidth={1.5} />
-                <p className="text-[13px] text-muted-foreground">
-                  {searchTerm ? "Nenhum barbeiro encontrado" : "Nenhum barbeiro cadastrado"}
-                </p>
-                <p className="text-[11px] text-muted-foreground/40 mt-1">
-                  {searchTerm ? "Tente ajustar a busca" : "Cadastre o primeiro barbeiro"}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-0">
-                <AnimatePresence mode="popLayout">
-                  {filteredBarbeiros.map((barbeiro, index) => (
-                    <motion.button
-                      key={barbeiro.id}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15, delay: index * 0.02 }}
-                      onClick={() => openBarberView(barbeiro.id)}
-                      className="w-full flex items-center gap-3 py-4 text-left border-b border-border/30 last:border-b-0 hover:bg-secondary/20 active:bg-secondary/40 transition-colors"
-                    >
-                      {/* Avatar with status dot */}
-                      <div className="relative flex-shrink-0">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden">
-                          {barbeiro.foto_url ? (
-                            <img src={barbeiro.foto_url} alt={barbeiro.apelido} className="w-10 h-10 object-cover" />
-                          ) : (
-                            <span className="text-[14px] font-bold text-primary">
-                              {barbeiro.apelido.charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <span
-                          className={cn(
-                            "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background",
-                            barbeiro.ativo ? "bg-emerald-500" : "bg-muted-foreground/40"
-                          )}
-                        />
-                      </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleCopyInviteLink}
+              className="flex-1 h-10 rounded-full bg-foreground text-background hover:bg-foreground/90 font-semibold text-[12.5px] flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
+            >
+              {copiedLink ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  Copiado!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  Copiar Link
+                </>
+              )}
+            </button>
 
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-medium text-foreground truncate">{barbeiro.apelido}</p>
-                        <p className="text-[12px] text-muted-foreground/60 truncate mt-0.5">
-                          {barbeiro.email || "Sem e-mail"}
-                        </p>
-                      </div>
-
-                      {/* Right side badges */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {barbeiro.comissao_pct && (
-                          <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-blue-500/10 text-[9px] font-bold text-blue-400">
-                            <Percent className="w-2.5 h-2.5" />
-                            {barbeiro.comissao_pct}
-                          </span>
-                        )}
-                        {!barbeiro.ativo && (
-                          <span className="px-1.5 py-0.5 rounded-md bg-muted/50 text-[9px] font-bold text-muted-foreground/60">
-                            Inativo
-                          </span>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-muted-foreground/40" strokeWidth={1.8} />
-                      </div>
-                    </motion.button>
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={handleSendViaWhatsApp}
+              className="flex-1 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[12.5px] flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5 text-white" />
+              WhatsApp
+            </button>
           </div>
-
-          {/* FAB — Novo Barbeiro */}
-          <button
-            onClick={() => setShowCreateScreen(true)}
-            className="fixed right-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-30 w-12 h-12 rounded-2xl bg-foreground text-background shadow-lg shadow-black/20 flex items-center justify-center hover:bg-foreground/90 active:scale-95 transition-all"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
         </div>
-      ) : (
-        /* ═══ DESKTOP LAYOUT ═══ */
-        <div>
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Barbeiros</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">{totalBarbeiros} barbeiros cadastrados</p>
+
+        {/* ─── SEÇÃO DE CADASTROS EM ANÁLISE (EM DESTAQUE SE HOUVER) ─── */}
+        {pendingBarbeiros.length > 0 && (
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-500" />
+                <h3 className="text-[14px] font-semibold text-amber-500">
+                  Cadastros em análise
+                </h3>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-500 tabular-nums">
+                {pendingBarbeiros.length}
+              </span>
             </div>
-            <Button size="sm" className="h-8 text-[11px] gap-1.5" onClick={() => setShowCreateScreen(true)}>
-              <Plus className="w-3.5 h-3.5" />
-              Novo Barbeiro
-            </Button>
+
+            <div className="space-y-2">
+              <AnimatePresence mode="popLayout">
+                {pendingBarbeiros.map((barbeiro) => (
+                  <motion.button
+                    key={barbeiro.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => openBarberView(barbeiro.id)}
+                    className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 text-left active:scale-[0.99] transition-all shadow-xs"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-amber-500/20 text-amber-500 border border-amber-500/30 flex items-center justify-center font-bold text-[15px] shrink-0">
+                      {barbeiro.apelido.charAt(0).toUpperCase()}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14.5px] font-semibold text-foreground truncate">
+                        {barbeiro.apelido}
+                      </p>
+                      <p className="text-[12px] text-muted-foreground/80 truncate mt-0.5">
+                        {barbeiro.telefone || barbeiro.email || "Solicitação pendente"}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-500">
+                        Revisar
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-amber-500/50" />
+                    </div>
+                  </motion.button>
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
+
+        {/* ─── SEÇÃO DE EQUIPE ATIVA ─── */}
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-[15px] font-semibold text-foreground">
+              Equipe da barbearia
+            </h3>
+            <span className="text-[12px] text-muted-foreground/60 tabular-nums">
+              {activeBarbeiros.length} {activeBarbeiros.length === 1 ? "profissional" : "profissionais"}
+            </span>
           </div>
 
-          {/* Filters + Search */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex bg-secondary/30 rounded-lg p-0.5 border border-border/20">
-              {([
-                { key: "all" as FilterType, label: "Todos" },
-                { key: "active" as FilterType, label: "Ativos" },
-                { key: "inactive" as FilterType, label: "Inativos" },
-              ] as const).map((f) => (
-                <button
-                  key={f.key}
-                  onClick={() => setFilter(f.key)}
-                  className={cn(
-                    "px-4 py-1.5 text-[11px] font-medium rounded-md transition-all",
-                    filter === f.key
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground/60"
-                  )}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            <div className="relative max-w-sm flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40" />
-              <Input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar barbeiro..."
-                className="h-9 pl-9 bg-secondary/30 border-border/20 text-[13px] rounded-xl"
-              />
-            </div>
+          {/* Barra de Pesquisa Minimalista sem divisor */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar profissional..."
+              className="w-full h-11 pl-10 pr-9 rounded-2xl bg-secondary/40 border border-border/20 text-[13.5px] font-normal text-foreground placeholder:text-muted-foreground/45 focus:outline-none focus:ring-1.5 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-muted-foreground/20 hover:bg-muted-foreground/30 flex items-center justify-center text-muted-foreground active:scale-95 transition-all"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
 
-          {/* Desktop list */}
-          {filteredBarbeiros.length === 0 ? (
-            <div className="text-center py-16 bg-card rounded-xl border border-border/30">
-              <Inbox className="w-10 h-10 mx-auto text-muted-foreground/20 mb-3" strokeWidth={1.5} />
-              <p className="text-[13px] text-muted-foreground">Nenhum barbeiro encontrado</p>
+          {/* Lista de Barbeiros Ativos */}
+          {activeBarbeiros.length === 0 ? (
+            <div className="text-center py-12 px-4 rounded-3xl bg-secondary/15 border border-border/20">
+              <Inbox className="w-9 h-9 mx-auto text-muted-foreground/25 mb-2.5" strokeWidth={1.5} />
+              <p className="text-[13.5px] font-semibold text-foreground">
+                {searchTerm ? "Nenhum barbeiro encontrado" : "Nenhum barbeiro ativo"}
+              </p>
+              <p className="text-[12px] text-muted-foreground/60 mt-1 max-w-xs mx-auto">
+                {searchTerm
+                  ? "Tente buscar com outro nome."
+                  : "Envie o link de convite acima para adicionar profissionais à barbearia."}
+              </p>
             </div>
           ) : (
-            <div className="rounded-xl border border-border/30 overflow-hidden bg-card">
-              {filteredBarbeiros.map((barbeiro, index) => (
-                <button
-                  key={barbeiro.id}
-                  onClick={() => openBarberView(barbeiro.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-left border-b border-border/20 last:border-b-0 hover:bg-secondary/20 transition-colors"
-                >
-                  <div className="relative flex-shrink-0">
-                    <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden">
-                      {barbeiro.foto_url ? (
-                        <img src={barbeiro.foto_url} alt={barbeiro.apelido} className="w-9 h-9 object-cover" />
-                      ) : (
-                        <span className="text-[13px] font-bold text-primary">
-                          {barbeiro.apelido.charAt(0).toUpperCase()}
-                        </span>
-                      )}
+            <div className="space-y-2">
+              <AnimatePresence mode="popLayout">
+                {activeBarbeiros.map((barbeiro, index) => (
+                  <motion.button
+                    key={barbeiro.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15, delay: index * 0.02 }}
+                    onClick={() => openBarberView(barbeiro.id)}
+                    className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-secondary/20 hover:bg-secondary/35 border border-border/20 text-left active:opacity-70 transition-all"
+                  >
+                    <div className="relative shrink-0">
+                      <div className="w-11 h-11 rounded-xl bg-foreground/5 border border-border/30 flex items-center justify-center overflow-hidden">
+                        {barbeiro.foto_url ? (
+                          <img
+                            src={barbeiro.foto_url}
+                            alt={barbeiro.apelido}
+                            className="w-11 h-11 object-cover"
+                          />
+                        ) : (
+                          <span className="text-[15px] font-bold text-foreground">
+                            {barbeiro.apelido.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background bg-emerald-500" />
                     </div>
-                    <span
-                      className={cn(
-                        "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card",
-                        barbeiro.ativo ? "bg-emerald-500" : "bg-muted-foreground/40"
-                      )}
-                    />
-                  </div>
 
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-foreground truncate">{barbeiro.apelido}</p>
-                    <p className="text-[11px] text-muted-foreground/60 truncate mt-0.5">
-                      {barbeiro.email || "Sem e-mail"}
-                    </p>
-                  </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[14.5px] font-semibold text-foreground truncate">
+                          {barbeiro.apelido}
+                        </p>
+                        {barbeiro.isAdmin && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-foreground/10 text-foreground border border-foreground/15 shrink-0">
+                            Admin
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[12px] text-muted-foreground/60 truncate mt-0.5">
+                        {barbeiro.telefone || barbeiro.email || "Ativo na barbearia"}
+                      </p>
+                    </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {barbeiro.comissao_pct && (
-                      <span className="text-[11px] text-muted-foreground/50">
-                        {barbeiro.comissao_pct}%
-                      </span>
-                    )}
-                    <span
-                      className={cn(
-                        "px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider",
-                        barbeiro.ativo
-                          ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                          : "bg-muted/50 text-muted-foreground/60 border border-border/30"
-                      )}
-                    >
-                      {barbeiro.ativo ? "Ativo" : "Inativo"}
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/40" strokeWidth={1.8} />
-                  </div>
-                </button>
-              ))}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/30" strokeWidth={2} />
+                    </div>
+                  </motion.button>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </div>
-      )}
-
-      {/* Dialogs */}
-      <DeactivateDialog
-        open={!!deactivateTarget}
-        onOpenChange={(open) => !open && setDeactivateTarget(null)}
-        barbeiro={deactivateTarget}
-        onConfirm={confirmDeactivate}
-      />
-      <DeleteDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        barbeiro={deleteTarget}
-        deleting={deletarMutation.isPending}
-        onConfirm={handleDeleteBarbeiro}
-      />
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════ */
-/*         SUB-COMPONENTS              */
-/* ═══════════════════════════════════ */
-
-/* ── KPI Card ── */
-function KpiCard({
-  icon: Icon,
-  label,
-  value,
-  accentClass,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  accentClass?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border/30 bg-card p-4">
-      <div className="flex items-center gap-2 mb-1.5">
-        <Icon className={cn("w-3.5 h-3.5", accentClass || "text-muted-foreground/50")} />
-        <span className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.1em] font-medium">
-          {label}
-        </span>
       </div>
-      <p className={cn("text-[18px] font-bold leading-none", accentClass || "text-foreground")}>
-        {value}
-      </p>
     </div>
   );
 }
 
-/* ── Detail Row ── */
-function DetailRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20 last:border-b-0">
-      <Icon className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
-      <span className="text-[11px] text-muted-foreground/60 w-20 flex-shrink-0">{label}</span>
-      <span className="text-[13px] text-foreground truncate flex-1">{value}</span>
-    </div>
-  );
-}
-
-/* ── Create Barber Dialog ── */
-function CreateBarberDialog({
-  nome, setNome,
-  nomeCompleto, setNomeCompleto,
-  cpf, setCpf,
-  email, setEmail,
-  senha, setSenha,
-  showPassword, setShowPassword,
-  telefone, setTelefone,
-  creating,
-  onSubmit,
-  onCancel,
-}: {
-  nome: string; setNome: (v: string) => void;
-  nomeCompleto: string; setNomeCompleto: (v: string) => void;
-  cpf: string; setCpf: (v: string) => void;
-  email: string; setEmail: (v: string) => void;
-  senha: string; setSenha: (v: string) => void;
-  showPassword: boolean; setShowPassword: (v: boolean) => void;
-  telefone: string; setTelefone: (v: string) => void;
-  creating: boolean;
-  onSubmit: (e: React.FormEvent) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <DialogContent className="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2 text-[14px]">
-          <Scissors className="w-4 h-4 text-primary" />
-          Cadastrar Novo Barbeiro
-        </DialogTitle>
-      </DialogHeader>
-
-      <form onSubmit={onSubmit} className="space-y-3 mt-3">
-        <CompactFormField label="Apelido / Nome de exibição" required icon={Scissors} value={nome} onChange={setNome} placeholder="Ex: Pedro" />
-        <CompactFormField label="Nome Completo" required icon={Users} value={nomeCompleto} onChange={setNomeCompleto} placeholder="Nome completo do barbeiro" />
-        <CompactFormField label="CPF" required icon={CreditCard} value={cpf} onChange={setCpf} placeholder="000.000.000-00" />
-        <CompactFormField label="Email" required icon={Mail} value={email} onChange={setEmail} placeholder="email@exemplo.com" type="email" />
-        <div>
-          <label className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.1em] font-medium block mb-1">
-            Senha <span className="text-destructive">*</span>
-          </label>
-          <div className="relative">
-            <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
-            <Input
-              type={showPassword ? "text" : "password"}
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
-              className="h-8 pl-8 pr-8 bg-muted/30 border-border/30 text-[12px] text-foreground placeholder:text-muted-foreground/40 rounded-lg"
-              required
-              minLength={6}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground transition-colors"
-            >
-              {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        </div>
-        <CompactFormField label="Telefone" icon={Phone} value={telefone} onChange={setTelefone} placeholder="(00) 00000-0000" />
-
-        <div className="flex gap-2 pt-3">
-          <Button type="button" variant="outline" onClick={onCancel} className="flex-1 h-9 text-[11px]">
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={creating} className="flex-1 h-9 text-[11px]">
-            {creating ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Criando...</>
-            ) : (
-              <><Plus className="w-3.5 h-3.5 mr-1.5" /> Cadastrar</>
-            )}
-          </Button>
-        </div>
-      </form>
-    </DialogContent>
-  );
-}
-
-/* ── Deactivate Dialog ── */
+/* ─── Subcomponentes de Diálogo ─── */
 function DeactivateDialog({
   open,
   onOpenChange,
@@ -1139,25 +942,23 @@ function DeactivateDialog({
   barbeiro: Barbeiro | null;
   onConfirm: () => void;
 }) {
+  if (!barbeiro) return null;
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-sm">
+      <AlertDialogContent className="max-w-xs rounded-2xl">
         <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2 text-[14px]">
-            <UserX className="w-4 h-4 text-destructive" />
-            Desativar barbeiro
+          <AlertDialogTitle className="text-base font-semibold">
+            Desativar {barbeiro.apelido}?
           </AlertDialogTitle>
-          <AlertDialogDescription className="text-[12px]">
-            Tem certeza que deseja desativar{" "}
-            <span className="text-foreground font-medium">{barbeiro?.apelido}</span>?
-            Ele não receberá novos agendamentos enquanto estiver inativo.
+          <AlertDialogDescription className="text-xs text-muted-foreground">
+            O barbeiro não aparecerá para agendamentos até ser reativado.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel className="h-8 text-[11px]">Cancelar</AlertDialogCancel>
+        <AlertDialogFooter className="gap-2">
+          <AlertDialogCancel className="h-9 text-xs rounded-full">Cancelar</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            className="h-8 text-[11px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="h-9 text-xs rounded-full bg-amber-600 text-white hover:bg-amber-700"
           >
             Desativar
           </AlertDialogAction>
@@ -1167,7 +968,6 @@ function DeactivateDialog({
   );
 }
 
-/* ── Delete Dialog ── */
 function DeleteDialog({
   open,
   onOpenChange,
@@ -1181,44 +981,32 @@ function DeleteDialog({
   deleting: boolean;
   onConfirm: () => void;
 }) {
+  if (!barbeiro) return null;
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-sm">
+      <AlertDialogContent className="max-w-xs rounded-2xl">
         <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2 text-[14px]">
-            <AlertTriangle className="w-4 h-4 text-destructive" />
-            Remover barbeiro
-          </AlertDialogTitle>
-          <AlertDialogDescription className="text-[12px] space-y-2">
-            <p>
-              Remover{" "}
-              <span className="text-foreground font-medium">{barbeiro?.apelido}</span>?
-            </p>
-            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-2.5 space-y-1">
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
-                Horários, comissões, avaliações e configurações serão removidos. Agendamentos futuros serão cancelados.
-              </p>
-              <p className="text-[10px] text-foreground/70 leading-relaxed">
-                O barbeiro terá <span className="font-semibold">7 dias de acesso</span> para resolver pendências financeiras.
-              </p>
-            </div>
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="w-5 h-5" />
+            <AlertDialogTitle className="text-base font-semibold">
+              Remover {barbeiro.apelido}?
+            </AlertDialogTitle>
+          </div>
+          <AlertDialogDescription className="text-xs text-muted-foreground space-y-2">
+            <p>Esta ação removerá o barbeiro da barbearia.</p>
             <p className="text-[10px] text-destructive font-medium">Esta ação não pode ser desfeita.</p>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={deleting} className="h-8 text-[11px]">
+        <AlertDialogFooter className="gap-2">
+          <AlertDialogCancel disabled={deleting} className="h-9 text-xs rounded-full">
             Cancelar
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             disabled={deleting}
-            className="h-8 text-[11px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="h-9 text-xs rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {deleting ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Removendo...</>
-            ) : (
-              "Remover definitivamente"
-            )}
+            {deleting ? "Removendo..." : "Remover"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1226,82 +1014,81 @@ function DeleteDialog({
   );
 }
 
-/* ── Compact Form Field ── */
-function CompactFormField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  required = false,
-  icon: Icon,
+function RoleDialog({
+  open,
+  onOpenChange,
+  barbeiro,
+  updating,
+  onSelectRole,
 }: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: string;
-  required?: boolean;
-  icon?: React.ElementType;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  barbeiro: Barbeiro | null;
+  updating: boolean;
+  onSelectRole: (makeAdmin: boolean) => Promise<void>;
 }) {
-  return (
-    <div>
-      <label className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.1em] font-medium block mb-1">
-        {label}
-        {required && <span className="text-destructive ml-0.5">*</span>}
-      </label>
-      <div className="relative">
-        {Icon && (
-          <Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
-        )}
-        <Input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder || label}
-          className={cn(
-            "h-8 bg-muted/30 border-border/30 text-[12px] text-foreground placeholder:text-muted-foreground/40 rounded-lg focus:border-border/50 focus:ring-0",
-            Icon && "pl-8"
-          )}
-          required={required}
-        />
-      </div>
-    </div>
-  );
-}
+  if (!barbeiro) return null;
 
-/* ── Form Field Row (full-screen style) ── */
-function FormFieldRow({
-  icon: Icon,
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  required = false,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: string;
-  required?: boolean;
-}) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20 last:border-b-0">
-      <Icon className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
-      <span className="text-[11px] text-muted-foreground/60 w-20 flex-shrink-0">
-        {label} {required && <span className="text-destructive">*</span>}
-      </span>
-      <Input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder || label}
-        className="h-8 flex-1 bg-transparent border-0 shadow-none text-[13px] text-foreground placeholder:text-muted-foreground/40 focus-visible:ring-0 p-0"
-        required={required}
-      />
-    </div>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="max-w-xs rounded-3xl p-5 border-border/30">
+        <AlertDialogHeader className="space-y-1 text-left">
+          <AlertDialogTitle className="text-[16px] font-semibold text-foreground">
+            Permissão de Acesso
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-[12px] text-muted-foreground leading-relaxed">
+            Defina o tipo de permissão de {barbeiro.apelido} no sistema.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-2 py-3">
+          <button
+            type="button"
+            disabled={updating}
+            onClick={() => onSelectRole(false)}
+            className={cn(
+              "w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between active:scale-[0.99]",
+              !barbeiro.isAdmin
+                ? "border-foreground bg-foreground/5 shadow-2xs"
+                : "border-border/30 bg-secondary/20 hover:bg-secondary/40"
+            )}
+          >
+            <div>
+              <p className="text-[13.5px] font-semibold text-foreground">Barbeiro</p>
+              <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                Agenda pessoal, atendimentos e clientes
+              </p>
+            </div>
+            {!barbeiro.isAdmin && <Check className="w-4 h-4 text-foreground shrink-0" />}
+          </button>
+
+          <button
+            type="button"
+            disabled={updating}
+            onClick={() => onSelectRole(true)}
+            className={cn(
+              "w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between active:scale-[0.99]",
+              barbeiro.isAdmin
+                ? "border-foreground bg-foreground/5 shadow-2xs"
+                : "border-border/30 bg-secondary/20 hover:bg-secondary/40"
+            )}
+          >
+            <div>
+              <p className="text-[13.5px] font-semibold text-foreground">Administrador</p>
+              <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                Acesso total à gestão, finanças e barbearia
+              </p>
+            </div>
+            {barbeiro.isAdmin && <Check className="w-4 h-4 text-foreground shrink-0" />}
+          </button>
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={updating} className="w-full h-10 rounded-full text-xs font-semibold">
+            Fechar
+          </AlertDialogCancel>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

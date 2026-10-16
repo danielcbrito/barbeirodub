@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { CarteiraScreen } from "@/components/financial/CarteiraScreen";
+import { CarteiraPage } from "@/components/barber/CarteiraPage";
 
 interface AdminFinanceiroProps {
   userId?: string;
@@ -9,11 +9,7 @@ interface AdminFinanceiroProps {
   basePath?: string;
 }
 
-/**
- * AdminFinanceiro — ponte direta para o app da Efí Bank.
- * Remove o módulo financeiro interno para admin/tenant também.
- */
-export function AdminFinanceiro({ barbeiroId, basePath = "/admin" }: AdminFinanceiroProps = {}) {
+export function AdminFinanceiro({ userName, barbeiroId, basePath = "/admin" }: AdminFinanceiroProps = {}) {
   const navigate = useNavigate();
 
   const handleBack = useCallback(() => {
@@ -28,6 +24,13 @@ export function AdminFinanceiro({ barbeiroId, basePath = "/admin" }: AdminFinanc
     );
   }
 
-  return <CarteiraScreen barbeiroId={barbeiroId} onBack={handleBack} />;
+  return (
+    <CarteiraPage
+      barbeiroId={barbeiroId}
+      barbeiroNome={userName || "Admin"}
+      basePath={basePath}
+      onBack={handleBack}
+    />
+  );
 }
 

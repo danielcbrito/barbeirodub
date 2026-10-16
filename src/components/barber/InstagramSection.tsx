@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useToggleInstagramPosts } from "@/hooks/useBarberMutations";
@@ -24,6 +25,7 @@ interface InstagramConnection {
  * Permite conectar/desconectar e configurar exibição de posts na landing page.
  */
 export function InstagramSection({ barbeiroId, basePath = "/barbeiro" }: InstagramSectionProps) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -65,26 +67,9 @@ export function InstagramSection({ barbeiroId, basePath = "/barbeiro" }: Instagr
     }
   };
 
-  /** Inicia fluxo OAuth do Instagram */
-  const handleConnect = async () => {
-    try {
-      setConnecting(true);
-      const { data, error } = await supabase.functions.invoke("instagram-auth", {
-        body: { action: "get_auth_url", barbeiro_id: barbeiroId },
-      });
-
-      if (error || !data?.url) {
-        toast.error(data?.error || "Erro ao iniciar conexão com Instagram");
-        return;
-      }
-
-      // Redireciona para o Instagram OAuth
-      window.location.href = data.url;
-    } catch (err) {
-      toast.error("Erro ao conectar com Instagram");
-    } finally {
-      setConnecting(false);
-    }
+  /** Abre a tela de conexão do Instagram */
+  const handleConnect = () => {
+    navigate(`${basePath}/instagram`);
   };
 
   /** Desconecta o Instagram */
@@ -281,7 +266,7 @@ export function InstagramSection({ barbeiroId, basePath = "/barbeiro" }: Instagr
             {connecting ? (
               <Loader2 className="w-4 h-4 text-muted-foreground animate-spin flex-shrink-0" />
             ) : (
-              <div className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 text-foreground text-[11px] font-semibold flex-shrink-0">
+              <div className="h-8 px-4 rounded-full bg-foreground text-background text-[12px] font-semibold flex items-center justify-center shrink-0 shadow-xs">
                 Conectar
               </div>
             )}

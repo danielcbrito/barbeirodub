@@ -8,7 +8,7 @@ import { AvatarEditSheet } from "@/components/admin/mobile/AvatarEditSheet";
 import {
   Loader2, ImagePlus,
   ChevronRight, Megaphone, LogOut,
-  Send, Star,
+  Send, Star, MessageSquare, BarChart3, ArrowRight,
 } from "lucide-react";
 import { CopyCode } from "@/components/ui/copy-code-button";
 
@@ -24,6 +24,8 @@ import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
 import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
+import { ProfileInstagramBanner } from "@/components/profile/ProfileInstagramBanner";
+import { ProfilePortfolioCarousel } from "@/components/profile/ProfilePortfolioCarousel";
 
 
 interface AdminMobileProfileProps {
@@ -88,11 +90,13 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const atualizarBanner = useAtualizarBannerAdmin();
+  const [loadedBarbeiroId, setLoadedBarbeiroId] = useState<string | null>(null);
   const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(userId || "");
+  const effectiveBarbeiroId = adminBarbeiroId || loadedBarbeiroId || null;
   const { hasMultiple: hasMultipleBarbers } = useTenantBarbersCount(tenantId);
   const setupCompletion = useSetupCompletion({
     userId: userId || "",
-    barbeiroId: adminBarbeiroId || "",
+    barbeiroId: effectiveBarbeiroId || "",
     basePath,
     personalDataOptional: true,
     routeOverrides: {
@@ -132,11 +136,15 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
         supabase.from("tenants").select("id, slug, nome, logo_url")
           .eq("owner_user_id", user.id)
           .order("created_at", { ascending: true }).limit(1).maybeSingle(),
-        supabase.from("barbeiros").select("tenant_id")
+        supabase.from("barbeiros").select("id, tenant_id")
           .eq("user_id", user.id).eq("ativo", true).is("deleted_at", null)
           .not("tenant_id", "is", null)
           .order("created_at", { ascending: true }).limit(1).maybeSingle(),
       ]);
+
+      if ((barbRes.data as any)?.id) {
+        setLoadedBarbeiroId((barbRes.data as any).id);
+      }
 
       const profile: any = profileRes.data || {};
       const nextAvatar = profile.avatar_url || null;
@@ -246,25 +254,8 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
   };
 
   const handleHorariosClick = () => {
-    const goWithScope = (scope: ApplyScope) => {
-      const qs =
-        scope.type === "self"
-          ? "?scope=self"
-          : `?scope=units&unit_ids=${scope.unitIds.join(",")}`;
-      navigate(`${basePath}/horarios${qs}`);
-    };
-
-    if (!hasMultipleBarbers) {
-      goWithScope({ type: "self" });
-      return;
-    }
-
-    setScopeConfig({
-      title: "Aplicar horário a...",
-      description: "Escolha se esse horário vale só pra você ou pras barbearias.",
-      onConfirm: goWithScope,
-    });
-    setScopeOpen(true);
+    // Configura exclusivamente os horários pessoais do profissional, sem abrir modal de escopo
+    navigate(`${basePath}/horarios?scope=self`);
   };
 
   const handleConfigBarbeariaClick = async () => {
@@ -325,20 +316,21 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
         {/* ═══ BANNER FINO NO TOPO (edge-to-edge, sob a status bar) ═══ */}
         <div className="relative isolate bg-background">
           <div
-            className="relative w-full overflow-hidden bg-muted"
+            className="relative w-full overflow-hidden bg-muted pointer-events-none"
             style={{ height: "calc(6.5rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }}
           >
             {bannerUrl ? (
               <img
                 src={bannerUrl}
                 alt="Banner da barbearia"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover select-none pointer-events-none"
                 style={{ objectPosition: "center" }}
+                draggable={false}
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-muted via-muted/70 to-background" />
+              <div className="w-full h-full bg-gradient-to-br from-muted via-muted/70 to-background pointer-events-none" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/5 to-background" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/5 to-background pointer-events-none" />
           </div>
 
           {/* Botão trocar banner — canto superior direito, discreto */}
@@ -413,77 +405,65 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
 
           {/* Link de copiar — lugar estratégico e compacto logo abaixo */}
           {tenantSlug && (
-            <motion.div
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.1 }}
-              className="mt-4"
-            >
+            <div className="mt-4">
               <CopyCode code={fullLink} label={displayLink} />
-            </motion.div>
+            </div>
           )}
         </div>
 
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
         <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerChange} className="hidden" />
 
-        {/* ═══ ACESSOS PRINCIPAIS ESTRATÉGICOS (3 CARDS 100% SÉRIOS & MINIMALISTAS) ═══ */}
+        {/* ═══ ACESSOS PRINCIPAIS ESTRATÉGICOS (3 CARDS 100% SÉRIOS & MINIMALISTAS - PADRÃO IMAGEM 2) ═══ */}
         <div className="grid grid-cols-3 gap-2.5 mt-5 mx-5">
           {/* Card 1: Disparo */}
           <button
+            type="button"
             onClick={() => setShowWhenToSend(true)}
-            className="relative overflow-hidden flex flex-col justify-between p-3.5 rounded-2xl bg-card border border-border/70 dark:border-white/[0.08] hover:border-foreground/30 active:scale-[0.97] transition-all shadow-xs group text-left min-h-[106px]"
+            className="group relative flex flex-col justify-between p-3.5 rounded-2xl bg-card border border-border/50 hover:bg-secondary/40 active:scale-[0.98] transition-transform duration-100 shadow-xs text-left min-h-[112px] cursor-pointer touch-manipulation"
           >
-            {/* Ícone de fundo transparente elegante */}
-            <Send className="absolute -right-3 -bottom-3 w-16 h-16 text-foreground/[0.035] dark:text-white/[0.04] -rotate-12 transition-transform duration-300 group-hover:scale-110 pointer-events-none stroke-[1.2]" />
-
-            <div className="w-8 h-8 rounded-xl bg-foreground/[0.05] dark:bg-white/[0.07] flex items-center justify-center mb-2.5 relative z-10">
-              <Send className="w-4 h-4 text-foreground stroke-[1.8]" />
+            <div className="text-red-500 dark:text-red-500 transition-transform duration-200 group-hover:scale-105">
+              <Send className="w-6 h-6 stroke-[1.8]" />
             </div>
 
-            <div className="relative z-10">
-              <span className="text-[13px] font-semibold text-foreground tracking-tight block leading-tight">
-                Disparo
-              </span>
-              <span className="text-[11px] text-muted-foreground block truncate mt-0.5 font-normal">
-                Mensagens
+            <div>
+              <div className="flex items-center justify-between gap-1 w-full">
+                <span className="text-[13.5px] font-semibold text-foreground tracking-tight block leading-tight">
+                  Disparo
+                </span>
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </div>
+              <span className="text-[11px] text-muted-foreground block truncate mt-1 font-normal">
+                Mensagens em massa
               </span>
             </div>
           </button>
 
-          {/* Card 2: WhatsApp (com o tema verdinho aprovado pelo usuário) */}
+          {/* Card 2: WhatsApp */}
           <button
+            type="button"
             onClick={() => navigate(`${basePath}/whatsapp`)}
-            className="relative overflow-hidden flex flex-col justify-between p-3.5 rounded-2xl bg-[#25D366]/[0.03] dark:bg-[#25D366]/[0.05] border border-[#25D366]/25 dark:border-[#25D366]/30 hover:border-[#25D366]/50 active:scale-[0.97] transition-all shadow-xs group text-left min-h-[106px]"
+            className="group relative flex flex-col justify-between p-3.5 rounded-2xl bg-card border border-border/50 hover:bg-secondary/40 active:scale-[0.98] transition-transform duration-100 shadow-xs text-left min-h-[112px] cursor-pointer touch-manipulation"
           >
-            {/* Efeito de luz sutil no fundo */}
-            <div className="absolute top-0 right-0 w-24 h-24 bg-[#25D366]/[0.08] dark:bg-[#25D366]/[0.10] rounded-full blur-xl pointer-events-none" />
-            {/* Ícone de fundo transparente estratégico do WhatsApp */}
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="absolute -right-2.5 -bottom-2.5 w-16 h-16 text-[#25D366]/[0.10] dark:text-[#25D366]/[0.14] -rotate-12 transition-transform duration-300 group-hover:scale-110 pointer-events-none"
-              aria-hidden="true"
-            >
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-            </svg>
-
-            <div className="w-8 h-8 rounded-xl bg-[#25D366]/15 dark:bg-[#25D366]/20 flex items-center justify-center mb-2.5 relative z-10">
+            <div className="text-foreground transition-transform duration-200 group-hover:scale-105">
               <svg
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="w-4 h-4 text-[#25D366]"
+                className="w-6 h-6"
                 aria-hidden="true"
               >
                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
               </svg>
             </div>
 
-            <div className="relative z-10">
-              <span className="text-[13px] font-semibold text-foreground tracking-tight block leading-tight">
-                WhatsApp
-              </span>
-              <span className="text-[11px] text-muted-foreground block truncate mt-0.5 font-normal">
+            <div>
+              <div className="flex items-center justify-between gap-1 w-full">
+                <span className="text-[13.5px] font-semibold text-foreground tracking-tight block leading-tight">
+                  WhatsApp
+                </span>
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </div>
+              <span className="text-[11px] text-muted-foreground block truncate mt-1 font-normal">
                 Atendimento
               </span>
             </div>
@@ -491,127 +471,96 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
 
           {/* Card 3: Campanhas & Promoções */}
           <button
+            type="button"
             onClick={() => navigate(`${basePath}/promocoes`)}
-            className="relative overflow-hidden flex flex-col justify-between p-3.5 rounded-2xl bg-card border border-border/70 dark:border-white/[0.08] hover:border-foreground/30 active:scale-[0.97] transition-all shadow-xs group text-left min-h-[106px]"
+            className="group relative flex flex-col justify-between p-3.5 rounded-2xl bg-card border border-border/50 hover:bg-secondary/40 active:scale-[0.98] transition-transform duration-100 shadow-xs text-left min-h-[112px] cursor-pointer touch-manipulation"
           >
-            {/* Ícone de fundo transparente elegante de campanhas */}
-            <Megaphone className="absolute -right-2.5 -bottom-2.5 w-16 h-16 text-foreground/[0.035] dark:text-white/[0.04] -rotate-12 transition-transform duration-300 group-hover:scale-110 pointer-events-none stroke-[1.2]" />
-
-            <div className="w-8 h-8 rounded-xl bg-foreground/[0.05] dark:bg-white/[0.07] flex items-center justify-center mb-2.5 relative z-10">
-              <Megaphone className="w-4 h-4 text-foreground stroke-[1.8]" />
+            <div className="text-foreground transition-transform duration-200 group-hover:scale-105">
+              <Megaphone className="w-6 h-6 stroke-[1.8]" />
             </div>
 
-            <div className="relative z-10">
-              <span className="text-[13px] font-semibold text-foreground tracking-tight block leading-tight">
-                Campanhas
-              </span>
-              <span className="text-[11px] text-muted-foreground block truncate mt-0.5 font-normal">
+            <div>
+              <div className="flex items-center justify-between gap-1 w-full">
+                <span className="text-[13.5px] font-semibold text-foreground tracking-tight block leading-tight">
+                  Campanhas
+                </span>
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </div>
+              <span className="text-[11px] text-muted-foreground block truncate mt-1 font-normal">
                 Promoções
               </span>
             </div>
           </button>
         </div>
 
-        {/* ═══ BANNER DE DESTAQUE: CONFIGURAÇÕES DA BARBEARIA (100% SÉRIO & MINIMALISTA, SEM LOGO) ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="mt-4 mx-5"
-        >
-          <button
-            type="button"
-            onClick={handleConfigBarbeariaClick}
-            className="w-full relative overflow-hidden rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 text-left active:scale-[0.99] transition-all group shadow-xs hover:border-foreground/30 flex items-center justify-between gap-4"
-          >
-            <div className="min-w-0 flex-1">
-              <span className="text-[14px] font-semibold text-foreground block truncate leading-tight">
-                Configurações da Barbearia
-              </span>
-              <p className="text-[11.5px] text-muted-foreground mt-1 truncate">
-                Catálogo, horários, equipe e dados da empresa
-              </p>
-            </div>
-            <div className="w-7 h-7 rounded-full bg-secondary/60 flex items-center justify-center shrink-0 text-muted-foreground group-hover:text-foreground group-hover:bg-secondary transition-colors">
-              <ChevronRight className="w-4 h-4" />
-            </div>
-          </button>
-        </motion.div>
-
-        {/* ═══ BANNER DE CONFIGURAÇÃO INICIAL ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.15 }}
-          className="mt-4 mx-5"
-        >
+        {/* ═══ BANNER DE CONFIGURAÇÃO INICIAL (SE HOUVER ETAPAS PENDENTES) ═══ */}
+        <div className="mt-4 mx-5">
           <SetupCompletionBanner
             percentage={setupCompletion.percentage}
             steps={setupCompletion.steps}
             loading={setupCompletion.loading}
             variant="detailed"
+            defaultExpanded={false}
           />
-        </motion.div>
+        </div>
 
-        {/* ═══ ITENS DE CONFIGURAÇÃO AGRUPADOS (PADRÃO ATENDIMENTO & NOTIFICAÇÕES) ═══ */}
-        <div className="mt-5 mx-5 space-y-4">
-          {/* Grupo: Gestão & Atendimento Pessoal */}
-          <div>
-            <p className="text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">
-              Gestão & Atendimento Pessoal
-            </p>
-            <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] overflow-hidden divide-y divide-border/25 dark:divide-white/[0.06] shadow-xs">
-              <ProfileMenuItem
-                label="Horário de funcionamento"
-                description="Seus dias e horários de trabalho"
-                onClick={handleHorariosClick}
-              />
-              <ProfileMenuItem
-                label="Serviços"
-                description="Duração pessoal e serviços que você atende"
-                onClick={() => navigate(`${basePath}/servicos/cortes`)}
-              />
-              <ProfileMenuItem
-                label="Clientes"
-                description="Clientes atendidos por você"
-                onClick={() => navigate(`${basePath}/meus-clientes`)}
-              />
-              <ProfileMenuItem
-                label="Avaliações"
-                description="Notas e comentários dos seus clientes"
-                onClick={() => navigate(`${basePath}/avaliacoes`)}
-              />
-              <ProfileMenuItem
-                label="Portfólio"
-                description="Fotos dos melhores cortes da barbearia"
-                onClick={() => navigate(`${basePath}/portfolio`)}
-              />
-              <ProfileMenuItem
-                label="Relatórios"
-                description="Dados e métricas do seu negócio"
-                onClick={() => navigate(`${basePath}/relatorios`)}
-              />
-              <ProfileMenuItem
-                label="Suporte"
-                description="Fale com nosso time de atendimento"
-                onClick={() => window.open("https://wa.me/5511963390043?text=" + encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"), "_blank", "noopener,noreferrer")}
-              />
-            </div>
+        {/* ═══ ITENS E SEÇÕES ESTRATÉGICAS DO PERFIL (PADRÃO APPLE HIG) ═══ */}
+        <div className="mt-5 mx-5 space-y-6">
+          {/* Configurações Gerais — item direto sem título redundante */}
+          <div className="divide-y divide-border/25">
+            <ProfileMenuItem
+              label="Configurações gerais"
+              description="Horários, serviços, clientes, equipe e dados"
+              onClick={handleConfigBarbeariaClick}
+            />
+            <ProfileMenuItem
+              label="Relatórios"
+              description="Estatísticas, faturamento e desempenho"
+              onClick={() => navigate(`${basePath}/relatorios`)}
+            />
           </div>
 
-          {/* Grupo 2: Conta & Segurança */}
-          <div>
-            <p className="text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">
-              Conta & Segurança
-            </p>
-            <div className="rounded-2xl bg-card border border-border/60 dark:border-white/[0.08] overflow-hidden divide-y divide-border/25 dark:divide-white/[0.06] shadow-xs">
-              <ProfileMenuItem
-                label="Segurança"
-                description="Senha, autenticação e acessos"
-                onClick={() => navigate(`${basePath}/seguranca`)}
-              />
+          {/* ═══ BANNER DO INSTAGRAM ═══ */}
+          <ProfileInstagramBanner
+            barbeiroId={effectiveBarbeiroId}
+            basePath={basePath}
+          />
+
+          {/* ═══ CARROSSEL DO PORTFÓLIO ═══ */}
+          <ProfilePortfolioCarousel
+            barbeiroId={effectiveBarbeiroId}
+            tenantId={tenantId}
+            basePath={basePath}
+          />
+
+          {/* ═══ SUPORTE ESTRATÉGICO ═══ */}
+          <button
+            type="button"
+            onClick={() =>
+              window.open(
+                "https://wa.me/5511963390043?text=" +
+                  encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"),
+                "_blank",
+                "noopener,noreferrer"
+              )
+            }
+            className="w-full rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/50 p-3.5 flex items-center justify-between gap-3 text-left transition-all active:scale-[0.99] group shadow-xs cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-secondary border border-border/50 flex items-center justify-center text-foreground shrink-0">
+                <MessageSquare className="w-4 h-4 stroke-[2]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13.5px] font-medium text-foreground leading-tight">
+                  Precisa de ajuda?
+                </p>
+                <p className="text-[11.5px] text-muted-foreground mt-0.5 truncate">
+                  Fale com nosso time de atendimento no WhatsApp
+                </p>
+              </div>
             </div>
-          </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+          </button>
 
           {/* ═══ RODAPÉ: Sair da conta (esq) + Tema claro/escuro (dir) ═══ */}
           <div className="pt-4 pb-8 flex items-center justify-between">
@@ -687,22 +636,40 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
   );
 }
 
-/* ─── Subcomponent: item 100% sério, alinhado à tipografia do Atendimento & Notificações ─── */
-function ProfileMenuItem({ label, description, onClick }: { label: string; description: string; onClick: () => void }) {
+/* ─── Subcomponent: item 100% sério, alinhado à tipografia e padrão Atendimento & Notificações ─── */
+function ProfileMenuItem({
+  label,
+  description,
+  badge,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  badge?: string;
+  onClick: () => void;
+}) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-muted/20 active:bg-muted/40 transition-colors group"
+      className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-opacity duration-100 group touch-manipulation"
     >
       <div className="min-w-0 pr-3">
-        <span className="text-[13.5px] font-semibold text-foreground block truncate leading-tight group-hover:text-foreground transition-colors">
-          {label}
-        </span>
-        <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5 leading-snug font-normal">
+        <div className="flex items-center gap-2">
+          <p className="text-[13.5px] font-medium text-foreground leading-snug">
+            {label}
+          </p>
+          {badge && (
+            <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
+              {badge}
+            </span>
+          )}
+        </div>
+        <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
           {description}
-        </span>
+        </p>
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/35 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
     </button>
   );
 }

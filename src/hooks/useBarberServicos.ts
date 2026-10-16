@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { STALE_TIMES } from "@/lib/queryConstants";
 
+import { fetchServiceOrder, sortServicesByCustomOrder } from "@/lib/servicesOrder";
+
 export interface BarberServico {
   id: string;
   nome: string;
@@ -30,26 +32,28 @@ export function useBarberServicos(
     queryFn: async (): Promise<BarberServicosResult> => {
       let servicesQuery = supabase
         .from("servicos")
-        .select("id, nome, descricao, duracao_minutos, preco, ativo")
-        .order("nome");
+        .select("id, nome, descricao, duracao_minutos, preco, ativo");
 
       servicesQuery = tenantId
         ? servicesQuery.eq("tenant_id", tenantId)
         : servicesQuery.is("tenant_id", null);
 
-      const [servicesRes, duracaoRes] = await Promise.all([
+      const [servicesRes, duracaoRes, orderList] = await Promise.all([
         servicesQuery,
         supabase
           .from("barbeiro_servico_duracao")
           .select("servico_id, duracao_personalizada")
           .eq("barbeiro_id", barbeiroId),
+        fetchServiceOrder(tenantId),
       ]);
 
       if (servicesRes.error) throw servicesRes.error;
       if (duracaoRes.error) throw duracaoRes.error;
 
+      const sortedServicos = sortServicesByCustomOrder(servicesRes.data || [], orderList);
+
       return {
-        servicos: servicesRes.data || [],
+        servicos: sortedServicos,
         duracaoMap: new Map(
           (duracaoRes.data || []).map((d) => [d.servico_id, d.duracao_personalizada])
         ),

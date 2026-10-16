@@ -247,6 +247,20 @@ async function handleWithdraw(req: Request, body: Record<string, unknown>): Prom
       return fail("NO_SUBACCOUNT", "Barbeiro sem subconta Woovi configurada", 400);
     }
 
+    // Se o PIN foi enviado diretamente no corpo da requisição, valida no banco e renova sessão
+    if (body.pin && typeof body.pin === "string") {
+      const { data: pinOk } = await context.supabase.rpc("verify_financial_pin", {
+        p_pin: body.pin,
+      });
+      if (pinOk) {
+        await context.supabase.from("financeiro_auth_sessions").insert({
+          user_id: context.userId,
+          token_hash: btoa(`${context.userId}:${Date.now()}:${crypto.randomUUID()}`),
+          expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+        });
+      }
+    }
+
     const { data: pinSession } = await context.supabase
       .from("financeiro_auth_sessions")
       .select("created_at")

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, addDays, isToday, isSameDay, startOfWeek } from "date-fns";
@@ -18,6 +18,7 @@ import {
   Filter,
   X,
   Check,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { extractWalkInName, isWhatsAppAppointment, extractWhatsAppName } from "@/lib/walkInName";
@@ -27,6 +28,7 @@ import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { AdminContext } from "@/pages/Admin";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AdminMobileAgenda } from "./mobile/AdminMobileAgenda";
+import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
 import { ConfirmAttendanceModal } from "./ConfirmAttendanceModal";
 import { CancelAllAppointmentsModal } from "./CancelAllAppointmentsModal";
 import { MobileManualBookingModal } from "./mobile/MobileManualBookingModal";
@@ -72,14 +74,14 @@ const getStatusColorConfig = (status: string, barbeiroConfirmou: boolean | null)
       lightBg: "dark:bg-transparent bg-emerald-50/50",
     };
   }
-  if (status === "no_show") {
+  if (status === "no_show" || status === "nao_veio" || status === "faltou") {
     return {
-      bg: "bg-orange-500/6",
-      border: "dark:border-orange-500/15 border-orange-400/40",
-      accent: "dark:border-l-orange-500 border-l-orange-500",
-      statusBadge: "dark:bg-orange-500/10 dark:text-orange-400 bg-orange-50 text-orange-700 ring-1 ring-orange-200/60",
+      bg: "bg-zinc-500/6",
+      border: "dark:border-zinc-500/15 border-zinc-400/40",
+      accent: "dark:border-l-zinc-500 border-l-zinc-500",
+      statusBadge: "dark:bg-zinc-500/10 dark:text-zinc-400 bg-zinc-50 text-zinc-700 ring-1 ring-zinc-200/60",
       statusLabel: "NÃO VEIO",
-      lightBg: "dark:bg-transparent bg-orange-50/50",
+      lightBg: "dark:bg-transparent bg-zinc-50/50",
     };
   }
   if (status === "confirmed" || barbeiroConfirmou) {
@@ -122,22 +124,29 @@ const getPaymentBadge = (apt: { tipo_agendamento: string | null; payment_method:
 export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const location = useLocation();
   const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
   const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
   const overdueState = useOverdueAppointments(effectiveBarbeiroId, { enabled: !isMobile });
-  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
+  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(() => Boolean(location.state?.openOverdueModal));
   const hasAutoPromptedOverdueRef = useRef(false);
 
-  // Auto-abertura da gaveta ao entrar na Agenda quando houver agendamentos para finalizar
   useEffect(() => {
-    if (isMobile || overdueState.isLoading) return;
-    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
+    if (location.state?.openOverdueModal) {
       setIsOverdueModalOpen(true);
-      hasAutoPromptedOverdueRef.current = true;
-    } else if (overdueState.count === 0) {
-      hasAutoPromptedOverdueRef.current = false;
+      return;
     }
-  }, [isMobile, overdueState.count, overdueState.isLoading]);
+    if (isMobile) return;
+    if (overdueState.isLoading) return;
+    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
+      hasAutoPromptedOverdueRef.current = true;
+      if (canAutoOpenOverdueModal()) {
+        setIsOverdueModalOpen(true);
+      }
+    }
+  }, [location.state, isMobile, overdueState.count, overdueState.isLoading]);
+
+
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -302,7 +311,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
         .from("agendamentos")
         .select("id, data, hora, duracao, status, preco, observacoes, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao")
         .eq("data", dateStr)
-        .in("status", ["pending", "confirmed", "completed", "no_show"])
+        .neq("status", "excluido")
         .order("hora", { ascending: true });
 
       if (isTenantScope) {
@@ -489,6 +498,43 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
     return true;
   });
 
+  const dayPendingAppointments = useMemo(() => {
+    if (!appointments || appointments.length === 0) return [];
+    return appointments.filter(
+      (apt) => apt && apt.id && apt.status !== "completed" && apt.status !== "no_show" && (apt as any).status !== "cancelled"
+    );
+  }, [appointments]);
+
+  const [isFinalizingDay, setIsFinalizingDay] = useState(false);
+
+  const handleFinalizeDay = async () => {
+    if (dayPendingAppointments.length === 0) {
+      toast.info("Todos os agendamentos deste dia já estão concluídos.");
+      return;
+    }
+
+    try {
+      setIsFinalizingDay(true);
+      const idsToComplete = dayPendingAppointments.map((a) => a.id);
+
+      setAppointments((prev) =>
+        prev.map((apt) =>
+          idsToComplete.includes(apt.id)
+            ? { ...apt, status: "completed", barbeiro_confirmou: true }
+            : apt
+        )
+      );
+
+      await overdueState.completeBulk(idsToComplete);
+      await loadAppointments(selectedDate, true);
+    } catch (error) {
+      console.error("Erro ao finalizar agendamentos do dia:", error);
+      toast.error("Erro ao finalizar agendamentos.");
+    } finally {
+      setIsFinalizingDay(false);
+    }
+  };
+
   // ========== MOBILE ==========
   if (isMobile) {
     return (
@@ -531,16 +577,6 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            {overdueState.count > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsOverdueModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold bg-foreground text-background hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-xs"
-              >
-                <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>Finalizar ({overdueState.count})</span>
-              </button>
-            )}
 
             {/* Filters Toggle */}
             <button
@@ -731,10 +767,10 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                     onClick={() => navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt } })}
                     style={{ opacity: isCompleted ? 0.48 : 1 }}
                     className={cn(
-                      "rounded-xl border-l-[3px] p-4 border transition-all cursor-pointer",
+                      "rounded-2xl border-l-[3px] p-4 border transition-all cursor-pointer backdrop-blur-xl backdrop-saturate-[180%]",
                       isCompleted
-                        ? "dark:bg-white/[0.015] bg-muted/20 border-border/30"
-                        : "hover:scale-[1.01] dark:bg-card/60 bg-card backdrop-blur-sm dark:shadow-none shadow-[0_2px_10px_rgba(0,0,0,0.06)]",
+                        ? "dark:bg-white/[0.02] bg-card/35 border-border/20 dark:border-white/[0.04] shadow-none"
+                        : "border-border/40 dark:border-white/[0.08] bg-card/75 dark:bg-white/[0.04] hover:bg-card/90 dark:hover:bg-white/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.4)] dark:shadow-[0_2px_16px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.06)] active:scale-[0.99]",
                       statusConfig.border, statusConfig.accent, statusConfig.lightBg
                     )}
                   >
@@ -812,25 +848,6 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                   </div>
                 );
               })}
-
-              {/* Botão estratégico inferior para finalizar todos ao final dos atendimentos */}
-              {overdueState.count > 0 && (
-                <div className="pt-8 pb-4 flex flex-col items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsOverdueModalOpen(true)}
-                    className="h-12 px-8 rounded-full bg-foreground text-background text-[14px] font-semibold flex items-center justify-center gap-2 active:opacity-70 hover:opacity-90 transition-all cursor-pointer shadow-sm"
-                  >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>Finalizar todos ({overdueState.count})</span>
-                  </button>
-                  <p className="text-[12px] text-muted-foreground font-normal">
-                    {overdueState.count === 1
-                      ? "1 atendimento pendente de confirmação"
-                      : `${overdueState.count} atendimentos pendentes de confirmação`}
-                  </p>
-                </div>
-              )}
             </div>
           </>
         )}
@@ -886,7 +903,12 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       {/* Modal de confirmação em lote de agendamentos pendentes */}
       <PendingAppointmentsModal
         open={isOverdueModalOpen}
-        onOpenChange={setIsOverdueModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            recordOverdueModalDismissal();
+          }
+          setIsOverdueModalOpen(open);
+        }}
         appointments={overdueState.overdueAppointments}
         onCompleteBulk={overdueState.completeBulk}
         isCompleting={overdueState.isCompleting}

@@ -43,7 +43,7 @@ serve(async (req) => {
 
     const userId = claimsData.claims.sub as string;
 
-    const { assinaturaId } = await req.json();
+    const { assinaturaId, formaPagamento } = await req.json();
     if (!assinaturaId) {
       throw new Error('assinaturaId é obrigatório');
     }
@@ -128,6 +128,7 @@ serve(async (req) => {
         confirmado_por: userId,
         valor: assinatura.plano?.preco_mensal || 0,
         competencia: competenciaMonth,
+        observacoes: formaPagamento ? `Forma de pagamento: ${String(formaPagamento).toUpperCase()}` : null,
       });
 
     if (insertError) throw insertError;

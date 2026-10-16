@@ -28,6 +28,9 @@ import {
   X,
   User,
   Scissors,
+  History,
+  CalendarCheck,
+  Banknote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -47,14 +50,222 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useBarberClientes, type BarberClient, type BlockDetail } from "@/hooks/useBarberClientes";
-import { useQueryClient } from "@tanstack/react-query";
+import { useBarberClientes, useTenantClientes, useClientSubscriptionDetail, type BarberClient, type BlockDetail } from "@/hooks/useBarberClientes";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { useBlockClient, useUnblockClient, useUnblockSpecific, useRemoveClient } from "@/hooks/useBarberMutations";
 import { BlockClientModal } from "./BlockClientModal";
 import { supabase } from "@/integrations/supabase/client";
 import { ClientPlanConversionScreen } from "@/components/shared/ClientPlanConversionScreen";
+import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
+import { useConfirmarPagamentoPlano } from "@/hooks/useAdminMutations";
+
+/* ─── Helper: WhatsApp SVG Icon ─── */
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+    </svg>
+  );
+}
+
+/* ─── Helper: Histórico de Visitas (No máximo 3 visitas no card) ─── */
+function ClientHistorySection({
+  clientUserId,
+  onViewAll,
+}: {
+  clientUserId: string;
+  onViewAll?: () => void;
+}) {
+  const { data: history = [], isLoading } = useQuery({
+    queryKey: ["client-history-view-short", clientUserId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agendamentos")
+        .select("id, data, hora, status, preco, payment_method, servico:servicos(nome)")
+        .eq("user_id", clientUserId)
+        .order("data", { ascending: false })
+        .limit(3);
+      if (error) return [];
+      return data ?? [];
+    },
+    staleTime: 30_000,
+    enabled: !!clientUserId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="rounded-2xl border border-border/20 bg-secondary/15 p-4 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (history.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border/20 bg-secondary/15 p-4 text-center">
+        <p className="text-[12px] text-muted-foreground/60">Nenhum agendamento registrado ainda.</p>
+      </div>
+    );
+  }
+
+  const getStatusLabel = (status: string) => {
+    if (status === "completed") return { label: "Concluído", color: "text-emerald-500" };
+    if (status === "no_show") return { label: "Não compareceu", color: "text-amber-500" };
+    if (status.includes("cancel")) return { label: "Cancelado", color: "text-destructive" };
+    return { label: "Agendado", color: "text-foreground/75" };
+  };
+
+  return (
+    <div className="rounded-2xl border border-border/20 bg-secondary/15 overflow-hidden">
+      <div className="divide-y divide-border/15">
+        {history.map((h: any) => {
+          const statusCfg = getStatusLabel(h.status);
+          const horaFormatted = (h.hora || "00:00").substring(0, 5);
+          return (
+            <div
+              key={h.id}
+              onClick={onViewAll}
+              className={cn(
+                "flex items-center justify-between p-3.5 transition-colors",
+                onViewAll && "cursor-pointer hover:bg-secondary/25 active:bg-secondary/40"
+              )}
+            >
+              <div className="min-w-0 flex-1 mr-3">
+                <p className="text-[13px] font-semibold text-foreground truncate">
+                  {h.servico?.nome || "Atendimento"}
+                </p>
+                <p className="text-[11.5px] text-muted-foreground/65 mt-0.5 tabular-nums">
+                  {format(new Date(`${h.data}T12:00:00`), "dd/MM/yyyy")} · {horaFormatted}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[12.5px] font-semibold text-foreground tabular-nums">
+                  {h.payment_method === "plano"
+                    ? "No Plano"
+                    : typeof h.preco === "number"
+                    ? `R$ ${h.preco.toFixed(2).replace(".", ",")}`
+                    : "—"}
+                </p>
+                <p className={cn("text-[10px] font-medium mt-0.5", statusCfg.color)}>
+                  {statusCfg.label}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {onViewAll && (
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="w-full py-2.5 px-3 bg-secondary/30 hover:bg-secondary/50 border-t border-border/15 text-[12px] font-semibold text-foreground flex items-center justify-center gap-1.5 transition-colors active:opacity-70"
+        >
+          <span>Ver histórico completo</span>
+          <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─── Tela Completa Dedicada: Todas as Visitas do Cliente ─── */
+function ClientAllVisitsScreen({
+  client,
+  onBack,
+}: {
+  client: BarberClient;
+  onBack: () => void;
+}) {
+  const { data: allVisits = [], isLoading } = useQuery({
+    queryKey: ["client-all-visits", client.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agendamentos")
+        .select("id, data, hora, status, preco, payment_method, servico:servicos(nome), barbeiro:barbeiros(apelido)")
+        .eq("user_id", client.id)
+        .order("data", { ascending: false })
+        .limit(200);
+      if (error) return [];
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const getStatusLabel = (status: string) => {
+    if (status === "completed") return { label: "Concluído", color: "text-emerald-500", bg: "bg-emerald-500/10" };
+    if (status === "no_show") return { label: "Não compareceu", color: "text-amber-500", bg: "bg-amber-500/10" };
+    if (status.includes("cancel")) return { label: "Cancelado", color: "text-destructive", bg: "bg-destructive/10" };
+    return { label: "Agendado", color: "text-foreground/75", bg: "bg-foreground/5" };
+  };
+
+  return (
+    <div className="pb-12 min-h-app bg-background">
+      <ScheduleHeader
+        title={`Visitas de ${client.nome}`}
+        onBack={onBack}
+        right={
+          <span className="text-[12px] font-semibold text-muted-foreground/70 tabular-nums">
+            {allVisits.length} {allVisits.length === 1 ? "visita" : "visitas"}
+          </span>
+        }
+      />
+
+      <div className="max-w-md mx-auto px-4 pt-3 space-y-3">
+        <p className="text-sm text-muted-foreground/60 leading-relaxed font-light">
+          Histórico completo de todos os agendamentos e cortes realizados por este cliente.
+        </p>
+
+        {isLoading ? (
+          <div className="rounded-2xl border border-border/20 bg-secondary/15 p-12 flex items-center justify-center">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : allVisits.length === 0 ? (
+          <div className="rounded-2xl border border-border/20 bg-secondary/15 p-8 text-center">
+            <Inbox className="w-8 h-8 mx-auto text-muted-foreground/30 mb-2" />
+            <p className="text-[13px] font-semibold text-foreground">Nenhuma visita registrada</p>
+            <p className="text-[11.5px] text-muted-foreground mt-0.5">Este cliente ainda não realizou atendimentos.</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border/30 bg-card overflow-hidden divide-y divide-border/20 shadow-xs">
+            {allVisits.map((v: any) => {
+              const statusCfg = getStatusLabel(v.status);
+              const horaFormatted = (v.hora || "00:00").substring(0, 5);
+              return (
+                <div key={v.id} className="p-3.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13.5px] font-semibold text-foreground truncate">
+                      {v.servico?.nome || "Atendimento"}
+                    </p>
+                    <p className="text-[11.5px] text-muted-foreground/80 mt-0.5 tabular-nums">
+                      {format(new Date(`${v.data}T12:00:00`), "dd/MM/yyyy")} · {horaFormatted}
+                      {v.barbeiro?.apelido ? ` · ${v.barbeiro.apelido}` : ""}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[13px] font-semibold text-foreground tabular-nums">
+                      {v.payment_method === "plano"
+                        ? "No Plano"
+                        : typeof v.preco === "number"
+                        ? `R$ ${v.preco.toFixed(2).replace(".", ",")}`
+                        : "—"}
+                    </p>
+                    <span className={cn("inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold mt-1", statusCfg.color, statusCfg.bg)}>
+                      {statusCfg.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ─── Helper: open WhatsApp ─── */
 function openWhatsApp(telefone: string | null) {
@@ -80,6 +291,7 @@ interface BarberClientesProps {
   forceViewMode?: ViewMode;
   initialUnitId?: string | null;
   hideHeader?: boolean;
+  onBack?: () => void;
 }
 
 /* ═══════════════════════════════════════ */
@@ -91,6 +303,7 @@ export function BarberClientes({
   forceViewMode,
   initialUnitId = null,
   hideHeader = false,
+  onBack,
 }: BarberClientesProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -111,20 +324,46 @@ export function BarberClientes({
   const [fabOpen, setFabOpen] = useState(false);
 
   /* ── View mode: Todos (tenant-wide) vs Meus (barber-only) ── */
+  const queryMode = searchParams.get("mode") as ViewMode | null;
   const canAccessTenantClients = !!barberContext.isTenantAdmin && !!barberContext.tenantId;
-  const resolvedForcedViewMode = forceViewMode && canAccessTenantClients ? forceViewMode : undefined;
-  const showViewModeToggle = canAccessTenantClients && !resolvedForcedViewMode;
+  const resolvedForcedViewMode = forceViewMode || queryMode || undefined;
+  const showViewModeToggle = canAccessTenantClients && !forceViewMode && !queryMode;
   const [viewMode, setViewMode] = useState<ViewMode>(resolvedForcedViewMode ?? "meus");
 
   /* ── Unit selector for "Todos" mode ── */
   const [units, setUnits] = useState<TenantUnit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(initialUnitId);
 
-  /* ── All tenant client IDs by unit (for "Todos" mode) ── */
-  const [allTenantClients, setAllTenantClients] = useState<BarberClient[]>([]);
-  const [loadingAllClients, setLoadingAllClients] = useState(false);
-  /** Bump para forçar refetch do modo "Todos" em mudanças realtime (assinaturas/usos). */
-  const [allTenantTick, setAllTenantTick] = useState(0);
+  /* ── All tenant clients (modo "Todos") via hook otimizado com cache instantâneo ── */
+  const {
+    data: allTenantClientsData,
+    isLoading: loadingTenantClients,
+    refetch: refetchTenantClients,
+  } = useTenantClientes(
+    viewMode === "todos" ? barberContext.tenantId : null,
+    selectedUnitId,
+    barberContext.barbeiroId
+  );
+  const allTenantClients = allTenantClientsData || [];
+  const loadingAllClients = loadingTenantClients && allTenantClients.length === 0;
+
+  /* ── Checar se a barbearia possui planos ativos ── */
+  const { data: tenantHasPlans = false } = useQuery({
+    queryKey: ["tenant-has-active-plans", barberTenantId || barberContext.tenantId],
+    queryFn: async () => {
+      const tid = barberTenantId || barberContext.tenantId;
+      if (!tid) return false;
+      const { count, error } = await supabase
+        .from("planos")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tid)
+        .eq("ativo", true);
+      if (error) return false;
+      return (count ?? 0) > 0;
+    },
+    staleTime: 1000 * 60 * 10,
+    enabled: !!(barberTenantId || barberContext.tenantId),
+  });
 
   /* ── Load units ── */
   useEffect(() => {
@@ -150,217 +389,10 @@ export function BarberClientes({
     setSelectedUnitId(initialUnitId);
   }, [initialUnitId]);
 
-  /* ── Load ALL tenant clients when in "Todos" mode ── */
-  useEffect(() => {
-    if (viewMode !== "todos" || !barberContext.tenantId) {
-      setAllTenantClients([]);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      setLoadingAllClients(true);
-      try {
-        const tenantId = barberContext.tenantId!;
-
-        /* Buscar barbeiros para excluir */
-        const { data: allBarbeiros } = await supabase
-          .from("barbeiros")
-          .select("user_id")
-          .not("user_id", "is", null);
-        const barberUserIds = allBarbeiros?.map((b) => b.user_id).filter(Boolean) || [];
-
-        /* Buscar IDs de barbeiros do tenant */
-        const { data: tenantBarbersData } = await supabase
-          .from("barbeiros")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .eq("ativo", true);
-        const tenantBarberIds = tenantBarbersData?.map((b) => b.id) || [];
-
-        /* Buscar clientes manuais */
-        const { data: tenantClientes } = await supabase
-          .from("tenant_clientes")
-          .select("user_id, created_at")
-          .eq("tenant_id", tenantId);
-        const manualClientIds = tenantClientes?.map((tc) => tc.user_id) || [];
-        const tenantRegistrationMap: Record<string, string> = {};
-        for (const tc of tenantClientes || []) {
-          tenantRegistrationMap[tc.user_id] = tc.created_at;
-        }
-
-        /* Buscar agendamentos — opcionalmente filtrados por unidade */
-        let agQuery = supabase
-          .from("agendamentos")
-          .select("user_id, barbeiro_id, unidade_id, data, created_at")
-          .in("barbeiro_id", tenantBarberIds.length > 0 ? tenantBarberIds : ["__none__"]);
-
-        if (selectedUnitId) {
-          agQuery = agQuery.eq("unidade_id", selectedUnitId);
-        }
-
-        const { data: agendamentos } = await agQuery;
-        const agClientIds = agendamentos?.map((a) => a.user_id) || [];
-        const allClientIds = [...new Set([...agClientIds, ...manualClientIds])];
-
-        if (allClientIds.length === 0) {
-          if (!cancelled) { setAllTenantClients([]); setLoadingAllClients(false); }
-          return;
-        }
-
-        /* Buscar perfis */
-        let profilesQuery = supabase
-          .from("profiles")
-          .select("id, nome, telefone, created_at")
-          .in("id", allClientIds);
-        if (barberUserIds.length > 0) {
-          profilesQuery = profilesQuery.not("id", "in", `(${barberUserIds.join(",")})`);
-        }
-        const { data: profiles } = await profilesQuery;
-        const userIds = profiles?.map((p) => p.id) || [];
-
-        if (userIds.length === 0) {
-          if (!cancelled) { setAllTenantClients([]); setLoadingAllClients(false); }
-          return;
-        }
-
-        /* Stats (incluindo contagem de agendamentos do mês corrente) */
-        const monthPrefix = new Date().toISOString().slice(0, 7);
-        const clientStats = new Map<string, { count: number; monthCount: number; lastDate: string | null }>();
-        for (const ag of agendamentos || []) {
-          const isThisMonth = typeof ag.data === "string" && ag.data.startsWith(monthPrefix);
-          const existing = clientStats.get(ag.user_id);
-          if (!existing) {
-            clientStats.set(ag.user_id, { count: 1, monthCount: isThisMonth ? 1 : 0, lastDate: ag.data });
-          } else {
-            existing.count += 1;
-            if (isThisMonth) existing.monthCount += 1;
-            if (ag.data > (existing.lastDate || "")) existing.lastDate = ag.data;
-          }
-        }
-
-        /* Pontos + bloqueios + assinaturas ativas */
-        const [{ data: pontos }, { data: blocks }, { data: assinaturas }] = await Promise.all([
-          supabase.from("pontos").select("user_id, pontos").in("user_id", userIds),
-          supabase.from("client_booking_blocks").select("id, client_user_id, scope, barbeiro_id, unidade_id").eq("tenant_id", tenantId),
-          supabase
-            .from("assinaturas")
-            .select("id, user_id, status, payment_method, barbeiro_id, created_at, next_billing_date, plano:planos(nome, limite_agendamentos_mes, tenant_id)")
-            .in("user_id", userIds)
-            .in("status", ["active", "pending_cash"]),
-        ]);
-
-        const blockMap: Record<string, BlockDetail[]> = {};
-        for (const b of blocks || []) {
-          const detail: BlockDetail = {
-            id: b.id,
-            scope: b.scope as BlockDetail["scope"],
-            barbeiro_id: b.barbeiro_id,
-            unidade_id: b.unidade_id,
-            unidade_nome: null,
-          };
-          if (!blockMap[b.client_user_id]) blockMap[b.client_user_id] = [];
-          blockMap[b.client_user_id].push(detail);
-        }
-
-        // Filtra assinaturas pelo tenant atual e calcula usos
-        const tenantAssinaturas = (assinaturas || []).filter(
-          (a: any) => a.plano && a.plano.tenant_id === tenantId,
-        );
-        const assinaturaIds = tenantAssinaturas.map((a: any) => a.id);
-        const usosMap: Record<string, number> = {};
-        if (assinaturaIds.length > 0) {
-          const { data: usos } = await supabase
-            .from("plano_agendamentos_usos")
-            .select("assinatura_id")
-            .in("assinatura_id", assinaturaIds)
-            .is("released_at", null);
-          for (const u of usos || []) {
-            usosMap[u.assinatura_id] = (usosMap[u.assinatura_id] || 0) + 1;
-          }
-        }
-        // Buscar nomes dos barbeiros responsáveis pelas assinaturas
-        const respBarbeiroIds = [
-          ...new Set(
-            (tenantAssinaturas as any[])
-              .map((a) => a.barbeiro_id)
-              .filter((id): id is string => !!id),
-          ),
-        ];
-        const respBarbeiroNomeMap: Record<string, string> = {};
-        if (respBarbeiroIds.length > 0) {
-          const { data: respBarbeiros } = await supabase
-            .from("barbeiros")
-            .select("id, apelido")
-            .in("id", respBarbeiroIds);
-          for (const b of respBarbeiros || []) {
-            respBarbeiroNomeMap[b.id] = b.apelido || "Sem nome";
-          }
-        }
-        const planMap: Record<string, BarberClient["activePlan"]> = {};
-        for (const a of tenantAssinaturas as any[]) {
-          const isPendingCash = a.status === "pending_cash";
-          const limite = isPendingCash ? 1 : a.plano.limite_agendamentos_mes || 4;
-          const usados = usosMap[a.id] || 0;
-          const existing = planMap[a.user_id];
-          if (existing && existing.status === "active" && a.status !== "active") continue;
-          planMap[a.user_id] = {
-            assinatura_id: a.id,
-            plano_nome: a.plano.nome,
-            limite,
-            usados,
-            restantes: Math.max(0, limite - usados),
-            status: a.status,
-            is_pending_cash: isPendingCash,
-            barbeiro_responsavel_id: a.barbeiro_id || null,
-            barbeiro_responsavel_nome: a.barbeiro_id ? respBarbeiroNomeMap[a.barbeiro_id] || null : null,
-            created_at: a.created_at,
-            next_billing_date: a.next_billing_date || null,
-            payment_method: a.payment_method || null,
-          };
-        }
-
-        const result: BarberClient[] = (profiles || []).map((p) => {
-          const stats = clientStats.get(p.id);
-          const details = blockMap[p.id] || [];
-          const isBlocked = details.some(
-            (d) => d.scope === "tenant" || d.scope === "unit" || (d.scope === "barber" && d.barbeiro_id === barberContext.barbeiroId)
-          );
-          return {
-            id: p.id,
-            nome: p.nome || "Sem nome",
-            telefone: p.telefone || null,
-            email: null,
-            total_agendamentos: stats?.count || 0,
-            agendamentos_mes: stats?.monthCount || 0,
-            ultimo_agendamento: stats?.lastDate || null,
-            pontos: (pontos || []).find((pt) => pt.user_id === p.id)?.pontos || 0,
-            created_at: tenantRegistrationMap[p.id] || p.created_at,
-            creditos: 0,
-            blocked: isBlocked,
-            blockDetails: details,
-            activePlan: planMap[p.id] || null,
-          };
-        });
-
-        result.sort((a, b) => {
-          if (!a.ultimo_agendamento) return 1;
-          if (!b.ultimo_agendamento) return -1;
-          return b.ultimo_agendamento.localeCompare(a.ultimo_agendamento);
-        });
-
-        if (!cancelled) { setAllTenantClients(result); }
-      } catch (err) {
-        console.error("Error loading all tenant clients:", err);
-      } finally {
-        if (!cancelled) setLoadingAllClients(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [viewMode, barberContext.tenantId, selectedUnitId, barberContext.barbeiroId, allTenantTick]);
-
   /* Add client full-screen */
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [clientToConvert, setClientToConvert] = useState<BarberClient | null>(null);
+  const [viewingAllVisitsClient, setViewingAllVisitsClient] = useState<BarberClient | null>(null);
 
   /* Block dialog */
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
@@ -375,11 +407,22 @@ export function BarberClientes({
   const [clientToCancelPlan, setClientToCancelPlan] = useState<BarberClient | null>(null);
   const [cancellingPlan, setCancellingPlan] = useState(false);
 
-  /** Invalida o cache de clientes */
+  /** Invalida o cache de clientes e revalida listas */
   const invalidateClients = () => {
+    if (barberContext.barbeiroId) {
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.barbeiro.clientes(barberContext.barbeiroId),
+      });
+    }
     queryClient.invalidateQueries({
-      queryKey: QUERY_KEYS.barbeiro.clientes(barberContext.barbeiroId),
+      queryKey: ["tenant-clientes"],
     });
+    if (viewId) {
+      queryClient.invalidateQueries({
+        queryKey: ["client-subscription-detail", viewId],
+      });
+    }
+    refetchTenantClients();
   };
 
   /* ── Realtime: assinaturas + usos do plano ──
@@ -387,29 +430,71 @@ export function BarberClientes({
      em qualquer aplicativo (cliente, admin ou barbearia), e também quando um
      uso de plano é registrado/liberado (para refletir "cortes usados" em tempo real). */
   useEffect(() => {
-    if (!barberContext.barbeiroId) return;
+    const channelKey = barberContext.tenantId || barberContext.barbeiroId || barberContext.userId || "global";
 
     const handleChange = () => {
       invalidateClients();
-      // Força refetch do modo "Todos" também (que usa state local, não TanStack Query).
-      setAllTenantTick((t) => t + 1);
     };
 
     const channel = supabase
-      .channel(`barber-clientes-realtime-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`)
+      .channel(`barber-clientes-realtime-${channelKey}-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "assinaturas" }, handleChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "plano_agendamentos_usos" }, handleChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "tenant_clientes" }, handleChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "pagamentos_plano_barbearia" }, handleChange)
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barberContext.barbeiroId]);
+  }, [barberContext.barbeiroId, barberContext.tenantId, barberContext.userId, viewId]);
+
+  /* ── Realtime específico para o cliente sendo visualizado em detalhes ── */
+  useEffect(() => {
+    if (!viewId) return;
+
+    const handleDetailChange = () => {
+      queryClient.invalidateQueries({
+        queryKey: ["client-subscription-detail", viewId],
+      });
+      invalidateClients();
+    };
+
+    const channel = supabase
+      .channel(`barber-client-view-${viewId}-${Math.random().toString(36).slice(2, 9)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "assinaturas", filter: `user_id=eq.${viewId}` }, handleDetailChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "plano_agendamentos_usos", filter: `user_id=eq.${viewId}` }, handleDetailChange)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [viewId]);
 
   /* ─── Active list source based on view mode ─── */
   const activeClients = viewMode === "todos" ? allTenantClients : clients;
+
+  /* ─── Single client detail fresh query (prevents cache discrepancy) ─── */
+  const { data: detailActivePlan, isFetched: detailFetched } = useClientSubscriptionDetail(
+    viewId,
+    barberTenantId || barberContext.tenantId
+  );
+
+  const baseClient = useMemo(() => {
+    if (!viewId) return null;
+    return activeClients.find((c) => c.id === viewId) || null;
+  }, [activeClients, viewId]);
+
+  const activeClient = useMemo(() => {
+    if (!baseClient) return null;
+    if (detailFetched) {
+      return {
+        ...baseClient,
+        activePlan: detailActivePlan !== undefined ? detailActivePlan : baseClient.activePlan,
+      };
+    }
+    return baseClient;
+  }, [baseClient, detailFetched, detailActivePlan]);
 
   /* ─── Filtered list ─── */
   const filteredClients = useMemo(() => {
@@ -435,7 +520,63 @@ export function BarberClientes({
   const unblockMutation = useUnblockClient();
   const unblockSpecificMutation = useUnblockSpecific();
   const removeMutation = useRemoveClient();
+  const confirmarPlanoMutation = useConfirmarPagamentoPlano();
   const deleting = removeMutation.isPending;
+
+  const [quitarPlanDialogOpen, setQuitarPlanDialogOpen] = useState(false);
+  const [clientToQuitarPlan, setClientToQuitarPlan] = useState<BarberClient | null>(null);
+  const [formaPagamentoPlano, setFormaPagamentoPlano] = useState<"dinheiro" | "pix" | "cartao">("dinheiro");
+
+  const handleQuitarPlan = async () => {
+    if (!clientToQuitarPlan?.activePlan) return;
+    try {
+      await confirmarPlanoMutation.mutateAsync({
+        assinaturaId: clientToQuitarPlan.activePlan.assinatura_id,
+        userId: clientToQuitarPlan.id,
+        planoNome: clientToQuitarPlan.activePlan.plano_nome,
+        formaPagamento: formaPagamentoPlano,
+      });
+      setQuitarPlanDialogOpen(false);
+      setClientToQuitarPlan(null);
+      invalidateClients();
+    } catch (err: any) {
+      console.warn("Falha no invoke Edge Function confirm-plan-payment, tentando fallback direto:", err);
+      try {
+        const nextBilling = new Date();
+        nextBilling.setDate(nextBilling.getDate() + 30);
+        const { error: directError } = await supabase
+          .from("assinaturas")
+          .update({
+            status: "active",
+            cash_payment_confirmed: true,
+            next_billing_date: nextBilling.toISOString().split("T")[0],
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", clientToQuitarPlan.activePlan.assinatura_id);
+
+        if (directError) throw directError;
+
+        const competenciaMonth = new Date().toISOString().slice(0, 7) + "-01";
+        await supabase.from("pagamentos_plano_barbearia").insert({
+          assinatura_id: clientToQuitarPlan.activePlan.assinatura_id,
+          user_id: clientToQuitarPlan.id,
+          barbeiro_id: barberContext.barbeiroId,
+          confirmado_por: barberContext.userId,
+          valor: clientToQuitarPlan.activePlan.preco_mensal || 0,
+          competencia: competenciaMonth,
+          observacoes: `Forma de pagamento: ${formaPagamentoPlano.toUpperCase()}`,
+        });
+
+        toast.success("Pagamento confirmado! Plano liberado.");
+        setQuitarPlanDialogOpen(false);
+        setClientToQuitarPlan(null);
+        invalidateClients();
+      } catch (fallbackErr: any) {
+        console.error("Erro ao quitar plano:", fallbackErr);
+        toast.error(fallbackErr?.message || "Erro ao quitar plano");
+      }
+    }
+  };
 
   /* ─── Block / unblock ─── */
   const canManageTenantWideBlock = barberContext.canManageTenantWideClientBlock;
@@ -459,8 +600,8 @@ export function BarberClientes({
 
         if (error) throw error;
         
-        // Atualizar lista local se necessário (embora o realtime já deva tratar)
-        setAllTenantTick(t => t + 1);
+        // Atualizar lista local via TanStack Query e cache sincronizado
+        invalidateClients();
         
         resolve(true);
       } catch (err) {
@@ -591,7 +732,6 @@ export function BarberClientes({
       setCancelPlanDialogOpen(false);
       setClientToCancelPlan(null);
       invalidateClients();
-      setAllTenantTick((t) => t + 1);
     } catch (err: any) {
       console.error("Erro ao cancelar plano:", err);
       toast.error(err?.message || "Erro ao cancelar plano");
@@ -649,9 +789,16 @@ export function BarberClientes({
             return next;
           });
           invalidateClients();
-          // Força refetch do modo "Todos" imediatamente — o realtime confirma depois.
-          setAllTenantTick((t) => t + 1);
         }}
+      />
+    );
+  }
+
+  if (viewingAllVisitsClient) {
+    return (
+      <ClientAllVisitsScreen
+        client={viewingAllVisitsClient}
+        onBack={() => setViewingAllVisitsClient(null)}
       />
     );
   }
@@ -660,8 +807,15 @@ export function BarberClientes({
   // CLIENT DETAIL FULL-PAGE VIEW
   // ═══════════════════════════════════
   if (viewId) {
-    const client = activeClients.find((c) => c.id === viewId);
-    if (!client) {
+    if (!activeClient && (loading || loadingAllClients)) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+          <Loader2 className="w-7 h-7 text-muted-foreground animate-spin" />
+        </div>
+      );
+    }
+
+    if (!activeClient) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
           <Users className="w-10 h-10 text-muted-foreground/20" strokeWidth={1.5} />
@@ -671,191 +825,244 @@ export function BarberClientes({
       );
     }
 
+    const client = activeClient;
+
     return (
-      <div className="pb-8 -mx-3 -mt-3">
-        {/* Header fixo */}
-        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
-          <div className="flex items-center gap-3 px-4 h-14">
-            <button
-              onClick={goBack}
-              className="w-9 h-9 rounded-full flex items-center justify-center bg-card border border-border/60 hover:bg-secondary/50 active:scale-95 transition-all text-foreground shrink-0 shadow-sm"
-              aria-label="Voltar"
-            >
-              <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
-            </button>
-            <h1 className="text-[18px] font-semibold tracking-tight text-foreground flex-1 truncate">
-              {client.nome}
-            </h1>
-            {client.activePlan ? (
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 bg-foreground text-background">
-                Plano
-              </span>
-            ) : !client.blocked ? (
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider flex-shrink-0 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                Ativo
-              </span>
-            ) : (
-              <div className="flex flex-wrap gap-1 justify-end flex-shrink-0">
+      <div className="pb-8">
+        {/* Header no padrão oficial com botão Voltar */}
+        <ScheduleHeader
+          title={client.nome}
+          onBack={goBack}
+          right={
+            client.blocked ? (
+              <div className="flex flex-wrap gap-1 justify-end">
                 {client.blockDetails.map((d) => (
                   <BlockBadge key={d.id} detail={d} />
                 ))}
               </div>
-            )}
-          </div>
-        </div>
+            ) : null
+          }
+        />
 
-        <div className="px-4 pt-5 space-y-6">
-          {/* Avatar + nome */}
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-2xl font-bold text-primary">
-                {client.nome.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-lg font-semibold text-foreground truncate">{client.nome}</p>
-              <p className="text-xs text-muted-foreground/60 mt-0.5">
-                Cadastro em {format(new Date(client.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-              </p>
-            </div>
-          </div>
-
-          {/* Faixa destacada do plano ativo */}
-          {client.activePlan && (
-            <div className="rounded-2xl border border-foreground/10 bg-foreground text-background px-4 py-3.5 flex items-center justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-background/60">
-                  Cliente plano
-                </p>
-                <p className="text-[15px] font-semibold tracking-tight truncate mt-0.5">
-                  {client.activePlan.plano_nome}
-                </p>
-              </div>
-              <div className="text-right flex-shrink-0 ml-3">
-                <p className="text-[22px] font-bold leading-none tabular-nums">
-                  {client.activePlan.usados}
-                  <span className="text-[13px] font-medium text-background/60">
-                    /{client.activePlan.limite}
+        <div className="mx-auto w-full max-w-md pb-6 space-y-3.5 pt-2">
+          {/* ── CARD PRINCIPAL: INFORMAÇÕES DE CONTATO ── */}
+          <div className="px-4">
+            <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3.5 shadow-sm">
+              {/* Telefone */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5 text-muted-foreground">
+                  <Phone className="w-4 h-4 text-foreground/70" />
+                  <span className="text-[13px] font-medium">Telefone</span>
+                </div>
+                {client.telefone ? (
+                  <button
+                    type="button"
+                    onClick={() => openWhatsApp(client.telefone)}
+                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums hover:opacity-80 active:scale-95 transition-all"
+                    title="Conversar no WhatsApp"
+                  >
+                    <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                    <span>{client.telefone}</span>
+                  </button>
+                ) : (
+                  <span className="text-[13px] font-medium text-muted-foreground">
+                    Não informado
                   </span>
-                </p>
-                <p className="text-[10px] text-background/60 mt-1 uppercase tracking-wider">
-                  cortes usados
-                </p>
+                )}
+              </div>
+
+              <div className="h-px bg-border/40" />
+
+              {/* Email */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 text-muted-foreground">
+                  <Mail className="w-4 h-4 text-foreground/70 flex-shrink-0" />
+                  <span className="text-[13px] font-medium">Email</span>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground truncate">
+                  {client.email || "Não informado"}
+                </span>
+              </div>
+
+              <div className="h-px bg-border/40" />
+
+              {/* Total de Agendamentos */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5 text-muted-foreground">
+                  <Calendar className="w-4 h-4 text-foreground/70" />
+                  <span className="text-[13px] font-medium">Total de visitas</span>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground tabular-nums">
+                  {client.total_agendamentos} {client.total_agendamentos === 1 ? "agendamento" : "agendamentos"}
+                </span>
               </div>
             </div>
-          )}
-
-          {/* KPI Cards */}
-          <div
-            className={cn(
-              "grid gap-3",
-              client.activePlan ? "grid-cols-2" : loyaltyEnabled ? "grid-cols-2" : "grid-cols-1",
-            )}
-          >
-            <KpiCard
-              icon={Calendar}
-              label="Agendamentos no mês"
-              value={String(client.agendamentos_mes)}
-            />
-            {client.activePlan ? (
-              <KpiCard
-                icon={User}
-                label="Responsável"
-                value={client.activePlan.barbeiro_responsavel_nome || "—"}
-              />
-            ) : (
-              loyaltyEnabled && (
-                <KpiCard
-                  icon={Award}
-                  label="Pontos"
-                  value={String(client.pontos)}
-                  accentClass="text-amber-500"
-                />
-              )
-            )}
           </div>
 
-          {/* Detalhes do plano */}
+          {/* ── CARD PLANO / FIDELIDADE (Apenas se tiver plano ativo ou pontos) ── */}
           {client.activePlan && (
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
-                Detalhes do plano
-              </p>
-              <div className="space-y-0 rounded-2xl bg-card border border-border/60 overflow-hidden shadow-sm">
-                <DetailRow
-                  icon={Calendar}
-                  label="Assinou em"
-                  value={format(new Date(client.activePlan.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                />
-                <DetailRow
-                  icon={Calendar}
-                  label="Próxima renovação"
-                  value={
-                    client.activePlan.next_billing_date
-                      ? format(new Date(client.activePlan.next_billing_date + "T12:00:00"), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
-                      : "Não definida"
-                  }
-                />
-                <DetailRow
-                  icon={CreditCard}
-                  label="Pagamento"
-                  value={
-                    client.activePlan.payment_method === "cash"
-                      ? "Dinheiro"
-                      : client.activePlan.payment_method === "pix"
-                      ? "PIX"
-                      : client.activePlan.payment_method === "credit_card"
-                      ? "Cartão de crédito"
-                      : client.activePlan.payment_method || "Não informado"
-                  }
-                />
+            <div className="px-4">
+              <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <CalendarCheck className="w-4 h-4 text-foreground/80 stroke-[1.8] flex-shrink-0" />
+                    <div>
+                      <p className="text-[13px] font-semibold text-foreground">Uso do Plano</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{client.activePlan.plano_nome}</p>
+                    </div>
+                  </div>
+                  <span className="text-[15px] font-bold text-foreground tabular-nums">
+                    {client.activePlan.usados}/{client.activePlan.limite}
+                  </span>
+                </div>
+                <div className="flex gap-1.5 flex-wrap pt-1">
+                  {Array.from({ length: client.activePlan.limite }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "h-2 flex-1 min-w-[14px] rounded-full transition-all",
+                        i < client.activePlan.usados ? "bg-foreground" : "bg-secondary"
+                      )}
+                    />
+                  ))}
+                </div>
+                {client.activePlan.usados >= client.activePlan.limite ? (
+                  <p className="text-[11px] font-medium text-amber-500">Limite mensal atingido</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    {client.activePlan.limite - client.activePlan.usados}{" "}
+                    {client.activePlan.limite - client.activePlan.usados === 1 ? "corte restante" : "cortes restantes"}
+                  </p>
+                )}
+
+                {/* Detalhes de renovação e pagamento */}
+                <div className="pt-2 border-t border-border/40 space-y-2 text-[11.5px] text-muted-foreground">
+                  {client.activePlan.is_pending_cash && (
+                    <div className="flex justify-between items-center">
+                      <span>Status do pagamento</span>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-foreground/[0.06] border border-border/80 text-foreground tabular-nums">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        A cobrar R$ {client.activePlan.preco_mensal.toFixed(2).replace('.', ',')}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>Próxima renovação</span>
+                    <span className="font-medium text-foreground">
+                      {client.activePlan.next_billing_date
+                        ? format(new Date(client.activePlan.next_billing_date + "T12:00:00"), "dd/MM/yyyy")
+                        : "Não definida"}
+                    </span>
+                  </div>
+                  {client.activePlan.barbeiro_responsavel_nome && (
+                    <div className="flex justify-between">
+                      <span>Responsável</span>
+                      <span className="font-medium text-foreground">{client.activePlan.barbeiro_responsavel_nome}</span>
+                    </div>
+                  )}
+
+                  {client.activePlan.is_pending_cash && (
+                    <div className="pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClientToQuitarPlan(client);
+                          setQuitarPlanDialogOpen(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 h-10 rounded-full bg-foreground text-background text-[12.5px] font-semibold hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Quitar pagamento do plano
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Dados de contato */}
-          <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
-              Informações de contato
-            </p>
-            <div className="space-y-0 rounded-2xl bg-card border border-border/60 overflow-hidden shadow-sm">
-              <DetailRow icon={Mail} label="Email" value={client.email || "Não informado"} />
-              <DetailRow icon={Phone} label="Telefone" value={client.telefone || "Não informado"} />
+          {/* ── CARD PLANO: TRANSFORMAR EM PLANO (Apenas se a barbearia possuir planos ativos cadastrados) ── */}
+          {!client.activePlan && tenantHasPlans && (
+            <div className="px-4">
+              <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <CreditCard className="w-4 h-4 text-foreground/80 stroke-[1.8] flex-shrink-0" />
+                    <div>
+                      <p className="text-[13px] font-semibold text-foreground">Assinatura de Plano</p>
+                      <p className="text-[11px] text-muted-foreground">Cliente avulso (sem plano ativo)</p>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setClientToConvert(client)}
+                  className="w-full flex items-center justify-center gap-2 h-11 rounded-full bg-foreground text-background text-[13px] font-semibold hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  Transformar em plano
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!client.activePlan && loyaltyEnabled && client.pontos > 0 && (
+            <div className="px-4">
+              <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Award className="w-4 h-4 text-amber-500 stroke-[1.8] flex-shrink-0" />
+                    <div>
+                      <p className="text-[13px] font-semibold text-foreground">Programa Fidelidade</p>
+                      <p className="text-[10px] text-muted-foreground">Pontos acumulados</p>
+                    </div>
+                  </div>
+                  <span className="text-[15px] font-bold text-foreground tabular-nums">
+                    {client.pontos}/8
+                  </span>
+                </div>
+                <div className="flex gap-1.5 flex-wrap pt-1">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "h-2 flex-1 min-w-[12px] rounded-full transition-all",
+                        i < client.pontos ? "bg-amber-500" : "bg-secondary"
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── CARD HISTÓRICO DE VISITAS (Últimas visitas - máx. 3) ── */}
+          <div className="px-4">
+            <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5" />
+                  Últimas visitas (máx. 3)
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setViewingAllVisitsClient(client)}
+                  className="text-[11.5px] font-semibold text-foreground/80 hover:text-foreground hover:underline"
+                >
+                  Ver todas
+                </button>
+              </div>
+              <ClientHistorySection
+                clientUserId={client.id}
+                onViewAll={() => setViewingAllVisitsClient(client)}
+              />
             </div>
           </div>
 
-          {/* Aviso quando não há programa de pontos (e não há plano ativo) */}
-          {!loyaltyEnabled && !client.activePlan && (
-            <p className="text-[11px] text-muted-foreground/60 px-1 -mt-2">
-              Esta barbearia não tem programa de pontos.
-            </p>
-          )}
-
-          {/* Ações */}
-          <div>
-            <p className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-2.5 px-1">
-              Ações
-            </p>
-
-            {/* CTA primário monocromático */}
-            <button
-              onClick={() => openWhatsApp(client.telefone)}
-              className="w-full flex items-center justify-center gap-2.5 h-12 rounded-2xl bg-foreground text-background hover:bg-foreground/90 active:scale-[0.99] transition-all duration-200 mb-3 shadow-sm"
-            >
-              <img src={whatsappLogo} alt="" className="w-5 h-5" />
-              <span className="text-[14px] font-semibold tracking-tight">Conversar no WhatsApp</span>
-            </button>
-
-            {/* Lista de ações secundárias agrupadas */}
+          {/* ── AÇÕES ── */}
+          <div className="px-4 pt-1 space-y-3">
+            {/* Ações em Card Agrupado */}
             <div className="rounded-2xl bg-card border border-border/60 overflow-hidden divide-y divide-border/40 shadow-sm">
-              {!client.activePlan && (
-                <ActionRow
-                  icon={CreditCard}
-                  label="Transformar em plano"
-                  onClick={() => setClientToConvert(client)}
-                />
-              )}
-
               {client.activePlan && (
                 <>
                   <ActionRow
@@ -882,7 +1089,6 @@ export function BarberClientes({
                 disabled={unblockSpecificMutation.isPending || unblockMutation.isPending}
                 loading={unblockSpecificMutation.isPending || unblockMutation.isPending}
               />
-
               <ActionRow
                 icon={Trash2}
                 label="Remover da lista"
@@ -990,6 +1196,76 @@ export function BarberClientes({
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Quitar Plan Payment Drawer (Gaveta) */}
+        <Drawer open={quitarPlanDialogOpen} onOpenChange={setQuitarPlanDialogOpen}>
+          <DrawerContent className="max-w-md mx-auto rounded-t-[28px] border-t border-border/60 bg-background px-5 pb-8 pt-2">
+            <div className="flex flex-col items-center text-center pt-2">
+              <div className="w-12 h-12 rounded-full bg-foreground/5 border border-border/60 flex items-center justify-center mx-auto text-foreground mb-2.5">
+                <Banknote className="w-6 h-6 stroke-[1.8]" />
+              </div>
+              <DrawerTitle className="text-[18px] font-semibold tracking-tight text-foreground">
+                Confirmar pagamento do plano
+              </DrawerTitle>
+              <DrawerDescription className="text-[13px] text-muted-foreground leading-relaxed mt-1 max-w-xs">
+                Confirmar recebimento de <span className="font-semibold text-foreground">R$ {clientToQuitarPlan?.activePlan?.preco_mensal ? clientToQuitarPlan.activePlan.preco_mensal.toFixed(2).replace('.', ',') : '0,00'}</span> referente ao plano <span className="font-semibold text-foreground">{clientToQuitarPlan?.activePlan?.plano_nome}</span>?
+              </DrawerDescription>
+            </div>
+
+            <div className="pt-4 pb-1 space-y-2">
+              <label className="text-[12px] font-medium text-muted-foreground block text-left">
+                Forma de pagamento
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "dinheiro", label: "Dinheiro" },
+                  { id: "pix", label: "PIX" },
+                  { id: "cartao", label: "Cartão" },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setFormaPagamentoPlano(opt.id as any)}
+                    className={cn(
+                      "h-11 rounded-xl text-[13px] font-medium border transition-all flex items-center justify-center active:scale-95",
+                      formaPagamentoPlano === opt.id
+                        ? "bg-foreground text-background border-foreground font-semibold shadow-xs"
+                        : "bg-secondary/40 text-foreground border-border/60 hover:bg-secondary/70"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 space-y-2.5">
+              <button
+                type="button"
+                onClick={handleQuitarPlan}
+                disabled={confirmarPlanoMutation.isPending}
+                className="w-full h-12 rounded-full bg-foreground text-background text-[13.5px] font-semibold hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs flex items-center justify-center gap-2"
+              >
+                {confirmarPlanoMutation.isPending ? (
+                  <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Confirmando...</>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Sim, confirmar pagamento
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuitarPlanDialogOpen(false)}
+                disabled={confirmarPlanoMutation.isPending}
+                className="w-full h-9 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Voltar
+              </button>
+            </div>
+          </DrawerContent>
+        </Drawer>
+
         {/* Selective Unblock Dialog */}
         <AlertDialog open={unblockDialogOpen} onOpenChange={setUnblockDialogOpen}>
           <AlertDialogContent className="max-w-sm">
@@ -1062,386 +1338,224 @@ export function BarberClientes({
   // CLIENT LISTING PAGE
   // ═══════════════════════════════════
   return (
-    <div className="pb-28 lg:pb-8">
-      {isMobile ? (
-        <div className={cn(!hideHeader && "-mx-3 -mt-3")}>
-          {/* Header + Filters sticky bar */}
-          <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
-            {!hideHeader && (
-              <div className="flex items-center gap-2.5 px-4 h-14">
-                <button
-                  onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
-                  aria-label="Voltar"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                    <path d="M9 14L4 9l5-5" />
-                    <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-                  </svg>
-                </button>
-                <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">Clientes</h1>
-                <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
-                  {filteredClients.length} cliente{filteredClients.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-            )}
+    <div className="pb-28 lg:pb-12">
+      {!hideHeader && (
+        <ScheduleHeader
+          title="Clientes"
+          onBack={onBack ? onBack : () => navigate(`${basePath}/configuracoes-perfil`)}
+          right={
+            <span className="text-[12px] text-muted-foreground/70 font-medium tabular-nums">
+              {filteredClients.length} {filteredClients.length === 1 ? "cliente" : "clientes"}
+            </span>
+          }
+        />
+      )}
 
-            {/* ── View Mode Toggle: Todos / Meus ── */}
-            {showViewModeToggle && (
-              <div className="px-4 pb-2">
-                <div className="flex bg-secondary/40 rounded-xl p-1 border border-border/20">
-                  <button
-                    onClick={() => setViewMode("meus")}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[13px] font-semibold transition-all duration-200",
-                      viewMode === "meus"
-                        ? "bg-foreground text-background shadow-md"
-                        : "text-muted-foreground/60 hover:text-muted-foreground"
-                    )}
-                  >
-                    <User className="w-4 h-4" />
-                    Meus Clientes
-                  </button>
-                  <button
-                    onClick={() => setViewMode("todos")}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[13px] font-semibold transition-all duration-200",
-                      viewMode === "todos"
-                        ? "bg-foreground text-background shadow-md"
-                        : "text-muted-foreground/60 hover:text-muted-foreground"
-                    )}
-                  >
-                    <Users className="w-4 h-4" />
-                    Todos os Clientes
-                  </button>
-                </div>
-              </div>
-            )}
+      <div className="px-4 pt-3 space-y-3.5">
+        <p className="text-sm text-muted-foreground/60 leading-relaxed font-light">
+          {viewMode === "todos"
+            ? "Visualize todos os clientes cadastrados da barbearia, histórico de visitas e status de planos."
+            : "Visualize os clientes que realizaram agendamentos com você e o histórico de atendimentos."}
+        </p>
 
-            {/* ── Unit Selector Pills (only for "Todos" mode with units) ── */}
-            {viewMode === "todos" && units.length > 1 && (
-              <div className="px-4 pb-2">
-                <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                  <button
-                    onClick={() => setSelectedUnitId(null)}
-                    className={cn(
-                      "flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-medium border transition-all",
-                      !selectedUnitId
-                        ? "bg-foreground text-background border-foreground shadow-sm"
-                        : "bg-secondary/30 text-muted-foreground border-border/30 hover:bg-secondary/50"
-                    )}
-                  >
-                    <Building2 className="w-3.5 h-3.5" />
-                    Todas as unidades
-                  </button>
-                  {units.map((unit) => (
-                    <button
-                      key={unit.id}
-                      onClick={() => setSelectedUnitId(selectedUnitId === unit.id ? null : unit.id)}
-                      className={cn(
-                        "flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium border transition-all",
-                        selectedUnitId === unit.id
-                          ? "bg-foreground text-background border-foreground shadow-sm"
-                          : "bg-secondary/30 text-muted-foreground border-border/30 hover:bg-secondary/50"
-                      )}
-                    >
-                      {unit.nome}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Search */}
-            <div className="px-4 pb-3 pt-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por nome ou telefone..."
-                  className="w-full h-10 pl-9 pr-3 rounded-xl bg-secondary/30 border border-border/20 text-[13px] font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
-                />
-              </div>
-
-              {/* Chip de filtro ativo */}
-              {planFilterOnly && (
-                <button
-                  onClick={() => setPlanFilterOnly(false)}
-                  className="mt-4 inline-flex items-center gap-1.5 pl-2.5 pr-2 h-7 rounded-full bg-foreground text-background text-[11px] font-semibold tracking-tight active:scale-95 transition-transform"
-                  aria-label="Remover filtro de planos"
-                >
-                  <CreditCard className="w-3 h-3" />
-                  Apenas planos
-                  <X className="w-3 h-3 opacity-80" />
-                </button>
+        {/* ── View Mode Toggle: Todos / Meus ── */}
+        {showViewModeToggle && (
+          <div className="flex bg-secondary/40 rounded-xl p-1 border border-border/20">
+            <button
+              onClick={() => setViewMode("meus")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[13px] font-semibold transition-all duration-200",
+                viewMode === "meus"
+                  ? "bg-foreground text-background shadow-xs"
+                  : "text-muted-foreground/70 hover:text-foreground"
               )}
-            </div>
+            >
+              <User className="w-4 h-4" />
+              Meus Clientes
+            </button>
+            <button
+              onClick={() => setViewMode("todos")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[13px] font-semibold transition-all duration-200",
+                viewMode === "todos"
+                  ? "bg-foreground text-background shadow-xs"
+                  : "text-muted-foreground/70 hover:text-foreground"
+              )}
+            >
+              <Users className="w-4 h-4" />
+              Todos os Clientes
+            </button>
           </div>
+        )}
 
-          {/* Pending plan payments */}
-          {viewMode === "meus" && (
-            <div className="px-4 pt-3">
-              <PendingPlanPayments barbeiroId={barberContext.barbeiroId} />
-            </div>
-          )}
-
-          {/* Loading indicator for "Todos" mode */}
-          {viewMode === "todos" && loadingAllClients && (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
-            </div>
-          )}
-
-          {/* Client list */}
-          <div className="px-4 pt-2">
-            {!loadingAllClients && filteredClients.length === 0 ? (
-              <div className="text-center py-16">
-                <Inbox className="w-10 h-10 mx-auto text-muted-foreground/20 mb-3" strokeWidth={1.5} />
-                <p className="text-[13px] text-muted-foreground">
-                  {search
-                    ? "Nenhum cliente encontrado"
-                    : viewMode === "meus"
-                    ? "Nenhum cliente atendido por você ainda"
-                    : "Nenhum cliente nesta seleção"}
-                </p>
-                <p className="text-[11px] text-muted-foreground/40 mt-1">
-                  {search
-                    ? "Tente ajustar a busca"
-                    : viewMode === "meus"
-                    ? "Clientes que agendarem com você aparecerão aqui"
-                    : "Selecione outra unidade ou verifique os filtros"}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-0">
-                <AnimatePresence mode="popLayout">
-                  {filteredClients.map((client, index) => (
-                    <motion.button
-                      key={client.id}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15, delay: index * 0.02 }}
-                      onClick={() => openClientView(client.id)}
-                      className="w-full flex items-center gap-3 py-4 text-left border-b border-border/30 last:border-b-0 hover:bg-secondary/20 active:bg-secondary/40 transition-colors"
-                    >
-                      {/* Avatar */}
-                      <div className="relative flex-shrink-0">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                          <span className="text-[14px] font-bold text-primary">
-                            {client.nome.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        {/* Status indicator — sempre ativo para barbeiro */}
-                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background bg-emerald-500" />
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-medium text-foreground truncate">{client.nome}</p>
-                        <p className="text-[12px] text-muted-foreground/60 truncate mt-0.5">
-                          {client.email || client.telefone || "Sem contato"}
-                        </p>
-                      </div>
-
-                      {/* Right side badges */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {client.activePlan ? (
-                          <span className="px-1.5 py-0.5 rounded-md bg-foreground text-background text-[9px] font-bold uppercase tracking-wider">
-                            Plano
-                          </span>
-                        ) : (
-                          client.pontos > 0 && (
-                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-[9px] font-bold text-amber-500">
-                              <Award className="w-2.5 h-2.5" />
-                              {client.pontos}
-                            </span>
-                          )
-                        )}
-                        <ChevronRight className="w-4 h-4 text-muted-foreground/40" strokeWidth={1.8} />
-                      </div>
-                    </motion.button>
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* ═══ DESKTOP LAYOUT ═══ */
-        <div>
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Clientes</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {totalClients} cliente{totalClients !== 1 ? "s" : ""}{" "}
-                {viewMode === "meus" ? "atendidos por você" : "da unidade selecionada"}
-              </p>
-            </div>
-          </div>
-
-          {/* View mode toggle (desktop) */}
-          {showViewModeToggle && (
-            <div className="mb-5">
-              <div className="inline-flex bg-secondary/40 rounded-xl p-1 border border-border/20">
-                <button
-                  onClick={() => setViewMode("meus")}
-                  className={cn(
-                    "flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200",
-                    viewMode === "meus"
-                      ? "bg-foreground text-background shadow-md"
-                      : "text-muted-foreground/60 hover:text-muted-foreground"
-                  )}
-                >
-                  <User className="w-4 h-4" />
-                  Meus Clientes
-                </button>
-                <button
-                  onClick={() => setViewMode("todos")}
-                  className={cn(
-                    "flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200",
-                    viewMode === "todos"
-                      ? "bg-foreground text-background shadow-md"
-                      : "text-muted-foreground/60 hover:text-muted-foreground"
-                  )}
-                >
-                  <Users className="w-4 h-4" />
-                  Todos os Clientes
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Unit pills (desktop) */}
-          {viewMode === "todos" && units.length > 1 && (
-            <div className="flex gap-2 mb-5 flex-wrap">
+        {/* ── Unit Selector Pills (only for "Todos" mode with units) ── */}
+        {viewMode === "todos" && units.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            <button
+              onClick={() => setSelectedUnitId(null)}
+              className={cn(
+                "flex-shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-medium border transition-all",
+                !selectedUnitId
+                  ? "bg-foreground text-background border-foreground shadow-xs font-semibold"
+                  : "bg-secondary/30 text-muted-foreground border-border/30 hover:bg-secondary/50"
+              )}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              Todas as unidades
+            </button>
+            {units.map((unit) => (
               <button
-                onClick={() => setSelectedUnitId(null)}
+                key={unit.id}
+                onClick={() => setSelectedUnitId(selectedUnitId === unit.id ? null : unit.id)}
                 className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium border transition-all",
-                  !selectedUnitId
-                    ? "bg-foreground text-background border-foreground"
+                  "flex-shrink-0 px-3.5 py-1.5 rounded-full text-[12px] font-medium border transition-all",
+                  selectedUnitId === unit.id
+                    ? "bg-foreground text-background border-foreground shadow-xs font-semibold"
                     : "bg-secondary/30 text-muted-foreground border-border/30 hover:bg-secondary/50"
                 )}
               >
-                <Building2 className="w-3.5 h-3.5" />
-                Todas as unidades
+                {unit.nome}
               </button>
-              {units.map((unit) => (
-                <button
-                  key={unit.id}
-                  onClick={() => setSelectedUnitId(selectedUnitId === unit.id ? null : unit.id)}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-xs font-medium border transition-all",
-                    selectedUnitId === unit.id
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-secondary/30 text-muted-foreground border-border/30 hover:bg-secondary/50"
-                  )}
-                >
-                  {unit.nome}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Pending plan payments */}
-          {viewMode === "meus" && (
-            <div className="mb-5">
-              <PendingPlanPayments barbeiroId={barberContext.barbeiroId} />
-            </div>
-          )}
-
-          {/* Search */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="relative max-w-sm flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nome ou telefone..."
-                className="h-9 pl-9 bg-muted/30 border-border/30 text-sm rounded-lg"
-              />
-            </div>
+            ))}
           </div>
+        )}
 
-          {/* Loading for "Todos" */}
-          {viewMode === "todos" && loadingAllClients && (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
-            </div>
-          )}
-
-          {/* Grid */}
-          {!loadingAllClients && filteredClients.length === 0 ? (
-            <div className="rounded-xl border border-border/30 bg-card p-10 text-center">
-              <Inbox className="w-10 h-10 mx-auto mb-3 text-muted-foreground/20" strokeWidth={1.5} />
-              <p className="text-sm text-muted-foreground">
-                {search
-                  ? "Nenhum cliente encontrado"
-                  : viewMode === "meus"
-                  ? "Nenhum cliente atendido por você ainda"
-                  : "Nenhum cliente nesta seleção"}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-              {filteredClients.map((client, idx) => (
-                <motion.div
-                  key={client.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, delay: idx * 0.015 }}
-                  onClick={() => openClientView(client.id)}
-                  className="group cursor-pointer rounded-xl border border-border/30 bg-card p-5 transition-all hover:shadow-md hover:border-border/50"
-                >
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="relative flex-shrink-0">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                        <span className="text-sm font-bold text-primary">
-                          {client.nome.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card bg-emerald-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{client.nome}</p>
-                      <p className="text-xs text-muted-foreground/50 truncate mt-0.5">
-                        {client.email || client.telefone || "Sem contato"}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/40 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground/50">
-                        {client.total_agendamentos} agend.
-                      </span>
-                      {!client.activePlan && client.pontos > 0 && (
-                        <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-500">
-                          <Award className="w-3 h-3" />
-                          {client.pontos}
-                        </span>
-                      )}
-                    </div>
-                    {client.activePlan ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-foreground text-background">
-                        Plano
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-500/10 text-emerald-500">
-                        Ativo
-                      </span>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+        {/* ── Search Bar: Fluida e Nativa Apple HIG ── */}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50 pointer-events-none" />
+          <input
+            type="search"
+            inputMode="search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck="false"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou telefone..."
+            className="w-full h-11 pl-10 pr-9 rounded-xl bg-secondary/50 dark:bg-white/[0.05] border border-border/40 focus:border-foreground/30 focus:bg-background text-[13.5px] text-foreground placeholder:text-muted-foreground/50 transition-all outline-none"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-muted-foreground/20 hover:bg-muted-foreground/30 flex items-center justify-center text-foreground/70 active:scale-90 transition-all"
+              aria-label="Limpar busca"
+            >
+              <X className="w-3 h-3" strokeWidth={2.2} />
+            </button>
           )}
         </div>
-      )}
+
+        {/* ── Filtro rápido de planos ── */}
+        {planFilterOnly && (
+          <div className="flex items-center">
+            <button
+              onClick={() => setPlanFilterOnly(false)}
+              className="inline-flex items-center gap-1.5 pl-2.5 pr-2 h-7 rounded-full bg-foreground text-background text-[11px] font-semibold tracking-tight active:scale-95 transition-transform shadow-xs"
+              aria-label="Remover filtro de planos"
+            >
+              <CreditCard className="w-3 h-3" />
+              Apenas clientes com plano
+              <X className="w-3 h-3 opacity-80" />
+            </button>
+          </div>
+        )}
+
+        {/* ── Pending plan payments ── */}
+        {viewMode === "meus" && (
+          <PendingPlanPayments barbeiroId={barberContext.barbeiroId} />
+        )}
+
+        {/* ── Loading indicator ── */}
+        {viewMode === "todos" && loadingAllClients && (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+          </div>
+        )}
+
+        {/* ── Client List: Fluida diretamente na tela (sem card de fundo) ── */}
+        {!loadingAllClients && filteredClients.length === 0 ? (
+          <div className="py-14 text-center">
+            <Inbox className="w-10 h-10 mx-auto mb-3 text-muted-foreground/25" strokeWidth={1.5} />
+            <p className="text-[14px] font-semibold text-foreground">
+              {search
+                ? "Nenhum cliente encontrado"
+                : viewMode === "meus"
+                ? "Nenhum cliente atendido por você ainda"
+                : "Nenhum cliente nesta seleção"}
+            </p>
+            <p className="text-[12px] text-muted-foreground mt-1">
+              {search
+                ? "Tente ajustar o termo de busca ou telefone"
+                : viewMode === "meus"
+                ? "Clientes que agendarem com você aparecerão aqui"
+                : "Selecione outra unidade ou limpe os filtros"}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/25">
+            <AnimatePresence mode="popLayout">
+              {filteredClients.map((client, index) => (
+                <motion.button
+                  key={client.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15, delay: Math.min(index * 0.015, 0.2) }}
+                  onClick={() => openClientView(client.id)}
+                  className="w-full flex items-center gap-3.5 py-3.5 px-1 sm:px-2 text-left hover:opacity-80 active:opacity-60 transition-opacity"
+                >
+                  {/* Avatar */}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-11 h-11 rounded-2xl bg-foreground/10 border border-border/40 flex items-center justify-center">
+                      <span className="text-[15px] font-bold text-foreground">
+                        {client.nome.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Informações */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14.5px] font-semibold text-foreground truncate">{client.nome}</p>
+                    <p className="text-[12px] text-muted-foreground truncate mt-0.5">
+                      {client.telefone || client.email || "Sem telefone cadastrado"}
+                    </p>
+                  </div>
+
+                  {/* Lado Direito */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-[11.5px] text-muted-foreground tabular-nums hidden sm:inline">
+                      {client.total_agendamentos} {client.total_agendamentos === 1 ? "agendamento" : "agendamentos"}
+                    </span>
+                    {client.activePlan ? (
+                      <div className="flex items-center gap-1.5">
+                        {client.activePlan.is_pending_cash && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 tabular-nums">
+                            A cobrar
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 rounded-full bg-secondary/80 text-foreground/80 border border-border/40 text-[10.5px] font-medium">
+                          Plano
+                        </span>
+                      </div>
+                    ) : client.blocked ? (
+                      <span className="px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20 text-[10px] font-medium">
+                        Bloqueado
+                      </span>
+                    ) : client.pontos > 0 ? (
+                      <span className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-500/10 text-[10px] font-medium text-amber-500 border border-amber-500/20 tabular-nums">
+                        <Award className="w-3 h-3 stroke-[1.8]" />
+                        {client.pontos}
+                      </span>
+                    ) : null}
+                    <ChevronRight className="w-4 h-4 text-muted-foreground/40 shrink-0" strokeWidth={1.8} />
+                  </div>
+                </motion.button>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
 
       {/* FAB expansível — Filtro de planos + Adicionar cliente */}
       {!viewId && typeof document !== "undefined" && createPortal(

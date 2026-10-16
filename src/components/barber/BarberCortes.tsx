@@ -74,6 +74,7 @@ const durationOptions = [
 interface Props {
   barberContext: BarberContext;
   basePath?: string;
+  onBack?: () => void;
 }
 
 /**
@@ -81,7 +82,7 @@ interface Props {
  * O barbeiro vê todos os serviços da barbearia mas só pode editar
  * o TEMPO PESSOAL que ele gasta em cada um. Nome, preço e status são read-only.
  */
-export function BarberCortes({ barberContext, basePath = "/barbeiro" }: Props) {
+export function BarberCortes({ barberContext, basePath = "/barbeiro", onBack }: Props) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -735,7 +736,13 @@ export function BarberCortes({ barberContext, basePath = "/barbeiro" }: Props) {
         <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
           <div className="flex items-center gap-2.5 px-4 h-14">
             <button
-              onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
+              onClick={() => {
+                if (onBack) {
+                  onBack();
+                } else {
+                  navigate(`${basePath}/configuracoes-perfil`);
+                }
+              }}
               className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
               aria-label="Voltar"
             >

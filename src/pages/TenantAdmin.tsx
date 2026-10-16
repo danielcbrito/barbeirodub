@@ -40,6 +40,7 @@ import { AdminSeguranca } from "@/components/admin/AdminSeguranca";
 import { EstatisticasRelatorios } from "@/components/shared/EstatisticasRelatorios";
 import { AdminDadosEmpresa } from "@/components/admin/AdminDadosEmpresa";
 import { WhatsAppConnectionPage } from "@/components/whatsapp/WhatsAppConnectionPage";
+import { InstagramConnectionPage } from "@/components/instagram/InstagramConnectionPage";
 import { PortfolioManager } from "@/components/shared/PortfolioManager";
 import { SupportChatBubble } from "@/components/support/SupportChatBubble";
 import { AdminUnidades } from "@/components/admin/unidades/AdminUnidades";
@@ -552,18 +553,18 @@ const TenantAdmin = () => {
           <main
             className={cn(
               "relative min-h-[calc(100dvh-56px)] bg-background",
-              (location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo")) && "pb-0 overflow-hidden"
+              (location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo") || location.pathname.includes("/financeiro") || location.pathname.includes("/carteira")) && "pb-0 overflow-hidden"
             )}
             style={
-              location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo")
+              location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo") || location.pathname.includes("/financeiro") || location.pathname.includes("/carteira")
                 ? undefined
                 : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
             }
           >
             <div
-              className={cn("px-4 py-4 lg:px-8", location.pathname.includes("/promocoes") && "p-0", location.pathname.includes("/perfil") && "p-0", location.pathname.includes("/config-barbearia") && "p-0", location.pathname.includes("/unidades") && "h-full p-0", location.pathname.includes("/whatsapp") && "p-0", location.pathname.includes("/disparo") && "p-0")}
+              className={cn("px-4 py-4 lg:px-8", location.pathname.includes("/promocoes") && "p-0", location.pathname.includes("/perfil") && "p-0", location.pathname.includes("/config-barbearia") && "p-0", location.pathname.includes("/unidades") && "h-full p-0", location.pathname.includes("/whatsapp") && "p-0", location.pathname.includes("/instagram") && "p-0", location.pathname.includes("/disparo") && "p-0", location.pathname.includes("/relatorios") && "p-0", location.pathname.includes("/financeiro") && "p-0", location.pathname.includes("/carteira") && "p-0")}
               style={
-                location.pathname.includes("/perfil") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/unidades") || location.pathname.includes("/whatsapp") || location.pathname.includes("/promocoes") || location.pathname.includes("/disparo")
+                location.pathname.includes("/perfil") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/unidades") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/promocoes") || location.pathname.includes("/disparo") || location.pathname.includes("/relatorios") || location.pathname.includes("/financeiro") || location.pathname.includes("/carteira")
                   ? undefined
                   : { paddingTop: "calc(0.75rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }
               }
@@ -579,6 +580,7 @@ const TenantAdmin = () => {
                   <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="meus" /> : null} />
                   <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={tenantId || undefined} basePath={BASE} />} />
                   <Route path="financeiro" element={<AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />} />
+                  <Route path="carteira" element={<AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />} />
                   <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} tenantId={tenantId} basePath="/tenant/admin/perfil" />} />
                   <Route path="servicos/*" element={tenantId ? <AdminServicos tenantId={tenantId} basePath={BASE} /> : null} />
                   <Route path="promocoes/preparando" element={<Navigate to={`${BASE}/promocoes`} replace />} />
@@ -592,6 +594,7 @@ const TenantAdmin = () => {
                   <Route path="config-barbearia" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
                   <Route path="assinatura" element={<TenantSubscriptionPage subscription={subscription} basePath={BASE} tenantId={tenantId} />} />
                   <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath={BASE} tenantNome={tenantNome} barberName={adminContext?.apelido} />} />
+                  <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath={BASE} tenantNome={tenantNome} barberName={adminContext?.apelido} tenantId={tenantId} />} />
                   <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} tenantId={tenantId} title="Portfólio da Barbearia" showBack onBack={() => navigate(`${BASE}/perfil`)} /> : null} />
                   <Route path="unidades" element={<AdminUnidades basePath={BASE} />} />
                   <Route path="meus-planos" element={<AdminMeusPlanos basePath={BASE} />} />
@@ -605,7 +608,7 @@ const TenantAdmin = () => {
         )}
 
         {/* Bottom Navigation — esconder nas configurações, edição de serviços/planos, horários e disparo */}
-        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("financeiro") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("assinatura") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("loja") && !location.pathname.includes("disparo") && (
+        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("instagram") && !location.pathname.includes("assinatura") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("loja") && !location.pathname.includes("disparo") && (
           <div className="lg:hidden">
             <AdminMobileNavigation
               basePath={BASE}
@@ -656,7 +659,7 @@ const TenantAdmin = () => {
           <div className={
             isSubscriptionRoute
               ? "h-full"
-              : (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/perfil"))
+              : (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/relatorios"))
               ? "p-0 max-w-[1600px] mx-auto"
               : "p-6 lg:p-8 max-w-[1600px] mx-auto"
           }>
@@ -682,6 +685,7 @@ const TenantAdmin = () => {
                 <Route path="config-barbearia" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
                 <Route path="assinatura" element={<TenantSubscriptionPage subscription={subscription} basePath={BASE} tenantId={tenantId} />} />
                 <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath={BASE} tenantNome={tenantNome} barberName={adminContext?.apelido} />} />
+                <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath={BASE} tenantNome={tenantNome} barberName={adminContext?.apelido} tenantId={tenantId} />} />
                 <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} tenantId={tenantId} title="Portfólio da Barbearia" showBack onBack={() => navigate(BASE)} /> : null} />
                 <Route path="unidades" element={<AdminUnidades basePath={BASE} />} />
                 <Route path="loja" element={tenantId ? <AdminLoja tenantId={tenantId} /> : null} />

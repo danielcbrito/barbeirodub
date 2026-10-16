@@ -15,6 +15,17 @@ import {
   AlertTriangle,
   AlertCircle,
   X,
+  Search,
+  Building2,
+  MessageSquare,
+  CalendarClock,
+  Users,
+  Scissors,
+  Crown,
+  UserCheck,
+  Star,
+  Palette,
+  ShieldCheck,
 } from "lucide-react";
 import { BarberContext } from "@/pages/Barbeiro";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
@@ -25,6 +36,7 @@ import { AdminCortes } from "@/components/admin/AdminCortes";
 import { AdminBarbeiros } from "@/components/admin/AdminBarbeiros";
 import { AdminDadosEmpresa } from "@/components/admin/AdminDadosEmpresa";
 import { AdminAvaliacoes } from "@/components/admin/AdminAvaliacoes";
+import { BarberCortes } from "@/components/barber/BarberCortes";
 import { WhatsAppConnectionPage } from "@/components/whatsapp/WhatsAppConnectionPage";
 import { UnidadeWizardSheet } from "@/components/admin/unidades/wizard/UnidadeWizardSheet";
 import { UnidadeDetailScreen } from "@/components/admin/unidades/UnidadeDetailScreen";
@@ -55,15 +67,23 @@ type HubScreen =
   | "dados-empresa"
   | "whatsapp"
   | "horarios"
+  | "horarios-barbearia"
+  | "horarios-pessoal"
   | "servicos"
+  | "servicos-barbearia"
+  | "servicos-pessoal"
   | "planos"
+  | "servicos-planos"
   | "formas-pagamento"
   | "loja"
   | "avaliacoes"
   | "barbeiros"
   | "clientes"
+  | "clientes-todos"
+  | "clientes-meus"
   | "todas-unidades"
-  | "fotos-banner";
+  | "fotos-banner"
+  | "excluir-pausar";
 
 const DEFAULT_COMPANY_NAME = "Barbearia DUB";
 const DEFAULT_COMPANY_LOGO = "https://djtpzvujzmrrslirzwun.supabase.co/storage/v1/object/public/logos/global/logo-global-1772648853243.png";
@@ -82,8 +102,18 @@ export function BarberConfigBarbearia({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlUnidadeId = searchParams.get("unidade");
+  const urlViewId = searchParams.get("view");
 
-  const [activeScreen, setActiveScreen] = useState<HubScreen>("hub");
+  const [activeScreen, setActiveScreen] = useState<HubScreen>(() => {
+    if (urlViewId) return "clientes-todos";
+    return "hub";
+  });
+
+  useEffect(() => {
+    if (urlViewId && activeScreen === "hub") {
+      setActiveScreen("clientes-todos");
+    }
+  }, [urlViewId]);
   const [tenantNome, setTenantNome] = useState<string>(DEFAULT_COMPANY_NAME);
   const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(DEFAULT_COMPANY_LOGO);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -103,6 +133,9 @@ export function BarberConfigBarbearia({
   const [showSelectUnitDrawer, setShowSelectUnitDrawer] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [detailUnidade, setDetailUnidade] = useState<Unidade | null>(null);
+
+  // Busca inteligente nas configurações
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Estados para Gerenciamento Operacional da Barbearia (Pausar / Excluir)
   const [showPauseModal, setShowPauseModal] = useState(false);
@@ -306,6 +339,121 @@ export function BarberConfigBarbearia({
     return unidades.find((u) => u.id === selectedUnidadeId) || unidades[0];
   }, [unidades, selectedUnidadeId]);
 
+  /** Lista de itens de configuração do Hub com ícones e palavras-chave para busca inteligente */
+  const configItems = useMemo(
+    () => [
+      {
+        id: "fotos-banner",
+        icon: Palette,
+        label: "Identidade Visual",
+        description: "Foto de perfil, logo e banner da barbearia",
+        keywords: ["foto", "perfil", "logo", "banner", "imagem", "capa", "identidade visual", "visual"],
+        onClick: () => setActiveScreen("fotos-banner"),
+      },
+      {
+        id: "dados-empresa",
+        icon: Building2,
+        label: "Dados da Barbearia",
+        description: "Nome, WhatsApp, endereço e redes sociais",
+        keywords: ["nome", "whatsapp", "endereco", "contato", "telefone", "instagram", "redes", "cnpj", "localizacao", "dados"],
+        onClick: () => setActiveScreen("dados-empresa"),
+      },
+      {
+        id: "whatsapp",
+        icon: MessageSquare,
+        label: "Atendimento & Notificações",
+        description: "WhatsApp conectado, agente de IA e lembretes automáticos",
+        keywords: ["whatsapp", "atendimento", "notificacoes", "ia", "agente", "bot", "robo", "lembretes", "mensagens"],
+        onClick: () => setActiveScreen("whatsapp"),
+      },
+      {
+        id: "horarios",
+        icon: CalendarClock,
+        label: "Horário de funcionamento",
+        description: "Expediente da barbearia ou seus horários pessoais",
+        keywords: ["horario", "funcionamento", "expediente", "dias", "abertura", "fechamento", "hora", "atendimento", "agenda"],
+        onClick: () => setActiveScreen("horarios"),
+      },
+      {
+        id: "barbeiros",
+        icon: Users,
+        label: "Barbeiros & Cadeiras",
+        description: "Equipe de profissionais cadastrados nesta unidade",
+        keywords: ["barbeiros", "cadeiras", "equipe", "profissionais", "funcionarios", "colaboradores"],
+        onClick: () => setActiveScreen("barbeiros"),
+      },
+      {
+        id: "servicos",
+        icon: Scissors,
+        label: "Serviços",
+        description: "Catálogo da barbearia ou seus serviços pessoais",
+        keywords: [
+          "servicos",
+          "cortes",
+          "planos",
+          "assinaturas",
+          "catalogo",
+          "barba",
+          "precos",
+          "valores",
+          "duracao",
+          "tabela",
+          "clube",
+          "fidelidade",
+          "mensalidade",
+          "recorrente",
+        ],
+        onClick: () => setActiveScreen("servicos"),
+      },
+      {
+        id: "clientes",
+        icon: UserCheck,
+        label: "Clientes",
+        description: "Todos os clientes da barbearia ou seus clientes",
+        keywords: ["clientes", "contatos", "base", "historico", "crm", "fidelidade"],
+        onClick: () => setActiveScreen("clientes"),
+      },
+      {
+        id: "avaliacoes",
+        icon: Star,
+        label: "Avaliações da Barbearia",
+        description: "Feedbacks e notas dos clientes sobre a barbearia",
+        keywords: ["avaliacoes", "feedback", "notas", "estrelas", "opinioes", "reviews"],
+        onClick: () => setActiveScreen("avaliacoes"),
+      },
+      {
+        id: "seguranca",
+        icon: ShieldCheck,
+        label: "Segurança",
+        description: "Senha, autenticação e acessos da conta",
+        keywords: ["seguranca", "segurança", "senha", "autenticacao", "acesso", "conta", "login"],
+        onClick: () => navigate(`${appBasePath}/seguranca`),
+      },
+      {
+        id: "excluir-pausar",
+        icon: AlertTriangle,
+        label: "Excluir e pausar",
+        description: "Pausar agendamentos temporariamente ou excluir esta barbearia",
+        destructive: true,
+        keywords: ["excluir", "pausar", "reativar", "apagar", "deletar", "suspender", "fechar"],
+        onClick: () => setActiveScreen("excluir-pausar"),
+      },
+    ],
+    []
+  );
+
+  /** Filtragem inteligente em tempo real */
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return configItems;
+    return configItems.filter((item) => {
+      const matchLabel = item.label.toLowerCase().includes(q);
+      const matchDesc = item.description.toLowerCase().includes(q);
+      const matchKeywords = item.keywords.some((k) => k.toLowerCase().includes(q));
+      return matchLabel || matchDesc || matchKeywords;
+    });
+  }, [searchQuery, configItems]);
+
   /** Seleciona uma unidade pelo Drawer */
   const handleSelectUnit = (unit: Unidade) => {
     setSelectedUnidadeId(unit.id);
@@ -413,6 +561,7 @@ export function BarberConfigBarbearia({
       }
 
       await loadUnidades();
+      setActiveScreen("hub");
     } catch (err: any) {
       console.error("[handleDeleteUnit]", err);
       toast.error(
@@ -560,7 +709,10 @@ export function BarberConfigBarbearia({
         return (
           <div className="pb-10">
             <ScheduleHeader title="Dados da Barbearia" onBack={() => setActiveScreen("hub")} />
-            <div className="px-4 pt-2">
+            <div className="px-4 pt-3 max-w-md mx-auto">
+              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-4">
+                Configure os dados cadastrais, endereço e formas de contato oficiais da barbearia.
+              </p>
               <AdminDadosEmpresa basePath={appBasePath} tenantId={tenantId} />
             </div>
           </div>
@@ -582,28 +734,130 @@ export function BarberConfigBarbearia({
         );
       case "horarios":
         return (
-          <div className="pb-10">
+          <div className="pb-10 min-h-app bg-background">
             <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
+              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
+                Escolha o horário que deseja configurar:
+              </p>
+              <div className="divide-y divide-border/25">
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen("horarios-barbearia")}
+                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-[14.5px] font-medium text-foreground leading-snug">
+                      Configurar horário da barbearia
+                    </p>
+                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                      Expediente oficial e dias de atendimento de toda a barbearia
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen("horarios-pessoal")}
+                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-[14.5px] font-medium text-foreground leading-snug">
+                      Configurar o seu horário
+                    </p>
+                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                      Seus dias e horários pessoais de trabalho na cadeira
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      case "horarios-barbearia":
+        return (
+          <div className="pb-10 min-h-app bg-background">
+            <ScheduleHeader title="Horário da Barbearia" onBack={() => setActiveScreen("horarios")} />
             <div className="px-4 pt-3 max-w-md mx-auto">
               <AdminHorarios hideTitle companyMode tenantId={tenantId} />
             </div>
           </div>
         );
-      case "servicos":
+      case "horarios-pessoal":
         return (
-          <div className="pb-10">
-            <ScheduleHeader title="Serviços & Cortes" onBack={() => setActiveScreen("hub")} />
+          <div className="pb-10 min-h-app bg-background">
+            <ScheduleHeader title="Seu Horário Pessoal" onBack={() => setActiveScreen("horarios")} />
             <div className="px-4 pt-3 max-w-md mx-auto">
-              <AdminCortes tenantId={tenantId} basePath={appBasePath} hideHeader />
+              <AdminHorarios hideTitle barbeiroId={barberContext.barbeiroId} tenantId={tenantId} />
             </div>
           </div>
         );
+      case "servicos":
+        return (
+          <div className="pb-10 min-h-app bg-background">
+            <ScheduleHeader title="Serviços" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
+              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
+                Escolha o catálogo de serviços que deseja configurar:
+              </p>
+              <div className="divide-y divide-border/25">
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen("servicos-barbearia")}
+                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-[14.5px] font-medium text-foreground leading-snug">
+                      Configurar serviços da barbearia
+                    </p>
+                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                      Catálogo oficial de cortes, serviços e preços da barbearia
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen("servicos-pessoal")}
+                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-[14.5px] font-medium text-foreground leading-snug">
+                      Configurar os seus serviços
+                    </p>
+                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                      Duração pessoal e serviços que você atende na barbearia
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      case "servicos-barbearia":
+      case "servicos-planos":
       case "planos":
         return (
-          <div className="pb-10">
-            <ScheduleHeader title="Planos da Barbearia" onBack={() => setActiveScreen("hub")} />
-            <div className="px-4 pt-3 max-w-md mx-auto">
-              <AdminPlanos tenantId={tenantId} basePath={appBasePath} hideHeader />
+          <BarberServicosPlanos
+            tenantId={tenantId}
+            appBasePath={appBasePath}
+            onBack={() => setActiveScreen("servicos")}
+            defaultTab={activeScreen === "planos" ? "planos" : "servicos"}
+          />
+        );
+      case "servicos-pessoal":
+        return (
+          <div className="pb-10 min-h-app bg-background">
+            <div className="max-w-md mx-auto">
+              <BarberCortes
+                barberContext={barberContext}
+                basePath={appBasePath}
+                onBack={() => setActiveScreen("servicos")}
+              />
             </div>
           </div>
         );
@@ -612,6 +866,9 @@ export function BarberConfigBarbearia({
           <div className="pb-10">
             <ScheduleHeader title="Avaliações da Barbearia" onBack={() => setActiveScreen("hub")} />
             <div className="px-4 pt-3 max-w-md mx-auto">
+              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-4">
+                Acompanhe o feedback, notas e comentários deixados pelos clientes após os atendimentos.
+              </p>
               <AdminAvaliacoes tenantId={tenantId} basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />
             </div>
           </div>
@@ -619,22 +876,80 @@ export function BarberConfigBarbearia({
       case "barbeiros":
         return (
           <div className="pb-10">
-            <ScheduleHeader title="Barbeiros & Equipe" onBack={() => setActiveScreen("hub")} />
-            <div className="px-4 pt-3 max-w-md mx-auto">
-              <AdminBarbeiros basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />
+            <div className="max-w-md mx-auto">
+              <AdminBarbeiros
+                basePath={appBasePath}
+                tenantId={tenantId || resolvedTenantId}
+                onBack={() => setActiveScreen("hub")}
+              />
             </div>
           </div>
         );
       case "clientes":
         return (
-          <div className="pb-10">
-            <ScheduleHeader title="Clientes da Barbearia" onBack={() => setActiveScreen("hub")} />
-            <div className="px-4 pt-3 max-w-md mx-auto">
+          <div className="pb-10 min-h-app bg-background">
+            <ScheduleHeader title="Clientes" onBack={() => setActiveScreen("hub")} />
+            <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
+              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
+                Escolha a base de clientes que deseja visualizar:
+              </p>
+              <div className="divide-y divide-border/25">
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen("clientes-todos")}
+                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-[14.5px] font-medium text-foreground leading-snug">
+                      Todos os clientes da barbearia
+                    </p>
+                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                      Base completa de clientes de toda a barbearia
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen("clientes-meus")}
+                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-[14.5px] font-medium text-foreground leading-snug">
+                      Meus clientes
+                    </p>
+                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                      Clientes atendidos exclusivamente por você
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      case "clientes-todos":
+        return (
+          <div className="pb-10 min-h-app bg-background">
+            <div className="max-w-2xl mx-auto px-0 sm:px-4">
               <BarberClientes
                 barberContext={barberContext}
                 forceViewMode="todos"
                 initialUnitId={selectedUnidadeId === "todas" ? undefined : selectedUnidadeId}
-                hideHeader
+                onBack={() => setActiveScreen("clientes")}
+              />
+            </div>
+          </div>
+        );
+      case "clientes-meus":
+        return (
+          <div className="pb-10 min-h-app bg-background">
+            <div className="max-w-2xl mx-auto px-0 sm:px-4">
+              <BarberClientes
+                barberContext={barberContext}
+                forceViewMode="meus"
+                onBack={() => setActiveScreen("clientes")}
               />
             </div>
           </div>
@@ -644,6 +959,9 @@ export function BarberConfigBarbearia({
           <div className="pb-10 min-h-app bg-background">
             <ScheduleHeader title="Foto e Banner" onBack={() => setActiveScreen("hub")} />
             <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
+              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
+                Personalize a identidade visual da barbearia atualizando o banner de capa e a foto de perfil.
+              </p>
               {/* Seção 1: Banner da Barbearia (Capa) */}
               <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 space-y-3 shadow-xs">
                 <div className="flex items-center justify-between">
@@ -757,344 +1075,123 @@ export function BarberConfigBarbearia({
             </div>
           </div>
         );
+      case "excluir-pausar":
+        return (
+          <div className="pb-10 min-h-app bg-background">
+            <ScheduleHeader title="Excluir e Pausar" onBack={() => setActiveScreen("hub")} />
+
+            <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
+              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
+                Controle a disponibilidade operacional da barbearia pausando agendamentos ou gerenciando a unidade.
+              </p>
+              {/* Card de Identificação da Barbearia Selecionada */}
+              <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 flex items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 rounded-2xl border border-border/50 bg-secondary/80 overflow-hidden flex items-center justify-center shrink-0">
+                    {activeUnit?.logo_url || tenantLogoUrl ? (
+                      <img
+                        src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
+                        alt={activeUnit?.nome || tenantNome}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="font-bold text-foreground text-[15px]">
+                        {(activeUnit?.nome || tenantNome || "B").charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-semibold text-foreground truncate">
+                      {activeUnit?.nome || tenantNome}
+                    </p>
+                    <p className="text-[11.5px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                      <span
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full shrink-0",
+                          activeUnit?.ativo !== false ? "bg-emerald-500" : "bg-amber-500"
+                        )}
+                      />
+                      <span>
+                        {activeUnit?.ativo !== false ? "Operação ativa" : "Barbearia pausada"}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista Unificada Padrão Atendimento & Notificações (100% flat, divide-y divide-border/25) */}
+              <div className="divide-y divide-border/25 pt-1">
+                {/* Pausar / Reativar */}
+                {activeUnit?.ativo !== false ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowPauseModal(true)}
+                    className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
+                  >
+                    <div className="min-w-0 pr-3">
+                      <p className="text-[13.5px] font-medium text-foreground leading-snug">
+                        Pausar barbearia
+                      </p>
+                      <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Pausa temporariamente novos agendamentos nesta filial mantendo seus cadastros e faturamento salvos.
+                      </p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleToggleAtivo}
+                    disabled={isPausing}
+                    className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all disabled:opacity-50 group"
+                  >
+                    <div className="min-w-0 pr-3">
+                      <p className="text-[13.5px] font-medium text-foreground leading-snug">
+                        Reativar barbearia
+                      </p>
+                      <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Volta a receber agendamentos normalmente nesta filial.
+                      </p>
+                    </div>
+                    {isPausing ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+                    )}
+                  </button>
+                )}
+
+                {/* Excluir Barbearia */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteConfirmText("");
+                    setShowDeleteModal(true);
+                  }}
+                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-[13.5px] font-medium text-destructive leading-snug">
+                      Excluir barbearia permanentemente
+                    </p>
+                    <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Remove esta filial e desvincula os dados operacionais permanentemente.
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-destructive/50 group-hover:text-destructive transition-colors shrink-0" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
       default:
         return null;
     }
   };
 
-  /** Se uma sub-tela estiver ativa, renderiza a sub-tela correspondente */
-  if (activeScreen !== "hub") {
-    return (
-      <div className="min-h-app bg-background">
-        {/* Inputs ocultos para upload de foto e banner em sub-telas */}
-        <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-        <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
-
-        {renderSubScreen()}
-
-        {/* Modal Wizard se acionado na sub-tela */}
-        <UnidadeWizardSheet
-          open={wizardOpen}
-          onOpenChange={setWizardOpen}
-          tenantId={resolvedTenantId}
-          onSaved={() => {
-            loadUnidades();
-            toast.success("Nova barbearia cadastrada com sucesso!");
-          }}
-        />
-
-        {/* Modal de Detalhes da Unidade se acionado */}
-        {detailUnidade && (
-          <UnidadeDetailScreen
-            open={!!detailUnidade}
-            onClose={() => setDetailUnidade(null)}
-            unidade={detailUnidade}
-            tenantId={detailUnidade.tenant_id}
-            onSaved={() => {
-              loadUnidades();
-              setDetailUnidade(null);
-            }}
-          />
-        )}
-      </div>
-    );
-  }
-
-  /** Hub principal — 100% sério, minimalista, institucional e estratégico (Padrão Atendimento & Notificações) */
-  return (
-    <div className="pb-10">
-      {/* Inputs ocultos para upload de foto e banner */}
-      <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-      <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
-
-      {/* Header Institucional Padrão do Sistema */}
-      <ScheduleHeader
-        title="Configurações da Barbearia"
-        onBack={() => navigate(`${appBasePath}/perfil`)}
-      />
-
-      <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
-        {/* Barra Superior: Barbearia Ativa + Botões de Ação */}
-        <div className="flex items-center justify-between gap-2 px-1 py-0.5">
-          <div className="min-w-0 flex-1 flex items-center gap-2">
-            <span className="text-[14px] font-semibold text-foreground truncate block">
-              {activeUnit?.nome || tenantNome}
-            </span>
-            {activeUnit?.is_sede && (
-              <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
-                Sede
-              </span>
-            )}
-            {activeUnit?.ativo === false && (
-              <span className="text-[9.5px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 shrink-0">
-                Pausada
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Se houver mais de 1 barbearia cadastrada, exibe o botão Trocar Barbearia */}
-            {unidades.length > 1 && (
-              <button
-                type="button"
-                onClick={() => setShowSelectUnitDrawer(true)}
-                className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40"
-              >
-                <Store className="w-3.5 h-3.5 opacity-70" />
-                <span>Trocar filial</span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
-              </button>
-            )}
-
-            {/* Botão de Adicionar Nova Barbearia no topo */}
-            <button
-              type="button"
-              onClick={() => setWizardOpen(true)}
-              className="text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-all flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border/40"
-              title="Adicionar nova barbearia"
-            >
-              <Plus className="w-3.5 h-3.5 text-foreground stroke-[2.2]" />
-              <span>Nova</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Banner de Alerta se a barbearia selecionada estiver pausada */}
-        {activeUnit && activeUnit.ativo === false && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-2.5 text-amber-600 dark:text-amber-400 shadow-xs">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[12.5px] font-semibold leading-tight">Barbearia Pausada Temporariamente</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                Esta filial não está recebendo novos agendamentos no momento. Todos os dados e cadastros permanecem 100% seguros e salvos.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleToggleAtivo}
-              disabled={isPausing}
-              className="shrink-0 text-[11.5px] font-semibold underline underline-offset-2 hover:opacity-80 active:opacity-60"
-            >
-              {isPausing ? "Reativando..." : "Reativar"}
-            </button>
-          </div>
-        )}
-
-        {/* ═══ CARD DE IDENTIDADE VISUAL (100% MINIMALISTA, SÉRIO & ESTRATÉGICO — PADRÃO APPLE HIG) ═══ */}
-        <div
-          onClick={() => setActiveScreen("fotos-banner")}
-          className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 flex items-center justify-between gap-3 shadow-xs cursor-pointer hover:border-foreground/30 active:scale-[0.99] transition-all group"
-        >
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            {/* Logo da Barbearia com indicador sutil de câmera */}
-            <div
-              onClick={(e) => {
-                e.stopPropagation();
-                logoInputRef.current?.click();
-              }}
-              title="Toque para trocar a foto de perfil"
-              className="relative shrink-0 w-11 h-11 active:scale-95 transition-transform"
-            >
-              <div className="w-full h-full rounded-2xl border border-border/50 bg-secondary/80 overflow-hidden flex items-center justify-center shadow-xs group-hover:border-foreground/40 transition-colors">
-                {uploadingLogo ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                ) : activeUnit?.logo_url || tenantLogoUrl ? (
-                  <img
-                    src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
-                    alt={tenantNome}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="font-bold text-foreground text-[15px]">
-                    {(tenantNome || "B").charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-foreground text-background flex items-center justify-center border border-card shadow-xs">
-                <Camera className="w-2.5 h-2.5 stroke-[2.2]" />
-              </div>
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-semibold text-foreground truncate">
-                Identidade Visual
-              </p>
-              <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
-                Foto de perfil e banner de capa
-              </p>
-            </div>
-          </div>
-
-          <div className="shrink-0">
-            {/* Botão Único Cápsula Apple — Editar fotos e banner */}
-            <div className="px-3.5 py-1.5 rounded-full bg-foreground text-background text-[12px] font-semibold shadow-xs flex items-center gap-1 group-hover:opacity-90 active:scale-95 transition-all">
-              <span>Editar</span>
-              <ChevronRight className="w-3.5 h-3.5 stroke-[2.2]" />
-            </div>
-          </div>
-        </div>
-
-        {/* ═══ LISTA UNIFICADA DIRETO NA TELA DE FUNDO (PADRÃO ATENDIMENTO & NOTIFICAÇÕES) ═══ */}
-        <div className="divide-y divide-border/25 dark:divide-white/[0.08] pt-1">
-          <ConfigListItem
-            label="Dados da Barbearia"
-            description="Nome, WhatsApp, endereço e redes sociais"
-            onClick={() => setActiveScreen("dados-empresa")}
-          />
-          <ConfigListItem
-            label="Atendimento & Notificações"
-            description="WhatsApp conectado, agente de IA e lembretes automáticos"
-            onClick={() => setActiveScreen("whatsapp")}
-          />
-          <ConfigListItem
-            label="Horário de funcionamento"
-            description="Expediente oficial e dias de atendimento da barbearia"
-            onClick={() => setActiveScreen("horarios")}
-          />
-          <ConfigListItem
-            label="Barbeiros & Cadeiras"
-            description="Equipe de profissionais cadastrados nesta unidade"
-            onClick={() => setActiveScreen("barbeiros")}
-          />
-          <ConfigListItem
-            label="Serviços & Cortes"
-            description="Catálogo de cortes, barbas, durações e valores"
-            onClick={() => setActiveScreen("servicos")}
-          />
-          <ConfigListItem
-            label="Planos da Barbearia"
-            description="Clubes de fidelidade e assinaturas recorrentes"
-            onClick={() => setActiveScreen("planos")}
-          />
-          <ConfigListItem
-            label="Clientes da Barbearia"
-            description="Base de contatos, histórico e fidelidade"
-            onClick={() => setActiveScreen("clientes")}
-          />
-          <ConfigListItem
-            label="Avaliações da Barbearia"
-            description="Feedbacks e notas dos clientes sobre a barbearia"
-            onClick={() => setActiveScreen("avaliacoes")}
-          />
-          <ConfigListItem
-            label="Filiais da Barbearia"
-            description={unidades.length <= 1 ? "1 unidade cadastrada · Matriz" : `${unidades.length} unidades cadastradas · Matriz e filiais`}
-            onClick={() => {
-              if (unidades.length <= 1) {
-                setWizardOpen(true);
-              } else {
-                setShowSelectUnitDrawer(true);
-              }
-            }}
-          />
-        </div>
-
-        {/* ═══ ADICIONAR UMA NOVA BARBEARIA ═══ */}
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={() => setWizardOpen(true)}
-            className="w-full p-3.5 rounded-2xl border border-dashed border-border/80 dark:border-white/[0.15] bg-card/50 hover:bg-secondary/40 active:scale-[0.99] transition-all flex items-center justify-between gap-3 text-left group shadow-xs"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center shrink-0 border border-border/40 group-hover:scale-105 transition-transform text-foreground">
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-              </div>
-              <div className="min-w-0">
-                <span className="text-[13.5px] font-semibold text-foreground block truncate">
-                  Adicionar uma nova barbearia
-                </span>
-                <span className="text-[11.5px] text-muted-foreground block truncate mt-0.5">
-                  Cadastrar uma nova filial ou unidade para o seu negócio
-                </span>
-              </div>
-            </div>
-            <div className="w-7 h-7 rounded-full bg-secondary/60 flex items-center justify-center shrink-0 text-muted-foreground group-hover:text-foreground group-hover:bg-secondary transition-colors">
-              <ChevronRight className="w-4 h-4" />
-            </div>
-          </button>
-        </div>
-
-        {/* ═══ AÇÕES DE GERENCIAMENTO DA BARBEARIA (100% MINIMALISTA & SÉRIO) ═══ */}
-        <div className="pt-2 pb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {/* Botão Pausar / Reativar */}
-            {activeUnit?.ativo !== false ? (
-              <button
-                type="button"
-                onClick={() => setShowPauseModal(true)}
-                className="w-full h-11 px-4 rounded-xl border border-border/40 hover:bg-secondary/40 text-muted-foreground hover:text-foreground text-[13px] font-medium transition-all active:scale-[0.99] flex items-center justify-center gap-2"
-              >
-                <PauseCircle className="w-4 h-4 stroke-[1.8] opacity-70" />
-                <span>Pausar barbearia</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleToggleAtivo}
-                disabled={isPausing}
-                className="w-full h-11 px-4 rounded-xl border border-border/40 hover:bg-secondary/40 text-foreground text-[13px] font-medium transition-all active:scale-[0.99] flex items-center justify-center gap-2"
-              >
-                {isPausing ? (
-                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                ) : (
-                  <PlayCircle className="w-4 h-4 stroke-[1.8] opacity-70" />
-                )}
-                <span>Reativar barbearia</span>
-              </button>
-            )}
-
-            {/* Botão Excluir Barbearia */}
-            <button
-              type="button"
-              onClick={() => {
-                setDeleteConfirmText("");
-                setShowDeleteModal(true);
-              }}
-              className="w-full h-11 px-4 rounded-xl border border-border/30 hover:border-destructive/30 hover:bg-destructive/5 text-muted-foreground/75 hover:text-destructive text-[13px] font-medium transition-all active:scale-[0.99] flex items-center justify-center gap-2"
-            >
-              <Trash2 className="w-4 h-4 stroke-[1.8] opacity-70" />
-              <span>Excluir barbearia</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-
-      {/* ═══ DRAWER DE SELEÇÃO DE BARBEARIA / FILIAL (GAVETA COMPARTILHADA) ═══ */}
-      <SelectBarbeariaDrawer
-        open={showSelectUnitDrawer}
-        onClose={() => setShowSelectUnitDrawer(false)}
-        tenantId={resolvedTenantId || barberContext.tenantId}
-        activeUnitId={activeUnit?.id}
-        onSelectUnit={handleSelectUnit}
-      />
-
-      {/* Modal Wizard de Criação de Unidade */}
-      <UnidadeWizardSheet
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
-        tenantId={resolvedTenantId}
-        onSaved={() => {
-          loadUnidades();
-          toast.success("Nova barbearia cadastrada com sucesso!");
-        }}
-      />
-
-      {/* Modal de Detalhes da Unidade */}
-      {detailUnidade && (
-        <UnidadeDetailScreen
-          open={!!detailUnidade}
-          onClose={() => setDetailUnidade(null)}
-          unidade={detailUnidade}
-          tenantId={detailUnidade.tenant_id}
-          onSaved={() => {
-            loadUnidades();
-            setDetailUnidade(null);
-          }}
-        />
-      )}
-
+  /** Modais de Pausar e Excluir Unidade (compartilhados entre o Hub e sub-telas) */
+  const renderPauseDeleteModals = () => (
+    <>
       {/* ═══ MODAL DE PAUSAR / CONFIRMAR PAUSA ═══ */}
       <AnimatePresence>
         {showPauseModal && (
@@ -1281,22 +1378,222 @@ export function BarberConfigBarbearia({
           </div>
         )}
       </AnimatePresence>
+    </>
+  );
+
+  /** Se uma sub-tela estiver ativa, renderiza a sub-tela correspondente */
+  if (activeScreen !== "hub") {
+    return (
+      <div className="min-h-app bg-background">
+        {/* Inputs ocultos para upload de foto e banner em sub-telas */}
+        <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+        <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+
+        {renderSubScreen()}
+
+        {/* Modal Wizard se acionado na sub-tela */}
+        <UnidadeWizardSheet
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          tenantId={resolvedTenantId}
+          onSaved={() => {
+            loadUnidades();
+            toast.success("Nova barbearia cadastrada com sucesso!");
+          }}
+        />
+
+        {/* Modal de Detalhes da Unidade se acionado */}
+        {detailUnidade && (
+          <UnidadeDetailScreen
+            open={!!detailUnidade}
+            onClose={() => setDetailUnidade(null)}
+            unidade={detailUnidade}
+            tenantId={detailUnidade.tenant_id}
+            onSaved={() => {
+              loadUnidades();
+              setDetailUnidade(null);
+            }}
+          />
+        )}
+
+        {/* Modais de Pausar e Excluir */}
+        {renderPauseDeleteModals()}
+      </div>
+    );
+  }
+
+  /** Hub principal — 100% sério, minimalista, institucional e estratégico (Padrão Screenshot & Apple HIG) */
+  return (
+    <div className="pb-10">
+      {/* Inputs ocultos para upload de foto e banner */}
+      <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+      <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+
+      {/* Header Institucional Padrão do Sistema */}
+      <ScheduleHeader
+        title="Configurações"
+        onBack={() => navigate(`${appBasePath}/perfil`)}
+        right={
+          unidades.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => setShowSelectUnitDrawer(true)}
+              className="flex items-center gap-1.5 p-1 pr-1.5 rounded-full hover:bg-secondary active:scale-95 transition-all"
+              title="Trocar barbearia"
+            >
+              <div className="w-7 h-7 rounded-full overflow-hidden bg-secondary border border-border/50 flex items-center justify-center shrink-0">
+                {activeUnit?.logo_url || tenantLogoUrl ? (
+                  <img
+                    src={activeUnit?.logo_url || tenantLogoUrl || DEFAULT_COMPANY_LOGO}
+                    alt={activeUnit?.nome || tenantNome}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="font-bold text-foreground text-[11px]">
+                    {(activeUnit?.nome || tenantNome || "B").charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-foreground/70" />
+            </button>
+          ) : null
+        }
+      />
+
+      <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
+        {/* Barra de Pesquisa Inteligente (Padrão Screenshot) */}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Pesquisar nas configurações..."
+            className="w-full h-11 pl-10 pr-9 rounded-2xl bg-muted/40 dark:bg-white/[0.04] border border-border/40 focus:border-border/80 focus:bg-background text-[13.5px] text-foreground placeholder:text-muted-foreground/50 transition-all outline-none"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
+        {/* Banner de Alerta se a barbearia selecionada estiver pausada */}
+        {activeUnit && activeUnit.ativo === false && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-2.5 text-amber-600 dark:text-amber-400 shadow-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12.5px] font-semibold leading-tight">Barbearia Pausada Temporariamente</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                Esta filial não está recebendo novos agendamentos no momento. Todos os dados permanecem salvos.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleAtivo}
+              disabled={isPausing}
+              className="shrink-0 text-[11.5px] font-semibold underline underline-offset-2 hover:opacity-80 active:opacity-60"
+            >
+              {isPausing ? "Reativando..." : "Reativar"}
+            </button>
+          </div>
+        )}
+
+        {/* ═══ LISTA UNIFICADA COM ÍCONES BARE (PADRÃO 100% IDENTICO AO SCREENSHOT) ═══ */}
+        {filteredItems.length === 0 ? (
+          <div className="py-12 text-center space-y-2">
+            <Search className="w-8 h-8 text-muted-foreground/30 mx-auto" />
+            <p className="text-[13.5px] font-medium text-foreground">
+              Nenhuma configuração encontrada
+            </p>
+            <p className="text-[12px] text-muted-foreground">
+              Nenhum item corresponde a "{searchQuery}".
+            </p>
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="text-[12px] font-medium text-foreground underline underline-offset-2 mt-1 hover:opacity-80"
+            >
+              Limpar pesquisa
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/25 pt-1">
+            {filteredItems.map((item) => (
+              <ConfigListItem
+                key={item.id}
+                icon={item.icon}
+                label={item.label}
+                description={item.description}
+                destructive={item.destructive}
+                onClick={item.onClick}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+
+      {/* ═══ DRAWER DE SELEÇÃO DE BARBEARIA / FILIAL (GAVETA COMPARTILHADA) ═══ */}
+      <SelectBarbeariaDrawer
+        open={showSelectUnitDrawer}
+        onClose={() => setShowSelectUnitDrawer(false)}
+        tenantId={resolvedTenantId || barberContext.tenantId}
+        activeUnitId={activeUnit?.id}
+        onSelectUnit={handleSelectUnit}
+      />
+
+      {/* Modal Wizard de Criação de Unidade */}
+      <UnidadeWizardSheet
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        tenantId={resolvedTenantId}
+        onSaved={() => {
+          loadUnidades();
+          toast.success("Nova barbearia cadastrada com sucesso!");
+        }}
+      />
+
+      {/* Modal de Detalhes da Unidade */}
+      {detailUnidade && (
+        <UnidadeDetailScreen
+          open={!!detailUnidade}
+          onClose={() => setDetailUnidade(null)}
+          unidade={detailUnidade}
+          tenantId={detailUnidade.tenant_id}
+          onSaved={() => {
+            loadUnidades();
+            setDetailUnidade(null);
+          }}
+        />
+      )}
+
+      {/* Modais de Pausar e Excluir */}
+      {renderPauseDeleteModals()}
     </div>
   );
 }
 
 /**
- * Subcomponente de item de menu direto na tela de fundo (Padrão 100% idêntico ao Atendimento & Notificações)
+ * Subcomponente de item de menu direto na tela de fundo (Padrão 100% idêntico à imagem de referência)
  */
 function ConfigListItem({
+  icon: Icon,
   label,
   description,
   badge,
+  destructive,
   onClick,
 }: {
+  icon?: React.ElementType;
   label: string;
   description: string;
   badge?: string;
+  destructive?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -1305,22 +1602,118 @@ function ConfigListItem({
       onClick={onClick}
       className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
     >
-      <div className="min-w-0 pr-3">
-        <div className="flex items-center gap-2">
-          <p className="text-[13.5px] font-medium text-foreground leading-snug">
-            {label}
+      <div className="flex items-center gap-3.5 min-w-0 pr-3 flex-1">
+        {Icon && (
+          <Icon
+            className={cn(
+              "w-5 h-5 stroke-[1.8] shrink-0",
+              destructive ? "text-destructive" : "text-foreground"
+            )}
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p
+              className={cn(
+                "text-[13.5px] font-semibold leading-snug",
+                destructive ? "text-destructive" : "text-foreground"
+              )}
+            >
+              {label}
+            </p>
+            {badge && (
+              <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
+                {badge}
+              </span>
+            )}
+          </div>
+          <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
+            {description}
           </p>
-          {badge && (
-            <span className="text-[9.5px] font-medium uppercase px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border/40 shrink-0">
-              {badge}
-            </span>
-          )}
         </div>
-        <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-          {description}
-        </p>
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      <ChevronRight
+        className={cn(
+          "w-4 h-4 transition-colors shrink-0",
+          destructive
+            ? "text-destructive/50 group-hover:text-destructive"
+            : "text-muted-foreground/40 group-hover:text-foreground"
+        )}
+      />
     </button>
   );
 }
+
+interface BarberServicosPlanosProps {
+  tenantId?: string;
+  appBasePath?: string;
+  onBack: () => void;
+  defaultTab?: "servicos" | "planos";
+}
+
+function BarberServicosPlanos({
+  tenantId,
+  appBasePath,
+  onBack,
+  defaultTab = "servicos",
+}: BarberServicosPlanosProps) {
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<"servicos" | "planos">(defaultTab);
+
+  const isEditing = !!(searchParams.get("edit") || searchParams.get("novo"));
+
+  return (
+    <div className="pb-10 min-h-app">
+      {!isEditing && (
+        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md">
+          <ScheduleHeader title="Serviços e Planos" onBack={onBack} className="static" />
+          {/* Seletor Segmentado Apple (Serviços | Planos) */}
+          <div className="px-4 pt-1 pb-3 max-w-md mx-auto">
+            <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-3">
+              {tab === "servicos"
+                ? "Configure os serviços disponíveis, tempo estimado de atendimento e valores cobrados."
+                : "Gerencie os planos de assinatura mensal e regras de agendamento da barbearia."}
+            </p>
+            <div className="grid grid-cols-2 p-1 rounded-full bg-muted/60 dark:bg-white/[0.06] border border-border/40 backdrop-blur-xl">
+              <button
+                type="button"
+                onClick={() => setTab("servicos")}
+                className={cn(
+                  "flex items-center justify-center gap-2 py-2 px-4 rounded-full text-[13px] transition-all duration-200 select-none",
+                  tab === "servicos"
+                    ? "bg-foreground text-background shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-medium"
+                )}
+              >
+                <Scissors className="w-3.5 h-3.5" />
+                <span>Serviços</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("planos")}
+                className={cn(
+                  "flex items-center justify-center gap-2 py-2 px-4 rounded-full text-[13px] transition-all duration-200 select-none",
+                  tab === "planos"
+                    ? "bg-foreground text-background shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-medium"
+                )}
+              >
+                <Crown className="w-3.5 h-3.5" />
+                <span>Planos</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-md mx-auto">
+        {tab === "servicos" ? (
+          <AdminCortes tenantId={tenantId} basePath={appBasePath} hideHeader />
+        ) : (
+          <AdminPlanos tenantId={tenantId} basePath={appBasePath} hideHeader />
+        )}
+      </div>
+    </div>
+  );
+}
+

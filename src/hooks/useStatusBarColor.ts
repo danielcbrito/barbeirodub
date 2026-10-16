@@ -52,5 +52,8 @@ export function useStatusBarColor(color: string) {
   useEffect(() => {
     if (typeof document === "undefined") return;
     applyStatusBarColor(color);
+    return () => {
+      applyStatusBarColor("app-background");
+    };
   }, [color]);
 }

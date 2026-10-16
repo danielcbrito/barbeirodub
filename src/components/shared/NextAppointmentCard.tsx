@@ -8,6 +8,7 @@ import {
   CreditCard,
   Crown,
   Gift,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
@@ -40,42 +41,52 @@ interface NextAppointmentCardProps {
   isBlinking?: boolean;
 }
 
-/** Status oficial do sistema com cores claras:
- * - Concluído: VERDE (emerald)
- * - Agendado: AZUL (blue)
- * - Pendente: ÂMBAR (amber)
- * - Não veio: VERMELHO (rose)
+/** Status oficial do sistema com cores solicitadas:
+ * - Cancelado: Vermelho suave (#FF3B30)
+ * - Faltou: Cinza (zinc-400)
+ * - Falta confirmar / Pendente: Azul (#007AFF)
+ * - Confirmado: Verde (#34C759)
+ * - Concluído: Verde translúcido (#34C759/40)
  */
 const getStatusConfig = (status?: string | null, barbeiroConfirmou?: boolean | null) => {
-  if (status === "completed") {
+  const isCancelled = status === "cancelled" || status === "cancelled_by_admin" || status === "cancelled_by_user";
+  if (isCancelled) {
     return {
-      dot: "bg-emerald-500/70",
-      barColor: "bg-emerald-500/75 dark:bg-emerald-500/70",
-      textColor: "text-muted-foreground/75",
-      statusLabel: "Concluído",
+      dot: "bg-[#FF3B30] dark:bg-[#FF453A]",
+      barColor: "bg-[#FF3B30] dark:bg-[#FF453A]",
+      textColor: "text-[#FF3B30] dark:text-[#FF453A]",
+      statusLabel: "Cancelado",
     };
   }
   if (status === "no_show") {
     return {
-      dot: "bg-rose-500/70",
-      barColor: "bg-rose-500/75 dark:bg-rose-500/70",
-      textColor: "text-rose-600/80 dark:text-rose-400/80",
-      statusLabel: "Não veio",
+      dot: "bg-zinc-400 dark:bg-zinc-500",
+      barColor: "bg-zinc-400 dark:bg-zinc-500",
+      textColor: "text-muted-foreground",
+      statusLabel: "Faltou",
     };
   }
-  if (status === "confirmed" || barbeiroConfirmou) {
+  if (status === "completed") {
     return {
-      dot: "bg-blue-500/70",
-      barColor: "bg-blue-500/75 dark:bg-blue-500/70",
+      dot: "bg-[#34C759]/40 dark:bg-[#30D158]/40",
+      barColor: "bg-[#34C759]/40 dark:bg-[#30D158]/40",
       textColor: "text-muted-foreground/75",
-      statusLabel: "Agendado",
+      statusLabel: "Concluído",
+    };
+  }
+  if (status === "pending" || barbeiroConfirmou === false) {
+    return {
+      dot: "bg-[#FF9500] dark:bg-[#FF9F0A]",
+      barColor: "bg-[#FF9500] dark:bg-[#FF9F0A]",
+      textColor: "text-[#FF9500] dark:text-[#FF9F0A]",
+      statusLabel: "Pendente",
     };
   }
   return {
-    dot: "bg-amber-500/70",
-    barColor: "bg-amber-500/75 dark:bg-amber-500/70",
-    textColor: "text-amber-600/80 dark:text-amber-400/80",
-    statusLabel: "Pendente",
+    dot: "bg-[#34C759] dark:bg-[#30D158]",
+    barColor: "bg-[#34C759] dark:bg-[#30D158]",
+    textColor: "text-[#34C759] dark:text-[#30D158]",
+    statusLabel: "Confirmado",
   };
 };
 
@@ -155,7 +166,13 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
   const isBlinking = useMemo(() => {
     if (typeof propIsBlinking === "boolean") return propIsBlinking;
     if (!appointment?.hora) return false;
-    if (appointment.status === "completed" || appointment.status === "no_show" || appointment.status === "cancelled") {
+    if (
+      appointment.status === "completed" ||
+      appointment.status === "no_show" ||
+      appointment.status === "cancelled" ||
+      appointment.status === "cancelled_by_admin" ||
+      appointment.status === "cancelled_by_user"
+    ) {
       return false;
     }
 
@@ -192,25 +209,57 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
   };
 
   if (!appointment) {
+    const handleEmptyClick = () => {
+      const target = `${basePath}/agenda`;
+      if (onNavigate) {
+        onNavigate(target);
+      } else {
+        navigate(target, { state: { openManualBooking: true } });
+      }
+    };
+
     return (
       <div
-        onClick={handleCardClick}
+        onClick={handleEmptyClick}
         className={cn(
-          "group relative w-full rounded-2xl border border-border/60 dark:border-white/[0.10] bg-card p-3.5 sm:p-4 flex items-center gap-3.5 shadow-xs hover:border-border active:scale-[0.99] transition-all cursor-pointer overflow-hidden",
+          "group relative w-full rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card dark:bg-[#141416] p-3.5 sm:p-4 flex items-center justify-between gap-3 shadow-xs hover:border-foreground/20 active:scale-[0.99] transition-all cursor-pointer overflow-hidden",
           className
         )}
       >
-        <div className="w-10 h-10 rounded-xl bg-secondary/80 dark:bg-white/[0.06] border border-border/40 dark:border-white/10 flex items-center justify-center shrink-0">
-          <Calendar className="w-4 h-4 text-muted-foreground" />
+        {/* Apple Liquid Glass Rim Reflection */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 dark:via-white/20 to-transparent"
+        />
+
+        {/* Informação Operacional Estratégica & Minimalista (Sem textos truncados no iPhone) */}
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="relative flex h-2.5 w-2.5 shrink-0 ml-0.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#34C759] opacity-75 duration-1000" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#34C759]" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13.5px] sm:text-[14px] font-semibold text-foreground tracking-tight leading-snug">
+              Horário livre agora
+            </p>
+            <p className="text-[11.5px] sm:text-[12px] text-muted-foreground font-normal tracking-tight leading-snug mt-0.5">
+              Pronto para novo encaixe
+            </p>
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold text-foreground truncate">
-            Sem agendamentos nas próximas horas
-          </p>
-          <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
-            Toque para abrir a agenda do dia
-          </p>
-        </div>
+
+        {/* CTA Cápsula Apple HIG */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEmptyClick();
+          }}
+          className="h-10 px-4 rounded-full bg-foreground text-background font-semibold text-[13px] flex items-center gap-1.5 shadow-xs hover:opacity-90 active:scale-95 transition-all shrink-0 cursor-pointer"
+        >
+          <Scissors className="w-4 h-4 stroke-[2.2]" />
+          <span>Novo Encaixe</span>
+        </button>
       </div>
     );
   }
@@ -246,8 +295,8 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 dark:via-white/20 to-transparent"
         />
-        {/* Coluna de Horário da Agenda (Esquerda) com sincronização precisa do efeito piscante */}
-        <div className="w-12 shrink-0 flex flex-col items-center justify-center text-center">
+        {/* Coluna de Horário Limpa (sem fundo por trás) */}
+        <div className="w-[54px] shrink-0 flex flex-col items-center justify-center text-center">
           <span
             style={
               isBlinking
@@ -258,21 +307,21 @@ export const NextAppointmentCard: React.FC<NextAppointmentCardProps> = ({
                 : undefined
             }
             className={cn(
-              "agenda-strong font-mono text-[14.5px] tabular-nums tracking-tight inline-block",
+              "agenda-strong font-mono text-[14px] tabular-nums tracking-tight inline-block",
               isBlinking
-                ? "text-emerald-600 dark:text-emerald-400/75 font-semibold animate-soft-blink"
+                ? "text-[#34C759] dark:text-[#30D158] font-semibold animate-soft-blink"
                 : "text-foreground font-semibold"
             )}
           >
             {horaFormatted}
           </span>
-          <span className="agenda-subtle text-[11px] font-medium text-muted-foreground/65 mt-0.5">
+          <span className="agenda-subtle text-[11px] font-normal text-muted-foreground/75 leading-none mt-0.5">
             {duration} min
           </span>
         </div>
 
-        {/* Barra vertical fina, elegante e minimalista (2.5px) */}
-        <div className={cn("w-[2.5px] self-stretch rounded-full shrink-0", statusConfig.barColor)} />
+        {/* Barra vertical fina, elegante e minimalista (3px) */}
+        <div className={cn("w-[3px] self-stretch rounded-full shrink-0", statusConfig.barColor)} />
 
         {/* Conteúdo Principal do Agendamento */}
         <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">

@@ -117,7 +117,7 @@ export const FloatingInput = forwardRef<HTMLInputElement, FloatingInputProps>(
         <div
           className={cn(
             "relative rounded-2xl transition-colors bg-foreground/[0.04]",
-            error ? "ring-1 ring-destructive" : focused ? "ring-1 ring-primary" : "ring-1 ring-transparent",
+            error ? "ring-1 ring-destructive" : focused ? "ring-2 ring-foreground" : "ring-1 ring-transparent",
             className,
           )}
         >

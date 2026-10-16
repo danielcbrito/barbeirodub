@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, ChevronLeft, Clock, Check, Copy, Crown } from "lucide-react";
+import { ArrowLeft, ChevronLeft, Clock, Check, Copy, Crown, Banknote } from "lucide-react";
 import { toast } from "sonner";
 import { ptBR } from "date-fns/locale";
 import { format } from "date-fns";
@@ -20,6 +20,7 @@ import { PremiumCalendar } from "@/components/booking/PremiumCalendar";
 import { StepDots } from "@/components/booking/StepDots";
 import { BookingBottomBar } from "@/components/booking/BookingBottomBar";
 import { TimeSelectionBar } from "@/components/booking/TimeSelectionBar";
+import { fetchServiceOrder, sortServicesByCustomOrder } from "@/lib/servicesOrder";
 
 interface Service {
   id: string;
@@ -378,8 +379,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     let query = supabase
       .from("servicos")
       .select("id, nome, descricao, preco, duracao_minutos, ativo, tenant_id")
-      .eq("ativo", true)
-      .order("preco");
+      .eq("ativo", true);
 
     // Filtrar por tenant: se tem tenant_id, filtrar; senão, mostrar globais (null)
     if (tenantId) {
@@ -389,7 +389,14 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     }
 
     const { data } = await query;
-    setServices(data || []);
+    if (!data) {
+      setServices([]);
+      return;
+    }
+
+    const orderList = await fetchServiceOrder(tenantId || null);
+    const sorted = sortServicesByCustomOrder(data, orderList);
+    setServices(sorted as Service[]);
   };
 
   const loadBarbers = async (tenantId?: string | null) => {
@@ -527,6 +534,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           next_billing_date,
           status,
           payment_method,
+          cash_payment_confirmed,
           plano:planos(nome, limite_agendamentos_mes, servico_id, preco_mensal)
         `)
         .eq("user_id", session.user.id)
@@ -539,7 +547,8 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
       if (subscription && subscription.plano) {
         const planoData = subscription.plano as any;
-        const isPendingCash = subscription.status === 'pending_cash';
+        const isCash = subscription.payment_method === 'cash';
+        const isPendingCash = subscription.status === 'pending_cash' || (isCash && (subscription.cash_payment_confirmed === false || subscription.cash_payment_confirmed === null));
 
         // Para planos ativos, verificar vencimento
         if (!isPendingCash) {
@@ -1455,38 +1464,54 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
   // Tela de Limite Atingido - para quando o usuário já usou todos os agendamentos do plano
   if (subscriptionLimitReached) {
+    const isPendingPayment = activeSubscription?.isPendingCash;
+
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
-          <div className="w-20 h-20 mx-auto mb-6 bg-destructive/10 rounded-full flex items-center justify-center">
-            <Clock className="w-10 h-10 text-destructive" />
+          <div className="w-20 h-20 mx-auto mb-6 bg-foreground/5 border border-border/60 rounded-full flex items-center justify-center">
+            {isPendingPayment ? (
+              <Banknote className="w-10 h-10 text-foreground stroke-[1.6]" />
+            ) : (
+              <Clock className="w-10 h-10 text-foreground stroke-[1.6]" />
+            )}
           </div>
           
-          <h1 className="text-2xl font-bold text-foreground mb-3">
-            Limite Mensal Atingido
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-3">
+            {isPendingPayment ? "Pagamento Pendente na Barbearia" : "Limite Mensal Atingido"}
           </h1>
           
-          <p className="text-muted-foreground mb-6">
-            Você já utilizou todos os {activeSubscription?.limite_agendamentos_mes || 4} agendamentos 
-            do seu plano <span className="text-primary font-semibold">{activeSubscription?.plano_nome}</span> este mês.
+          <p className="text-muted-foreground text-sm leading-relaxed mb-6">
+            {isPendingPayment ? (
+              <>
+                Você já realizou o primeiro agendamento do plano <span className="text-foreground font-semibold">{activeSubscription?.plano_nome}</span>. Para agendar os próximos cortes, realize o acerto de <span className="text-foreground font-semibold">R$ {(activeSubscription?.preco_mensal || 0).toFixed(2).replace('.', ',')}</span> diretamente na barbearia.
+              </>
+            ) : (
+              <>
+                Você já utilizou todos os {activeSubscription?.limite_agendamentos_mes || 4} agendamentos 
+                do seu plano <span className="text-foreground font-semibold">{activeSubscription?.plano_nome}</span> este mês.
+              </>
+            )}
           </p>
           
-          <div className="bg-card border border-border rounded-2xl p-4 mb-6">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground text-sm">Agendamentos usados</span>
+          <div className="bg-card border border-border/60 rounded-2xl p-4 mb-6">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">
+                {isPendingPayment ? "Situação do plano" : "Agendamentos usados"}
+              </span>
               <span className="text-foreground font-semibold">
-                {activeSubscription?.agendamentos_usados}/{activeSubscription?.limite_agendamentos_mes}
+                {isPendingPayment ? (
+                  <span className="text-amber-500 font-semibold">Aguardando pagamento</span>
+                ) : (
+                  `${activeSubscription?.agendamentos_usados}/${activeSubscription?.limite_agendamentos_mes}`
+                )}
               </span>
             </div>
           </div>
           
-          <p className="text-sm text-muted-foreground mb-6">
-            O limite será renovado no próximo período de cobrança.
-          </p>
-          
           <button
             onClick={() => navigate("/cliente")}
-            className="w-full py-3.5 bg-primary text-primary-foreground font-semibold rounded-xl hover:bg-primary/90 transition-all"
+            className="w-full h-12 bg-foreground text-background font-semibold rounded-full hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs"
           >
             Voltar para Início
           </button>

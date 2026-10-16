@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useViewportHeight } from "@/hooks/useViewportHeight";
+import { useStatusBarColor } from "@/hooks/useStatusBarColor";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -15,7 +17,10 @@ import {
   Calendar,
   Lock,
   AlertCircle,
+  Bell,
+  X,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,18 +33,156 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import pixLogo from "@/assets/pix-logo.png";
+import {
+  saveFinancialPin,
+  getSavedFinancialPin,
+  clearSavedFinancialPin,
+} from "@/lib/financialPinStorage";
 
-function PixLogoImage({ className = "w-8 h-8" }: { className?: string }) {
+function PixLogoImage({ className = "w-5 h-5", size = 20 }: { className?: string; size?: number }) {
   return (
     <img
       src={pixLogo}
       alt="Pix"
-      className={`${className} object-contain shrink-0`}
+      className={cn("object-contain shrink-0", className)}
+      style={{ width: `${size}px`, height: `${size}px`, maxWidth: `${size}px`, maxHeight: `${size}px` }}
       loading="eager"
       decoding="sync"
     />
   );
 }
+
+function BackspaceIcon({ className = "w-6 h-6" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
+      <line x1="18" y1="9" x2="12" y2="15" />
+      <line x1="12" y1="9" x2="18" y2="15" />
+    </svg>
+  );
+}
+
+function TripleChevron({ className = "" }: { className?: string }) {
+  return (
+    <div className={`flex items-center -space-x-1.5 ${className}`}>
+      <ChevronRight className="w-4 h-4 stroke-[2.4]" />
+      <ChevronRight className="w-4 h-4 stroke-[2.4] opacity-80" />
+      <ChevronRight className="w-4 h-4 stroke-[2.4] opacity-50" />
+    </div>
+  );
+}
+
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return "bom dia,";
+  if (h >= 12 && h < 18) return "boa tarde,";
+  return "boa noite,";
+}
+
+const SwipeToSendSlider = React.memo(function SwipeToSendSlider({
+  onConfirm,
+  disabled,
+  loading,
+}: {
+  onConfirm: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [maxDrag, setMaxDrag] = useState(200);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const x = useMotionValue(0);
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.offsetWidth;
+        const handleWidth = 62;
+        const padding = 12;
+        setMaxDrag(Math.max(60, containerWidth - handleWidth - padding));
+      }
+    };
+    updateWidth();
+    window.addEventListener("resize", updateWidth);
+    return () => window.removeEventListener("resize", updateWidth);
+  }, []);
+
+  const textOpacity = useTransform(x, [0, maxDrag * 0.55], [1, 0]);
+  const progressWidth = useTransform(x, (val) => Math.max(0, val + 32));
+
+  const handleDragEnd = () => {
+    if (disabled || loading || isCompleted) return;
+    const currentX = x.get();
+    if (currentX >= maxDrag * 0.65) {
+      setIsCompleted(true);
+      animate(x, maxDrag, { type: "spring", stiffness: 350, damping: 26 });
+      try {
+        navigator.vibrate?.(25);
+      } catch {
+        /* ignore */
+      }
+      onConfirm();
+      setTimeout(() => {
+        setIsCompleted(false);
+        animate(x, 0, { type: "spring", stiffness: 350, damping: 28 });
+      }, 1000);
+    } else {
+      animate(x, 0, { type: "spring", stiffness: 450, damping: 32 });
+    }
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn(
+        "relative h-[64px] w-full rounded-full bg-muted/60 dark:bg-[#161618] border border-border/70 p-1.5 flex items-center select-none overflow-hidden transition-all shadow-inner",
+        disabled && "opacity-40 pointer-events-none"
+      )}
+    >
+      {/* Barra de progresso verde suave que acompanha o arrasto */}
+      <motion.div
+        className="absolute left-0 top-0 bottom-0 bg-emerald-500/15 rounded-full pointer-events-none"
+        style={{ width: progressWidth }}
+      />
+
+      {/* Texto de orientação com fade-out gradual */}
+      <motion.span
+        style={{ opacity: textOpacity }}
+        className="absolute inset-0 flex items-center justify-center text-[13px] font-medium text-muted-foreground pointer-events-none tracking-wide"
+      >
+        {loading ? "processando saque..." : "deslize para transferir"}
+      </motion.span>
+
+      {/* Botão deslizante com spring physics suave */}
+      <motion.div
+        drag={disabled || loading || isCompleted ? false : "x"}
+        dragConstraints={{ left: 0, right: maxDrag }}
+        dragElastic={{ left: 0.02, right: 0.08 }}
+        style={{ x }}
+        onDragEnd={handleDragEnd}
+        className={cn(
+          "relative z-10 w-[62px] h-[52px] rounded-[22px] bg-gradient-to-r from-[#174e42] to-[#0d332b] flex items-center justify-center text-white shadow-md cursor-grab active:cursor-grabbing active:scale-95 transition-transform",
+          isCompleted && "bg-emerald-600"
+        )}
+      >
+        {loading ? (
+          <Loader2 className="w-5 h-5 animate-spin text-white" />
+        ) : (
+          <TripleChevron className="text-white" />
+        )}
+      </motion.div>
+    </div>
+  );
+});
 
 /* ─── Types ───────────────────────────────────────────────── */
 
@@ -47,6 +190,7 @@ interface CarteiraPageProps {
   barbeiroId: string;
   barbeiroNome: string;
   basePath?: string;
+  onBack?: () => void;
 }
 
 interface BarberRow {
@@ -260,6 +404,8 @@ const walletCache = new Map<string, WalletCacheEntry>();
 export function CarteiraPage({
   barbeiroId,
   barbeiroNome,
+  basePath = "/barbeiro",
+  onBack,
 }: CarteiraPageProps) {
   const cached = walletCache.get(barbeiroId);
   const [loading, setLoading] = useState(!cached);
@@ -281,11 +427,45 @@ export function CarteiraPage({
   const [withdrawing, setWithdrawing] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
   const [pinMode, setPinMode] = useState<PinMode>("validate");
+  const [pinCreateStep, setPinCreateStep] = useState<"enter" | "confirm">("enter");
   const [hasPin, setHasPin] = useState<boolean>(false);
   const [pinDigits, setPinDigits] = useState<string[]>(emptyPin);
   const [pinConfirmDigits, setPinConfirmDigits] = useState<string[]>(emptyPin);
   const [pinError, setPinError] = useState<string | null>(null);
   const [savingPinSession, setSavingPinSession] = useState(false);
+
+  useStatusBarColor(withdrawOpen ? "app-background" : "#144439");
+
+  const handleNumpadPress = useCallback((digit: string) => {
+    setWithdrawValue((prev) => {
+      if (!prev || prev === "0") {
+        if (digit === ",") return "0,";
+        return digit;
+      }
+      if (digit === ",") {
+        if (prev.includes(",")) return prev;
+        return `${prev},`;
+      }
+      if (prev.includes(",")) {
+        const parts = prev.split(",");
+        if (parts[1] && parts[1].length >= 2) return prev;
+      }
+      if (prev.replace(",", "").length >= 7) return prev;
+      return prev + digit;
+    });
+  }, []);
+
+  const handleNumpadBackspace = useCallback(() => {
+    setWithdrawValue((prev) => {
+      if (!prev || prev.length <= 1) return "";
+      return prev.slice(0, -1);
+    });
+  }, []);
+
+  const formattedWithdrawDisplay = useMemo(() => {
+    if (!withdrawValue || withdrawValue === "0") return "R$ 0";
+    return `R$ ${withdrawValue}`;
+  }, [withdrawValue]);
 
   const [changePinOpen, setChangePinOpen] = useState(false);
   const [changeCurrentDigits, setChangeCurrentDigits] = useState<string[]>(emptyPin);
@@ -599,6 +779,7 @@ export function CarteiraPage({
   const resetPinForm = () => {
     setPinDigits([...emptyPin]);
     setPinConfirmDigits([...emptyPin]);
+    setPinCreateStep("enter");
     setPinError(null);
   };
 
@@ -610,6 +791,7 @@ export function CarteiraPage({
       console.error("[woovi] pin status:", err);
     }
     resetPinForm();
+    setPinCreateStep("enter");
     setPinMode(currentHasPin ? "validate" : "create");
     setPinOpen(true);
   };
@@ -629,24 +811,31 @@ export function CarteiraPage({
     if (error) throw error;
   };
 
-  const authorizePinAndWithdraw = async () => {
+  const authorizePinAndWithdraw = async (customPin?: string, customConfirmPin?: string) => {
     if (savingPinSession) return;
     setSavingPinSession(true);
+    setPinError(null);
     try {
-      const pin = pinDigits.join("");
+      const pin = customPin ?? pinDigits.join("");
       if (pin.length !== 4) {
         setPinError("Informe os 4 dígitos do PIN");
         return;
       }
 
       if (pinMode === "create") {
-        const confirmPin = pinConfirmDigits.join("");
+        const confirmPin = customConfirmPin ?? pinConfirmDigits.join("");
         if (confirmPin.length !== 4) {
           setPinError("Confirme os 4 dígitos do PIN");
           return;
         }
         if (pin !== confirmPin) {
           setPinError("Os PINs não conferem");
+          setPinConfirmDigits([...emptyPin]);
+          try {
+            navigator.vibrate?.([40, 60, 40]);
+          } catch {
+            /* ignore */
+          }
           return;
         }
 
@@ -656,14 +845,34 @@ export function CarteiraPage({
         });
         if (error) throw error;
         setHasPin(true);
+        const { data: auth } = await supabase.auth.getUser();
+        if (auth?.user?.id) {
+          saveFinancialPin(auth.user.id, pin);
+        }
+        if (barbeiroId) {
+          saveFinancialPin(barbeiroId, pin);
+        }
+        toast.success("PIN cadastrado! Seus próximos saques serão automáticos.");
       } else {
         const { data: ok, error } = await supabase.rpc("verify_financial_pin", {
           p_pin: pin,
         });
         if (error || ok !== true) {
-          setPinError("PIN incorreto");
+          setPinError("PIN incorreto. Tente novamente.");
           setPinDigits([...emptyPin]);
+          try {
+            navigator.vibrate?.([40, 60, 40]);
+          } catch {
+            /* ignore */
+          }
           return;
+        }
+        const { data: auth } = await supabase.auth.getUser();
+        if (auth?.user?.id) {
+          saveFinancialPin(auth.user.id, pin);
+        }
+        if (barbeiroId) {
+          saveFinancialPin(barbeiroId, pin);
         }
       }
 
@@ -673,8 +882,77 @@ export function CarteiraPage({
       await handleWithdraw(true);
     } catch (err) {
       setPinError((err as Error).message || "Erro ao validar PIN");
+      setPinDigits([...emptyPin]);
+      setPinConfirmDigits([...emptyPin]);
+      setPinCreateStep("enter");
     } finally {
       setSavingPinSession(false);
+    }
+  };
+
+  const handlePinKeypadPress = (digit: string) => {
+    if (savingPinSession) return;
+    setPinError(null);
+
+    if (pinMode === "create" && pinCreateStep === "confirm") {
+      const idx = pinConfirmDigits.findIndex((d) => d === "");
+      if (idx === -1) return;
+      const nextArr = [...pinConfirmDigits];
+      nextArr[idx] = digit;
+      setPinConfirmDigits(nextArr);
+
+      if (idx === 3) {
+        const fullPin = pinDigits.join("");
+        const fullConfirm = nextArr.join("");
+        if (fullPin !== fullConfirm) {
+          setPinError("Os PINs não conferem");
+          setPinConfirmDigits([...emptyPin]);
+          try {
+            navigator.vibrate?.([40, 60, 40]);
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+        authorizePinAndWithdraw(fullPin, fullConfirm);
+      }
+    } else {
+      const idx = pinDigits.findIndex((d) => d === "");
+      if (idx === -1) return;
+      const nextArr = [...pinDigits];
+      nextArr[idx] = digit;
+      setPinDigits(nextArr);
+
+      if (idx === 3) {
+        const fullPin = nextArr.join("");
+        if (pinMode === "create") {
+          setPinCreateStep("confirm");
+        } else {
+          authorizePinAndWithdraw(fullPin);
+        }
+      }
+    }
+  };
+
+  const handlePinKeypadBackspace = () => {
+    if (savingPinSession) return;
+    setPinError(null);
+
+    if (pinMode === "create" && pinCreateStep === "confirm") {
+      const lastFilledIdx = pinConfirmDigits.map((d) => Boolean(d)).lastIndexOf(true);
+      if (lastFilledIdx === -1) {
+        setPinCreateStep("enter");
+        return;
+      }
+      const nextArr = [...pinConfirmDigits];
+      nextArr[lastFilledIdx] = "";
+      setPinConfirmDigits(nextArr);
+    } else {
+      const lastFilledIdx = pinDigits.map((d) => Boolean(d)).lastIndexOf(true);
+      if (lastFilledIdx === -1) return;
+      const nextArr = [...pinDigits];
+      nextArr[lastFilledIdx] = "";
+      setPinDigits(nextArr);
     }
   };
 
@@ -711,28 +989,13 @@ export function CarteiraPage({
     }
   };
 
-  const handleWithdraw = async (pinAlreadyValidated = false) => {
-    const valueReais = parseFloat(withdrawValue.replace(",", "."));
-    if (!valueReais || valueReais <= 0) return toast.error("Informe um valor válido");
-    const cents = Math.round(valueReais * 100);
-    if (cents > availableCentavos) {
-      return toast.error(
-        blockedCentavos > 0
-          ? `Disponível ${fmtBRL(availableCentavos)} — ${fmtBRL(blockedCentavos)} aguardando finalização`
-          : "Saldo insuficiente",
-      );
-    }
-
-    if (!pinAlreadyValidated) {
-      await openPinGate();
-      return;
-    }
-
+  const executeWithdrawRequest = async (cents: number, pinToSend?: string) => {
     setWithdrawing(true);
     try {
       const response = await invokeStoreApi<{ woovi?: unknown }>({
         action: "woovi_withdraw",
         value_centavos: cents,
+        ...(pinToSend ? { pin: pinToSend } : {}),
       });
 
       if (!response.success) {
@@ -753,6 +1016,63 @@ export function CarteiraPage({
     } finally {
       setWithdrawing(false);
     }
+  };
+
+  const handleWithdraw = async (pinAlreadyValidated = false) => {
+    const valueReais = parseFloat(withdrawValue.replace(",", "."));
+    if (!valueReais || valueReais <= 0) return toast.error("Informe um valor válido");
+    const cents = Math.round(valueReais * 100);
+    if (cents > availableCentavos) {
+      return toast.error(
+        blockedCentavos > 0
+          ? `Disponível ${fmtBRL(availableCentavos)} — ${fmtBRL(blockedCentavos)} aguardando finalização`
+          : "Saldo insuficiente",
+      );
+    }
+
+    if (pinAlreadyValidated) {
+      await executeWithdrawRequest(cents);
+      return;
+    }
+
+    // 1. Obter usuário autenticado ou barbeiroId
+    const { data: authData } = await supabase.auth.getUser();
+    const currentUserId = authData?.user?.id;
+    const storedPin =
+      (currentUserId ? getSavedFinancialPin(currentUserId) : null) ||
+      (barbeiroId ? getSavedFinancialPin(barbeiroId) : null);
+
+    // 2. Se o barbeiro já tem o PIN salvo no aparelho, valida e saca automaticamente sem pedir digitação
+    if (storedPin && storedPin.length === 4) {
+      setWithdrawing(true);
+      try {
+        const { data: ok, error: verifyErr } = await supabase.rpc("verify_financial_pin", {
+          p_pin: storedPin,
+        });
+
+        if (!verifyErr && ok === true) {
+          await createFinancialPinSession();
+          await executeWithdrawRequest(cents, storedPin);
+          return;
+        } else {
+          // PIN salvo desatualizado ou inválido (ex: alterado em outro dispositivo)
+          if (currentUserId) clearSavedFinancialPin(currentUserId);
+          if (barbeiroId) clearSavedFinancialPin(barbeiroId);
+          toast.error("PIN alterado ou inválido. Digite seu PIN para continuar.");
+          await openPinGate();
+          return;
+        }
+      } catch (err) {
+        console.error("[woovi] erro ao validar PIN salvo:", err);
+        await openPinGate();
+        return;
+      } finally {
+        setWithdrawing(false);
+      }
+    }
+
+    // 3. Primeiro saque ou sem PIN salvo -> abre modal para cadastrar ou digitar
+    await openPinGate();
   };
 
   const handleSaveSettings = async (next: boolean) => {
@@ -780,66 +1100,119 @@ export function CarteiraPage({
   };
 
   return (
-    <div className="min-h-app bg-background text-foreground pb-32">
-      {/* HEADER: Saudação e status */}
-      <div
-        className="sticky top-0 px-5 pb-3 flex items-center justify-between gap-3 z-20 bg-background/95 dark:bg-[#0c0c0e]/95 backdrop-blur-md"
-        style={{ paddingTop: "max(16px, calc(env(safe-area-inset-top, 0px) + 8px))" }}
+    <div className="min-h-app bg-background text-foreground pb-32 w-full">
+      {/* 1. HERO FINANCIAL HEADER FULL-WIDTH (PADRÃO IMAGEM 1)
+          Ocupa 100% da largura da tela, invade o topo / status bar do celular (onde fica horário, bateria, etc.)
+          e tem apenas as bordas arredondadas na base, abaixo dos botões Extrato e Sacar */}
+      <header
+        className="w-full bg-gradient-to-b from-[#144439] via-[#0d2e27] to-[#071a16] text-white rounded-b-[28px] sm:rounded-b-[32px] shadow-xl relative overflow-hidden border-b border-emerald-500/20"
+        style={{
+          paddingTop: "max(18px, calc(env(safe-area-inset-top, 0px) + 12px))",
+        }}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-border/80 bg-card">
-            {avatarUrl && !avatarFailed ? (
-              <img
-                src={avatarUrl}
-                alt={barbeiroNome || "Avatar"}
-                className="w-full h-full object-cover"
-                onError={() => setAvatarFailed(true)}
-              />
-            ) : (
-              <span className="text-[13px] font-bold text-foreground">
-                {(barbeiroNome || "B")
-                  .trim()
-                  .split(/\s+/)
-                  .map((p) => p[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
+        {/* Glow sutil de fundo */}
+        <div className="absolute -top-10 -right-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="mx-auto w-full max-w-md px-5 sm:px-6 pb-6 sm:pb-7">
+          {/* Linha de cabeçalho dentro do card (Image 1) */}
+          <div className="flex items-center justify-between relative z-10">
+            <div className="flex items-center gap-3">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 active:scale-95 transition-all -ml-1"
+                  aria-label="Voltar"
+                >
+                  <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
+                </button>
+              )}
+              <div className="flex flex-col">
+                <span className="text-[13px] text-emerald-200/80 font-normal lowercase tracking-wide">
+                  {getGreeting()}
+                </span>
+                <span className="text-[17px] font-semibold text-white tracking-tight leading-tight">
+                  {firstName}
+                </span>
+              </div>
+            </div>
+
+            {/* Botão de sino de notificação com ponto indicador / refresh */}
+            <button
+              onClick={handleRefreshAll}
+              disabled={refreshing}
+              className="relative p-2.5 rounded-full hover:bg-white/10 text-white/85 hover:text-white active:scale-95 transition-all"
+              title="Atualizar carteira"
+              aria-label="Notificações e atualização"
+            >
+              <Bell className={`w-5 h-5 stroke-[1.8] ${refreshing ? "animate-spin text-white" : ""}`} />
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-white ring-2 ring-[#13443a]" />
+            </button>
+          </div>
+
+          {/* Seção de Saldo (Image 1) */}
+          <div className="relative z-10 mt-7 mb-6">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[14px] text-emerald-100/75 font-normal tracking-wide">
+                seu saldo total
               </span>
+              <button
+                onClick={() => setShowBalance((v) => !v)}
+                aria-label="Mostrar ou ocultar saldo"
+                className="text-emerald-100/75 hover:text-white transition-colors p-1"
+              >
+                {showBalance ? (
+                  <Eye className="w-5 h-5 stroke-[1.8]" />
+                ) : (
+                  <EyeOff className="w-5 h-5 stroke-[1.8]" />
+                )}
+              </button>
+            </div>
+
+            <p className="text-[36px] sm:text-[42px] font-bold tracking-tight text-white tabular-nums leading-none">
+              {showBalance ? fmtBRL(availableCentavos) : "R$ ••••••"}
+            </p>
+
+            {blockedCentavos > 0 && (
+              <p className="text-[12px] text-emerald-200/70 font-normal mt-2">
+                {showBalance ? fmtBRL(blockedCentavos) : "R$ ••••"} aguardando finalização do corte
+              </p>
             )}
           </div>
-          <div className="min-w-0">
-            <h1 className="text-[16px] font-bold leading-tight truncate tracking-tight text-foreground">
-              Olá, {firstName}
-            </h1>
-            <p className="text-[12px] font-normal text-muted-foreground leading-none mt-0.5">
-              Carteira Digital
-            </p>
+
+          {/* Dois botões em cápsula lado a lado (Image 1: request & send) */}
+          <div className="flex items-center gap-3 relative z-10 pt-1">
+            <button
+              type="button"
+              onClick={() => setExtratoOpen(true)}
+              className="flex-1 h-12 rounded-full bg-[#0a1815]/90 hover:bg-[#0a1815] text-white text-[14px] font-medium flex items-center justify-center border border-white/10 active:scale-98 transition-all shadow-xs"
+            >
+              extrato
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setWithdrawOpen(true)}
+              disabled={availableCentavos <= 0}
+              className="flex-1 h-12 rounded-full bg-white hover:bg-white/95 text-[#0a1815] text-[14px] font-semibold flex items-center justify-center active:scale-98 transition-all shadow-md disabled:opacity-40 disabled:pointer-events-none"
+            >
+              sacar
+            </button>
           </div>
         </div>
+      </header>
 
-        <button
-          onClick={handleRefreshAll}
-          disabled={refreshing}
-          className="w-9 h-9 rounded-full border border-border/80 bg-card flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all"
-          title="Atualizar dados"
-          aria-label="Atualizar dados"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-foreground" : ""}`} />
-        </button>
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="relative z-10 px-5 pt-2">
-        <div className="mx-auto w-full max-w-md space-y-6">
+      {/* CONTEÚDO PRINCIPAL (ABAIXO DO HEADER VERDE) */}
+      <div className="relative z-10 px-4 pt-5 sm:px-6">
+        <div className="mx-auto w-full max-w-md space-y-5">
           {loading ? (
-            <div className="w-full rounded-2xl min-h-[200px] flex items-center justify-center border border-border/80 bg-card">
+            <div className="w-full rounded-2xl min-h-[160px] flex items-center justify-center border border-border/80 bg-card">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : !hasSubaccount ? (
             /* Formulário de ativação / cadastro Pix */
             <div className="w-full rounded-2xl border border-border/80 bg-card p-6 shadow-sm">
               <div className="space-y-1 mb-5">
-                <PixLogoImage className="w-9 h-9 mb-3" />
+                <PixLogoImage size={36} className="mb-3" />
                 <h2 className="text-[18px] font-bold tracking-tight text-foreground">
                   Cadastrar Chave Pix
                 </h2>
@@ -916,65 +1289,19 @@ export function CarteiraPage({
             </div>
           ) : (
             <>
-              {/* 1. CARD PRINCIPAL DE SALDO (Padrão exato elogiado pelo usuário) */}
-              <div className="w-full rounded-2xl border border-border/60 bg-muted/30 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Saldo disponível
-                  </p>
-                  <button
-                    onClick={() => setShowBalance((v) => !v)}
-                    aria-label="Mostrar ou ocultar saldo"
-                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                  >
-                    {showBalance ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  </button>
-                </div>
 
-                <p className="text-[32px] sm:text-[36px] font-bold tracking-tight text-foreground tabular-nums leading-tight">
-                  {showBalance ? fmtBRL(availableCentavos) : "R$ ••••••"}
-                </p>
-
-                {blockedCentavos > 0 && (
-                  <p className="text-[12px] text-muted-foreground mt-1">
-                    {showBalance ? fmtBRL(blockedCentavos) : "R$ ••••"} aguardando finalização
-                  </p>
-                )}
-
-                {/* Botão de Saque (Padrão Add Money NeoBank) */}
-                <button
-                  onClick={() => setWithdrawOpen(true)}
-                  disabled={availableCentavos <= 0}
-                  className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] flex items-center justify-center hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-40 disabled:pointer-events-none mt-4 shadow-sm"
-                >
-                  Sacar via Pix
-                </button>
-              </div>
-
-              {/* 2. CHAVE PIX CADASTRADA (Banner Minimalista e Sério) */}
-              <div className="w-full rounded-2xl p-4 sm:p-5 bg-zinc-900 text-white border border-zinc-800 shadow-sm relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <PixLogoImage className="w-5 h-5" />
-                    <span className="text-[12px] font-medium text-zinc-300 truncate">
-                      Chave Pix cadastrada
+              {/* 2. CHAVE PIX CADASTRADA (Minimalista, refinada e adaptável ao tema claro/escuro) */}
+              <div className="w-full rounded-2xl p-4 sm:p-5 bg-card text-card-foreground border border-border/40 shadow-xs relative overflow-hidden transition-all">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <PixLogoImage size={20} />
+                    <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">
+                      Chave Pix
+                    </span>
+                    <span className="text-[11px] font-medium text-muted-foreground/80 bg-muted/60 dark:bg-muted/40 px-2 py-0.5 rounded-full shrink-0">
+                      {barber?.woovi_pix_key_type ? PIX_KEY_LABELS[barber.woovi_pix_key_type as PixKeyType] : "Pix"}
                     </span>
                   </div>
-                  <span className="text-[11px] text-zinc-400 shrink-0">
-                    {barber?.woovi_pix_key_type ? PIX_KEY_LABELS[barber.woovi_pix_key_type as PixKeyType] : "Pix"}
-                  </span>
-                </div>
-
-                <div className="mt-2.5 mb-3">
-                  <p className="text-[18px] sm:text-[19px] font-mono font-medium tracking-wider text-zinc-100 tabular-nums">
-                    {maskPixKey(barber?.woovi_pix_key, barber?.woovi_pix_key_type)}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between pt-2.5 border-t border-zinc-800/80">
-                  <p className="text-[12px] text-zinc-400 truncate">
-                    {barber?.woovi_subaccount_name || barbeiroNome}
-                  </p>
 
                   <button
                     onClick={() => {
@@ -982,47 +1309,64 @@ export function CarteiraPage({
                       setPixKeyTypeDraft(((barber?.woovi_pix_key_type as PixKeyType) ?? "cpf"));
                       setPixKeyOpen(true);
                     }}
-                    className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-[12px] font-medium text-white transition-all shrink-0"
+                    className="px-3 py-1 rounded-full bg-secondary hover:bg-secondary/80 text-foreground text-[12px] font-medium transition-all active:scale-95 shrink-0"
                   >
-                    Configurar
+                    Alterar
                   </button>
+                </div>
+
+                <div className="mt-2.5">
+                  <p className="text-[17px] sm:text-[18px] font-semibold text-foreground tracking-tight tabular-nums">
+                    {maskPixKey(barber?.woovi_pix_key, barber?.woovi_pix_key_type)}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
+                    {barber?.woovi_subaccount_name || barbeiroNome}
+                  </p>
                 </div>
               </div>
 
-              {/* 3. AÇÕES RÁPIDAS (Ícones diretos na linha, sem caixas/blocos por trás) */}
-              <div className="rounded-2xl border border-border/80 bg-card overflow-hidden divide-y divide-border/60">
-                {/* Linha: Saque Automático (Abre tela cheia) */}
+              {/* 3. CONFIGURAÇÕES & PREFERÊNCIAS (Apple Inset Grouped List) */}
+              <div className="rounded-2xl border border-border/40 bg-card overflow-hidden divide-y divide-border/30 shadow-xs">
+                {/* Linha: Repasse */}
                 <div
                   onClick={() => setAutoConfigOpen(true)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:scale-[0.99] transition-all cursor-pointer"
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
-                    <Calendar className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 text-foreground">
+                      <Calendar className="w-4 h-4 stroke-[1.8]" />
+                    </div>
                     <div className="text-left min-w-0">
-                      <p className="text-[14px] font-medium text-foreground">Saque automático</p>
-                      <p className="text-[12px] text-muted-foreground truncate">
-                        {autoEnabled ? "Ativado · Semanalmente" : "Desativado"}
+                      <p className="text-[14px] font-medium text-foreground leading-tight">
+                        Repasse
+                      </p>
+                      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
+                        {autoEnabled ? "Semanal · Toda segunda-feira" : "Desativado"}
                       </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
                 </div>
 
-                {/* Linha: PIN Financeiro (Abre tela cheia) */}
+                {/* Linha: PIN de segurança */}
                 <div
                   onClick={openChangePin}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:scale-[0.99] transition-all cursor-pointer"
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
-                    <Lock className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 text-foreground">
+                      <Lock className="w-4 h-4 stroke-[1.8]" />
+                    </div>
                     <div className="text-left min-w-0">
-                      <p className="text-[14px] font-medium text-foreground">PIN de segurança</p>
-                      <p className="text-[12px] text-muted-foreground truncate">
-                        {hasPin ? "PIN de 4 dígitos ativo" : "Criar PIN de segurança"}
+                      <p className="text-[14px] font-medium text-foreground leading-tight">
+                        PIN de segurança
+                      </p>
+                      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
+                        {hasPin ? "PIN de 4 dígitos ativo · Saque automático" : "Criar PIN de segurança"}
                       </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
                 </div>
               </div>
 
@@ -1101,104 +1445,132 @@ export function CarteiraPage({
 
       {/* ─── TELAS INTEIRAS (100% sem gaveta) ────────────────────────── */}
 
-      {/* TELA INTEIRA: SACAR VIA PIX */}
+      {/* TELA INTEIRA: SACAR VIA PIX (DESIGN 100% IDÊNTICO À IMAGEM 2, COM SUPORTE TOTAL AO TEMA CLARO E ESCURO) */}
       {withdrawOpen && (
         <div
-          className="fixed inset-0 z-[120] flex flex-col bg-background text-foreground overflow-hidden"
+          className="fixed inset-0 z-[120] flex flex-col justify-between bg-background text-foreground overflow-hidden select-none"
           style={{ minHeight: viewportHeight }}
         >
-          {/* Header com ChevronLeft limpo (sem caixa cinza) */}
+          {/* 1. Header com seta voltar limpa e card do destinatário */}
           <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5"
-            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
+            className="flex-shrink-0 w-full max-w-sm mx-auto px-4"
+            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)" }}
           >
-            <div className="flex items-center gap-2 min-h-[52px]">
+            <div className="flex items-center min-h-[48px]">
               <button
                 onClick={() => !withdrawing && setWithdrawOpen(false)}
                 disabled={withdrawing}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
+                className="w-10 h-10 flex items-center justify-center text-foreground hover:bg-muted active:scale-95 transition-all -ml-2 rounded-full"
                 aria-label="Voltar"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
               </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                Sacar via Pix
-              </h2>
             </div>
-          </div>
 
-          {/* Conteúdo */}
-          <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-6">
-              {/* Saldo disponível (Idêntico ao padrão que o usuário elogiou) */}
-              <div className="rounded-2xl p-4 bg-muted/30 border border-border/60">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                  Saldo disponível
-                </p>
-                <p className="text-[26px] font-bold text-foreground mt-0.5 tabular-nums">
-                  {fmtBRL(availableCentavos)}
-                </p>
-                {blockedCentavos > 0 && (
-                  <p className="text-[12px] mt-1 text-muted-foreground">
-                    {fmtBRL(blockedCentavos)} aguardando finalização
-                  </p>
-                )}
-              </div>
-
-              {/* Valor a transferir: DIRETO NA TELA, sem bolha/caixa de input */}
-              <div className="flex flex-col items-center justify-center py-6">
-                <p className="text-[13px] font-medium text-muted-foreground mb-3">
-                  Quanto deseja transferir?
-                </p>
-                <div className="flex items-baseline justify-center gap-1.5 w-full">
-                  <span className="text-[28px] sm:text-[34px] font-bold text-muted-foreground select-none">
-                    R$
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoFocus
-                    placeholder="0,00"
-                    value={withdrawValue}
-                    onChange={(e) => setWithdrawValue(e.target.value)}
-                    className="bg-transparent text-[38px] sm:text-[44px] font-bold text-foreground text-center focus:outline-none w-[240px] tabular-nums border-none shadow-none p-0"
-                  />
+            {/* Recipient Card (Exato como Imagem 2, com cores adaptáveis ao tema) */}
+            <div className="w-full rounded-2xl bg-card border border-border/80 p-3 mt-1 flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-muted overflow-hidden flex items-center justify-center shrink-0 border border-border/60">
+                  {avatarUrl && !avatarFailed ? (
+                    <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <PixLogoImage size={24} />
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setWithdrawValue((availableCentavos / 100).toFixed(2).replace(".", ","))
-                  }
-                  className="mt-4 text-[13px] font-medium text-muted-foreground hover:text-foreground underline transition-colors"
-                >
-                  Sacar valor total ({fmtBRL(availableCentavos)})
-                </button>
+                <div className="min-w-0">
+                  <p className="text-[15px] font-semibold text-foreground truncate leading-tight">
+                    {barber?.woovi_subaccount_name || barbeiroNome}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground font-mono mt-0.5">
+                    {maskPixKey(barber?.woovi_pix_key, barber?.woovi_pix_key_type)}
+                  </p>
+                </div>
               </div>
+
+              <button
+                onClick={() => {
+                  setPixKeyDraft(barber?.woovi_pix_key ?? "");
+                  setPixKeyTypeDraft(((barber?.woovi_pix_key_type as PixKeyType) ?? "cpf"));
+                  setPixKeyOpen(true);
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="Configurar chave Pix"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
-          {/* Footer CTA */}
+          {/* 2. Valor Central e Subtítulo "no tax" / "sem taxa" (Exato como Imagem 2) */}
+          <div className="flex-1 flex flex-col items-center justify-center px-4 py-2 my-auto">
+            <div className="text-center">
+              <p className="text-[52px] sm:text-[62px] font-bold text-foreground tracking-tight leading-none tabular-nums">
+                {formattedWithdrawDisplay}
+              </p>
+              <p className="text-[13px] text-muted-foreground font-normal mt-2.5">
+                sem taxa
+              </p>
+            </div>
+
+            {/* Atalho de saldo disponível */}
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-[12px] text-muted-foreground">
+                Saldo disponível: {fmtBRL(availableCentavos)}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const maxStr = (availableCentavos / 100).toFixed(2).replace(".", ",");
+                  setWithdrawValue(maxStr);
+                }}
+                className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 hover:opacity-80 underline transition-opacity"
+              >
+                Sacar tudo
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Teclado Virtual Numérico + Slider "swipe to send" (Exato como Imagem 2) */}
           <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3 bg-background border-t border-border/60"
+            className="flex-shrink-0 w-full max-w-sm mx-auto px-4"
             style={{
-              paddingBottom: keyboardOpen
-                ? 12
-                : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
+              paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
             }}
           >
-            <Button
-              onClick={() => handleWithdraw()}
-              disabled={withdrawing || availableCentavos <= 0}
-              className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all shadow-sm"
-            >
-              {withdrawing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Transferindo...
-                </>
-              ) : (
-                "Confirmar saque Pix"
-              )}
-            </Button>
+            {/* Grid 3x4 do Teclado Numérico */}
+            <div className="grid grid-cols-3 gap-y-2 gap-x-6 text-center mb-5 select-none touch-manipulation">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "0"].map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onPointerDown={() => {
+                    try { navigator.vibrate?.(10); } catch {}
+                  }}
+                  onClick={() => handleNumpadPress(k)}
+                  className="h-13 sm:h-15 flex items-center justify-center text-[26px] sm:text-[28px] font-normal text-foreground active:scale-95 active:bg-muted/70 transition-colors duration-75 rounded-full hover:bg-muted/40 touch-manipulation select-none"
+                >
+                  {k}
+                </button>
+              ))}
+              <button
+                type="button"
+                onPointerDown={() => {
+                  try { navigator.vibrate?.(10); } catch {}
+                }}
+                onClick={() => handleNumpadBackspace()}
+                className="h-13 sm:h-15 flex items-center justify-center text-foreground active:scale-95 active:bg-muted/70 transition-colors duration-75 rounded-full hover:bg-muted/40 touch-manipulation select-none"
+                aria-label="Apagar dígito"
+              >
+                <BackspaceIcon className="w-6 h-6 stroke-[1.8]" />
+              </button>
+            </div>
+
+            {/* 4. Slider "swipe to send" */}
+            <SwipeToSendSlider
+              onConfirm={() => handleWithdraw()}
+              disabled={withdrawing || availableCentavos <= 0 || !withdrawValue || withdrawValue === "0"}
+              loading={withdrawing}
+            />
           </div>
         </div>
       )}
@@ -1231,7 +1603,7 @@ export function CarteiraPage({
 
           <div className="flex-1 overflow-y-auto overscroll-contain">
             <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-5">
-              <div className="rounded-2xl p-4 bg-muted/30 border border-border/60">
+              <div className="rounded-2xl p-4 bg-card border border-border/40 shadow-xs">
                 <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Chave atual
                 </p>
@@ -1342,14 +1714,14 @@ export function CarteiraPage({
                 <ChevronLeft className="w-6 h-6" />
               </button>
               <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                Saque Automático
+                Repasse
               </h2>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto overscroll-contain">
             <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-4">
-              <div className="rounded-2xl p-4 bg-muted/30 border border-border/60 flex items-center justify-between">
+              <div className="rounded-2xl p-4 bg-card border border-border/40 shadow-xs flex items-center justify-between">
                 <div className="pr-4">
                   <p className="text-[14px] font-medium text-foreground">
                     Repasse semanal automático
@@ -1418,6 +1790,7 @@ export function CarteiraPage({
                     {[0, 1, 2, 3].map((index) => (
                       <Input
                         key={`${field.prefix}-${index}`}
+                        id={`pin-input-${field.prefix}-${index}`}
                         type="password"
                         inputMode="numeric"
                         maxLength={1}
@@ -1428,8 +1801,18 @@ export function CarteiraPage({
                           arr[index] = value;
                           field.setter(arr);
                           setChangePinError(null);
+                          if (value && index < 3) {
+                            const nextInput = document.getElementById(`pin-input-${field.prefix}-${index + 1}`);
+                            nextInput?.focus();
+                          }
                         }}
-                        className="w-12 h-13 text-center text-xl font-bold rounded-xl bg-background border-border/80 text-foreground"
+                        onKeyDown={(event) => {
+                          if (event.key === "Backspace" && !field.digits[index] && index > 0) {
+                            const prevInput = document.getElementById(`pin-input-${field.prefix}-${index - 1}`);
+                            prevInput?.focus();
+                          }
+                        }}
+                        className="w-12 h-13 text-center text-xl font-bold rounded-xl bg-background border-border/80 text-foreground touch-manipulation"
                       />
                     ))}
                   </div>
@@ -1464,141 +1847,133 @@ export function CarteiraPage({
         </div>
       )}
 
-      {/* TELA INTEIRA: AUTORIZAÇÃO DE PIN (SAQUE) */}
+      {/* MODAL ESTRATÉGICO DE PIN (CENTRALIZADO COM TECLADO TÁTIL NATIVO) */}
       {pinOpen && (
-        <div
-          className="fixed inset-0 z-[140] flex flex-col bg-background text-foreground overflow-hidden"
-          style={{ minHeight: viewportHeight }}
-        >
-          {/* Header limpo com ChevronLeft */}
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5"
-            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
-          >
-            <div className="flex items-center gap-2 min-h-[52px]">
-              <button
-                onClick={() => !savingPinSession && setPinOpen(false)}
-                disabled={savingPinSession}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
-                aria-label="Voltar"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                {pinMode === "create" ? "Criar PIN de segurança" : "Autorizar saque"}
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-6">
-              <p className="text-[13px] leading-relaxed text-muted-foreground">
-                {pinMode === "create"
-                  ? "Defina um PIN de 4 dígitos para autorizar saques."
-                  : "Digite seu PIN de 4 dígitos para autorizar o saque via Pix."}
-              </p>
-
-              <div className="space-y-2">
-                <Label className="text-[12px] font-medium text-muted-foreground">
-                  PIN
-                </Label>
-                <div className="flex items-center justify-center gap-3">
-                  {[0, 1, 2, 3].map((index) => (
-                    <Input
-                      key={`pin-${index}`}
-                      id={`fin-pin-${index}`}
-                      autoFocus={index === 0}
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={pinDigits[index]}
-                      onChange={(event) => {
-                        const value = event.target.value.replace(/\D/g, "").slice(-1);
-                        const arr = [...pinDigits];
-                        arr[index] = value;
-                        setPinDigits(arr);
-                        setPinError(null);
-                        if (value && index < 3) {
-                          document.getElementById(`fin-pin-${index + 1}`)?.focus();
-                        }
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Backspace" && !pinDigits[index] && index > 0) {
-                          document.getElementById(`fin-pin-${index - 1}`)?.focus();
-                        }
-                      }}
-                      className="w-13 h-14 text-center text-2xl font-bold rounded-xl bg-card border-border/80 text-foreground shadow-sm"
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {pinMode === "create" && (
-                <div className="space-y-2">
-                  <Label className="text-[12px] font-medium text-muted-foreground">
-                    Confirmar PIN
-                  </Label>
-                  <div className="flex items-center justify-center gap-3">
-                    {[0, 1, 2, 3].map((index) => (
-                      <Input
-                        key={`pin-confirm-${index}`}
-                        id={`fin-pin-c-${index}`}
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={pinConfirmDigits[index]}
-                        onChange={(event) => {
-                          const value = event.target.value.replace(/\D/g, "").slice(-1);
-                          const arr = [...pinConfirmDigits];
-                          arr[index] = value;
-                          setPinConfirmDigits(arr);
-                          setPinError(null);
-                          if (value && index < 3) {
-                            document.getElementById(`fin-pin-c-${index + 1}`)?.focus();
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Backspace" && !pinConfirmDigits[index] && index > 0) {
-                            document.getElementById(`fin-pin-c-${index - 1}`)?.focus();
-                          }
-                        }}
-                        className="w-13 h-14 text-center text-2xl font-bold rounded-xl bg-card border-border/80 text-foreground shadow-sm"
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {pinError && (
-                <div className="flex items-center justify-center gap-2 text-[12px] text-destructive font-medium">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>{pinError}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3 bg-background border-t border-border/60"
-            style={{
-              paddingBottom: keyboardOpen
-                ? 12
-                : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
-            }}
-          >
-            <Button
-              onClick={authorizePinAndWithdraw}
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-[32px] bg-card text-card-foreground border border-border/80 shadow-2xl p-6 relative overflow-hidden flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+            {/* Botão fechar sutil */}
+            <button
+              onClick={() => {
+                if (!savingPinSession) {
+                  setPinOpen(false);
+                  resetPinForm();
+                }
+              }}
               disabled={savingPinSession}
-              className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all shadow-sm"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Fechar"
             >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Ícone de Cadeado */}
+            <div className="w-13 h-13 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 border border-emerald-500/20 shadow-xs">
               {savingPinSession ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : pinMode === "create" ? (
-                "Criar PIN e autorizar saque"
+                <Loader2 className="w-6 h-6 animate-spin" />
               ) : (
-                "Confirmar PIN e sacar"
+                <Lock className="w-6 h-6 stroke-[2]" />
               )}
-            </Button>
+            </div>
+
+            {/* Títulos Estratégicos */}
+            <h3 className="text-[18px] font-bold tracking-tight text-foreground">
+              {pinMode === "create"
+                ? pinCreateStep === "confirm"
+                  ? "Confirme seu PIN"
+                  : "Crie seu PIN de 4 dígitos"
+                : "Digite seu PIN de segurança"}
+            </h3>
+
+            <p className="text-[12.5px] text-muted-foreground mt-1 max-w-[260px] leading-snug">
+              {pinMode === "create"
+                ? pinCreateStep === "confirm"
+                  ? "Digite novamente os 4 dígitos para confirmar"
+                  : "Defina uma senha de 4 dígitos para proteger suas transferências"
+                : `Para autorizar o saque de ${formattedWithdrawDisplay}`}
+            </p>
+
+            {/* 4 Pontos do PIN (Estilo Apple Passcode) */}
+            <div className="flex items-center justify-center gap-4 my-5">
+              {[0, 1, 2, 3].map((i) => {
+                const isFilled =
+                  (pinMode === "create" && pinCreateStep === "confirm"
+                    ? pinConfirmDigits[i]
+                    : pinDigits[i]) !== "";
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "w-4 h-4 rounded-full transition-all duration-200",
+                      isFilled
+                        ? "bg-foreground scale-110 shadow-xs ring-2 ring-foreground/20"
+                        : "border-2 border-muted-foreground/35 bg-transparent"
+                    )}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Mensagem de Erro com Animação */}
+            {pinError && (
+              <div className="flex items-center justify-center gap-1.5 text-[12px] text-destructive font-medium mb-3 animate-in fade-in">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{pinError}</span>
+              </div>
+            )}
+
+            {/* Teclado Numérico Estratégico (Sem abrir teclado do celular!) */}
+            <div className="grid grid-cols-3 gap-y-2.5 gap-x-4 w-full max-w-[260px] mx-auto mt-1 select-none touch-manipulation">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onPointerDown={() => {
+                    try { navigator.vibrate?.(10); } catch {}
+                  }}
+                  onClick={() => handlePinKeypadPress(n)}
+                  disabled={savingPinSession}
+                  className="h-13 w-13 rounded-full bg-muted/50 hover:bg-muted active:scale-95 active:bg-muted/80 text-[22px] font-semibold text-foreground flex items-center justify-center transition-colors duration-75 mx-auto shadow-xs touch-manipulation select-none"
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!savingPinSession) {
+                    setPinOpen(false);
+                    resetPinForm();
+                  }
+                }}
+                disabled={savingPinSession}
+                className="h-13 w-13 rounded-full flex items-center justify-center text-[12px] font-medium text-muted-foreground hover:text-foreground active:scale-95 transition-colors duration-75 mx-auto touch-manipulation select-none"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onPointerDown={() => {
+                  try { navigator.vibrate?.(10); } catch {}
+                }}
+                onClick={() => handlePinKeypadPress("0")}
+                disabled={savingPinSession}
+                className="h-13 w-13 rounded-full bg-muted/50 hover:bg-muted active:scale-95 active:bg-muted/80 text-[22px] font-semibold text-foreground flex items-center justify-center transition-colors duration-75 mx-auto shadow-xs touch-manipulation select-none"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onPointerDown={() => {
+                  try { navigator.vibrate?.(10); } catch {}
+                }}
+                onClick={() => handlePinKeypadBackspace()}
+                disabled={savingPinSession}
+                className="h-13 w-13 rounded-full flex items-center justify-center text-foreground hover:bg-muted/50 active:scale-95 transition-colors duration-75 mx-auto touch-manipulation select-none"
+                aria-label="Apagar dígito"
+              >
+                <BackspaceIcon className="w-5 h-5 stroke-[1.8]" />
+              </button>
+            </div>
           </div>
         </div>
       )}

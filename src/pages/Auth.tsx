@@ -5,12 +5,114 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Eye, EyeOff, ChevronLeft } from "lucide-react";
+import { Loader2, Eye, EyeOff, ChevronLeft, Sparkles } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+
+/* ─── Helper para vincular convite de barbeiro pós-login/cadastro ─── */
+async function processPendingBarberInvite(
+  userId: string,
+  userNome?: string,
+  userEmail?: string,
+  userPhone?: string
+): Promise<boolean> {
+  try {
+    if (typeof window === "undefined") return false;
+
+    // Cenário 1: Convite com barberId específico já gerado
+    const rawInvite = localStorage.getItem("dub_pending_barber_invite");
+    if (rawInvite) {
+      const invite = JSON.parse(rawInvite);
+      if (invite?.barberId) {
+        await supabase
+          .from("barbeiros")
+          .update({ user_id: userId, updated_at: new Date().toISOString() })
+          .eq("id", invite.barberId);
+
+        await supabase
+          .from("user_roles")
+          .upsert({ user_id: userId, role: "barber" as any }, { onConflict: "user_id,role" });
+
+        await supabase
+          .from("user_roles")
+          .delete()
+          .eq("user_id", userId)
+          .eq("role", "cliente");
+
+        localStorage.removeItem("dub_pending_barber_invite");
+        return true;
+      }
+    }
+
+    // Cenário 2: Convite geral da barbearia (apenas tenantId)
+    const pendingTenant = localStorage.getItem("dub_pending_barber_tenant");
+    if (pendingTenant) {
+      // Verificar se já existe barbeiro desse user no tenant
+      const { data: existingBarber } = await supabase
+        .from("barbeiros")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("tenant_id", pendingTenant)
+        .maybeSingle();
+
+      let barberId = existingBarber?.id;
+
+      if (!barberId) {
+        // Criar barbeiro em análise para esse tenant
+        const { data: createdBarber, error: errCreate } = await supabase
+          .from("barbeiros")
+          .insert({
+            user_id: userId,
+            tenant_id: pendingTenant,
+            apelido: userNome?.trim().split(" ")[0] || "Barbeiro",
+            ativo: false, // EM ANÁLISE!
+            setup_completed: false, // VAI PREENCHER O SETUP
+            comissao_pct: 30,
+          })
+          .select("id")
+          .single();
+
+        if (errCreate) {
+          console.error("Erro ao criar barbeiro por convite:", errCreate);
+        } else if (createdBarber) {
+          barberId = createdBarber.id;
+
+          if (userEmail || userPhone || userNome) {
+            try {
+              await supabase.from("barbeiros_private").insert({
+                barbeiro_id: barberId,
+                nome_completo: userNome?.trim() || null,
+                email: userEmail?.trim().toLowerCase() || null,
+                telefone: userPhone?.trim() || null,
+              });
+            } catch {}
+          }
+        }
+      }
+
+      await supabase
+        .from("user_roles")
+        .upsert({ user_id: userId, role: "barber" as any }, { onConflict: "user_id,role" });
+
+      await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("role", "cliente");
+
+      localStorage.removeItem("dub_pending_barber_tenant");
+      return true;
+    }
+
+    return false;
+  } catch (err) {
+    console.error("Erro ao processar convite de barbeiro:", err);
+    return false;
+  }
+}
 
 /* ─── Schemas ─────────────────────────────────────────────────────── */
 const emailSchema = z.string().trim().email("E-mail inválido").max(255);
@@ -149,9 +251,9 @@ const isValidPhoneFor = (c: Country, v: string) => {
   return d.length >= c.minLen && d.length <= c.maxLen;
 };
 
-/* ─── Floating label input (estilo iFood) ─────────────────────────── */
 type FloatingInputProps = {
   id: string;
+  name?: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -167,56 +269,84 @@ type FloatingInputProps = {
   inputRef?: React.Ref<HTMLInputElement>;
   maxLength?: number;
   autoFocus?: boolean;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  isPasswordMasked?: boolean;
+  dataLpignore?: boolean;
+  role?: string;
+  onFocus?: () => void;
+  onBlur?: () => void;
 };
 
 const FloatingInput = ({
   id,
+  name,
   label,
   value,
   onChange,
   placeholder,
-  type = "text",
-  inputMode,
-  autoComplete,
+  type = "search",
+  inputMode = "text",
+  autoComplete = "off",
   enterKeyHint,
-  autoCapitalize,
-  autoCorrect,
-  spellCheck,
+  autoCapitalize = "none",
+  autoCorrect = "off",
+  spellCheck = false,
   rightSlot,
   inputRef,
   maxLength,
   autoFocus,
+  onKeyDown,
+  isPasswordMasked = false,
+  dataLpignore = true,
+  role = "searchbox",
+  onFocus,
+  onBlur,
 }: FloatingInputProps) => {
   const [focused, setFocused] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
   const active = focused || value.length > 0;
+
+  const handleUnlock = () => {
+    if (!unlocked) setUnlocked(true);
+  };
 
   return (
     <div
+      onClick={handleUnlock}
+      onTouchStart={handleUnlock}
       className={`relative h-[62px] rounded-2xl transition-all duration-150 ${
         focused
-          ? "border-2 border-primary bg-transparent shadow-sm"
+          ? "border-2 border-foreground bg-foreground/[0.03] shadow-xs"
           : "border border-transparent bg-foreground/[0.06] hover:bg-foreground/[0.08]"
       }`}
     >
-      <label
-        htmlFor={id}
+      <span
+        aria-hidden="true"
         className={`pointer-events-none absolute left-5 select-none transition-all duration-150 ${
           active
             ? `top-[9px] text-[11.5px] font-medium tracking-wide leading-none ${
-                focused ? "text-primary" : "text-foreground/55"
+                focused ? "text-foreground font-semibold" : "text-foreground/55"
               }`
             : "top-1/2 -translate-y-1/2 text-[15.5px] font-normal text-foreground/45"
         }`}
       >
         {label}
-      </label>
+      </span>
 
       <input
         id={id}
+        name={name || id}
         ref={inputRef}
-        type={type}
+        type={isPasswordMasked ? "search" : (type === "password" ? "search" : type)}
+        role={role}
         inputMode={inputMode}
         autoComplete={autoComplete}
+        readOnly={!unlocked}
+        data-lpignore={dataLpignore ? "true" : undefined}
+        data-form-type="other"
+        data-1p-ignore={dataLpignore ? "true" : undefined}
+        data-bwignore={dataLpignore ? "true" : undefined}
+        aria-autocomplete="none"
         enterKeyHint={enterKeyHint}
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
@@ -226,13 +356,27 @@ const FloatingInput = ({
         placeholder={active && placeholder ? placeholder : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        data-no-auto-scroll="true"
+        onTouchStart={handleUnlock}
+        onMouseDown={handleUnlock}
+        onFocus={() => {
+          handleUnlock();
+          setFocused(true);
+          onFocus?.();
+        }}
+        onBlur={() => {
+          setFocused(false);
+          onBlur?.();
+        }}
+        onKeyDown={onKeyDown}
         className={`peer h-full w-full rounded-2xl bg-transparent px-5 pt-[22px] pb-[6px] ${
           rightSlot ? "pr-12" : ""
-        } text-[15.5px] text-foreground placeholder:text-foreground/35 caret-primary outline-none leading-normal font-normal`}
-        style={{ fontSize: 16, WebkitAppearance: "none" }}
+        } text-[15.5px] text-foreground placeholder:text-foreground/35 caret-foreground outline-none leading-normal font-normal`}
+        style={{
+          fontSize: 16,
+          WebkitAppearance: "none",
+          appearance: "none",
+          ...(isPasswordMasked ? { WebkitTextSecurity: "disc" as any } : {}),
+        }}
       />
 
       {rightSlot && (
@@ -332,7 +476,47 @@ const Auth = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  const initialSignup = (searchParams.get("mode") || "login") === "signup";
+  const inviteType = searchParams.get("invite");
+  const inviteTenant = searchParams.get("tenant");
+  const inviteBarber = searchParams.get("barber");
+  const inviteApelido = searchParams.get("apelido");
+
+  // Se o link veio com invite de barbeiro ou tenant, SEMPRE inicia em modo signup ("Criar conta")
+  const isBarberInvite = inviteType === "barbeiro" || Boolean(inviteTenant && inviteType);
+  const initialSignup = isBarberInvite || (searchParams.get("mode") || "login") === "signup";
+
+  const [invitedTenantNome, setInvitedTenantNome] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inviteTenant) {
+      supabase
+        .from("tenants")
+        .select("nome")
+        .eq("id", inviteTenant)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.nome) setInvitedTenantNome(data.nome);
+        });
+    }
+  }, [inviteTenant]);
+
+  useEffect(() => {
+    if (inviteType === "barbeiro") {
+      if (inviteTenant) {
+        localStorage.setItem("dub_pending_barber_tenant", inviteTenant);
+      }
+      if (inviteBarber) {
+        localStorage.setItem(
+          "dub_pending_barber_invite",
+          JSON.stringify({
+            barberId: inviteBarber,
+            tenantId: inviteTenant,
+            apelido: inviteApelido,
+          })
+        );
+      }
+    }
+  }, [inviteType, inviteBarber, inviteTenant, inviteApelido]);
 
   useStatusBarColor("app-background");
 
@@ -365,42 +549,76 @@ const Auth = () => {
   const passwordValid = passwordSchema.safeParse(senha).success;
   const canSubmit = emailValid && passwordValid;
 
-  /* ─── Visual Viewport & Teclado Móvel ─────────────────────────── */
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  /* ─── Teclado Móvel & Estabilidade de Tela ─────────────────────────── */
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [visualHeight, setVisualHeight] = useState<number | null>(() => {
+    if (typeof window !== "undefined" && window.visualViewport) {
+      return window.visualViewport.height;
+    }
+    return null;
+  });
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const vv = window.visualViewport;
-    if (!vv) return;
 
-    const handleResize = () => {
-      setViewportHeight(vv.height);
-      const keyboardActive = window.innerHeight - vv.height > 100;
-      setIsKeyboardOpen(keyboardActive);
+    const updateViewport = () => {
+      if (vv) {
+        setVisualHeight(vv.height);
+        const keyboardActive = window.innerHeight - vv.height > 100;
+        if (keyboardActive) {
+          setIsKeyboardOpen(true);
+        } else {
+          const active = document.activeElement;
+          const isInput = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+          if (!isInput) {
+            setIsKeyboardOpen(false);
+          }
+        }
+      }
+      window.scrollTo(0, 0);
     };
 
-    vv.addEventListener("resize", handleResize);
-    vv.addEventListener("scroll", handleResize);
-    handleResize();
-
-    return () => {
-      vv.removeEventListener("resize", handleResize);
-      vv.removeEventListener("scroll", handleResize);
+    const handleFocusIn = () => {
+      setIsKeyboardOpen(true);
+      window.scrollTo(0, 0);
     };
-  }, []);
 
-  // Garante que o campo com foco nunca fique oculto pelo teclado
-  useEffect(() => {
-    const handleFocus = (e: FocusEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
-        setTimeout(() => {
-          target.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 150);
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (!active || (active.tagName !== "INPUT" && active.tagName !== "TEXTAREA")) {
+          setIsKeyboardOpen(false);
+        }
+      }, 150);
+    };
+
+    const preventScroll = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
       }
     };
-    window.addEventListener("focusin", handleFocus);
-    return () => window.removeEventListener("focusin", handleFocus);
+
+    if (vv) {
+      vv.addEventListener("resize", updateViewport);
+      vv.addEventListener("scroll", updateViewport);
+    }
+    window.addEventListener("scroll", preventScroll, { passive: true });
+    window.addEventListener("focusin", handleFocusIn);
+    window.addEventListener("focusout", handleFocusOut);
+
+    updateViewport();
+
+    return () => {
+      if (vv) {
+        vv.removeEventListener("resize", updateViewport);
+        vv.removeEventListener("scroll", updateViewport);
+      }
+      window.removeEventListener("scroll", preventScroll);
+      window.removeEventListener("focusin", handleFocusIn);
+      window.removeEventListener("focusout", handleFocusOut);
+    };
   }, []);
 
   /* ─── Session bootstrap ─────────────────────────────────────────── */
@@ -442,8 +660,8 @@ const Auth = () => {
   }, [sCode, step, mode, isLoading]);
 
   /* ─── Login submit ──────────────────────────────────────────────── */
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLoginSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
     if (!canSubmit || isLoading || cooldown > 0) return;
     setIsLoading(true);
     try {
@@ -461,6 +679,19 @@ const Auth = () => {
       if (data.user && !data.user.email_confirmed_at) {
         toast.error("Confirme seu cadastro pelo WhatsApp antes de entrar");
         return;
+      }
+      if (data.user) {
+        const isInvitedBarber = await processPendingBarberInvite(
+          data.user.id,
+          data.user.user_metadata?.nome,
+          data.user.email,
+          data.user.user_metadata?.telefone
+        );
+        if (isInvitedBarber) {
+          toast.success("Bem-vindo à equipe!");
+          navigate("/barbeiro", { replace: true });
+          return;
+        }
       }
       navigate("/", { replace: true });
     } finally {
@@ -549,8 +780,8 @@ const Auth = () => {
       setIsLoading(true);
       try {
         const productionUrl = window.location.origin.includes("localhost")
-          ? "https://dubadmin.lovable.app"
-          : window.location.origin;
+          ? "https://barbeirodub.lovable.app"
+          : window.location.origin.replace("dubadmin.lovable.app", "barbeirodub.lovable.app");
         const { data, error } = await supabase.auth.signUp({
           email: sEmail.trim().toLowerCase(),
           password: sPassword,
@@ -611,12 +842,7 @@ const Auth = () => {
           toast.error(data?.error || "Código incorreto");
           return;
         }
-        // O cadastro iniciado por "Criar conta" é sempre dono de uma nova barbearia.
-        // Garante o papel correto antes do login/redirect, mesmo para usuários criados
-        // antes da correção do trigger do banco.
-        await supabase.rpc("assign_tenant_admin_role", { p_user_id: sUserId });
-
-        // Login automático
+        // Login automático após verificação do OTP
         const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
           email: sEmail.trim().toLowerCase(),
           password: sPassword,
@@ -628,13 +854,31 @@ const Auth = () => {
           return;
         }
 
+        const authenticatedUserId = loginData?.user?.id ?? sUserId;
+
         await queryClient.invalidateQueries({
-          queryKey: QUERY_KEYS.shared.permissoes(loginData.user?.id ?? sUserId),
+          queryKey: QUERY_KEYS.shared.permissoes(authenticatedUserId),
         });
 
+        // Verificar se é um barbeiro convidado completando cadastro
+        const isInvitedBarber = await processPendingBarberInvite(
+          authenticatedUserId,
+          sName,
+          sEmail,
+          sPhone
+        );
+
+        if (isInvitedBarber) {
+          toast.success("Cadastro concluído! Bem-vindo à equipe.");
+          navigate("/barbeiro", { replace: true });
+          return;
+        }
+
+        // O cadastro iniciado por "Criar conta" como dono de nova barbearia
+        await supabase.rpc("assign_tenant_admin_role", { p_user_id: sUserId });
+
         toast.success("Bem-vindo!");
-        // Signup flow → sempre vai para o onboarding da barbearia (tenant admin),
-        // nunca para o app do cliente.
+        // Signup flow normal → onboarding da barbearia (tenant admin)
         navigate("/onboarding", { replace: true });
       } finally {
         setIsLoading(false);
@@ -677,6 +921,12 @@ const Auth = () => {
               autoComplete="name"
               autoCapitalize="words"
               enterKeyHint="next"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && stepValidity.name) {
+                  e.preventDefault();
+                  handleSignupNext();
+                }
+              }}
             />
           ),
         };
@@ -686,17 +936,26 @@ const Auth = () => {
           hint: "Usaremos para entrar no aplicativo",
           input: (
             <FloatingInput
-              id="s-email"
+              id="q_s_acc"
+              name="q_s_acc"
               label="E-mail"
               value={sEmail}
               onChange={setSEmail}
-              type="email"
-              inputMode="email"
-              autoComplete="email"
+              type="search"
+              role="searchbox"
+              inputMode="text"
+              autoComplete="off"
+              dataLpignore={true}
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
               enterKeyHint="next"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && stepValidity.email) {
+                  e.preventDefault();
+                  handleSignupNext();
+                }
+              }}
             />
           ),
         };
@@ -713,6 +972,12 @@ const Auth = () => {
               inputMode="numeric"
               enterKeyHint="next"
               maxLength={14}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && stepValidity.cpf) {
+                  e.preventDefault();
+                  handleSignupNext();
+                }
+              }}
             />
           ),
         };
@@ -741,6 +1006,12 @@ const Auth = () => {
                   autoComplete="tel"
                   enterKeyHint="next"
                   maxLength={20}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && stepValidity.phone) {
+                      e.preventDefault();
+                      handleSignupNext();
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -752,13 +1023,23 @@ const Auth = () => {
           hint: "Mínimo de 6 caracteres",
           input: (
             <FloatingInput
-              id="s-password"
+              id="q_s_sec"
+              name="q_s_sec"
               label="Senha"
               value={sPassword}
               onChange={setSPassword}
-              type={sShowPassword ? "text" : "password"}
-              autoComplete="new-password"
+              type="search"
+              role="searchbox"
+              isPasswordMasked={!sShowPassword}
+              autoComplete="off"
+              dataLpignore={true}
               enterKeyHint="done"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && stepValidity.password && !isLoading) {
+                  e.preventDefault();
+                  handleSignupNext();
+                }
+              }}
               rightSlot={
                 <button
                   type="button"
@@ -813,7 +1094,12 @@ const Auth = () => {
       ? "Continuar"
       : "Continuar";
 
-  const title = mode === "login" ? "Entrar" : "Criar conta";
+  const title =
+    mode === "login"
+      ? "Entrar"
+      : isBarberInvite
+      ? "Cadastro de Barbeiro"
+      : "Criar conta";
 
   const canGoCta =
     mode === "login" ? canSubmit && cooldown === 0 : stepValidity[step];
@@ -834,16 +1120,17 @@ const Auth = () => {
 
   return (
     <div
-      data-no-auto-scroll="true"
-      className="w-full flex flex-col bg-background text-foreground overflow-hidden"
+      className="fixed inset-0 w-full flex flex-col bg-background text-foreground overflow-hidden select-none"
       style={{
-        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
-        maxHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
-        paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 8px)",
+        height: visualHeight ? `${visualHeight}px` : "100dvh",
+        maxHeight: visualHeight ? `${visualHeight}px` : "100dvh",
+        paddingTop: isKeyboardOpen
+          ? "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 2px)"
+          : "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 8px)",
       }}
     >
-      {/* ─── Header: idêntico ao modelo anterior com < na esquerda e título centralizado ─── */}
-      <header className="relative flex items-center justify-center px-4 shrink-0 pb-2">
+      {/* ─── Header: centralizado com < na esquerda ─── */}
+      <header className="relative flex items-center justify-center px-4 shrink-0 h-12">
         <button
           type="button"
           onClick={onBackClick}
@@ -853,7 +1140,7 @@ const Auth = () => {
         >
           <ChevronLeft className="h-6 w-6" strokeWidth={2.2} />
         </button>
-        <h2 className="text-[16px] font-semibold text-foreground/90">{title}</h2>
+        <h2 className="text-[15px] font-semibold text-foreground/90">{title}</h2>
       </header>
 
       {/* Progress bar (signup) */}
@@ -861,7 +1148,7 @@ const Auth = () => {
         <div className="px-6 pb-2 shrink-0 max-w-md mx-auto w-full">
           <div className="h-[3px] w-full rounded-full bg-foreground/10 overflow-hidden">
             <div
-              className="h-full bg-primary transition-all duration-300"
+              className="h-full bg-foreground transition-all duration-300"
               style={{
                 width: `${((SIGNUP_ORDER.indexOf(step) + 1) / SIGNUP_ORDER.length) * 100}%`,
               }}
@@ -870,8 +1157,29 @@ const Auth = () => {
         </div>
       )}
 
-      {/* ─── Content: Área de rolagem dos campos (ScrollView) ─── */}
-      <div className="w-full max-w-md mx-auto px-6 pt-2 pb-2 flex-1 overflow-y-auto overscroll-contain flex flex-col">
+      {/* ─── Content: Área de campos ─── */}
+      <div
+        className="w-full max-w-md mx-auto px-6 flex-1 flex flex-col overflow-y-auto scrollbar-none pt-6 sm:pt-8"
+        style={{
+          paddingBottom: isKeyboardOpen ? "12px" : "max(24px, env(safe-area-inset-bottom, 24px))",
+        }}
+      >
+        {inviteType === "barbeiro" && (
+          <div className="mb-5 p-3.5 rounded-2xl bg-secondary/50 border border-border/30 flex items-center gap-2.5 shrink-0 shadow-xs">
+            <Sparkles className="w-4 h-4 text-foreground/80 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] font-semibold text-foreground leading-tight">
+                Convite de Equipe
+              </p>
+              <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-tight">
+                {invitedTenantNome
+                  ? `Você foi convidado para a equipe da ${invitedTenantNome}. Complete seu cadastro para começar.`
+                  : "Crie sua conta para fazer parte da equipe da barbearia."}
+              </p>
+            </div>
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div
             key={mode === "login" ? "login" : `signup-${step}`}
@@ -882,45 +1190,67 @@ const Auth = () => {
             className="w-full flex-1 flex flex-col justify-start"
           >
             {mode === "login" ? (
-              <form
-                id="auth-login-form"
-                onSubmit={handleLoginSubmit}
-                className="w-full"
-                noValidate
+              <div
+                className="w-full flex-1 flex flex-col justify-between"
+                role="presentation"
               >
                 <div>
-                  <h1 className="text-[25px] sm:text-[27px] font-extrabold tracking-tight text-foreground leading-tight mb-5">
+                  <h1 className="text-[28px] sm:text-[32px] font-bold tracking-tight text-foreground leading-[1.15] mb-6">
                     Entrar na sua conta
                   </h1>
 
                   <div className="space-y-3.5">
                     <FloatingInput
-                      id="email-input"
+                      id="q_acc_dub"
+                      name="q_acc_dub"
                       label="E-mail"
                       value={email}
                       onChange={setEmail}
-                      type="email"
-                      inputMode="email"
-                      autoComplete="username"
+                      type="search"
+                      role="searchbox"
+                      inputMode="text"
+                      autoComplete="off"
+                      dataLpignore={true}
                       enterKeyHint="next"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const pwd = document.getElementById("q_sec_dub") as HTMLInputElement | null;
+                          pwd?.focus();
+                        }
+                      }}
                     />
                     <FloatingInput
-                      id="senha-input"
+                      id="q_sec_dub"
+                      name="q_sec_dub"
                       label="Senha"
                       value={senha}
                       onChange={setSenha}
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      enterKeyHint="done"
+                      type="search"
+                      role="searchbox"
+                      inputMode="text"
+                      isPasswordMasked={!showPassword}
+                      autoComplete="off"
+                      dataLpignore={true}
+                      enterKeyHint="go"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (canSubmit && !isLoading) {
+                            handleLoginSubmit();
+                          }
+                        }
+                      }}
                       rightSlot={
                         <button
                           type="button"
+                          tabIndex={-1}
                           onClick={() => setShowPassword((v) => !v)}
                           aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                           className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/60 hover:text-foreground active:scale-95 transition-all"
@@ -935,7 +1265,7 @@ const Auth = () => {
                       <button
                         type="button"
                         onClick={() => navigate("/esqueci-senha")}
-                        className="text-[13.5px] font-semibold text-primary hover:underline underline-offset-4 active:opacity-70 transition-opacity"
+                        className="text-[13.5px] font-medium text-muted-foreground hover:text-foreground hover:underline underline-offset-4 active:opacity-70 transition-colors"
                         style={{ touchAction: "manipulation" }}
                       >
                         Esqueci minha senha
@@ -943,7 +1273,40 @@ const Auth = () => {
                     </div>
                   </div>
                 </div>
-              </form>
+
+                {/* ─── Botão Continuar e Link Criar Conta ─── */}
+                <div className={cn("w-full mt-auto shrink-0", isKeyboardOpen ? "pt-4 pb-2" : "pt-8 pb-2")}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (canSubmit && !isLoading) {
+                        handleLoginSubmit();
+                      }
+                    }}
+                    disabled={!canGoCta || isLoading}
+                    className="w-full h-[52px] sm:h-[54px] rounded-full bg-foreground text-background font-semibold text-[16px] tracking-normal shadow-xs active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    style={{ touchAction: "manipulation" }}
+                  >
+                    {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+                    {ctaLabel}
+                  </button>
+
+                  <p className="pt-3 text-center text-[13.5px] text-muted-foreground">
+                    Não tem uma conta?{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("signup");
+                        setStep("name");
+                      }}
+                      className="font-semibold text-foreground hover:underline active:opacity-70 transition-opacity"
+                      style={{ touchAction: "manipulation" }}
+                    >
+                      Criar conta
+                    </button>
+                  </p>
+                </div>
+              </div>
             ) : (
               <form
                 id="auth-signup-form"
@@ -951,14 +1314,14 @@ const Auth = () => {
                   e.preventDefault();
                   handleSignupNext();
                 }}
-                className="w-full"
+                className="w-full flex-1 flex flex-col justify-between"
                 noValidate
               >
                 <div>
-                  <h1 className="text-[23px] sm:text-[25px] font-bold text-foreground tracking-tight mb-2">
+                  <h1 className="text-[28px] sm:text-[32px] font-bold text-foreground tracking-tight leading-[1.15] mb-2">
                     {signupContent!.heading}
                   </h1>
-                  <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
+                  <p className="text-[14px] text-muted-foreground mb-6 leading-normal">
                     {signupContent!.hint}
                   </p>
 
@@ -975,7 +1338,7 @@ const Auth = () => {
                           type="button"
                           onClick={handleResendCode}
                           disabled={sResendCooldown > 0 || isLoading}
-                          className="text-[13px] font-semibold text-primary underline underline-offset-4 active:opacity-70 disabled:opacity-40 disabled:no-underline"
+                          className="text-[13px] font-semibold text-foreground underline underline-offset-4 active:opacity-70 disabled:opacity-40 disabled:no-underline"
                           style={{ touchAction: "manipulation" }}
                         >
                           {sResendCooldown > 0
@@ -986,65 +1349,39 @@ const Auth = () => {
                     )}
                   </div>
                 </div>
+
+                {/* ─── Botão Continuar e Link Já tem uma conta ─── */}
+                <div className={cn("w-full mt-auto shrink-0", isKeyboardOpen ? "pt-2 pb-1" : "pt-8 pb-2")}>
+                  <button
+                    type="submit"
+                    disabled={!canGoCta || isLoading}
+                    className="w-full h-[52px] sm:h-[54px] rounded-full bg-foreground text-background font-semibold text-[16px] tracking-normal shadow-xs active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    style={{ touchAction: "manipulation" }}
+                  >
+                    {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+                    {ctaLabel}
+                  </button>
+
+                  {step !== "otp" && (
+                    <p className={cn("text-center text-[13.5px] text-muted-foreground", isKeyboardOpen ? "pt-2" : "pt-3")}>
+                      Já tem uma conta?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode("login");
+                        }}
+                        className="font-semibold text-foreground hover:underline active:opacity-70 transition-opacity"
+                        style={{ touchAction: "manipulation" }}
+                      >
+                        Entrar
+                      </button>
+                    </p>
+                  )}
+                </div>
               </form>
             )}
           </motion.div>
         </AnimatePresence>
-      </div>
-
-      {/* ─── Botão Continuar Fixo Acima do Teclado (Fora do ScrollView) ─── */}
-      <div
-        className="shrink-0 w-full max-w-md mx-auto px-6 bg-background/95 backdrop-blur-xs transition-all duration-150 pt-2"
-        style={{
-          paddingBottom: isKeyboardOpen
-            ? "12px"
-            : "max(16px, env(safe-area-inset-bottom, 16px))",
-        }}
-      >
-        <button
-          type={mode === "login" ? "submit" : "button"}
-          form={mode === "login" ? "auth-login-form" : "auth-signup-form"}
-          onClick={onCtaClick}
-          disabled={!canGoCta || isLoading}
-          className="w-full h-[52px] sm:h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-          style={{ touchAction: "manipulation" }}
-        >
-          {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-          {ctaLabel}
-        </button>
-
-        {mode === "login" ? (
-          <p className="pt-3 text-center text-[13.5px] text-foreground/60">
-            Não tem uma conta?{" "}
-            <button
-              type="button"
-              onClick={() => {
-                setMode("signup");
-                setStep("name");
-              }}
-              className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-              style={{ touchAction: "manipulation" }}
-            >
-              Criar conta
-            </button>
-          </p>
-        ) : (
-          step !== "otp" && (
-            <p className="pt-3 text-center text-[13.5px] text-foreground/60">
-              Já tem uma conta?{" "}
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("login");
-                }}
-                className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
-                style={{ touchAction: "manipulation" }}
-              >
-                Entrar
-              </button>
-            </p>
-          )
-        )}
       </div>
     </div>
   );

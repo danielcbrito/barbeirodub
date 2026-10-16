@@ -4,6 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { STALE_TIMES } from "@/lib/queryConstants";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AdminRescheduleModal } from "./AdminRescheduleModal";
 import { 
   Clock, 
@@ -95,6 +102,7 @@ export function AppointmentDetailsView({
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
   const [paymentJustConfirmed, setPaymentJustConfirmed] = useState(false);
+  const [confirmFinalizeOpen, setConfirmFinalizeOpen] = useState(false);
 
   const isPlanAppointment = appointment?.tipo_agendamento === 'plano' || appointment?.payment_method === 'plano';
   const planInfo = usePlanPaymentInfo(appointment?.user_id || '', isPlanAppointment && !!appointment);
@@ -305,6 +313,58 @@ export function AppointmentDetailsView({
     );
   };
 
+  const onFinalizeClick = () => {
+    if (!appointment) return;
+    // Se for plano com pagamento pendente presencial
+    if (isPlanAppointment && planInfo.isCashPending && !paymentJustConfirmed) {
+      setConfirmFinalizeOpen(true);
+      return;
+    }
+    handleMarkAsCompleted();
+  };
+
+  const handleFinalizeWithPaid = async () => {
+    setConfirmFinalizeOpen(false);
+    setLoading(true);
+    try {
+      let subQuery = supabase
+        .from("assinaturas")
+        .select("id, plano_id, status, payment_method, barbeiro_id, cash_payment_confirmed")
+        .eq("user_id", appointment.user_id)
+        .eq("payment_method", "cash");
+
+      if (resolvedBarbeiroId) {
+        subQuery = subQuery.eq("barbeiro_id", resolvedBarbeiroId);
+      }
+
+      const { data: sub } = await subQuery
+        .or("status.in.(pending_cash,suspended),and(status.eq.active,cash_payment_confirmed.eq.false)")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sub) {
+        await confirmarPlanoMutation.mutateAsync({
+          assinaturaId: sub.id,
+          userId: appointment.user_id,
+          planoNome: planInfo.planName || "assinatura",
+        });
+        setPaymentJustConfirmed(true);
+      }
+    } catch (err) {
+      console.error("Erro ao confirmar pagamento do plano:", err);
+    } finally {
+      setLoading(false);
+      handleMarkAsCompleted();
+    }
+  };
+
+  const handleFinalizeWithoutPaid = () => {
+    setConfirmFinalizeOpen(false);
+    toast.info("Atendimento finalizado. Cobrança do plano permanece pendente.");
+    handleMarkAsCompleted();
+  };
+
   const handleCancel = () => {
     if (!appointment) return;
     cancelMutation.mutate(
@@ -458,7 +518,7 @@ export function AppointmentDetailsView({
 
   const getPaymentLabel = () => {
     if (isPlanAppointment) {
-      if (planInfo.isCashPending) return "Plano — Cobrar na Barbearia";
+      if (planInfo.isCashPending && !paymentJustConfirmed) return "Plano";
       if (planInfo.isPlanCash) return "Plano (Dinheiro)";
       if (planInfo.planPaymentMethod === 'pix') return "Plano PIX";
       return "Plano Ativo";
@@ -479,11 +539,11 @@ export function AppointmentDetailsView({
   };
 
   const getStatusConfig = () => {
-    if (isCompleted) return { label: "Concluído", dot: "bg-emerald-500", icon: CheckCircle2 };
+    if (isCompleted) return { label: "Concluído", dot: "bg-[#34C759]", icon: CheckCircle2 };
     if (isCancelled) return { label: "Cancelado", dot: "bg-red-500", icon: XCircle };
-    if (isNoShow) return { label: "Não compareceu", dot: "bg-orange-500", icon: UserX };
-    if (isPending) return { label: "Pendente", dot: "bg-amber-500", icon: Clock };
-    return { label: "Confirmado", dot: "bg-blue-500", icon: CheckCircle2 };
+    if (isNoShow) return { label: "Não veio", dot: "bg-zinc-400 dark:bg-zinc-500", icon: UserX };
+    if (isPending) return { label: "Pendente", dot: "bg-[#007AFF]", icon: Clock };
+    return { label: "Agendado", dot: "bg-[#007AFF]", icon: CheckCircle2 };
   };
 
   const statusConfig = getStatusConfig();
@@ -588,7 +648,11 @@ export function AppointmentDetailsView({
               <PayIcon className="w-4 h-4 text-foreground/70" />
               <span className="text-[13px] font-medium">{getPaymentLabel()}</span>
             </div>
-            {(isPrepaid || isPlanAppointment || isCredit || appointment.is_free) ? (
+            {isPlanAppointment && planInfo.isCashPending && !paymentJustConfirmed ? (
+              <span className="text-[11.5px] font-semibold px-2.5 py-0.5 rounded-full bg-foreground/[0.06] border border-border/80 text-foreground tabular-nums">
+                A cobrar R$ {planInfo.precoMensal.toFixed(2).replace('.', ',')}
+              </span>
+            ) : (isPrepaid || isPlanAppointment || isCredit || appointment.is_free) ? (
               <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[11px] font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 <span>Pago</span>
@@ -599,25 +663,6 @@ export function AppointmentDetailsView({
           </div>
         </div>
       </div>
-
-      {/* Cash plan banner — se houver pagamento pendente */}
-      {isPlanAppointment && planInfo.isCashPending && !paymentJustConfirmed && (
-        <div className="px-4">
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 text-amber-500">
-              <Banknote className="w-5 h-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold text-foreground truncate">
-                Cobrar R$ {planInfo.precoMensal.toFixed(2).replace('.', ',')}
-              </p>
-              <p className="text-[12px] text-muted-foreground truncate">
-                {planInfo.planName ? `Plano ${planInfo.planName} · ` : ''}pagamento pendente
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── OBSERVAÇÕES ── */}
       {appointment.observacoes && (
@@ -636,9 +681,7 @@ export function AppointmentDetailsView({
             <>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-foreground/10 flex items-center justify-center text-foreground">
-                    <CalendarCheck className="w-4 h-4" />
-                  </div>
+                  <CalendarCheck className="w-4 h-4 text-foreground/80 stroke-[1.8] flex-shrink-0" />
                   <div>
                     <p className="text-[13px] font-semibold text-foreground">Uso do Plano</p>
                     <p className="text-[10px] text-muted-foreground">Mês atual</p>
@@ -671,9 +714,7 @@ export function AppointmentDetailsView({
             <>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
-                    <Award className="w-4 h-4" />
-                  </div>
+                  <Award className="w-4 h-4 text-amber-500 stroke-[1.8] flex-shrink-0" />
                   <div>
                     <p className="text-[13px] font-semibold text-foreground">Programa Fidelidade</p>
                     <p className="text-[10px] text-muted-foreground">Pontos acumulados</p>
@@ -758,32 +799,15 @@ export function AppointmentDetailsView({
             className="flex-shrink-0 border-t border-border/60 bg-background px-5 pt-3.5 space-y-2.5"
             style={{ paddingBottom: "calc(1.25rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))" }}
           >
-            {/* Confirm plan cash payment */}
-            {isPlanAppointment && planInfo.isCashPending && !paymentJustConfirmed && (
-              <button
-                onClick={handleConfirmPlanPayment}
-                disabled={isActing}
-                className={cn(
-                  "w-full h-11 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2",
-                  "bg-amber-500 text-background",
-                  "active:scale-[0.98] transition-transform duration-150",
-                  "disabled:opacity-40 disabled:pointer-events-none"
-                )}
-              >
-                <Banknote className="w-4 h-4" />
-                Cliente pagou
-              </button>
-            )}
-
-            {/* Primary: Finalizar Atendimento — largo, proeminente e confortável */}
+            {/* Primary: Finalizar Atendimento — cápsula Apple preto */}
             {canComplete && (
               <button 
-                onClick={handleMarkAsCompleted} 
+                onClick={onFinalizeClick} 
                 disabled={isActing}
                 className={cn(
-                  "w-full h-12 rounded-2xl text-[14px] font-bold flex items-center justify-center gap-2",
-                  "bg-foreground text-background shadow-md shadow-foreground/15",
-                  "active:scale-[0.98] transition-all duration-150",
+                  "w-full h-12 rounded-full text-[14px] font-semibold flex items-center justify-center gap-2",
+                  "bg-foreground text-background shadow-xs hover:bg-foreground/90",
+                  "active:scale-[0.99] transition-all duration-150",
                   "disabled:opacity-40 disabled:pointer-events-none"
                 )}
               >
@@ -883,31 +907,15 @@ export function AppointmentDetailsView({
           className="flex-shrink-0 border-t border-border/60 bg-background px-5 pt-3.5 space-y-2.5"
           style={{ paddingBottom: "calc(1.25rem + var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)))" }}
         >
-          {isPlanAppointment && planInfo.isCashPending && !paymentJustConfirmed && (
-            <button
-              onClick={handleConfirmPlanPayment}
-              disabled={isActing}
-              className={cn(
-                "w-full h-11 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2",
-                "bg-amber-500 text-background",
-                "active:scale-[0.98] transition-transform duration-150",
-                "disabled:opacity-40 disabled:pointer-events-none"
-              )}
-            >
-              <Banknote className="w-4 h-4" />
-              Cliente pagou
-            </button>
-          )}
-
-          {/* Primary: Finalizar Atendimento — largo, proeminente e confortável */}
+          {/* Primary: Finalizar Atendimento — cápsula Apple preto */}
           {canComplete && (
             <button 
-              onClick={handleMarkAsCompleted} 
+              onClick={onFinalizeClick} 
               disabled={isActing}
               className={cn(
-                "w-full h-12 rounded-2xl text-[14px] font-bold flex items-center justify-center gap-2",
-                "bg-foreground text-background shadow-md shadow-foreground/15",
-                "active:scale-[0.98] transition-all duration-150",
+                "w-full h-12 rounded-full text-[14px] font-semibold flex items-center justify-center gap-2",
+                "bg-foreground text-background shadow-xs hover:bg-foreground/90",
+                "active:scale-[0.99] transition-all duration-150",
                 "disabled:opacity-40 disabled:pointer-events-none"
               )}
             >
@@ -1049,6 +1057,49 @@ export function AppointmentDetailsView({
           </motion.div>
         )}
       </AnimatePresence>
+      {/* ═══ DIALOG CONFIRMAÇÃO PAGAMENTO PLANO NO FINALIZAR ═══ */}
+      <AlertDialog open={confirmFinalizeOpen} onOpenChange={setConfirmFinalizeOpen}>
+        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background">
+          <AlertDialogHeader className="space-y-2 text-center sm:text-center">
+            <div className="w-12 h-12 rounded-full bg-foreground/5 border border-border/60 flex items-center justify-center mx-auto text-foreground mb-1">
+              <Banknote className="w-6 h-6 stroke-[1.8]" />
+            </div>
+            <AlertDialogTitle className="text-[17px] font-semibold tracking-tight text-foreground">
+              O cliente realizou o pagamento?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[13px] text-muted-foreground leading-relaxed">
+              Há uma cobrança pendente de <span className="font-semibold text-foreground">R$ {planInfo.precoMensal.toFixed(2).replace('.', ',')}</span> referente ao plano <span className="font-semibold text-foreground">{planInfo.planName}</span>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="pt-4 space-y-2.5">
+            <button
+              onClick={handleFinalizeWithPaid}
+              disabled={isActing}
+              className="w-full h-11 rounded-full bg-foreground text-background text-[13px] font-semibold hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs flex items-center justify-center gap-2"
+            >
+              <Check className="w-4 h-4" />
+              Sim, cliente pagou
+            </button>
+
+            <button
+              onClick={handleFinalizeWithoutPaid}
+              disabled={isActing}
+              className="w-full h-11 rounded-full bg-card border border-border/80 text-foreground text-[13px] font-medium hover:bg-secondary/40 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+            >
+              Não pagou (Cobrar depois)
+            </button>
+
+            <button
+              onClick={() => setConfirmFinalizeOpen(false)}
+              disabled={isActing}
+              className="w-full h-9 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Voltar
+            </button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

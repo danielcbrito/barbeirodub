@@ -40,7 +40,7 @@ export default function MobileShell() {
 
   return (
     <div
-      className="mx-auto w-full max-w-lg touch-pan-y antialiased overflow-x-hidden bg-background text-foreground"
+      className="mx-auto w-full max-w-lg antialiased overflow-x-hidden bg-background text-foreground"
       style={{
         minHeight: "var(--app-height, 100svh)",
         // Reserva a área da status bar (notch/dynamic island no iPhone)

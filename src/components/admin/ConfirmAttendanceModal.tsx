@@ -186,7 +186,7 @@ export function ConfirmAttendanceModal({ appointment, open, onClose, onUpdate }:
           <Button
             onClick={handleConfirmAttendance}
             disabled={loading}
-            className="flex-1 h-12 bg-green-600 hover:bg-green-500 text-foreground font-semibold rounded-xl transition-all duration-200 hover:scale-[1.02]"
+            className="flex-1 h-12 bg-[#007AFF] hover:bg-[#007AFF]/90 text-white font-semibold rounded-xl transition-all duration-200 hover:scale-[1.02] shadow-md shadow-[#007AFF]/20"
           >
             <CheckCircle2 className="w-4 h-4 mr-2" />
             Confirmar Atendimento

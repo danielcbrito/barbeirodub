@@ -18,6 +18,20 @@ Deno.serve(async (req) => {
   const cents = Number(body?.value_centavos ?? 0);
   if (!Number.isFinite(cents) || cents < 100) return errorResponse('INVALID_VALUE', 'Valor mínimo R$1,00');
 
+  // Se veio PIN no corpo, valida diretamente no banco e renova sessão
+  if (body?.pin && typeof body.pin === "string") {
+    const { data: pinOk } = await admin.rpc("verify_financial_pin", {
+      p_pin: body.pin,
+    });
+    if (pinOk) {
+      await admin.from("financeiro_auth_sessions").insert({
+        user_id: userId,
+        token_hash: btoa(`${userId}:${Date.now()}:${crypto.randomUUID()}`),
+        expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+      });
+    }
+  }
+
   // Sessão de PIN válida?
   const { data: pinSess } = await admin
     .from('financeiro_auth_sessions')

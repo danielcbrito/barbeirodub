@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { STALE_TIMES } from "@/lib/queryConstants";
 import { format, addDays, isToday, isSameDay } from "date-fns";
@@ -18,11 +18,13 @@ import {
   Filter,
   ExternalLink,
   Check,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarberContext } from "@/pages/Barbeiro";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AdminMobileAgenda } from "@/components/admin/mobile/AdminMobileAgenda";
+import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
 import { ConfirmAttendanceModal } from "@/components/admin/ConfirmAttendanceModal";
 import { MobileManualBookingModal } from "@/components/admin/mobile/MobileManualBookingModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -51,9 +53,9 @@ const getStatusColorConfig = (status: string, barbeiroConfirmou: boolean | null)
       statusLabel: "Concluído",
     };
   }
-  if (status === "no_show") {
+  if (status === "no_show" || status === "nao_veio" || status === "faltou") {
     return {
-      dot: "bg-orange-500",
+      dot: "bg-zinc-400 dark:bg-zinc-500",
       statusBadge: "text-muted-foreground",
       statusLabel: "Não veio",
     };
@@ -104,20 +106,26 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   const [selectedEmptySlot, setSelectedEmptySlot] = useState({ date: "", time: "" });
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const location = useLocation();
   const overdueState = useOverdueAppointments(barberContext.barbeiroId, { enabled: !isMobile });
-  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
+  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(() => Boolean(location.state?.openOverdueModal));
   const hasAutoPromptedOverdueRef = useRef(false);
 
-  // Auto-abertura da gaveta ao entrar na Agenda quando houver agendamentos para finalizar
   useEffect(() => {
-    if (isMobile || overdueState.isLoading) return;
-    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
+    if (location.state?.openOverdueModal) {
       setIsOverdueModalOpen(true);
-      hasAutoPromptedOverdueRef.current = true;
-    } else if (overdueState.count === 0) {
-      hasAutoPromptedOverdueRef.current = false;
+      return;
     }
-  }, [isMobile, overdueState.count, overdueState.isLoading]);
+    if (isMobile) return;
+    if (overdueState.isLoading) return;
+    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
+      hasAutoPromptedOverdueRef.current = true;
+      if (canAutoOpenOverdueModal()) {
+        setIsOverdueModalOpen(true);
+      }
+    }
+  }, [location.state, isMobile, overdueState.count, overdueState.isLoading]);
+
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -309,6 +317,48 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     return true;
   });
 
+  const dayPendingAppointments = useMemo(() => {
+    if (!appointments || appointments.length === 0) return [];
+    return appointments.filter(
+      (apt) => apt && apt.id && apt.status !== "completed" && apt.status !== "no_show" && (apt as any).status !== "cancelled"
+    );
+  }, [appointments]);
+
+  const [isFinalizingDay, setIsFinalizingDay] = useState(false);
+
+  const handleFinalizeDay = async () => {
+    if (dayPendingAppointments.length === 0) {
+      toast.info("Todos os agendamentos deste dia já estão concluídos.");
+      return;
+    }
+
+    try {
+      setIsFinalizingDay(true);
+      const idsToComplete = dayPendingAppointments.map((a) => a.id);
+
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+      queryClient.setQueryData(
+        QUERY_KEYS.barbeiro.agenda(barberContext.barbeiroId, dateStr),
+        (prev: any) =>
+          Array.isArray(prev)
+            ? prev.map((apt: any) =>
+                idsToComplete.includes(apt.id)
+                  ? { ...apt, status: "completed", barbeiro_confirmou: true }
+                  : apt
+              )
+            : prev
+      );
+
+      await overdueState.completeBulk(idsToComplete);
+      invalidateAgenda();
+    } catch (error) {
+      console.error("Erro ao finalizar agendamentos do dia:", error);
+      toast.error("Erro ao finalizar agendamentos.");
+    } finally {
+      setIsFinalizingDay(false);
+    }
+  };
+
   // ========== MOBILE ==========
   if (isMobile) {
     return (
@@ -359,16 +409,6 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            {overdueState.count > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsOverdueModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold bg-foreground text-background hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-xs"
-              >
-                <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>Finalizar ({overdueState.count})</span>
-              </button>
-            )}
 
             <button
               onClick={() => window.open("/agenda", "_blank")}
@@ -574,10 +614,10 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                     }}
                     style={{ opacity: isDone ? 0.48 : 1 }}
                     className={cn(
-                      "group relative rounded-2xl p-4 cursor-pointer transition-all duration-200",
+                      "group relative rounded-2xl p-4 cursor-pointer transition-all duration-200 backdrop-blur-xl backdrop-saturate-[180%]",
                       isDone
-                        ? "border border-border/30 bg-muted/20 dark:bg-white/[0.015]"
-                        : "border border-border/60 bg-card hover:border-border",
+                        ? "border border-border/20 dark:border-white/[0.04] bg-card/35 dark:bg-white/[0.02] shadow-none"
+                        : "border border-border/40 dark:border-white/[0.08] bg-card/75 dark:bg-white/[0.04] hover:bg-card/90 dark:hover:bg-white/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.4)] dark:shadow-[0_2px_16px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.06)] active:scale-[0.99]",
                       isNextUp && "ring-1 ring-foreground/20"
                     )}
                   >
@@ -650,25 +690,6 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                   </div>
                 );
               })}
-
-              {/* Botão estratégico inferior para finalizar todos ao final dos atendimentos */}
-              {overdueState.count > 0 && (
-                <div className="pt-8 pb-4 flex flex-col items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsOverdueModalOpen(true)}
-                    className="h-12 px-8 rounded-full bg-foreground text-background text-[14px] font-semibold flex items-center justify-center gap-2 active:opacity-70 hover:opacity-90 transition-all cursor-pointer shadow-sm"
-                  >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>Finalizar todos ({overdueState.count})</span>
-                  </button>
-                  <p className="text-[12px] text-muted-foreground font-normal">
-                    {overdueState.count === 1
-                      ? "1 atendimento pendente de confirmação"
-                      : `${overdueState.count} atendimentos pendentes de confirmação`}
-                  </p>
-                </div>
-              )}
             </div>
           </>
         )}
@@ -716,7 +737,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
       {/* Gaveta Apple HIG de finalização de atendimentos */}
       <PendingAppointmentsModal
         open={isOverdueModalOpen}
-        onOpenChange={setIsOverdueModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            recordOverdueModalDismissal();
+          }
+          setIsOverdueModalOpen(open);
+        }}
         appointments={overdueState.overdueAppointments}
         onCompleteBulk={overdueState.completeBulk}
         isCompleting={overdueState.isCompleting}

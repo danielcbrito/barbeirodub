@@ -69,7 +69,7 @@ export function CuponsDescontosCard({ tenantId }: CuponsDescontosCardProps) {
   }, [data]);
 
   return (
-    <div className="rounded-xl bg-card border border-border px-5 py-4">
+    <div className="rounded-2xl bg-card border border-border/30 px-5 py-4 shadow-xs">
       <div className="flex items-center gap-2 mb-3">
         <Ticket className="w-4 h-4 text-muted-foreground" />
         <p className="text-[10px] uppercase tracking-[0.15em] font-bold text-muted-foreground">

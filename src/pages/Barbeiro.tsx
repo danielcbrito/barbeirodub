@@ -53,8 +53,9 @@ const AdminLoja = lazy(() => import("@/components/admin/loja/AdminLoja").then(m 
 const CarteiraPage = lazy(() => import("@/components/barber/CarteiraPage").then(m => ({ default: m.CarteiraPage })));
 const AppointmentDetailsPage = lazy(() => import("@/pages/AppointmentDetailsPage"));
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Clock } from "lucide-react";
 const WhatsAppConnectionPage = lazy(() => import("@/components/whatsapp/WhatsAppConnectionPage").then(m => ({ default: m.WhatsAppConnectionPage })));
+const InstagramConnectionPage = lazy(() => import("@/components/instagram/InstagramConnectionPage").then(m => ({ default: m.InstagramConnectionPage })));
 const InstagramCallbackHandler = lazy(() => import("@/components/barber/InstagramCallbackHandler").then(m => ({ default: m.InstagramCallbackHandler })));
 const PortfolioManager = lazy(() => import("@/components/shared/PortfolioManager").then(m => ({ default: m.PortfolioManager })));
 const BarberConfigBarbearia = lazy(() => import("@/components/barber/BarberConfigBarbearia").then(m => ({ default: m.BarberConfigBarbearia })));
@@ -206,6 +207,57 @@ const Barbeiro = () => {
   const whatsAppStatus = useWhatsAppStatus(barberContext?.barbeiroId || null);
   const [pendingSetupOpen, setPendingSetupOpen] = useState(false);
   const { user: authUser, isReady: isAuthReady } = useAuthReady();
+  const [isBarberApproved, setIsBarberApproved] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!barberContext) return;
+    if (barberContext.isTenantAdmin) {
+      setIsBarberApproved(true);
+      return;
+    }
+
+    let mounted = true;
+    const checkApproval = async () => {
+      try {
+        const { data } = await supabase
+          .from("barbeiros")
+          .select("ativo")
+          .eq("id", barberContext.barbeiroId)
+          .maybeSingle();
+
+        if (mounted) {
+          setIsBarberApproved(data ? data.ativo !== false : true);
+        }
+      } catch {
+        if (mounted) setIsBarberApproved(true);
+      }
+    };
+
+    checkApproval();
+
+    const ch = supabase
+      .channel(`barber-approval-${barberContext.barbeiroId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "barbeiros",
+          filter: `id=eq.${barberContext.barbeiroId}`,
+        },
+        (payload: any) => {
+          if (payload.new && payload.new.ativo !== undefined) {
+            setIsBarberApproved(payload.new.ativo !== false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(ch);
+    };
+  }, [barberContext]);
 
   useEffect(() => {
     try { sessionStorage.setItem("dub-last-barbeiro-route", location.pathname); } catch {}
@@ -654,6 +706,42 @@ const Barbeiro = () => {
     );
   }
 
+  // Barbeiro convidado aguardando aprovação do dono da barbearia
+  if (isBarberApproved === false && !barberContext.isTenantAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center space-y-5 bg-background">
+        <div className="w-16 h-16 rounded-3xl bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20 shadow-xs">
+          <Clock className="w-8 h-8 stroke-[2.2]" />
+        </div>
+        <div className="space-y-2 max-w-sm">
+          <h2 className="text-[20px] font-semibold text-foreground tracking-tight">
+            Seu Cadastro Está em Análise
+          </h2>
+          <p className="text-[13px] text-muted-foreground leading-relaxed">
+            Suas informações e horários foram salvos com sucesso. O administrador da barbearia irá revisar seu cadastro para liberar seu acesso à agenda.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2.5 w-full max-w-xs pt-3">
+          <button
+            onClick={() => window.location.reload()}
+            className="h-11 w-full rounded-full bg-foreground text-background text-[13px] font-semibold active:scale-95 transition-all shadow-xs"
+          >
+            Verificar Status Agora
+          </button>
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              navigate("/", { replace: true });
+            }}
+            className="h-10 w-full rounded-full text-muted-foreground hover:text-foreground text-[12.5px] font-medium transition-colors"
+          >
+            Sair da Conta
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const isInGracePeriod = !!barberContext.deletedAt;
 
   /** Banner de aviso do período de graça */
@@ -723,29 +811,29 @@ const Barbeiro = () => {
         <main
           className={cn(
             "flex-1 min-h-0 bg-background",
-            (location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp")) && "pb-0"
+            (location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/financeiro") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/relatorios")) && "pb-0"
           )}
           style={
-            location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp")
+            location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/financeiro") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/relatorios")
               ? undefined
               : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
           }
         >
           <div
             className={cn(
-              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/config-barbearia")
+              (location.pathname === "/barbeiro" || location.pathname === "/barbeiro/") || location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/financeiro") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/horarios") || location.pathname.includes("/clientes") || location.pathname.includes("/relatorios")
                 ? "p-0"
                 : "px-3 sm:px-4 py-2"
             )}
             style={
-              location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/config-barbearia")
+              (location.pathname === "/barbeiro" || location.pathname === "/barbeiro/") || location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/financeiro") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/horarios") || location.pathname.includes("/clientes") || location.pathname.includes("/relatorios")
                 ? undefined
                 : { paddingTop: "calc(0.5rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }
             }
           >
 
 
-            {!location.pathname.includes("/barbeiro/promocoes") && !location.pathname.includes("/perfil") && !location.pathname.includes("/config-barbearia") && !location.pathname.includes("/whatsapp") && !isInGracePeriod && (
+            {!location.pathname.includes("/barbeiro/promocoes") && !location.pathname.includes("/perfil") && !location.pathname.includes("/config-barbearia") && !location.pathname.includes("/whatsapp") && !location.pathname.includes("/instagram") && !location.pathname.includes("/relatorios") && !location.pathname.includes("/barbeiro/financeiro") && !location.pathname.includes("/barbeiro/carteira") && !isInGracePeriod && (
               <div className="mb-3">
                 <BarberPushPermissionBanner barbeiroId={barberContext.barbeiroId} />
               </div>
@@ -785,6 +873,7 @@ const Barbeiro = () => {
                     <Route path="carteira" element={<CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" />} />
                     <Route path="configuracoes-perfil" element={<BarberSettingsPage />} />
                     <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
+                    <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                     <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
                     <Route path="portfolio" element={<PortfolioManager barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} title="Meu Portfólio" showBack onBack={() => navigate("/barbeiro/perfil")} />} />
                     {barberContext.isTenantAdmin && (
@@ -804,8 +893,8 @@ const Barbeiro = () => {
           </div>
         </main>
 
-        {/* Bottom Navigation Mobile — esconder no período de graça, configurações, horários, financeiro e disparo */}
-        {!isInGracePeriod && !location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("horarios") && !location.pathname.includes("financeiro") && !location.pathname.includes("meus-dados") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("relatorios") && !location.pathname.includes("servicos") && !location.pathname.includes("planos") && !location.pathname.includes("cupons") && !location.pathname.includes("promocoes") && !location.pathname.includes("whatsapp") && !location.pathname.includes("portfolio") && !location.pathname.includes("loja") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("configuracoes") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
+        {/* Bottom Navigation Mobile — esconder no período de graça, configurações, horários e disparo */}
+        {!isInGracePeriod && !location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("horarios") && !location.pathname.includes("meus-dados") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("relatorios") && !location.pathname.includes("servicos") && !location.pathname.includes("planos") && !location.pathname.includes("cupons") && !location.pathname.includes("promocoes") && !location.pathname.includes("whatsapp") && !location.pathname.includes("instagram") && !location.pathname.includes("portfolio") && !location.pathname.includes("loja") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("configuracoes") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
           <BarberMobileNavigation barbeiroId={barberContext?.barbeiroId} />
         )}
         <SupportChatBubble />
@@ -853,7 +942,7 @@ const Barbeiro = () => {
           <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
             <div className={cn(
               "max-w-[1600px] mx-auto",
-              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/perfil"))
+              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil"))
                 ? "p-0"
                 : "p-6 lg:p-8"
             )}>
@@ -890,6 +979,7 @@ const Barbeiro = () => {
                       <Route path="perfil" element={<div className="max-w-2xl mx-auto"><BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} /></div>} />
                       <Route path="carteira" element={<div className="max-w-2xl mx-auto"><CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" /></div>} />
                       <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
+                      <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                       <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
                       <Route path="portfolio" element={<PortfolioManager barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} title="Meu Portfólio" showBack onBack={() => navigate("/barbeiro/perfil")} />} />
                       {barberContext.isTenantAdmin && (

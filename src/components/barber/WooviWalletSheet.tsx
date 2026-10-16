@@ -1037,6 +1037,7 @@ export function WooviWalletSheet({
                   {[0, 1, 2, 3].map((index) => (
                     <Input
                       key={`pin-${index}`}
+                      id={`woovi-pin-${index}`}
                       type="password"
                       inputMode="numeric"
                       maxLength={1}
@@ -1047,8 +1048,16 @@ export function WooviWalletSheet({
                         next[index] = value;
                         setPinDigits(next);
                         setPinError(null);
+                        if (value && index < 3) {
+                          document.getElementById(`woovi-pin-${index + 1}`)?.focus();
+                        }
                       }}
-                      className="w-12 h-14 text-center text-xl font-bold rounded-2xl"
+                      onKeyDown={(event) => {
+                        if (event.key === "Backspace" && !pinDigits[index] && index > 0) {
+                          document.getElementById(`woovi-pin-${index - 1}`)?.focus();
+                        }
+                      }}
+                      className="w-12 h-14 text-center text-xl font-bold rounded-2xl touch-manipulation"
                       style={{ borderColor: pinError ? COLORS.red : COLORS.divider, color: COLORS.ink }}
                     />
                   ))}
@@ -1064,6 +1073,7 @@ export function WooviWalletSheet({
                     {[0, 1, 2, 3].map((index) => (
                       <Input
                         key={`pin-confirm-${index}`}
+                        id={`woovi-pin-confirm-${index}`}
                         type="password"
                         inputMode="numeric"
                         maxLength={1}
@@ -1074,8 +1084,16 @@ export function WooviWalletSheet({
                           next[index] = value;
                           setPinConfirmDigits(next);
                           setPinError(null);
+                          if (value && index < 3) {
+                            document.getElementById(`woovi-pin-confirm-${index + 1}`)?.focus();
+                          }
                         }}
-                        className="w-12 h-14 text-center text-xl font-bold rounded-2xl"
+                        onKeyDown={(event) => {
+                          if (event.key === "Backspace" && !pinConfirmDigits[index] && index > 0) {
+                            document.getElementById(`woovi-pin-confirm-${index - 1}`)?.focus();
+                          }
+                        }}
+                        className="w-12 h-14 text-center text-xl font-bold rounded-2xl touch-manipulation"
                         style={{ borderColor: pinError ? COLORS.red : COLORS.divider, color: COLORS.ink }}
                       />
                     ))}

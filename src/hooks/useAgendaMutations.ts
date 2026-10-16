@@ -169,6 +169,7 @@ export function useCompleteAppointment() {
       // Concluir afeta: agenda, histórico, financeiro
       const dateStr = format(date, "yyyy-MM-dd");
       queryClient.invalidateQueries({ queryKey: agendaKey(barbeiroId, date) });
+      queryClient.invalidateQueries({ queryKey: ["overdue-appointments"] });
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.barbeiro.historico(barbeiroId, 0),
       });
@@ -178,6 +179,7 @@ export function useCompleteAppointment() {
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.barbeiro.dashboard(barbeiroId),
       });
+      window.dispatchEvent(new CustomEvent("agenda-refresh"));
     },
 
     onError: (err, { barbeiroId, date }, context) => {
@@ -223,6 +225,8 @@ export function useCancelAppointment() {
 
     onSuccess: (_data, { barbeiroId, date }) => {
       queryClient.invalidateQueries({ queryKey: agendaKey(barbeiroId, date) });
+      queryClient.invalidateQueries({ queryKey: ["overdue-appointments"] });
+      window.dispatchEvent(new CustomEvent("agenda-refresh"));
     },
 
     onError: (err, { barbeiroId, date }, context) => {
@@ -284,6 +288,8 @@ export function useNoShowAppointment() {
 
     onSuccess: (_data, { barbeiroId, date }) => {
       queryClient.invalidateQueries({ queryKey: agendaKey(barbeiroId, date) });
+      queryClient.invalidateQueries({ queryKey: ["overdue-appointments"] });
+      window.dispatchEvent(new CustomEvent("agenda-refresh"));
     },
 
     onError: (err, { barbeiroId, date }, context) => {

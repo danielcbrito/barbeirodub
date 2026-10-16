@@ -90,20 +90,19 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
     staleTime: 60_000,
     queryFn: async () => {
       try {
-        // 1. Verifica no localStorage por qualquer cache síncrono do setup completion
-        if (typeof window !== "undefined") {
-          for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            if (k && k.startsWith("dub:qc:v1:setup-completion:")) {
-              try {
-                const parsed = JSON.parse(localStorage.getItem(k) || "");
-                if (parsed?.d?.steps && Array.isArray(parsed.d.steps)) {
-                  const incomplete = parsed.d.steps.filter((s: { completed: boolean }) => !s.completed).length;
-                  if (incomplete > 0) return incomplete;
-                }
-              } catch {
-                /* ignore json error */
+        // 1. Verifica no localStorage por qualquer cache síncrono do setup completion do barbeiro
+        if (typeof window !== "undefined" && barbeiroId) {
+          const prefix = `dub:qc:v1:setup-completion:${barbeiroId}`;
+          const cachedKey = Object.keys(localStorage).find((k) => k.startsWith(prefix));
+          if (cachedKey) {
+            try {
+              const parsed = JSON.parse(localStorage.getItem(cachedKey) || "");
+              if (parsed?.d?.steps && Array.isArray(parsed.d.steps)) {
+                const incomplete = parsed.d.steps.filter((s: { completed: boolean }) => !s.completed).length;
+                if (incomplete > 0) return incomplete;
               }
+            } catch {
+              /* ignore json error */
             }
           }
         }
@@ -128,12 +127,21 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
   useEffect(() => {
     const channel = supabase
       .channel(`bottom-bar-badges-${barbeiroId || "global"}-${Math.random().toString(36).slice(2, 9)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "agendamentos" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["day-appointments-count"] });
-        if (barbeiroId) {
-          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.barbeiro.dashboard(barbeiroId) });
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "agendamentos",
+          filter: barbeiroId ? `barbeiro_id=eq.${barbeiroId}` : undefined,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["day-appointments-count"] });
+          if (barbeiroId) {
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.barbeiro.dashboard(barbeiroId) });
+          }
         }
-      })
+      )
       .on("postgres_changes", { event: "*", schema: "public", table: "assinaturas" }, () => {
         queryClient.invalidateQueries({ queryKey: ["bottom-nav-fin-pending"] });
       })
@@ -213,44 +221,18 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
   };
 
   return (
-    <>
-      {/* Efeito de neblina inferior suave e progressivo — contido até o último terço do dock flutuante */}
-      <div
-        className={cn(
-          "fixed bottom-0 left-0 right-0 pointer-events-none z-[45] transition-opacity duration-300",
-          isKeyboardOpen && "opacity-0"
-        )}
-        style={{
-          height: "calc(var(--app-safe-bottom, 8px) + 4.25rem)",
-          background:
-            "linear-gradient(to top, hsl(var(--background) / 0.88) 0%, hsl(var(--background) / 0.82) 15%, hsl(var(--background) / 0.70) 30%, hsl(var(--background) / 0.52) 48%, hsl(var(--background) / 0.32) 64%, hsl(var(--background) / 0.16) 78%, hsl(var(--background) / 0.06) 88%, hsl(var(--background) / 0.015) 95%, hsl(var(--background) / 0) 100%)",
-          WebkitMaskImage:
-            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 25%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.18) 80%, rgba(0,0,0,0) 100%)",
-          maskImage:
-            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 25%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.18) 80%, rgba(0,0,0,0) 100%)",
-          backdropFilter: "blur(6px)",
-          WebkitBackdropFilter: "blur(6px)",
-        }}
-        aria-hidden="true"
-      />
-
-      <div
-        className={cn(
-          "fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none flex justify-center items-center w-full px-3 transition-all duration-200",
-          isKeyboardOpen ? "opacity-0 translate-y-16 pointer-events-none" : "opacity-100 translate-y-0"
-        )}
-        style={{
-          bottom: "calc(0.75rem + var(--app-safe-bottom, 8px))",
-        }}
-      >
+    <div
+      className={cn(
+        "fixed left-1/2 -translate-x-1/2 z-[60] pointer-events-none flex justify-center items-center w-full px-3 transition-all duration-200",
+        isKeyboardOpen ? "opacity-0 translate-y-16 pointer-events-none" : "opacity-100 translate-y-0"
+      )}
+      style={{
+        bottom: "calc(0.75rem + var(--app-safe-bottom, 8px))",
+      }}
+    >
         <nav
           aria-label="Navegação do aplicativo"
-          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] rounded-full border border-white/12 shadow-[0_12px_36px_rgba(0,0,0,0.38)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300"
-          style={{
-            backgroundColor: "rgba(14, 14, 18, 0.88)",
-            backdropFilter: "blur(24px) saturate(180%)",
-            WebkitBackdropFilter: "blur(24px) saturate(180%)",
-          }}
+          className="pointer-events-auto flex items-center justify-between p-2 h-[72px] rounded-full border border-white/25 dark:border-white/15 shadow-[0_14px_40px_rgba(0,0,0,0.32),inset_0_1px_1px_rgba(255,255,255,0.24)] w-[calc(100%-1.25rem)] max-w-[450px] transition-all duration-300 bg-background/55 dark:bg-[#121216]/55 backdrop-blur-3xl backdrop-saturate-[190%]"
         >
           {items.map(({ key, label, path, end, Icon, countKey }) => {
             const to = `${basePath}${path}`;
@@ -276,6 +258,9 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                 onPointerDown={() => prefetchTab(key)}
                 onClick={(e) => {
                   prefetchTab(key);
+                  if (key === "agenda") {
+                    window.dispatchEvent(new CustomEvent("open-overdue-modal"));
+                  }
                   if (location.pathname !== to) {
                     e.preventDefault();
                     navigate(to);
@@ -290,8 +275,8 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                       className={cn(
                         "relative flex items-center justify-center transition-all duration-300 active:scale-95 shrink-0",
                         active
-                          ? "h-[56px] px-3.5 sm:px-4 bg-white text-[#09090b] rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.22)] gap-2 dark:bg-white/15 dark:border dark:border-white/20 dark:text-white dark:shadow-xs"
-                          : "w-[54px] sm:w-[58px] h-[56px] rounded-full flex flex-col items-center justify-center gap-1 text-white/70 hover:text-white"
+                          ? "h-[56px] px-3.5 sm:px-4 bg-white/95 text-[#09090b] rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.18)] gap-2 dark:bg-white/[0.18] dark:border dark:border-white/25 dark:text-white dark:shadow-[0_2px_12px_rgba(0,0,0,0.3)] dark:backdrop-blur-md"
+                          : "w-[54px] sm:w-[58px] h-[56px] rounded-full flex flex-col items-center justify-center gap-1 text-foreground/60 dark:text-white/60 hover:text-foreground dark:hover:text-white"
                       )}
                     >
                       <div className="relative flex items-center justify-center shrink-0">
@@ -301,7 +286,7 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                             "shrink-0 block",
                             active
                               ? "w-[22px] h-[22px] text-[#09090b] dark:text-white"
-                              : "w-[21px] h-[21px] text-white/80"
+                              : "w-[21px] h-[21px] text-foreground/75 dark:text-white/75"
                           )}
                           aria-hidden="true"
                         />
@@ -309,7 +294,7 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                           <span
                             className={cn(
                               "absolute -top-1.5 -right-2 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none shadow-sm bg-red-500 text-white",
-                              active ? "ring-2 ring-white dark:ring-white/20" : "ring-2 ring-[#141416]"
+                              active ? "ring-2 ring-white dark:ring-white/20" : "ring-2 ring-background dark:ring-[#141416]"
                             )}
                             aria-label={`${count} pendências`}
                           >
@@ -322,7 +307,7 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
                           {label}
                         </span>
                       ) : (
-                        <span className="text-[9.5px] sm:text-[10px] font-medium tracking-tight text-white/60 leading-none whitespace-nowrap">
+                        <span className="text-[9.5px] sm:text-[10px] font-medium tracking-tight text-foreground/60 dark:text-white/60 leading-none whitespace-nowrap">
                           {label}
                         </span>
                       )}
@@ -334,6 +319,5 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
           })}
         </nav>
       </div>
-    </>
   );
 }

@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { fetchPlanOrder, sortPlansByCustomOrder } from "@/lib/plansOrder";
 
 interface Plan {
   id: string;
@@ -150,10 +151,13 @@ export function SubscribePlanSheet({ open, onOpenChange, userId }: SubscribePlan
             : []
         }));
 
-        setPlans(normalizedData);
+        const orderList = await fetchPlanOrder(tenantId);
+        const sortedPlans = sortPlansByCustomOrder(normalizedData, orderList);
+
+        setPlans(sortedPlans);
         setLoadingState("success");
 
-        if (normalizedData.length === 0) {
+        if (sortedPlans.length === 0) {
           setErrorMessage("Nenhum plano disponível no momento.");
         }
       }

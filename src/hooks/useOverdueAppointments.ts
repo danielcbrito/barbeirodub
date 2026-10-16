@@ -93,7 +93,7 @@ export function useOverdueAppointments(
       const fourteenDaysAgoStr = format(subDays(now, 14), "yyyy-MM-dd");
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-      // Busca agendamentos em aberto dos últimos 14 dias até hoje de forma limpa (sem joins frágeis)
+      // Busca agendamentos em aberto EXCLUSIVAMENTE de dias anteriores (ontem para trás)
       const { data, error } = await supabase
         .from("agendamentos")
         .select(`
@@ -103,7 +103,7 @@ export function useOverdueAppointments(
         .eq("barbeiro_id", targetBarbeiroId)
         .or("status.in.(pending,confirmed),status.is.null")
         .gte("data", fourteenDaysAgoStr)
-        .lte("data", todayStr)
+        .lt("data", todayStr)
         .order("data", { ascending: true })
         .order("hora", { ascending: true });
 
@@ -142,50 +142,55 @@ export function useOverdueAppointments(
 
       for (const apt of data || []) {
         if (!apt) continue;
+        const st = (apt.status || "").toLowerCase().trim();
+        // Apenas agendamentos em aberto (sem desfecho definido pelo barbeiro)
+        if (
+          st === "completed" ||
+          st === "no_show" ||
+          st === "nao_veio" ||
+          st === "faltou" ||
+          st.startsWith("cancel") ||
+          st === "excluido"
+        ) {
+          continue;
+        }
         const isPastDay = Boolean(apt.data && apt.data < todayStr);
+        if (!isPastDay) continue;
+
         const srv = servicosMap[apt.servico_id];
         const dur = apt.duracao || srv?.duracao_minutos || 30;
-        const [h, m] = (apt.hora || "00:00").split(":").map(Number);
-        const endMinutes = (h || 0) * 60 + (m || 0) + dur;
-        const isPastTimeToday = Boolean(apt.data && apt.data === todayStr && currentMinutes >= endMinutes);
+        const rawClientName = profileMap[apt.user_id] || "Cliente";
+        const clientName = resolveClienteDisplayName(apt.observacoes, rawClientName, "Cliente");
+        const serviceName = srv?.nome || "Serviço";
 
-        // É atrasado se for de dia anterior OU se for de hoje e o horário previsto já terminou
-        if (isPastDay || isPastTimeToday) {
-          const rawClientName = profileMap[apt.user_id] || "Cliente";
-          const clientName = resolveClienteDisplayName(apt.observacoes, rawClientName, "Cliente");
-          const serviceName = srv?.nome || "Serviço";
-
-          let displayDateLabel = "Hoje";
-          if (apt.data === yesterdayStr) {
-            displayDateLabel = "Ontem";
-          } else if (apt.data && apt.data < yesterdayStr) {
-            const parts = (apt.data || "").split("-");
-            if (parts.length === 3) {
-              displayDateLabel = `${parts[2]}/${parts[1]}`;
-            }
+        let displayDateLabel = "Ontem";
+        if (apt.data !== yesterdayStr) {
+          const parts = (apt.data || "").split("-");
+          if (parts.length === 3) {
+            displayDateLabel = `${parts[2]}/${parts[1]}`;
           }
-
-          list.push({
-            id: apt.id,
-            data: apt.data || todayStr,
-            hora: (apt.hora || "00:00").slice(0, 5),
-            duracao: dur,
-            status: apt.status || "pending",
-            preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
-            observacoes: apt.observacoes,
-            payment_method: apt.payment_method,
-            tipo_agendamento: apt.tipo_agendamento,
-            is_free: Boolean(apt.is_free),
-            user_id: apt.user_id || "",
-            servico_id: apt.servico_id,
-            barbeiro_id: apt.barbeiro_id,
-            clientName,
-            serviceName,
-            isPastDay,
-            isPastTimeToday,
-            displayDateLabel,
-          });
         }
+
+        list.push({
+          id: apt.id,
+          data: apt.data,
+          hora: apt.hora,
+          duracao: dur,
+          status: apt.status,
+          preco: Number(apt.preco) || 0,
+          observacoes: apt.observacoes,
+          payment_method: apt.payment_method,
+          tipo_agendamento: apt.tipo_agendamento,
+          is_free: apt.is_free,
+          user_id: apt.user_id,
+          servico_id: apt.servico_id,
+          barbeiro_id: apt.barbeiro_id,
+          clientName,
+          serviceName,
+          isPastDay: true,
+          isPastTimeToday: false,
+          displayDateLabel,
+        });
       }
 
       return list;
@@ -215,9 +220,13 @@ export function useOverdueAppointments(
 
           if (completeErr) throw completeErr;
 
-          // 2. Garantir registro de pagamento para os concluídos
-          const targetApts = overdueAppointments.filter((a) => selectedIds.includes(a.id));
-          for (const apt of targetApts) {
+          // 2. Garantir registro de pagamento para todos os concluídos
+          const { data: aptsData } = await supabase
+            .from("agendamentos")
+            .select("id, preco, user_id, payment_method, is_free, tipo_agendamento")
+            .in("id", selectedIds);
+
+          for (const apt of aptsData || []) {
             if (!apt.is_free && apt.tipo_agendamento !== "plano") {
               const { data: existingPay } = await supabase
                 .from("pagamentos")
@@ -263,8 +272,15 @@ export function useOverdueAppointments(
           if (noShowErr) throw noShowErr;
         }
 
-        // 4. Invalidar todos os caches relevantes
+        // 4. Remove imediatamente do cache para que não apareçam mais na gaveta
+        queryClient.setQueryData<OverdueAppointment[]>(queryKey, (old) => {
+          const processed = new Set([...selectedIds, ...noShowIds]);
+          return (old || []).filter((apt) => !processed.has(apt.id));
+        });
+
+        // 5. Invalidar todos os caches relevantes
         await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["overdue-appointments"] }),
           queryClient.invalidateQueries({ queryKey }),
           queryClient.invalidateQueries({ queryKey: ["barbeiro-agenda"] }),
           queryClient.invalidateQueries({ queryKey: ["barber-agenda"] }),

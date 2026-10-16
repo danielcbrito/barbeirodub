@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { 
   format, 
   addDays, 
@@ -28,6 +28,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  CheckCheck,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +40,7 @@ import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
+import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
 
 interface MobileAppointment {
   id: string;
@@ -69,14 +72,35 @@ interface AdminMobileAgendaProps {
   showBack?: boolean;
 }
 
-/** Status oficial do sistema com cores claras:
- * - Concluído: VERDE (emerald)
- * - Agendado: AZUL (blue)
- * - Pendente: ÂMBAR (amber)
- * - Não veio: VERMELHO (rose)
+/** Status oficial do sistema com cores solicitadas:
+ * - Cancelado: Vermelho suave (#FF3B30), card transparente
+ * - Faltou: Cinza (zinc-400), card transparente
+ * - Falta confirmar / Pendente: Azul (#007AFF), card normal
+ * - Confirmado: Verde (#34C759), card normal
+ * - Concluído: Verde translúcido (#34C759/40), card atenuado
  */
 const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
-  if (status === "completed") {
+  const st = (status || "").toLowerCase().trim();
+  const isCancelled = st === "cancelled" || st === "cancelled_by_admin" || st === "cancelled_by_user" || st === "excluido";
+  if (isCancelled) {
+    return {
+      dot: "bg-[#FF3B30] dark:bg-[#FF453A]",
+      barColor: "bg-[#FF3B30] dark:bg-[#FF453A]",
+      barColorDone: "bg-[#FF3B30]/40 dark:bg-[#FF453A]/40",
+      textColor: "text-red-500",
+      statusLabel: "Cancelado",
+    };
+  }
+  if (st === "no_show" || st === "nao_veio" || st === "faltou") {
+    return {
+      dot: "bg-zinc-400 dark:bg-zinc-500",
+      barColor: "bg-zinc-400/50 dark:bg-zinc-500/50",
+      barColorDone: "bg-zinc-400/40 dark:bg-zinc-500/40",
+      textColor: "text-muted-foreground",
+      statusLabel: "Não veio",
+    };
+  }
+  if (st === "completed") {
     return {
       dot: "bg-[#34C759] dark:bg-[#30D158]",
       barColor: "bg-[#34C759] dark:bg-[#30D158]",
@@ -85,30 +109,12 @@ const getStatusConfig = (status: string, barbeiroConfirmou: boolean | null) => {
       statusLabel: "Concluído",
     };
   }
-  if (status === "no_show") {
-    return {
-      dot: "bg-[#FF3B30] dark:bg-[#FF453A]",
-      barColor: "bg-[#FF3B30] dark:bg-[#FF453A]",
-      barColorDone: "bg-[#FF3B30]/40 dark:bg-[#FF453A]/40",
-      textColor: "text-rose-600/80 dark:text-rose-400/80",
-      statusLabel: "Não veio",
-    };
-  }
-  if (status === "confirmed" || barbeiroConfirmou) {
-    return {
-      dot: "bg-[#007AFF] dark:bg-[#0A84FF]",
-      barColor: "bg-[#007AFF] dark:bg-[#0A84FF]",
-      barColorDone: "bg-[#007AFF]/40 dark:bg-[#0A84FF]/40",
-      textColor: "text-muted-foreground/75",
-      statusLabel: "Agendado",
-    };
-  }
   return {
-    dot: "bg-[#FF9500] dark:bg-[#FF9F0A]",
-    barColor: "bg-[#FF9500] dark:bg-[#FF9F0A]",
-    barColorDone: "bg-[#FF9500]/40 dark:bg-[#FF9F0A]/40",
-    textColor: "text-amber-600/80 dark:text-amber-400/80",
-    statusLabel: "Pendente",
+    dot: "bg-[#007AFF] dark:bg-[#0A84FF]",
+    barColor: "bg-[#007AFF] dark:bg-[#0A84FF]",
+    barColorDone: "bg-[#007AFF]/40 dark:bg-[#0A84FF]/40",
+    textColor: "text-[#007AFF] dark:text-[#0A84FF]",
+    statusLabel: "Agendado",
   };
 };
 
@@ -177,29 +183,102 @@ export function AdminMobileAgenda({
     () => !readSyncCache<MobileAppointment[]>(syncKey(getDateKey(getLocalToday())))
   );
   const [refreshing, setRefreshing] = useState(false);
-  const [manualBookingOpen, setManualBookingOpen] = useState(false);
+  const location = useLocation();
+  const [manualBookingOpen, setManualBookingOpen] = useState(() => Boolean(location.state?.openManualBooking));
   const [selectedSlotTime, setSelectedSlotTime] = useState("09:00");
-  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
+  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(() => Boolean(location.state?.openOverdueModal));
+
+  useEffect(() => {
+    if (location.state?.openManualBooking) {
+      setManualBookingOpen(true);
+    }
+    if (location.state?.openOverdueModal) {
+      setIsOverdueModalOpen(true);
+    }
+  }, [location.state]);
 
   const overdueState = useOverdueAppointments(barbeiroId);
 
+  const dayPendingAppointments = useMemo(() => {
+    if (!appointments || appointments.length === 0) return [];
+    return appointments.filter(
+      (apt) =>
+        apt &&
+        apt.id &&
+        apt.status !== "completed" &&
+        apt.status !== "no_show" &&
+        apt.status !== "cancelled" &&
+        apt.status !== "cancelled_by_admin" &&
+        apt.status !== "cancelled_by_user" &&
+        apt.status !== "excluido"
+    );
+  }, [appointments]);
+
+  const [isFinalizingDay, setIsFinalizingDay] = useState(false);
+
+  const handleFinalizeDay = async () => {
+    if (dayPendingAppointments.length === 0) {
+      toast.info("Todos os agendamentos deste dia já estão concluídos.");
+      return;
+    }
+
+    try {
+      setIsFinalizingDay(true);
+      const idsToComplete = dayPendingAppointments.map((a) => a.id);
+
+      // Atualiza estado local imediatamente para fluidez instantânea
+      setAppointments((prev) =>
+        prev.map((apt) =>
+          idsToComplete.includes(apt.id)
+            ? { ...apt, status: "completed", barbeiro_confirmou: true }
+            : apt
+        )
+      );
+
+      const dateKey = getDateKey(selectedDate);
+      cacheRef.current.delete(dateKey);
+
+      await overdueState.completeBulk(idsToComplete);
+
+      await loadAppointments(selectedDate, { silent: true });
+      toast.success("Agendamentos do dia finalizados!");
+    } catch (error) {
+      console.error("Erro ao finalizar agendamentos do dia:", error);
+      toast.error("Erro ao finalizar agendamentos.");
+    } finally {
+      setIsFinalizingDay(false);
+    }
+  };
+
+
   // Auto-abertura da gaveta ao entrar na Agenda quando houver agendamentos para finalizar
-  const hasAutoPromptedOverdueRef = useRef(false);
+  // Regra: Máximo 3 vezes ao dia com intervalo mínimo de 3h ao dispensar no X
+  const hasAutoOpenedOverdueRef = useRef(false);
   useEffect(() => {
     if (overdueState.isLoading) return;
-    if (overdueState.count > 0 && !hasAutoPromptedOverdueRef.current) {
-      setIsOverdueModalOpen(true);
-      hasAutoPromptedOverdueRef.current = true;
-    } else if (overdueState.count === 0) {
-      hasAutoPromptedOverdueRef.current = false;
-    }
-  }, [overdueState.count, overdueState.isLoading]);
+    // Se veio explicitamente pelo state (ex: botão 'Conferir'), a abertura já ocorreu
+    if (location.state?.openOverdueModal) return;
 
+    if (overdueState.count > 0 && !hasAutoOpenedOverdueRef.current) {
+      hasAutoOpenedOverdueRef.current = true;
+      if (canAutoOpenOverdueModal()) {
+        setIsOverdueModalOpen(true);
+      }
+    }
+  }, [overdueState.count, overdueState.isLoading, location.state]);
+
+  // Abertura manual (quando o usuário clica no banner ou dispara o evento): sempre abre
   useEffect(() => {
-    const handleOpen = () => setIsOverdueModalOpen(true);
+    const handleOpen = () => {
+      if (overdueState.count > 0) {
+        setIsOverdueModalOpen(true);
+      }
+    };
     window.addEventListener("open-overdue-modal", handleOpen);
     return () => window.removeEventListener("open-overdue-modal", handleOpen);
-  }, []);
+  }, [overdueState.count]);
+
+
 
   const carouselRef = useRef<HTMLDivElement>(null);
   const isInitialScrollDone = useRef(false);
@@ -383,7 +462,7 @@ export function AdminMobileAgenda({
         if (!bundleError) {
           const raw = ((bundle as any)?.appointments || []) as any[];
           appointmentsWithDetails = raw
-            .filter((apt) => Boolean(apt) && ["pending", "confirmed", "completed"].includes(apt.status || "pending"))
+            .filter((apt) => Boolean(apt) && apt.status !== "excluido")
             .map((apt) => {
               const walkInName = extractWalkInName(apt.observacoes);
               const whatsAppName = extractWhatsAppName(apt.observacoes);
@@ -410,7 +489,7 @@ export function AdminMobileAgenda({
           .from("agendamentos")
           .select("id, data, hora, duracao, status, preco, observacoes, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao, created_at")
           .eq("data", dateStr)
-          .in("status", ["pending", "confirmed", "completed"])
+          .neq("status", "excluido")
           .order("hora", { ascending: true });
 
         if (barbeiroId) {
@@ -544,6 +623,17 @@ export function AdminMobileAgenda({
       }
     }
   }, [barbeiroId, commitAppointments]);
+
+  // Recarregar agenda sempre que ocorrer atualização em agendamentos (conclusão, falta, cancelamento)
+  useEffect(() => {
+    const handleAgendaRefresh = () => {
+      const dateStr = getDateKey(selectedDate);
+      cacheRef.current.delete(dateStr);
+      loadAppointments(selectedDate, { silent: true, visible: true });
+    };
+    window.addEventListener("agenda-refresh", handleAgendaRefresh);
+    return () => window.removeEventListener("agenda-refresh", handleAgendaRefresh);
+  }, [selectedDate, loadAppointments]);
 
   // Carrega agendamentos quando selectedDate mudar
   useEffect(() => {
@@ -797,7 +887,7 @@ export function AdminMobileAgenda({
       </div>
 
       {/* ══════ ÁREA SCROLLÁVEL: DATA, CONTAGEM E BOTÃO SOBEM JUNTOS AO ROLAR A TELA ══════ */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-28 pt-2">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-20 pt-2">
         {/* Barra de Ação (Data + Contagem + Botão Novo Encaixe) — sobe junto com os agendamentos */}
         <div className="px-4 pt-2 pb-2.5 flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1 pr-1">
@@ -813,20 +903,8 @@ export function AdminMobileAgenda({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {overdueState.count > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsOverdueModalOpen(true)}
-                className="h-9 px-3.5 rounded-full bg-secondary/80 hover:bg-secondary text-foreground border border-border/40 text-[12.5px] font-semibold flex items-center justify-center gap-1.5 active:opacity-70 transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
-                aria-label="Finalizar atendimentos pendentes"
-              >
-                <Check className="w-3.5 h-3.5 stroke-[2.4]" />
-                <span>Finalizar ({overdueState.count})</span>
-              </button>
-            )}
-
-            {/* Botão Novo Encaixe — Cápsula nativa Apple Preto Elegante */}
+          {/* Ação da Agenda: Apenas Novo Encaixe */}
+          <div className="flex items-center shrink-0">
             <button
               type="button"
               onClick={() => {
@@ -849,7 +927,7 @@ export function AdminMobileAgenda({
         {!isShowingSelectedDate ? (
           <div className="px-4 space-y-2.5 animate-pulse">
             {[0, 1, 2, 3].map((item) => (
-              <div key={item} className="h-16 rounded-2xl border border-border/30 dark:border-white/[0.04] bg-card/60 p-3.5 flex items-center gap-3">
+              <div key={item} className="h-16 rounded-2xl border border-border/20 dark:border-white/[0.04] bg-card/40 dark:bg-white/[0.02] backdrop-blur-xl p-3.5 flex items-center gap-3">
                 <div className="w-12 shrink-0 flex flex-col items-center gap-1">
                   <div className="h-4 w-10 rounded bg-muted/40" />
                   <div className="h-3 w-8 rounded bg-muted/20" />
@@ -874,7 +952,7 @@ export function AdminMobileAgenda({
           </div>
         ) : appointments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center px-6">
-            <div className="w-12 h-12 rounded-2xl bg-secondary/60 dark:bg-white/[0.04] border border-border/40 dark:border-white/[0.06] flex items-center justify-center mb-2.5 text-muted-foreground/60">
+            <div className="w-12 h-12 rounded-2xl bg-secondary/40 dark:bg-white/[0.035] backdrop-blur-xl border border-border/30 dark:border-white/[0.06] flex items-center justify-center mb-2.5 text-muted-foreground/60 shadow-xs">
               <Calendar className="w-6 h-6 stroke-[1.6]" />
             </div>
             <p className="text-[15px] font-medium text-foreground">
@@ -882,7 +960,7 @@ export function AdminMobileAgenda({
             </p>
           </div>
         ) : (
-          /* ══════ LISTA DE AGENDAMENTOS: PADRÃO APPLE HIG, MINIMALISTA, SÉRIO E MODERNO ══════ */
+          /* ══════ LISTA DE AGENDAMENTOS: PADRÃO APPLE HIG, MINIMALISTA, SÉRIO E MODERNO COM EFEITO VIDRO ══════ */
           <div className="px-4 space-y-2 mt-0.5">
             {appointments.map((apt) => {
               if (!apt) return null;
@@ -895,13 +973,19 @@ export function AdminMobileAgenda({
               const rawHora = apt.hora || "00:00";
               const horaFormatted = rawHora.slice(0, 5);
 
-              const isCompleted = apt.status === "completed" || apt.status === "no_show";
+              const st = (apt.status || "").toLowerCase().trim();
+              const isCompleted = st === "completed";
+              const isCancelled = st === "cancelled" || st === "cancelled_by_admin" || st === "cancelled_by_user" || st === "excluido";
+              const isNoShow = st === "no_show" || st === "nao_veio" || st === "faltou" || st === "no-show" || st.includes("show") || st.includes("falta");
+
               const isViewingToday = isToday(selectedDate);
               const [h, m] = rawHora.split(':').map(Number);
               const startMinutes = (h || 0) * 60 + (m || 0);
               const endMinutes = startMinutes + duration;
               const isPastTime = isViewingToday && endMinutes <= currentMinutesNow;
-              const isDone = isCompleted || isPastTime;
+
+              // Card fica atenuado/transparente se concluído, cancelado, faltou ou horário já decorrido
+              const isMuted = isCompleted || isCancelled || isNoShow || isPastTime;
 
               const clientName = apt.profile?.nome || "Cliente";
               const serviceName = (() => {
@@ -926,10 +1010,7 @@ export function AdminMobileAgenda({
               // Pisca o horário SE E SOMENTE SE estiver cortando agora
               const isCuttingNow =
                 isViewingToday &&
-                !isDone &&
-                apt.status !== 'completed' &&
-                apt.status !== 'no_show' &&
-                (apt as any).status !== 'cancelled' &&
+                !isMuted &&
                 currentMinutesNow >= startMinutes &&
                 currentMinutesNow < endMinutes;
 
@@ -941,16 +1022,16 @@ export function AdminMobileAgenda({
                 <div
                   key={apt.id}
                   onClick={() => onAppointmentClick?.(apt)}
-                  style={{ opacity: isDone ? 0.48 : 1 }}
+                  style={{ opacity: isMuted ? 0.45 : 1 }}
                   className={cn(
-                    "w-full rounded-2xl border transition-all duration-200 cursor-pointer p-3 sm:p-3.5 flex items-center gap-3",
-                    isDone
-                      ? "border-border/25 dark:border-white/[0.04] bg-card/60 dark:bg-[#151516]/60 shadow-none"
-                      : "border-border/40 dark:border-white/[0.07] bg-card dark:bg-[#18181a] shadow-2xs hover:border-border active:opacity-70"
+                    "w-full rounded-2xl border transition-all duration-200 cursor-pointer p-3 sm:p-3.5 flex items-center gap-3 backdrop-blur-xl backdrop-saturate-[180%]",
+                    isMuted
+                      ? "border-border/20 dark:border-white/[0.04] bg-card/35 dark:bg-white/[0.02] shadow-none"
+                      : "border-border/40 dark:border-white/[0.08] bg-card/75 dark:bg-white/[0.04] hover:bg-card/90 dark:hover:bg-white/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.4)] dark:shadow-[0_2px_16px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.06)] active:scale-[0.99] active:opacity-80"
                   )}
                 >
-                  {/* Coluna de Horário da Agenda (Esquerda) */}
-                  <div className="w-12 shrink-0 flex flex-col items-center justify-center text-center">
+                  {/* Coluna de Horário da Agenda (Esquerda) limpa, sem caixa/fundo por trás */}
+                  <div className="w-[52px] shrink-0 flex flex-col items-center justify-center text-center">
                     <span
                       style={
                         isCuttingNow
@@ -961,10 +1042,10 @@ export function AdminMobileAgenda({
                           : undefined
                       }
                       className={cn(
-                        "font-mono text-[15px] tabular-nums tracking-tight inline-block",
+                        "font-mono text-[14px] tabular-nums tracking-tight inline-block",
                         isCuttingNow
-                          ? "text-[#34C759] dark:text-[#30D158] font-semibold animate-soft-blink"
-                          : isDone
+                          ? "text-[#007AFF] dark:text-[#0A84FF] font-semibold animate-soft-blink"
+                          : isMuted
                             ? "text-muted-foreground/60 font-medium"
                             : "text-foreground font-semibold"
                       )}
@@ -972,18 +1053,24 @@ export function AdminMobileAgenda({
                       {horaFormatted}
                     </span>
                     <span className={cn(
-                      "text-[12px] font-normal mt-0.5",
-                      isDone ? "text-muted-foreground/45" : "text-muted-foreground/70"
+                      "text-[11px] font-normal mt-0.5 leading-none",
+                      isMuted ? "text-muted-foreground/45" : "text-muted-foreground/70"
                     )}>
                       {duration} min
                     </span>
                   </div>
 
-                  {/* Barra vertical fina estilo cápsula Apple (3px): mantém verde suave quando finalizado */}
+                  {/* Barra vertical fina estilo cápsula Apple (3px): verde suave se finalizado, cinza se não veio/faltou */}
                   <div
                     className={cn(
                       "w-[3px] self-stretch rounded-full shrink-0 transition-colors",
-                      isDone ? statusConfig.barColorDone : statusConfig.barColor
+                      isCompleted
+                        ? statusConfig.barColorDone
+                        : isNoShow
+                        ? "bg-zinc-400/50 dark:bg-zinc-500/50"
+                        : isCancelled
+                        ? "bg-[#FF3B30]/40 dark:bg-[#FF453A]/40"
+                        : statusConfig.barColor
                     )}
                   />
 
@@ -994,37 +1081,26 @@ export function AdminMobileAgenda({
                       <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
                         <span className={cn(
                           "text-[15px] tracking-tight truncate block",
-                          isDone ? "text-muted-foreground/75 font-normal" : "text-foreground font-semibold"
+                          isMuted ? "text-muted-foreground/75 font-normal" : "text-foreground font-semibold"
                         )}>
                           {clientName}
                         </span>
+                        {isNoShow && (
+                          <span className="text-[11px] font-normal text-muted-foreground/60 shrink-0">
+                            (Não veio)
+                          </span>
+                        )}
                         {isWhatsAppAppointment(apt.observacoes) && (
-                          <span className={cn(isDone && "opacity-60")}>
+                          <span className={cn(isMuted && "opacity-60")}>
                             <WhatsAppBadge />
                           </span>
                         )}
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {apt.status !== 'completed' && apt.status !== 'no_show' && ((apt.data && apt.data < format(new Date(), 'yyyy-MM-dd')) || (isViewingToday && isPastTime)) && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (overdueState?.completeBulk && apt.id) {
-                                overdueState.completeBulk([apt.id]);
-                              }
-                            }}
-                            disabled={overdueState?.isCompleting}
-                            className="h-6 px-2.5 rounded-full bg-foreground text-background text-[11px] font-semibold active:opacity-75 shadow-xs flex items-center gap-1 shrink-0 cursor-pointer"
-                          >
-                            <Check className="w-3 h-3 stroke-[2.5]" />
-                            <span>Confirmar</span>
-                          </button>
-                        )}
                         <span className={cn(
                           "text-[13px] tabular-nums shrink-0 text-right",
-                          isDone ? "text-muted-foreground/50 font-normal" : "text-foreground/90 font-medium"
+                          isMuted ? "text-muted-foreground/50 font-normal" : "text-foreground/90 font-medium"
                         )}>
                           {isPlan
                             ? "Plano"
@@ -1041,11 +1117,11 @@ export function AdminMobileAgenda({
                       <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden text-muted-foreground">
                         <Scissors className={cn(
                           "w-3.5 h-3.5 shrink-0",
-                          isDone ? "text-muted-foreground/35" : "text-muted-foreground/60"
+                          isMuted ? "text-muted-foreground/35" : "text-muted-foreground/60"
                         )} />
                         <span className={cn(
                           "truncate text-[12px] block font-normal",
-                          isDone ? "text-muted-foreground/60" : "text-muted-foreground"
+                          isMuted ? "text-muted-foreground/60" : "text-muted-foreground"
                         )}>
                           {serviceName}
                         </span>
@@ -1055,7 +1131,7 @@ export function AdminMobileAgenda({
                       {isPlan ? (
                         <div className={cn(
                           "flex items-center gap-1 shrink-0 font-medium tabular-nums text-[12px] text-right",
-                          isDone ? "text-muted-foreground/50" : "text-muted-foreground/80"
+                          isMuted ? "text-muted-foreground/50" : "text-muted-foreground/80"
                         )}>
                           <span>{planUsageCount}</span>
                         </div>
@@ -1063,10 +1139,10 @@ export function AdminMobileAgenda({
                         <div className="flex items-center gap-1.5 shrink-0 text-[11.5px] font-normal text-right">
                           <PayIcon className={cn(
                             "w-3.5 h-3.5 shrink-0",
-                            isDone ? "text-muted-foreground/40" : paymentBadge.iconColor
+                            isMuted ? "text-muted-foreground/40" : paymentBadge.iconColor
                           )} />
                           <span className={cn(
-                            isDone ? "text-muted-foreground/50" : "text-muted-foreground/80"
+                            isMuted ? "text-muted-foreground/50" : "text-muted-foreground/80"
                           )}>
                             {paymentBadge.label}
                           </span>
@@ -1077,28 +1153,6 @@ export function AdminMobileAgenda({
                 </div>
               );
             })}
-
-              {/* Botão estratégico inferior para finalizar todos ao final dos atendimentos */}
-              {overdueState.count > 0 && (
-                <div className="pt-6 pb-6 flex flex-col items-center gap-2 px-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsOverdueModalOpen(true)}
-                    className="w-full max-w-sm h-12 rounded-full bg-foreground text-background text-[14px] font-semibold flex items-center justify-center gap-2 active:opacity-70 hover:opacity-90 transition-all cursor-pointer shadow-sm"
-                  >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>Finalizar todos ({overdueState.count})</span>
-                  </button>
-                  <p className="text-[12px] text-muted-foreground font-normal">
-                    {overdueState.count === 1
-                      ? "1 atendimento pendente de confirmação"
-                      : `${overdueState.count} atendimentos pendentes de confirmação`}
-                  </p>
-                </div>
-              )}
-
-              {/* Espaçamento inferior elegante para rolagem */}
-              <div className="pb-8" />
             </div>
           )}
         </div>
@@ -1217,11 +1271,35 @@ export function AdminMobileAgenda({
       {/* Modal de confirmação em lote de agendamentos pendentes */}
       <PendingAppointmentsModal
         open={isOverdueModalOpen}
-        onOpenChange={setIsOverdueModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            recordOverdueModalDismissal();
+          }
+          setIsOverdueModalOpen(open);
+        }}
         appointments={overdueState.overdueAppointments}
-        onCompleteBulk={overdueState.completeBulk}
+        onCompleteBulk={async (selectedIds, noShowIds) => {
+          // Atualiza estado local imediatamente na UI para resposta instantânea
+          setAppointments((prev) =>
+            prev.map((apt) => {
+              if (selectedIds.includes(apt.id)) {
+                return { ...apt, status: "completed", barbeiro_confirmou: true };
+              }
+              if (noShowIds.includes(apt.id)) {
+                return { ...apt, status: "no_show", barbeiro_confirmou: false };
+              }
+              return apt;
+            })
+          );
+          const dateKey = getDateKey(selectedDate);
+          cacheRef.current.delete(dateKey);
+          await overdueState.completeBulk(selectedIds, noShowIds);
+          await loadAppointments(selectedDate, { silent: true, visible: true });
+        }}
         isCompleting={overdueState.isCompleting}
       />
     </div>
   );
 }
+
+export default AdminMobileAgenda;

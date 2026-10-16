@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Loader2, Save, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { saveFinancialPin } from "@/lib/financialPinStorage";
 
 interface Props {
   basePath?: string;
@@ -44,6 +45,15 @@ export function SegurancaPinCarteira({ basePath = "/admin" }: Props) {
         else if (msg.includes("not_authenticated")) toast.error("Usuário não autenticado");
         else toast.error("Erro ao salvar PIN");
         return;
+      }
+
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData?.user?.id) {
+          saveFinancialPin(authData.user.id, newPin);
+        }
+      } catch {
+        /* ignore local storage error */
       }
 
       toast.success(data ? "PIN salvo com sucesso" : "PIN atualizado");
@@ -104,8 +114,8 @@ export function SegurancaPinCarteira({ basePath = "/admin" }: Props) {
           className={cn(
             "w-full h-11 rounded-xl text-[13px] font-semibold tracking-wide flex items-center justify-center gap-2",
             "bg-foreground text-background",
-            "active:scale-[0.98] transition-all duration-300",
-            "shadow-lg shadow-background/50",
+            "active:scale-[0.98] transition-transform duration-100",
+            "shadow-lg shadow-background/50 touch-manipulation",
             canSave
               ? "opacity-100 hover:bg-foreground/90"
               : "opacity-30 pointer-events-none"
@@ -139,7 +149,7 @@ function PinField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder || label}
         maxLength={4}
-        className="h-9 bg-muted/30 border-border/30 text-[13px] text-foreground placeholder:text-muted-foreground/40 rounded-lg focus:border-border/50 focus:ring-0 tracking-[0.3em] text-center"
+        className="h-9 bg-muted/30 border-border/30 text-[13px] text-foreground placeholder:text-muted-foreground/40 rounded-lg focus:border-border/50 focus:ring-0 tracking-[0.3em] text-center touch-manipulation"
       />
     </div>
   );

@@ -244,10 +244,18 @@ export function BarberSetupScreen({ barberContext, onSetupComplete }: Props) {
 
       await supabase
         .from("barbeiros")
-        .update({ setup_completed: true, updated_at: new Date().toISOString() })
+        .update({
+          setup_completed: true,
+          ativo: isInvited ? false : true,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", barberContext.barbeiroId);
 
-      toast.success("Cadastro concluído! 🎉");
+      if (isInvited) {
+        toast.success("Cadastro enviado para análise da barbearia!");
+      } else {
+        toast.success("Cadastro concluído! 🎉");
+      }
       setTimeout(() => onSetupComplete(), 1200);
     } catch (err: any) {
       console.error("Erro ao finalizar setup:", err);
@@ -292,7 +300,12 @@ export function BarberSetupScreen({ barberContext, onSetupComplete }: Props) {
           />
         );
       case 3:
-        return <StepBoasVindas nome={sobreVoce.nome_completo.split(" ")[0] || barberContext.apelido} />;
+        return (
+          <StepBoasVindas
+            nome={sobreVoce.nome_completo.split(" ")[0] || barberContext.apelido}
+            isInvited={true}
+          />
+        );
       default:
         return null;
     }
@@ -314,7 +327,7 @@ export function BarberSetupScreen({ barberContext, onSetupComplete }: Props) {
       case 5:
         return <StepServicos tenantId={null} />;
       case 6:
-        return <StepBoasVindas nome={sobreVoce.nome_completo.split(" ")[0] || barberContext.apelido} />;
+        return <StepBoasVindas nome={sobreVoce.nome_completo.split(" ")[0] || barberContext.apelido} isInvited={false} />;
       default:
         return null;
     }
@@ -325,7 +338,7 @@ export function BarberSetupScreen({ barberContext, onSetupComplete }: Props) {
 
   const getButtonLabel = () => {
     if (saving) return "Finalizando...";
-    if (isLastStep) return "Acessar meu painel";
+    if (isLastStep) return isInvited ? "Concluir Cadastro" : "Acessar meu painel";
     return "Continuar";
   };
 

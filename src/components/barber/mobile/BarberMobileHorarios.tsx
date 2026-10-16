@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useSaveBarberSchedule } from '@/hooks/useBarberMutations';
 import { toast } from 'sonner';
-import { ChevronRight } from 'lucide-react';
+import { useSaveBarberSchedule } from '@/hooks/useBarberMutations';
+import { ChevronRight, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { DayScheduleScreen } from '@/components/shared/DayScheduleScreen';
@@ -214,8 +214,23 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
       header={<ScheduleHeader title="Horário de funcionamento" backTo={basePath} />}
       bottomReserve={hasChanges ? 96 : 0}
     >
-      <div className="mx-auto w-full max-w-md pt-2 pb-4 space-y-6">
-        <p className="text-[11px] text-muted-foreground/50 leading-relaxed font-light">
+      <div className="w-full max-w-lg mx-auto pt-2 pb-6 space-y-4 px-1 sm:px-0">
+        {/* Aviso de que a configuração é exclusivamente do barbeiro */}
+        <div className="rounded-2xl border border-border/40 bg-secondary/35 p-3.5 flex items-start gap-3 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-foreground/10 flex items-center justify-center shrink-0 mt-0.5">
+            <Clock className="w-4 h-4 text-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-foreground">
+              Seus horários individuais de trabalho
+            </p>
+            <p className="text-[11.5px] text-muted-foreground/80 mt-0.5 leading-relaxed">
+              Esta configuração define exclusivamente a sua disponibilidade na agenda pessoal e não altera os horários de outros profissionais.
+            </p>
+          </div>
+        </div>
+
+        <p className="text-sm text-muted-foreground/60 leading-relaxed font-light">
           Configure os dias e horários em que você estará disponível para agendamentos. Toque em um dia para ajustar os detalhes.
         </p>
 

@@ -307,9 +307,10 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
           appointmentsQuery,
           supabase
             .from("assinaturas")
-            .select("user_id, status, created_at, next_billing_date, plano_id, planos(nome)")
-            .eq("status", "active")
-            .in("user_id", userIds),
+            .select("id, user_id, status, created_at, next_billing_date, plano_id, planos(nome)")
+            .in("status", ["active", "pending_cash", "pending_renewal"])
+            .in("user_id", userIds)
+            .order("created_at", { ascending: false }),
           supabase.from("creditos").select("user_id, valor, usado").eq("usado", false).in("user_id", userIds),
         ]);
 

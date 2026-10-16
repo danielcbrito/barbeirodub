@@ -10,7 +10,7 @@ interface SetupCompletionBannerProps {
   loading: boolean;
   /** Modo compacto para dashboard, expandido para perfil */
   variant?: "compact" | "detailed";
-  /** Se deve vir expandido por padrão (padrão: true para variant detailed) */
+  /** Se deve vir expandido por padrão (padrão: false) */
   defaultExpanded?: boolean;
 }
 
@@ -24,10 +24,10 @@ export function SetupCompletionBanner({
   steps,
   loading,
   variant = "compact",
-  defaultExpanded,
+  defaultExpanded = false,
 }: SetupCompletionBannerProps) {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(() => defaultExpanded ?? (variant === "detailed"));
+  const [expanded, setExpanded] = useState(() => defaultExpanded);
 
   // Não mostrar se 100% ou carregando
   if (loading || percentage === 100) return null;
@@ -135,6 +135,7 @@ export function SetupCompletionBanner({
 
         {/* Chevron animado */}
         <div
+          className="transition-transform duration-200"
           style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
         >
           <ChevronRight className="w-4 h-4 text-muted-foreground/40" />

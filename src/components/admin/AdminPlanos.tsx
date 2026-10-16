@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveOldestOwnedTenant } from "@/lib/tenantOwnership";
@@ -14,14 +14,15 @@ import { toast } from "sonner";
 import {
   Loader2, Plus, Crown, Clock, Search, ChevronRight,
   DollarSign, Trash2, Check, Calendar, Users,
-  Scissors, X,
+  Scissors, X, GripVertical,
 } from "lucide-react";
+import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Reorder, useDragControls } from "framer-motion";
 import useEmblaCarousel from "embla-carousel-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { AdminAssinaturas } from "./AdminAssinaturas";
+import { fetchPlanOrder, sortPlansByCustomOrder, persistPlanOrder } from "@/lib/plansOrder";
 
 interface Plano {
   id: string;
@@ -42,6 +44,7 @@ interface Plano {
   ativo: boolean;
   servico_id: string | null;
   controle_vagas_ativo?: boolean | null;
+  ordem?: number | null;
   vagas?: number | null;
 }
 
@@ -227,11 +230,33 @@ export function AdminPlanos({ tenantId, basePath = "/admin", hideHeader = false 
     resolveTenantId();
   }, [resolvedTenantId]);
 
+  const [localPlanos, setLocalPlanos] = useState<Plano[]>([]);
+  const reorderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (planos) {
+      (async () => {
+        const orderList = await fetchPlanOrder(resolvedTenantId);
+        const sorted = sortPlansByCustomOrder(planos, orderList);
+        setLocalPlanos(sorted);
+      })();
+    }
+  }, [planos, resolvedTenantId]);
+
+  const handleReorder = (newOrder: Plano[]) => {
+    setLocalPlanos(newOrder);
+
+    if (reorderTimeoutRef.current) clearTimeout(reorderTimeoutRef.current);
+    reorderTimeoutRef.current = setTimeout(() => {
+      persistPlanOrder(newOrder.map(p => p.id), resolvedTenantId);
+    }, 350);
+  };
+
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return planos;
+    if (!searchQuery.trim()) return localPlanos;
     const q = searchQuery.toLowerCase();
-    return planos.filter(p => p.nome.toLowerCase().includes(q));
-  }, [planos, searchQuery]);
+    return localPlanos.filter(p => p.nome.toLowerCase().includes(q));
+  }, [localPlanos, searchQuery]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -325,23 +350,8 @@ export function AdminPlanos({ tenantId, basePath = "/admin", hideHeader = false 
     const charCount = formData.nome.length;
 
     return (
-      <div className="pb-8 -mx-3 -mt-3">
-        {/* Header */}
-        <div className="sticky top-0 z-30 bg-background">
-          <div className="flex items-center gap-2.5 px-4 h-14">
-            <button
-              onClick={goBack}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
-              aria-label="Voltar"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                <path d="M9 14L4 9l5-5" />
-                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-              </svg>
-            </button>
-            <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">{pageTitle}</h1>
-          </div>
-        </div>
+      <div className="pb-8">
+        <ScheduleHeader title={pageTitle} onBack={goBack} />
 
         <form onSubmit={handleSave} className="px-4 pt-4 space-y-7">
           {/* ─────────── 1. IDENTIDADE ─────────── */}
@@ -639,36 +649,36 @@ export function AdminPlanos({ tenantId, basePath = "/admin", hideHeader = false 
     <div className="pb-28 lg:pb-8">
       {/* Mobile layout */}
       {isMobile ? (
-        <div className="-mx-3 -mt-3">
+        <div>
           {/* Header */}
-          <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
+          <div className={cn("bg-background/95 backdrop-blur-md", !hideHeader && "sticky top-0 z-30")}>
             {!hideHeader && (
-            <div className="flex items-center gap-2.5 px-4 h-14">
-              <button
-                onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
-                aria-label="Voltar"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-                  <path d="M9 14L4 9l5-5" />
-                  <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-                </svg>
-              </button>
-              <h1 className="text-[19px] font-medium tracking-tight text-foreground flex-1">Planos e Assinaturas</h1>
-            </div>
+              <ScheduleHeader
+                title="Planos e Assinaturas"
+                onBack={() => navigate(`${basePath}/configuracoes-perfil`)}
+              />
             )}
 
             {/* Search */}
-            <div className="px-5 py-4">
-              <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/50 group-focus-within:text-primary transition-colors" />
+            <div className="px-4 py-3">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Pesquisar planos..."
-                  className="w-full h-14 pl-12 pr-4 bg-secondary/30 border border-border/30 rounded-2xl text-[15px] font-normal text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
+                  className="w-full h-11 pl-10 pr-9 rounded-2xl bg-muted/40 dark:bg-white/[0.04] border border-border/40 focus:border-border/80 focus:bg-background text-[13.5px] text-foreground placeholder:text-muted-foreground/50 transition-all outline-none"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -682,52 +692,34 @@ export function AdminPlanos({ tenantId, basePath = "/admin", hideHeader = false 
                   {searchQuery ? "Nenhum plano encontrado" : "Nenhum plano cadastrado"}
                 </p>
               </div>
+            ) : !searchQuery.trim() ? (
+              <Reorder.Group
+                axis="y"
+                values={localPlanos}
+                onReorder={handleReorder}
+                className="space-y-0"
+              >
+                {localPlanos.map((plano, index) => (
+                  <ReorderablePlanItem
+                    key={plano.id}
+                    plano={plano}
+                    index={index}
+                    isDraggable={true}
+                    onEdit={openEdit}
+                  />
+                ))}
+              </Reorder.Group>
             ) : (
               <div className="space-y-0">
-                <AnimatePresence mode="popLayout">
-                  {filtered.map((plano, index) => {
-                    const benefits = plano.beneficios_json || [];
-                    return (
-                      <motion.button
-                        key={plano.id}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15, delay: index * 0.02 }}
-                        onClick={() => openEdit(plano.id)}
-                        className={cn(
-                          "w-full flex items-center gap-3 py-4 text-left border-b border-border/30 last:border-b-0 hover:bg-secondary/20 active:bg-secondary/40 transition-colors",
-                          !plano.ativo && "opacity-50"
-                        )}
-                      >
-                        {/* Color bar */}
-                        <div className={cn("w-1 h-10 rounded-full flex-shrink-0", getPlanColor(index))} />
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-[14px] font-medium text-foreground truncate">{plano.nome}</p>
-                            {!plano.ativo && (
-                              <span className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Inativo</span>
-                            )}
-                          </div>
-                          <p className="text-[12px] text-muted-foreground/60 mt-0.5">
-                            {plano.limite_agendamentos_mes ? `${plano.limite_agendamentos_mes} agend./mês` : "Ilimitado"}
-                            {benefits.length > 0 && ` · ${benefits.length} benefício${benefits.length > 1 ? "s" : ""}`}
-                          </p>
-                        </div>
-
-                        {/* Price + chevron */}
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <span className="text-[14px] font-semibold text-foreground">
-                            R$ {plano.preco_mensal.toFixed(2).replace(".", ",")}
-                          </span>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground/40" strokeWidth={1.8} />
-                        </div>
-                      </motion.button>
-                    );
-                  })}
-                </AnimatePresence>
+                {filtered.map((plano, index) => (
+                  <ReorderablePlanItem
+                    key={plano.id}
+                    plano={plano}
+                    index={index}
+                    isDraggable={false}
+                    onEdit={openEdit}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -792,6 +784,87 @@ export function AdminPlanos({ tenantId, basePath = "/admin", hideHeader = false 
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function ReorderablePlanItem({
+  plano,
+  index,
+  isDraggable,
+  onEdit,
+}: {
+  plano: Plano;
+  index: number;
+  isDraggable: boolean;
+  onEdit: (id: string) => void;
+}) {
+  const dragControls = useDragControls();
+  const benefits = plano.beneficios_json || [];
+
+  return (
+    <Reorder.Item
+      value={plano}
+      id={plano.id}
+      dragListener={false}
+      dragControls={dragControls}
+      whileDrag={{
+        scale: 1.02,
+        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+        zIndex: 50,
+      }}
+      className={cn(
+        "relative w-full flex items-center gap-3 py-4 text-left border-b border-border/30 last:border-b-0 bg-background transition-colors hover:bg-secondary/20 select-none",
+        !plano.ativo && "opacity-50"
+      )}
+    >
+      {/* Drag handle com os 8 pontinhos */}
+      <div
+        onPointerDown={(e) => {
+          if (!isDraggable) return;
+          e.preventDefault();
+          dragControls.start(e);
+        }}
+        style={{ touchAction: "none" }}
+        className={cn(
+          "touch-none p-1.5 -ml-1.5 text-muted-foreground/35 hover:text-foreground active:text-foreground transition-colors shrink-0",
+          isDraggable ? "cursor-grab active:cursor-grabbing" : "opacity-30 cursor-default"
+        )}
+        title={isDraggable ? "Segure e arraste para organizar" : undefined}
+      >
+        <GripVertical className="w-4 h-4 flex-shrink-0" />
+      </div>
+
+      {/* Color bar */}
+      <div className={cn("w-1 h-10 rounded-full flex-shrink-0", getPlanColor(index))} />
+
+      {/* Info clicável para editar */}
+      <div
+        onClick={() => onEdit(plano.id)}
+        className="flex-1 min-w-0 cursor-pointer py-0.5"
+      >
+        <div className="flex items-center gap-2">
+          <p className="text-[14px] font-medium text-foreground truncate">{plano.nome}</p>
+          {!plano.ativo && (
+            <span className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Inativo</span>
+          )}
+        </div>
+        <p className="text-[12px] text-muted-foreground/60 mt-0.5">
+          {plano.limite_agendamentos_mes ? `${plano.limite_agendamentos_mes} agend./mês` : "Ilimitado"}
+          {benefits.length > 0 && ` · ${benefits.length} benefício${benefits.length > 1 ? "s" : ""}`}
+        </p>
+      </div>
+
+      {/* Preço e chevron */}
+      <div
+        onClick={() => onEdit(plano.id)}
+        className="flex items-center gap-1.5 flex-shrink-0 cursor-pointer py-0.5"
+      >
+        <span className="text-[14px] font-semibold text-foreground">
+          R$ {plano.preco_mensal.toFixed(2).replace(".", ",")}
+        </span>
+        <ChevronRight className="w-4 h-4 text-muted-foreground/40" strokeWidth={1.8} />
+      </div>
+    </Reorder.Item>
   );
 }
 

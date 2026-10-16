@@ -35,54 +35,109 @@ Deno.serve(async (req) => {
       });
     }
 
-    const callerId = user.id;
+    // ── Parse body first to check for specific tenant_id ──
+    const body = await req.json().catch(() => ({}));
+    const { email, password, nome, telefone, apelido, comissao_pct, cpf, invite_only, tenant_id: requestedTenantId, redirect_to } = body;
 
-    // ── Check tenant_admin role ──
-    const { data: tenantRole } = await supabaseUser
+    // ── Check admin / owner authorization ──
+    const { data: userRoles } = await supabaseUser
       .from("user_roles")
       .select("role")
-      .eq("user_id", callerId)
-      .eq("role", "tenant_admin")
-      .maybeSingle();
+      .eq("user_id", callerId);
 
-    if (!tenantRole) {
+    const hasTenantAdminRole = userRoles?.some(r => r.role === "tenant_admin" || r.role === "admin");
+
+    // Check if caller is owner of requested tenant or any tenant
+    let targetTenantId: string | null = null;
+
+    if (requestedTenantId) {
+      const { data: specificTenant } = await supabaseUser
+        .from("tenants")
+        .select("id")
+        .eq("id", requestedTenantId)
+        .maybeSingle();
+
+      if (specificTenant) {
+        targetTenantId = specificTenant.id;
+      }
+    }
+
+    if (!targetTenantId) {
+      const { data: ownedTenant } = await supabaseUser
+        .from("tenants")
+        .select("id")
+        .eq("owner_user_id", callerId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (ownedTenant) {
+        targetTenantId = ownedTenant.id;
+      }
+    }
+
+    if (!targetTenantId && !hasTenantAdminRole) {
       return new Response(
         JSON.stringify({ error: "Apenas administradores de barbearia podem adicionar barbeiros" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── Get tenant_id ──
-    const { data: tenant } = await supabaseUser
-      .from("tenants")
-      .select("id")
-      .eq("owner_user_id", callerId)
-      .maybeSingle();
-
-    if (!tenant) {
+    if (!targetTenantId) {
       return new Response(
         JSON.stringify({ error: "Barbearia não encontrada" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── Parse body ──
-    const body = await req.json();
-    const { email, password, nome, telefone, apelido, comissao_pct, cpf, invite_only } = body;
-
-    if (!email) {
-      return new Response(
-        JSON.stringify({ error: "E-mail é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const tenant = { id: targetTenantId };
 
     // ════════════════════════════════════════════════════════
-    // MODE 1: INVITE ONLY — send magic link, create barber
+    // MODE 1: INVITE ONLY — send magic link or create for link sharing
     // ════════════════════════════════════════════════════════
     if (invite_only) {
+      const barberName = (nome || apelido || (email ? email.trim().toLowerCase().split("@")[0] : "Barbeiro")).trim();
+
+      // Service role client
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
+      // If no email was provided, create the barber record for link-only onboarding
+      if (!email) {
+        const { data: barberData, error: barberError } = await supabaseAdmin
+          .from("barbeiros")
+          .insert({
+            apelido: barberName,
+            ativo: true,
+            setup_completed: false,
+            tenant_id: tenant.id,
+            comissao_pct: comissao_pct || 30,
+          })
+          .select("id")
+          .single();
+
+        if (barberError) {
+          console.error("Erro ao criar barbeiro sem e-mail:", barberError);
+          return new Response(
+            JSON.stringify({ error: "Erro ao criar registro do barbeiro" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            barbeiro_id: barberData.id,
+            invited: true,
+            link_only: true,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const trimmedEmail = email.trim().toLowerCase();
-      const barberName = (nome || apelido || trimmedEmail.split("@")[0]).trim();
 
       // Service role client
       const supabaseAdmin = createClient(

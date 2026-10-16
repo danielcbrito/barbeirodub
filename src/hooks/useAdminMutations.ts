@@ -1749,10 +1749,11 @@ interface ConfirmarPagamentoPlanoParams {
   assinaturaId: string;
   userId: string;
   planoNome: string;
+  formaPagamento?: string;
 }
 
 /**
- * Confirma pagamento em dinheiro de assinatura de plano.
+ * Confirma pagamento de assinatura de plano (dinheiro, PIX ou cartão).
  * 1. Invoca confirm-plan-payment Edge Function
  * 2. Insere notificação para o cliente (fire-and-forget, não bloqueia)
  */
@@ -1763,7 +1764,10 @@ export function useConfirmarPagamentoPlano() {
     mutationFn: async (params: ConfirmarPagamentoPlanoParams) => {
       // Passo 1 — Confirmar pagamento via Edge Function
       const { data, error } = await supabase.functions.invoke("confirm-plan-payment", {
-        body: { assinaturaId: params.assinaturaId },
+        body: {
+          assinaturaId: params.assinaturaId,
+          formaPagamento: params.formaPagamento,
+        },
       });
       if (error) throw new Error(`Falha ao confirmar pagamento: ${error.message}`);
       if (data?.error) throw new Error(data.error);
@@ -1787,6 +1791,8 @@ export function useConfirmarPagamentoPlano() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin"] });
       queryClient.invalidateQueries({ queryKey: ["barbeiro"] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-clientes"] });
+      queryClient.invalidateQueries({ queryKey: ["client-subscription-detail"] });
       toast.success("Pagamento confirmado! Plano ativado.");
     },
 

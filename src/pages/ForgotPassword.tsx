@@ -40,7 +40,7 @@ const FloatingInput = ({
     <div
       className={`relative h-[62px] rounded-2xl transition-all duration-150 ${
         focused
-          ? "border-2 border-primary bg-transparent shadow-sm"
+          ? "border-2 border-foreground bg-foreground/[0.03] shadow-xs"
           : "border border-transparent bg-foreground/[0.06] hover:bg-foreground/[0.08]"
       }`}
     >
@@ -49,7 +49,7 @@ const FloatingInput = ({
         className={`pointer-events-none absolute left-5 select-none transition-all duration-150 ${
           active
             ? `top-[9px] text-[11.5px] font-medium tracking-wide leading-none ${
-                focused ? "text-primary" : "text-foreground/55"
+                focused ? "text-foreground font-semibold" : "text-foreground/55"
               }`
             : "top-1/2 -translate-y-1/2 text-[15.5px] font-normal text-foreground/45"
         }`}
@@ -71,8 +71,7 @@ const FloatingInput = ({
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        data-no-auto-scroll="true"
-        className="peer h-full w-full rounded-2xl bg-transparent px-5 pt-[22px] pb-[6px] text-[15.5px] text-foreground caret-primary outline-none leading-normal font-normal"
+        className="peer h-full w-full rounded-2xl bg-transparent px-5 pt-[22px] pb-[6px] text-[15.5px] text-foreground caret-foreground outline-none leading-normal font-normal"
         style={{ fontSize: 16, WebkitAppearance: "none" }}
       />
     </div>
@@ -116,7 +115,6 @@ const ForgotPassword = () => {
 
   return (
     <div
-      data-no-auto-scroll="true"
       className="min-h-[100dvh] w-full flex flex-col bg-background text-foreground overflow-y-auto overscroll-y-contain"
       style={{
         paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)",
@@ -154,10 +152,10 @@ const ForgotPassword = () => {
                 noValidate
               >
                 <div>
-                  <h1 className="text-[25px] sm:text-[27px] font-extrabold tracking-tight text-foreground leading-tight mb-2">
+                  <h1 className="text-[25px] sm:text-[27px] font-semibold tracking-tight text-foreground leading-tight mb-2">
                     Recuperar senha
                   </h1>
-                  <p className="text-[13.5px] text-foreground/60 mb-5 leading-normal">
+                  <p className="text-[13.5px] text-muted-foreground mb-5 leading-normal">
                     Informe seu e-mail para receber as instruções de recuperação
                   </p>
 
@@ -177,18 +175,18 @@ const ForgotPassword = () => {
                   <button
                     type="submit"
                     disabled={!canSubmit || isLoading}
-                    className="w-full h-[54px] rounded-full bg-[#18181b] hover:bg-black text-white dark:bg-white dark:text-[#09090b] dark:hover:bg-zinc-100 font-semibold text-[16px] tracking-normal shadow-[0_8px_24px_rgba(0,0,0,0.14)] dark:shadow-[0_8px_24px_rgba(255,255,255,0.08)] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full h-[52px] sm:h-[54px] rounded-full bg-foreground text-background font-semibold text-[16px] tracking-normal shadow-xs active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                     style={{ touchAction: "manipulation" }}
                   >
                     {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
                     Continuar
                   </button>
 
-                  <p className="pt-4 text-center text-[13.5px] text-foreground/60">
+                  <p className="pt-4 text-center text-[13.5px] text-muted-foreground">
                     <button
                       type="button"
                       onClick={() => navigate("/auth")}
-                      className="font-semibold text-primary hover:underline active:opacity-70 transition-opacity"
+                      className="font-semibold text-foreground hover:underline active:opacity-70 transition-opacity"
                       style={{ touchAction: "manipulation" }}
                     >
                       Voltar ao login

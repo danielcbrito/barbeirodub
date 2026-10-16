@@ -22,6 +22,8 @@ export interface ActivePlanInfo {
   restantes: number;
   status: string;
   is_pending_cash: boolean;
+  cash_payment_confirmed: boolean | null;
+  preco_mensal: number;
   /** Barbeiro responsável que vendeu/ativou o plano */
   barbeiro_responsavel_id: string | null;
   barbeiro_responsavel_nome: string | null;
@@ -60,6 +62,26 @@ export interface BarberClientesResult {
 }
 
 /**
+ * Pontuação determinística para escolher a assinatura mais relevante/atual do cliente.
+ * Prioriza ciclos pendentes/ativos mais recentes e datas de cobrança/renovação futuras.
+ */
+export function getSubscriptionRelevanceScore(sub: any): number {
+  if (!sub) return 0;
+  let statusScore = 0;
+  if (sub.status === "pending_cash") statusScore = 400;
+  else if (sub.status === "active") statusScore = 300;
+  else if (sub.status === "pending_renewal") statusScore = 200;
+  else if (sub.status === "suspended") statusScore = 100;
+
+  const billingTime = sub.next_billing_date ? new Date(sub.next_billing_date + "T12:00:00").getTime() : 0;
+  const updatedTime = sub.updated_at ? new Date(sub.updated_at).getTime() : 0;
+  const createdTime = sub.created_at ? new Date(sub.created_at).getTime() : 0;
+
+  // statusScore é a ordem de grandeza principal, seguido pela data da renovação (ciclo mais recente)
+  return statusScore * 1e12 + Math.max(billingTime, updatedTime, createdTime);
+}
+
+/**
  * Hook de clientes do barbeiro — consolida agendamentos, perfis,
  * pontos, créditos e status de bloqueio em uma lista unificada.
  */
@@ -81,13 +103,34 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
       const tenantId = barberData?.tenant_id || null;
       const barberUserId = barberData?.user_id || null;
 
-      /* ── 3. Buscar agendamentos do barbeiro ── */
-      const { data: agendamentos, error: agError } = await supabase
+      /* ── 3. Buscar agendamentos do barbeiro (inclui barbeiroId e barberUserId se diferente) ── */
+      let agQuery = supabase
         .from("agendamentos")
         .select("user_id, data, created_at")
-        .eq("barbeiro_id", barbeiroId)
-        .limit(1000);
+        .order("data", { ascending: false })
+        .limit(3000);
+
+      if (barberUserId && barberUserId !== barbeiroId) {
+        agQuery = agQuery.or(`barbeiro_id.eq.${barbeiroId},barbeiro_id.eq.${barberUserId}`);
+      } else {
+        agQuery = agQuery.eq("barbeiro_id", barbeiroId);
+      }
+      const { data: agendamentos, error: agError } = await agQuery;
       if (agError) throw agError;
+
+      /* ── 3b. Buscar clientes com planos vinculados a este barbeiro ── */
+      let subQuery = supabase
+        .from("assinaturas")
+        .select("user_id")
+        .in("status", ["active", "pending_cash", "pending_renewal", "suspended"]);
+
+      if (barberUserId && barberUserId !== barbeiroId) {
+        subQuery = subQuery.or(`barbeiro_id.eq.${barbeiroId},barbeiro_id.eq.${barberUserId}`);
+      } else {
+        subQuery = subQuery.eq("barbeiro_id", barbeiroId);
+      }
+      const { data: assinaturasDoBarbeiro } = await subQuery;
+      const subUserIds = (assinaturasDoBarbeiro || []).map((s) => s.user_id);
 
       /* ── 4. Buscar clientes manuais + bloqueios granulares ── */
       let manualClientIds: string[] = [];
@@ -164,7 +207,15 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
         loyaltyEnabled = !!promoAtiva;
       }
 
-      if ((!agendamentos || agendamentos.length === 0) && manualClientIds.length === 0) {
+      const combinedUserIds = [
+        ...new Set([
+          ...(agendamentos || []).map((a) => a.user_id),
+          ...subUserIds,
+          ...manualClientIds,
+        ]),
+      ].filter((id) => !barberUserIds.includes(id));
+
+      if (combinedUserIds.length === 0) {
         return { clients: [], tenantId, loyaltyEnabled };
       }
 
@@ -191,13 +242,13 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
           if (ag.created_at < (existing.firstCreatedAt || "")) existing.firstCreatedAt = ag.created_at;
         }
       }
-      for (const manualId of manualClientIds) {
-        if (!clientMap.has(manualId)) {
-          clientMap.set(manualId, { count: 0, monthCount: 0, lastDate: null, firstCreatedAt: null });
+      for (const extraId of [...subUserIds, ...manualClientIds]) {
+        if (!clientMap.has(extraId)) {
+          clientMap.set(extraId, { count: 0, monthCount: 0, lastDate: null, firstCreatedAt: null });
         }
       }
 
-      const userIds = Array.from(clientMap.keys());
+      const userIds = combinedUserIds;
 
       /* ── 6. Batch fetch perfis, pontos, créditos e assinaturas ativas ── */
       const [{ data: profiles }, { data: pontos }, { data: creditos }, { data: assinaturas }] =
@@ -208,10 +259,11 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
           supabase
             .from("assinaturas")
             .select(
-              "id, user_id, status, payment_method, barbeiro_id, created_at, next_billing_date, plano:planos(nome, limite_agendamentos_mes, tenant_id)"
+              "id, user_id, status, payment_method, cash_payment_confirmed, barbeiro_id, created_at, updated_at, next_billing_date, ciclo_inicio, ciclo_fim, usos_ciclo_atual, plano:planos(nome, preco_mensal, limite_agendamentos_mes, tenant_id)"
             )
             .in("user_id", userIds)
-            .in("status", ["active", "pending_cash"]),
+            .in("status", ["active", "pending_cash", "pending_renewal", "suspended"])
+            .order("created_at", { ascending: false }),
         ]);
 
       /* ── 6b. Filtrar assinaturas pelo tenant do barbeiro e contar usos ── */
@@ -235,6 +287,10 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
         }
       }
 
+      tenantAssinaturas.sort(
+        (a: any, b: any) => getSubscriptionRelevanceScore(b) - getSubscriptionRelevanceScore(a)
+      );
+
       /* ── 6c. Buscar nomes dos barbeiros responsáveis pelas assinaturas ── */
       const respBarbeiroIds = [
         ...new Set(
@@ -257,12 +313,15 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
       /** Mapa: user_id → ActivePlanInfo (a mais recente em caso de múltiplas) */
       const activePlanMap: Record<string, ActivePlanInfo> = {};
       for (const a of tenantAssinaturas as any[]) {
-        const isPendingCash = a.status === "pending_cash";
-        const limite = isPendingCash ? 1 : a.plano.limite_agendamentos_mes || 4;
-        const usados = usosPorAssinatura[a.id] || 0;
-        // Mantém apenas uma assinatura por cliente (preferindo a "active" sobre pending_cash)
-        const existing = activePlanMap[a.user_id];
-        if (existing && existing.status === "active" && a.status !== "active") continue;
+        // Se já capturamos a assinatura mais recente deste cliente, não sobrescreve com antigas
+        if (activePlanMap[a.user_id]) continue;
+
+        const isCash = a.payment_method === "cash";
+        const isPendingCash = a.status === "pending_cash" || (isCash && (a.cash_payment_confirmed === false || a.cash_payment_confirmed === null));
+        const limite = a.plano?.limite_agendamentos_mes || 4;
+        // Prioriza usos_ciclo_atual (que reseta na renovação); fallback para contagem
+        const usados = a.usos_ciclo_atual != null ? Math.max(0, Number(a.usos_ciclo_atual)) : (usosPorAssinatura[a.id] || 0);
+
         activePlanMap[a.user_id] = {
           assinatura_id: a.id,
           plano_nome: a.plano.nome,
@@ -271,6 +330,8 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
           restantes: Math.max(0, limite - usados),
           status: a.status,
           is_pending_cash: isPendingCash,
+          cash_payment_confirmed: a.cash_payment_confirmed,
+          preco_mensal: Number(a.plano?.preco_mensal || 0),
           barbeiro_responsavel_id: a.barbeiro_id || null,
           barbeiro_responsavel_nome: a.barbeiro_id ? respBarbeiroNomeMap[a.barbeiro_id] || null : null,
           created_at: a.created_at,
@@ -350,11 +411,325 @@ export function useBarberClientes(barbeiroId: string) {
       writeSyncCache(`barber-clientes:${barbeiroId}`, data);
       return data;
     },
-    staleTime: STALE_TIMES.CLIENTES,
+    staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 30,
     enabled: !!barbeiroId,
     placeholderData: keepPreviousData,
     initialData: cached?.data,
     initialDataUpdatedAt: cached?.updatedAt,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Fetcher otimizado para carregar todos os clientes do tenant em paralelo,
+ * eliminando as 8 chamadas sequenciais que atrasavam a tela.
+ */
+export async function fetchTenantClientes(
+  tenantId: string,
+  unitId?: string | null,
+  currentBarbeiroId?: string | null
+): Promise<BarberClient[]> {
+  // LOTE 1 (PARALELO): Barbeiros, Tenant Clientes e Bloqueios
+  const [allBarbeirosRes, tenantBarbersRes, tenantClientesRes, blocksRes] = await Promise.all([
+    supabase.from("barbeiros").select("user_id").not("user_id", "is", null),
+    supabase.from("barbeiros").select("id, user_id, apelido").eq("tenant_id", tenantId).eq("ativo", true),
+    supabase.from("tenant_clientes").select("user_id, created_at").eq("tenant_id", tenantId),
+    supabase.from("client_booking_blocks").select("id, client_user_id, scope, barbeiro_id, unidade_id").eq("tenant_id", tenantId),
+  ]);
+
+  const barberUserIds = new Set(allBarbeirosRes.data?.map((b) => b.user_id).filter(Boolean) || []);
+  const tenantBarbers = tenantBarbersRes.data || [];
+  const tenantBarberIds = tenantBarbers.map((b) => b.id);
+  const respBarbeiroNomeMap: Record<string, string> = {};
+  for (const b of tenantBarbers) {
+    respBarbeiroNomeMap[b.id] = b.apelido || "Sem nome";
+  }
+
+  const tenantClientes = tenantClientesRes.data || [];
+  const manualClientIds = tenantClientes.map((tc) => tc.user_id);
+  const tenantRegistrationMap: Record<string, string> = {};
+  for (const tc of tenantClientes) {
+    tenantRegistrationMap[tc.user_id] = tc.created_at;
+  }
+
+  const blockMap: Record<string, BlockDetail[]> = {};
+  for (const b of blocksRes.data || []) {
+    const detail: BlockDetail = {
+      id: b.id,
+      scope: b.scope as BlockDetail["scope"],
+      barbeiro_id: b.barbeiro_id,
+      unidade_id: b.unidade_id,
+      unidade_nome: null,
+    };
+    if (!blockMap[b.client_user_id]) blockMap[b.client_user_id] = [];
+    blockMap[b.client_user_id].push(detail);
+  }
+
+  // LOTE 2: Agendamentos com limit razoável
+  let agQuery = supabase
+    .from("agendamentos")
+    .select("user_id, barbeiro_id, unidade_id, data, created_at")
+    .in("barbeiro_id", tenantBarberIds.length > 0 ? tenantBarberIds : ["__none__"])
+    .order("data", { ascending: false })
+    .limit(3000);
+
+  if (unitId) {
+    agQuery = agQuery.eq("unidade_id", unitId);
+  }
+
+  const { data: agendamentos } = await agQuery;
+  const agClientIds = (agendamentos || []).map((a) => a.user_id);
+
+  // Buscar assinaturas do tenant para não perder clientes que possuem plano ativo/pendente
+  const { data: tenantSubsRes } = await supabase
+    .from("assinaturas")
+    .select("user_id, plano:planos!inner(tenant_id)")
+    .eq("plano.tenant_id", tenantId)
+    .in("status", ["active", "pending_cash", "pending_renewal", "suspended"]);
+  const subClientIds = (tenantSubsRes || []).map((s: any) => s.user_id);
+
+  const allClientIds = [...new Set([...agClientIds, ...manualClientIds, ...subClientIds])].filter(
+    (id) => !barberUserIds.has(id)
+  );
+
+  if (allClientIds.length === 0) return [];
+
+  // LOTE 3 (PARALELO): Profiles, Pontos e Assinaturas
+  const [profilesRes, pontosRes, assinaturasRes] = await Promise.all([
+    supabase.from("profiles").select("id, nome, telefone, created_at").in("id", allClientIds),
+    supabase.from("pontos").select("user_id, pontos").in("user_id", allClientIds),
+    supabase
+      .from("assinaturas")
+      .select("id, user_id, status, payment_method, cash_payment_confirmed, barbeiro_id, created_at, updated_at, next_billing_date, ciclo_inicio, ciclo_fim, usos_ciclo_atual, plano:planos(nome, preco_mensal, limite_agendamentos_mes, tenant_id)")
+      .in("user_id", allClientIds)
+      .in("status", ["active", "pending_cash", "pending_renewal", "suspended"])
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const profiles = profilesRes.data || [];
+  const userIds = profiles.map((p) => p.id);
+  if (userIds.length === 0) return [];
+
+  // LOTE 4: Usos de plano (se houver assinaturas)
+  const tenantAssinaturas = (assinaturasRes.data || []).filter(
+    (a: any) => a.plano && a.plano.tenant_id === tenantId
+  );
+  const assinaturaIds = tenantAssinaturas.map((a: any) => a.id);
+  const usosMap: Record<string, number> = {};
+
+  if (assinaturaIds.length > 0) {
+    const { data: usos } = await supabase
+      .from("plano_agendamentos_usos")
+      .select("assinatura_id")
+      .in("assinatura_id", assinaturaIds)
+      .is("released_at", null);
+    for (const u of usos || []) {
+      usosMap[u.assinatura_id] = (usosMap[u.assinatura_id] || 0) + 1;
+    }
+  }
+
+  tenantAssinaturas.sort(
+    (a: any, b: any) => getSubscriptionRelevanceScore(b) - getSubscriptionRelevanceScore(a)
+  );
+
+  const planMap: Record<string, BarberClient["activePlan"]> = {};
+  for (const a of tenantAssinaturas as any[]) {
+    // Se já capturou a mais relevante/recente deste cliente, ignora
+    if (planMap[a.user_id]) continue;
+
+    const isCash = a.payment_method === "cash";
+    const isPendingCash = a.status === "pending_cash" || (isCash && (a.cash_payment_confirmed === false || a.cash_payment_confirmed === null));
+    const limite = a.plano?.limite_agendamentos_mes || 4;
+    const usados = a.usos_ciclo_atual != null ? Math.max(0, Number(a.usos_ciclo_atual)) : (usosMap[a.id] || 0);
+
+    planMap[a.user_id] = {
+      assinatura_id: a.id,
+      plano_nome: a.plano?.nome || "Plano",
+      limite,
+      usados,
+      restantes: Math.max(0, limite - usados),
+      status: a.status,
+      is_pending_cash: isPendingCash,
+      cash_payment_confirmed: a.cash_payment_confirmed,
+      preco_mensal: Number(a.plano?.preco_mensal || 0),
+      barbeiro_responsavel_id: a.barbeiro_id || null,
+      barbeiro_responsavel_nome: a.barbeiro_id ? respBarbeiroNomeMap[a.barbeiro_id] || null : null,
+      created_at: a.created_at,
+      next_billing_date: a.next_billing_date || null,
+      payment_method: a.payment_method || null,
+    };
+  }
+
+  // Stats
+  const monthPrefix = new Date().toISOString().slice(0, 7);
+  const clientStats = new Map<string, { count: number; monthCount: number; lastDate: string | null }>();
+  for (const ag of agendamentos || []) {
+    const isThisMonth = typeof ag.data === "string" && ag.data.startsWith(monthPrefix);
+    const existing = clientStats.get(ag.user_id);
+    if (!existing) {
+      clientStats.set(ag.user_id, { count: 1, monthCount: isThisMonth ? 1 : 0, lastDate: ag.data });
+    } else {
+      existing.count += 1;
+      if (isThisMonth) existing.monthCount += 1;
+      if (ag.data > (existing.lastDate || "")) existing.lastDate = ag.data;
+    }
+  }
+
+  const pontosMap = new Map<string, number>();
+  for (const pt of pontosRes.data || []) {
+    pontosMap.set(pt.user_id, pt.pontos || 0);
+  }
+
+  const result: BarberClient[] = profiles.map((p) => {
+    const stats = clientStats.get(p.id);
+    const details = blockMap[p.id] || [];
+    const isBlocked = details.some(
+      (d) =>
+        d.scope === "tenant" ||
+        d.scope === "unit" ||
+        (d.scope === "barber" && currentBarbeiroId && d.barbeiro_id === currentBarbeiroId)
+    );
+    return {
+      id: p.id,
+      nome: p.nome || "Sem nome",
+      telefone: p.telefone || null,
+      email: null,
+      total_agendamentos: stats?.count || 0,
+      agendamentos_mes: stats?.monthCount || 0,
+      ultimo_agendamento: stats?.lastDate || null,
+      pontos: pontosMap.get(p.id) || 0,
+      created_at: tenantRegistrationMap[p.id] || p.created_at,
+      creditos: 0,
+      blocked: isBlocked,
+      blockDetails: details,
+      activePlan: planMap[p.id] || null,
+    };
+  });
+
+  result.sort((a, b) => {
+    if (!a.ultimo_agendamento) return 1;
+    if (!b.ultimo_agendamento) return -1;
+    return b.ultimo_agendamento.localeCompare(a.ultimo_agendamento);
+  });
+
+  return result;
+}
+
+/**
+ * Hook com cache síncrono instantâneo para todos os clientes da barbearia.
+ * Renderiza em 0ms se já acessado antes, e revalida imediatamente em segundo plano.
+ */
+export function useTenantClientes(
+  tenantId: string | null | undefined,
+  unitId?: string | null,
+  currentBarbeiroId?: string | null
+) {
+  const cacheKey = `tenant-clientes:${tenantId || ""}:${unitId || "all"}`;
+  const cached = tenantId ? readSyncCache<BarberClient[]>(cacheKey) : null;
+
+  return useQuery({
+    queryKey: ["tenant-clientes", tenantId, unitId ?? "all"],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      const data = await fetchTenantClientes(tenantId, unitId, currentBarbeiroId);
+      writeSyncCache(cacheKey, data);
+      return data;
+    },
+    staleTime: 1000 * 30, // 30 segundos
+    gcTime: 1000 * 60 * 30,
+    enabled: !!tenantId,
+    placeholderData: keepPreviousData,
+    initialData: cached?.data,
+    initialDataUpdatedAt: cached?.updatedAt,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Hook em tempo real para obter os dados 100% frescos e revalidados do plano ativo de um cliente específico.
+ * Usado na tela de detalhe individual (?view=ID) para garantir zero discrepância entre abas/dispositivos.
+ */
+export function useClientSubscriptionDetail(clientId: string | null | undefined, tenantId?: string | null) {
+  return useQuery({
+    queryKey: ["client-subscription-detail", clientId, tenantId || "all"],
+    queryFn: async (): Promise<ActivePlanInfo | null> => {
+      if (!clientId) return null;
+
+      const { data: subs, error: subError } = await supabase
+        .from("assinaturas")
+        .select(`
+          id, user_id, status, payment_method, cash_payment_confirmed,
+          barbeiro_id, created_at, updated_at, next_billing_date,
+          ciclo_inicio, ciclo_fim, usos_ciclo_atual,
+          plano:planos(nome, preco_mensal, limite_agendamentos_mes, tenant_id)
+        `)
+        .eq("user_id", clientId)
+        .in("status", ["active", "pending_cash", "pending_renewal", "suspended"]);
+
+      if (subError || !subs || subs.length === 0) return null;
+
+      const tenantSubs = subs.filter((s: any) => {
+        if (!s.plano) return false;
+        if (tenantId) return s.plano.tenant_id === tenantId;
+        return true;
+      });
+
+      if (tenantSubs.length === 0) return null;
+
+      tenantSubs.sort((a: any, b: any) => getSubscriptionRelevanceScore(b) - getSubscriptionRelevanceScore(a));
+      const sub: any = tenantSubs[0];
+
+      let usosCount = 0;
+      if (sub.usos_ciclo_atual != null) {
+        usosCount = Math.max(0, Number(sub.usos_ciclo_atual));
+      } else {
+        const { count } = await supabase
+          .from("plano_agendamentos_usos")
+          .select("id", { count: "exact", head: true })
+          .eq("assinatura_id", sub.id)
+          .is("released_at", null);
+        usosCount = count || 0;
+      }
+
+      let respBarbeiroNome: string | null = null;
+      if (sub.barbeiro_id) {
+        const { data: barb } = await supabase
+          .from("barbeiros")
+          .select("apelido")
+          .eq("id", sub.barbeiro_id)
+          .maybeSingle();
+        respBarbeiroNome = barb?.apelido || null;
+      }
+
+      const isCash = sub.payment_method === "cash";
+      const isPendingCash =
+        sub.status === "pending_cash" ||
+        (isCash && (sub.cash_payment_confirmed === false || sub.cash_payment_confirmed === null));
+      const limite = sub.plano?.limite_agendamentos_mes || 4;
+
+      return {
+        assinatura_id: sub.id,
+        plano_nome: sub.plano?.nome || "Plano",
+        limite,
+        usados: usosCount,
+        restantes: Math.max(0, limite - usosCount),
+        status: sub.status,
+        is_pending_cash: isPendingCash,
+        cash_payment_confirmed: sub.cash_payment_confirmed,
+        preco_mensal: Number(sub.plano?.preco_mensal || 0),
+        barbeiro_responsavel_id: sub.barbeiro_id || null,
+        barbeiro_responsavel_nome: respBarbeiroNome,
+        created_at: sub.created_at,
+        next_billing_date: sub.next_billing_date || null,
+        payment_method: sub.payment_method || null,
+      };
+    },
+    enabled: !!clientId,
+    staleTime: 1000 * 5, // 5 segundos
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }

@@ -189,7 +189,7 @@ export default function AdminHorarios({
       let data: any[] | null = null;
       let error: any = null;
 
-      if (barbeiroId) {
+      if (barbeiroId && !companyMode) {
         const res = await supabase
           .from('configuracoes_horario_barbeiro')
           .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
@@ -200,7 +200,7 @@ export default function AdminHorarios({
       } else {
         const res = await supabase
           .from('configuracoes_horario')
-          .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
+          .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos')
           .order('dia_semana');
         data = res.data;
         error = res.error;
@@ -303,7 +303,7 @@ export default function AdminHorarios({
           delay_entre_servicos: config.delay_entre_servicos
         };
 
-        if (barbeiroId) {
+        if (barbeiroId && !companyMode) {
           return supabase
             .from('configuracoes_horario_barbeiro')
             .upsert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana } as any, {

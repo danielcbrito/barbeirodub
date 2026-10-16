@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { CarteiraScreen } from "@/components/financial/CarteiraScreen";
+import { CarteiraPage } from "@/components/barber/CarteiraPage";
 import type { BarberContext } from "@/pages/Barbeiro";
 
 interface Props {
@@ -8,12 +8,6 @@ interface Props {
   basePath?: string;
 }
 
-/**
- * BarberFinanceiro — rota de ponte para a carteira externa da Efí Bank.
- *
- * O fluxo do barbeiro não usa mais o módulo financeiro interno para saque.
- * Ao entrar em /financeiro, o app dispara imediatamente o deep link para a Efí.
- */
 export function BarberFinanceiro({ barberContext, basePath = "/barbeiro" }: Props) {
   const navigate = useNavigate();
 
@@ -22,8 +16,10 @@ export function BarberFinanceiro({ barberContext, basePath = "/barbeiro" }: Prop
   }, [navigate, basePath]);
 
   return (
-    <CarteiraScreen
+    <CarteiraPage
       barbeiroId={barberContext.barbeiroId}
+      barbeiroNome={barberContext.apelido}
+      basePath={basePath}
       onBack={handleBack}
     />
   );
