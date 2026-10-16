@@ -4,11 +4,11 @@ import { AppMobileBottomBar } from "@/components/layout/AppMobileBottomBar";
  * Bottom navigation mobile do admin — usa a barra compartilhada.
  */
 export function AdminMobileNavigation({
-  basePath: _basePath = "/admin",
-  barbeiroId: _barbeiroId,
+  basePath = "/admin",
+  barbeiroId,
 }: {
   basePath?: string;
   barbeiroId?: string | null;
 }) {
-  return null;
+  return <AppMobileBottomBar basePath={basePath} barbeiroId={barbeiroId} />;
 }

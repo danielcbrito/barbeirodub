@@ -28,11 +28,7 @@ const items = [
  * pílula ativa branca com texto e ícone escuro, ícones inativos em traço branco (26px),
  * mais larga de cima para baixo (h-[72px], itens h-[56px]) e 100% minimalista e séria.
  */
-export function AppMobileBottomBar(_props: AppMobileNavProps) {
-  return null;
-}
-
-function _UnusedAppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: AppMobileNavProps) {
+export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: AppMobileNavProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
