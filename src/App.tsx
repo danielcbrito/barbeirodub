@@ -17,6 +17,7 @@ import { ScrollRestoration } from "@/components/layout/ScrollRestoration";
 import { applyStatusBarColor } from "@/hooks/useStatusBarColor";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { LoadingScreen } from "@/components/shared/LoadingScreen";
+import { InstallPwaPrompt } from "@/components/pwa/InstallPwaPrompt";
 
 // Landing e Login são eager (páginas de entrada — quase todo primeiro paint cai aqui).
 import Index from "./pages/Index";
@@ -362,6 +363,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <ScrollRestoration />
+            <InstallPwaPrompt />
             <AppRoutes />
           </BrowserRouter>
         </AppErrorBoundary>

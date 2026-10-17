@@ -26,6 +26,7 @@ import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
 import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
 import { ProfileInstagramBanner } from "@/components/profile/ProfileInstagramBanner";
 import { ProfilePortfolioCarousel } from "@/components/profile/ProfilePortfolioCarousel";
+import { isAppInstalled } from "@/components/pwa/InstallPwaPrompt";
 
 
 interface AdminMobileProfileProps {
@@ -518,6 +519,13 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
               description="Estatísticas, faturamento e desempenho"
               onClick={() => navigate(`${basePath}/relatorios`)}
             />
+            {!isAppInstalled() && (
+              <ProfileMenuItem
+                label="Instalar aplicativo"
+                description="Adicione na tela de início para ter tela cheia"
+                onClick={() => window.dispatchEvent(new CustomEvent("open-pwa-install"))}
+              />
+            )}
           </div>
 
           {/* ═══ BANNER DO INSTAGRAM ═══ */}
