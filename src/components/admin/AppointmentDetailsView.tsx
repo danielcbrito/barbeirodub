@@ -314,8 +314,8 @@ export function AppointmentDetailsView({
     let targetUserId = appointment?.user_id;
 
     // Se o agendamento não tiver user_id direto, tenta encontrar por nome de perfil
-    if (!targetUserId && (appointment?.profile?.nome || appointment?.client_name)) {
-      const searchName = (appointment?.profile?.nome || appointment?.client_name || "").trim();
+    if (!targetUserId && (appointment?.profile?.nome || (appointment as any)?.client_name)) {
+      const searchName = (appointment?.profile?.nome || (appointment as any)?.client_name || "").trim();
       if (searchName) {
         try {
           const { data: prof } = await supabase
@@ -345,7 +345,7 @@ export function AppointmentDetailsView({
         .from("assinaturas")
         .select("id, status, plano_id, next_billing_date, plano:planos(id, nome, limite_agendamentos_mes)")
         .eq("user_id", targetUserId)
-        .in("status", ["active", "pending_cash", "pending_renewal", "suspended", "trialing"])
+        .in("status", ["active", "pending_cash", "pending_renewal", "suspended", "trialing"] as any)
         .order("created_at", { ascending: false })
         .limit(1);
 

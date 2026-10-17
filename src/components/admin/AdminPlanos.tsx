@@ -231,7 +231,7 @@ export function AdminPlanos({ tenantId, basePath = "/admin", hideHeader = false 
   }, [resolvedTenantId]);
 
   const [localPlanos, setLocalPlanos] = useState<Plano[]>([]);
-  const reorderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reorderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (planos) {

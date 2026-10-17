@@ -145,7 +145,7 @@ export function AdminCortes({ tenantId, basePath = "/admin", hideHeader = false 
     }
   }, [editId, isCreating, servicos]);
 
-  const reorderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reorderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadServicos = async () => {
     try {
