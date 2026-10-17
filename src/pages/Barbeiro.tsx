@@ -822,19 +822,19 @@ const Barbeiro = () => {
         >
           <div
             className={cn(
-              (location.pathname === "/barbeiro" || location.pathname === "/barbeiro/") || location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/financeiro") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/horarios") || location.pathname.includes("/clientes") || location.pathname.includes("/relatorios")
+              (location.pathname === "/barbeiro" || location.pathname === "/barbeiro/") || location.pathname.includes("/perfil") || location.pathname.includes("carteira") || location.pathname.includes("financeiro") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/horarios") || location.pathname.includes("/clientes") || location.pathname.includes("/relatorios")
                 ? "p-0"
                 : "px-3 sm:px-4 py-2"
             )}
             style={
-              (location.pathname === "/barbeiro" || location.pathname === "/barbeiro/") || location.pathname.includes("/perfil") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/financeiro") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/horarios") || location.pathname.includes("/clientes") || location.pathname.includes("/relatorios")
+              (location.pathname === "/barbeiro" || location.pathname === "/barbeiro/") || location.pathname.includes("/perfil") || location.pathname.includes("carteira") || location.pathname.includes("financeiro") || location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/horarios") || location.pathname.includes("/clientes") || location.pathname.includes("/relatorios")
                 ? undefined
                 : { paddingTop: "calc(0.5rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }
             }
           >
 
 
-            {!location.pathname.includes("/barbeiro/promocoes") && !location.pathname.includes("/perfil") && !location.pathname.includes("/config-barbearia") && !location.pathname.includes("/whatsapp") && !location.pathname.includes("/instagram") && !location.pathname.includes("/relatorios") && !location.pathname.includes("/barbeiro/financeiro") && !location.pathname.includes("/barbeiro/carteira") && !isInGracePeriod && (
+            {!location.pathname.includes("/barbeiro/promocoes") && !location.pathname.includes("/perfil") && !location.pathname.includes("/config-barbearia") && !location.pathname.includes("/whatsapp") && !location.pathname.includes("/instagram") && !location.pathname.includes("/relatorios") && !location.pathname.includes("financeiro") && !location.pathname.includes("carteira") && !isInGracePeriod && (
               <div className="mb-3">
                 <BarberPushPermissionBanner barbeiroId={barberContext.barbeiroId} />
               </div>

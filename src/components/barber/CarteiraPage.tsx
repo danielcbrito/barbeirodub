@@ -1105,11 +1105,11 @@ export function CarteiraPage({
       <header
         className="w-full bg-gradient-to-b from-[#144439] via-[#0d2e27] to-[#071a16] text-white rounded-b-[28px] sm:rounded-b-[32px] shadow-lg relative z-10 overflow-hidden"
         style={{
-          paddingTop: "max(calc(env(safe-area-inset-top, 0px) + 14px), 54px)",
+          paddingTop: "max(calc(env(safe-area-inset-top, 0px) + 6px), 14px)",
         }}
       >
-        {/* Glow sutil de fundo */}
-        <div className="absolute -top-10 -right-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        {/* Glow sutil de fundo posicionado sem clipping no topo */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="mx-auto w-full max-w-md px-4 pb-6 relative z-10">
           {/* Barra Superior dentro do Header Verde: Voltar, Saudação, Nome e Sino/Refresh */}
