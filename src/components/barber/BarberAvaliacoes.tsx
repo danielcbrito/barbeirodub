@@ -20,13 +20,20 @@ import { useNavigate } from "react-router-dom";
 interface BarberAvaliacoesProps {
   barberContext: BarberContext;
   basePath?: string;
+  onBack?: () => void;
+  hideHeader?: boolean;
 }
 
 /**
  * Avaliações do barbeiro — design premium unificado (shared components).
  * Migrado de useState+useEffect para useQuery via useBarberAvaliacoes.
  */
-export function BarberAvaliacoes({ barberContext, basePath = "/barbeiro" }: BarberAvaliacoesProps) {
+export function BarberAvaliacoes({
+  barberContext,
+  basePath = "/barbeiro",
+  onBack,
+  hideHeader = false,
+}: BarberAvaliacoesProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: reviews = [], isLoading: loading } = useBarberAvaliacoes(barberContext.barbeiroId);
@@ -87,29 +94,31 @@ export function BarberAvaliacoes({ barberContext, basePath = "/barbeiro" }: Barb
   return (
     <div className="pb-28 -mx-3 -mt-3">
       {/* ── Header ── */}
-      <div className="sticky top-0 z-30 bg-background">
-        <div className="flex items-center gap-2 px-4 h-16">
-          <button
-            onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
-            aria-label="Voltar"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
-              <path d="M9 14L4 9l5-5" />
-              <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-            </svg>
-          </button>
-          <h1 className="text-[19px] font-medium tracking-tight text-foreground ml-1">Minhas Avaliações</h1>
+      {!hideHeader && (
+        <div className="sticky top-0 z-30 bg-background">
+          <div className="flex items-center gap-2 px-4 h-16">
+            <button
+              onClick={() => (onBack ? onBack() : navigate(`${basePath}/configuracoes-perfil`))}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
+              aria-label="Voltar"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+                <path d="M9 14L4 9l5-5" />
+                <path d="M4 9h10a4 4 0 0 1 4 4v1" />
+              </svg>
+            </button>
+            <h1 className="text-[19px] font-medium tracking-tight text-foreground ml-1">Minhas Avaliações</h1>
+          </div>
+          <div className="h-px bg-border/30" />
+          <div className="px-4 py-2.5">
+            <p className="text-[11px] text-muted-foreground/50">Feedback dos seus clientes</p>
+          </div>
+          <div className="h-px bg-border/20" />
         </div>
-        <div className="h-px bg-border/30" />
-        <div className="px-4 py-2.5">
-          <p className="text-[11px] text-muted-foreground/50">Feedback dos seus clientes</p>
-        </div>
-        <div className="h-px bg-border/20" />
-      </div>
+      )}
 
       {/* Conteúdo com espaçamento */}
-      <div className="pt-4">
+      <div className={cn("pt-4", hideHeader && "pt-1")}>
       <div className="mx-4 mb-3">
         <HeroRatingCard
           averageRating={averageRating}

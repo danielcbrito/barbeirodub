@@ -26,6 +26,7 @@ import {
   Star,
   Palette,
   ShieldCheck,
+  User,
 } from "lucide-react";
 import { BarberContext } from "@/pages/Barbeiro";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
@@ -36,12 +37,14 @@ import { AdminCortes } from "@/components/admin/AdminCortes";
 import { AdminBarbeiros } from "@/components/admin/AdminBarbeiros";
 import { AdminDadosEmpresa } from "@/components/admin/AdminDadosEmpresa";
 import { AdminAvaliacoes } from "@/components/admin/AdminAvaliacoes";
+import { BarberAvaliacoes } from "@/components/barber/BarberAvaliacoes";
 import { BarberCortes } from "@/components/barber/BarberCortes";
 import { WhatsAppConnectionPage } from "@/components/whatsapp/WhatsAppConnectionPage";
 import { UnidadeWizardSheet } from "@/components/admin/unidades/wizard/UnidadeWizardSheet";
 import { UnidadeDetailScreen } from "@/components/admin/unidades/UnidadeDetailScreen";
 import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
 import type { Unidade } from "@/components/admin/unidades/AdminUnidades";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
@@ -77,6 +80,7 @@ type HubScreen =
   | "formas-pagamento"
   | "loja"
   | "avaliacoes"
+  | "avaliacoes-pessoal"
   | "barbeiros"
   | "clientes"
   | "clientes-todos"
@@ -124,6 +128,13 @@ export function BarberConfigBarbearia({
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
+  // Foto de perfil do barbeiro (para barbeiro comum / não-admin)
+  const [barberAvatarUrl, setBarberAvatarUrl] = useState<string | null>(null);
+  const [uploadingBarberAvatar, setUploadingBarberAvatar] = useState(false);
+  const barberAvatarInputRef = useRef<HTMLInputElement>(null);
+
+  const isTenantAdmin = !!barberContext.isTenantAdmin;
+
   // Unidades da Barbearia
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [selectedUnidadeId, setSelectedUnidadeId] = useState<string>("todas");
@@ -146,7 +157,7 @@ export function BarberConfigBarbearia({
 
   useStatusBarColor("app-background");
 
-  /** Busca dados gerais do tenant e da Barbearia DUB */
+  /** Busca dados gerais do tenant, da barbearia e do avatar do barbeiro */
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -154,6 +165,32 @@ export function BarberConfigBarbearia({
       let resolvedLogo: string | null = null;
       let resolvedBanner: string | null = null;
       let tId = barberContext.tenantId || resolvedTenantId;
+
+      // 0. Carrega foto de perfil do barbeiro se houver vínculo
+      if (barberContext.barbeiroId) {
+        try {
+          const { data: barbData } = await supabase
+            .from("barbeiros")
+            .select("foto_url")
+            .eq("id", barberContext.barbeiroId)
+            .maybeSingle();
+          if (mounted && barbData?.foto_url) {
+            setBarberAvatarUrl(barbData.foto_url);
+          }
+        } catch {}
+      }
+      if (barberContext.userId) {
+        try {
+          const { data: profData } = await supabase
+            .from("profiles")
+            .select("avatar_url")
+            .eq("id", barberContext.userId)
+            .maybeSingle();
+          if (mounted && profData?.avatar_url) {
+            setBarberAvatarUrl((prev) => prev || profData.avatar_url);
+          }
+        } catch {}
+      }
 
       // 1. Buscar em informacoes_empresa (onde Barbearia DUB, banner e logo estão salvos)
       try {
@@ -340,8 +377,69 @@ export function BarberConfigBarbearia({
   }, [unidades, selectedUnidadeId]);
 
   /** Lista de itens de configuração do Hub com ícones e palavras-chave para busca inteligente */
-  const configItems = useMemo(
-    () => [
+  const configItems = useMemo(() => {
+    if (!isTenantAdmin) {
+      return [
+        {
+          id: "fotos-banner",
+          icon: Palette,
+          label: "Foto de perfil",
+          description: "Sua foto de exibição para os clientes",
+          keywords: ["foto", "perfil", "avatar", "imagem", "rosto", "identidade visual"],
+          onClick: () => setActiveScreen("fotos-banner"),
+        },
+        {
+          id: "dados-pessoais",
+          icon: User,
+          label: "Meus dados",
+          description: "Foto, identificação, contato e endereço pessoal",
+          keywords: ["dados", "nome", "telefone", "contato", "endereco", "cpf", "pessoal", "perfil", "meus dados"],
+          onClick: () => navigate(`${appBasePath}/meus-dados`),
+        },
+        {
+          id: "horarios",
+          icon: CalendarClock,
+          label: "Horário de funcionamento",
+          description: "Seus dias e horários pessoais de trabalho na cadeira",
+          keywords: ["horario", "funcionamento", "expediente", "dias", "hora", "atendimento", "agenda"],
+          onClick: () => setActiveScreen("horarios-pessoal"),
+        },
+        {
+          id: "servicos",
+          icon: Scissors,
+          label: "Serviços",
+          description: "Duração pessoal e serviços que você atende na barbearia",
+          keywords: ["servicos", "cortes", "precos", "valores", "duracao", "barba"],
+          onClick: () => setActiveScreen("servicos-pessoal"),
+        },
+        {
+          id: "clientes",
+          icon: UserCheck,
+          label: "Clientes",
+          description: "Clientes atendidos exclusivamente por você",
+          keywords: ["clientes", "contatos", "historico", "meus clientes"],
+          onClick: () => setActiveScreen("clientes-meus"),
+        },
+        {
+          id: "avaliacoes",
+          icon: Star,
+          label: "Avaliações",
+          description: "Feedbacks, notas e comentários deixados pelos seus clientes",
+          keywords: ["avaliacoes", "feedback", "notas", "estrelas", "opinioes", "reviews"],
+          onClick: () => setActiveScreen("avaliacoes-pessoal"),
+        },
+        {
+          id: "seguranca",
+          icon: ShieldCheck,
+          label: "Segurança",
+          description: "Senha, autenticação e acessos da conta",
+          keywords: ["seguranca", "segurança", "senha", "autenticacao", "acesso", "conta", "login"],
+          onClick: () => navigate(`${appBasePath}/seguranca`),
+        },
+      ];
+    }
+
+    return [
       {
         id: "fotos-banner",
         icon: Palette,
@@ -438,9 +536,8 @@ export function BarberConfigBarbearia({
         keywords: ["excluir", "pausar", "reativar", "apagar", "deletar", "suspender", "fechar"],
         onClick: () => setActiveScreen("excluir-pausar"),
       },
-    ],
-    []
-  );
+    ];
+  }, [isTenantAdmin, appBasePath, navigate]);
 
   /** Filtragem inteligente em tempo real */
   const filteredItems = useMemo(() => {
@@ -701,6 +798,57 @@ export function BarberConfigBarbearia({
     }
   };
 
+  /** Upload da Foto de Perfil do Barbeiro (para barbeiro comum / não-admin) */
+  const handleBarberAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const bId = barberContext.barbeiroId;
+    const uId = barberContext.userId;
+    if (!file || (!bId && !uId)) return;
+    if (!file.type.startsWith("image/")) { toast.error("Selecione apenas imagens"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Máximo 5MB"); return; }
+
+    setUploadingBarberAvatar(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const filePath = `barbeiros/avatar-${bId || uId}-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true, contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      const newAvatarUrl = urlData.publicUrl;
+
+      if (bId) {
+        await supabase
+          .from("barbeiros")
+          .update({ foto_url: newAvatarUrl })
+          .eq("id", bId);
+      }
+
+      if (uId) {
+        await supabase
+          .from("profiles")
+          .update({ avatar_url: newAvatarUrl })
+          .eq("id", uId);
+      }
+
+      setBarberAvatarUrl(newAvatarUrl);
+      toast.success("Foto de perfil atualizada com sucesso!");
+    } catch (err) {
+      console.error("Erro ao enviar foto de perfil:", err);
+      toast.error("Erro ao enviar imagem");
+    } finally {
+      setUploadingBarberAvatar(false);
+      e.target.value = "";
+    }
+  };
+
   /** Renderiza sub-telas selecionadas */
   const renderSubScreen = () => {
     const tenantId = resolvedTenantId || barberContext.tenantId || undefined;
@@ -788,7 +936,10 @@ export function BarberConfigBarbearia({
       case "horarios-pessoal":
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Seu Horário Pessoal" onBack={() => setActiveScreen("horarios")} />
+            <ScheduleHeader
+              title={isTenantAdmin ? "Seu Horário Pessoal" : "Horário de Funcionamento"}
+              onBack={() => setActiveScreen(isTenantAdmin ? "horarios" : "hub")}
+            />
             <div className="px-4 pt-3 max-w-md mx-auto">
               <AdminHorarios hideTitle barbeiroId={barberContext.barbeiroId} tenantId={tenantId} />
             </div>
@@ -856,7 +1007,7 @@ export function BarberConfigBarbearia({
               <BarberCortes
                 barberContext={barberContext}
                 basePath={appBasePath}
-                onBack={() => setActiveScreen("servicos")}
+                onBack={() => setActiveScreen(isTenantAdmin ? "servicos" : "hub")}
               />
             </div>
           </div>
@@ -867,9 +1018,21 @@ export function BarberConfigBarbearia({
             <ScheduleHeader title="Avaliações da Barbearia" onBack={() => setActiveScreen("hub")} />
             <div className="px-4 pt-3 max-w-md mx-auto">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-4">
-                Acompanhe o feedback, notas e comentários deixados pelos clientes após os atendimentos.
+                Acompanhe o feedback, notas e comentários deixados pelos clientes sobre a barbearia.
               </p>
               <AdminAvaliacoes tenantId={tenantId} basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />
+            </div>
+          </div>
+        );
+      case "avaliacoes-pessoal":
+        return (
+          <div className="pb-10 min-h-app bg-background">
+            <div className="max-w-md mx-auto">
+              <BarberAvaliacoes
+                barberContext={barberContext}
+                basePath={appBasePath}
+                onBack={() => setActiveScreen("hub")}
+              />
             </div>
           </div>
         );
@@ -949,12 +1112,80 @@ export function BarberConfigBarbearia({
               <BarberClientes
                 barberContext={barberContext}
                 forceViewMode="meus"
-                onBack={() => setActiveScreen("clientes")}
+                onBack={() => setActiveScreen(isTenantAdmin ? "clientes" : "hub")}
               />
             </div>
           </div>
         );
       case "fotos-banner":
+        if (!isTenantAdmin) {
+          return (
+            <div className="pb-10 min-h-app bg-background">
+              <ScheduleHeader title="Foto de Perfil" onBack={() => setActiveScreen("hub")} />
+              <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
+                <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
+                  Personalize sua foto de exibição para seus clientes nos agendamentos e no perfil da barbearia.
+                </p>
+
+                {/* Card Foto do Barbeiro */}
+                <div className="rounded-2xl border border-border/60 dark:border-white/[0.08] bg-card p-4 space-y-4 shadow-xs">
+                  <div className="flex items-center gap-3.5 p-3 rounded-xl bg-secondary/30 border border-border/40">
+                    <div
+                      className="rounded-2xl border border-border/60 bg-secondary overflow-hidden shrink-0 flex items-center justify-center shadow-xs"
+                      style={{ width: 64, height: 64, minWidth: 64, minHeight: 64 }}
+                    >
+                      {barberAvatarUrl ? (
+                        <img
+                          src={barberAvatarUrl}
+                          alt={barberContext.apelido || "Barbeiro"}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center font-bold text-foreground text-xl">
+                          {(barberContext.apelido || "B").charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14.5px] font-semibold text-foreground truncate">
+                        {barberContext.apelido || "Meu Perfil"}
+                      </p>
+                      <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
+                        Profissional da barbearia
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => barberAvatarInputRef.current?.click()}
+                    disabled={uploadingBarberAvatar}
+                    className="w-full h-11 rounded-xl bg-foreground text-background font-medium text-[13px] flex items-center justify-center gap-2 active:scale-[0.99] transition-all"
+                  >
+                    {uploadingBarberAvatar ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Camera className="w-4 h-4" />
+                    )}
+                    <span>{barberAvatarUrl ? "Alterar foto de perfil" : "Adicionar foto de perfil"}</span>
+                  </button>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-muted/30 border border-border/40 space-y-1">
+                  <p className="text-[12px] text-foreground font-medium flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 opacity-70" />
+                    <span>Dica de proporção</span>
+                  </p>
+                  <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+                    Para máxima nitidez, use uma foto nítida do seu rosto em formato quadrado (1:1).
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div className="pb-10 min-h-app bg-background">
             <ScheduleHeader title="Foto e Banner" onBack={() => setActiveScreen("hub")} />
@@ -1388,6 +1619,7 @@ export function BarberConfigBarbearia({
         {/* Inputs ocultos para upload de foto e banner em sub-telas */}
         <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
         <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+        <input ref={barberAvatarInputRef} type="file" accept="image/*" onChange={handleBarberAvatarUpload} className="hidden" />
 
         {renderSubScreen()}
 
@@ -1428,13 +1660,14 @@ export function BarberConfigBarbearia({
       {/* Inputs ocultos para upload de foto e banner */}
       <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
       <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+      <input ref={barberAvatarInputRef} type="file" accept="image/*" onChange={handleBarberAvatarUpload} className="hidden" />
 
       {/* Header Institucional Padrão do Sistema */}
       <ScheduleHeader
         title="Configurações"
         onBack={() => navigate(`${appBasePath}/perfil`)}
         right={
-          unidades.length > 1 ? (
+          isTenantAdmin && unidades.length > 1 ? (
             <button
               type="button"
               onClick={() => setShowSelectUnitDrawer(true)}
@@ -1482,8 +1715,8 @@ export function BarberConfigBarbearia({
           )}
         </div>
 
-        {/* Banner de Alerta se a barbearia selecionada estiver pausada */}
-        {activeUnit && activeUnit.ativo === false && (
+        {/* Banner de Alerta se a barbearia selecionada estiver pausada (apenas para Admin) */}
+        {isTenantAdmin && activeUnit && activeUnit.ativo === false && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-2.5 text-amber-600 dark:text-amber-400 shadow-xs">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">

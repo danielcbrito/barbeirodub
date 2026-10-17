@@ -266,6 +266,12 @@ export function BarberMobileProfile({
   };
 
   const handleConfigBarbeariaClick = async () => {
+    // Se não for admin da empresa, entra direto nas configurações pessoais sem abrir drawer de unidades
+    if (!isTenantAdmin) {
+      navigate(`${basePath}/config-barbearia`);
+      return;
+    }
+
     const tid = barberContext.tenantId;
     if (!tid) {
       navigate(`${basePath}/config-barbearia`);
@@ -317,21 +323,23 @@ export function BarberMobileProfile({
             <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/5 to-background pointer-events-none" />
           </div>
 
-          {/* Botão trocar banner — canto superior direito, discreto */}
-          <button
-            onClick={() => bannerInputRef.current?.click()}
-            disabled={uploadingBanner}
-            className="absolute right-3 z-10 h-8 px-2.5 rounded-lg bg-black/40 backdrop-blur-sm flex items-center gap-1.5 text-white/90 hover:bg-black/60 active:scale-95 transition-all"
-            style={{ top: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)" }}
-            aria-label="Alterar banner"
-          >
-            {uploadingBanner ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <ImagePlus className="h-3.5 w-3.5" />
-            )}
-            <span className="text-[11px] font-medium">Editar</span>
-          </button>
+          {/* Botão trocar banner — apenas exibido se for admin da barbearia */}
+          {isTenantAdmin && (
+            <button
+              onClick={() => bannerInputRef.current?.click()}
+              disabled={uploadingBanner}
+              className="absolute right-3 z-10 h-8 px-2.5 rounded-lg bg-black/40 backdrop-blur-sm flex items-center gap-1.5 text-white/90 hover:bg-black/60 active:scale-95 transition-all"
+              style={{ top: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)" }}
+              aria-label="Alterar banner"
+            >
+              {uploadingBanner ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ImagePlus className="h-3.5 w-3.5" />
+              )}
+              <span className="text-[11px] font-medium">Editar</span>
+            </button>
+          )}
         </div>
 
         {/* ═══ HEADER ABAIXO DO BANNER — avatar sobrepondo 50/50 o banner ═══ */}
@@ -497,7 +505,11 @@ export function BarberMobileProfile({
           <div className="divide-y divide-border/25">
             <ProfileMenuItem
               label="Configurações gerais"
-              description="Horários, serviços, clientes, equipe e dados"
+              description={
+                isTenantAdmin
+                  ? "Horários, serviços, clientes, equipe e dados"
+                  : "Horários, serviços, clientes, avaliações e perfil"
+              }
               onClick={handleConfigBarbeariaClick}
             />
             <ProfileMenuItem
