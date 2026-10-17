@@ -80,6 +80,24 @@ export function InstallPwaPrompt() {
     };
   }, []);
 
+  // Auto-dismiss após 18 segundos para não incomodar o barbeiro
+  useEffect(() => {
+    if (!bannerVisible || modalOpen) return;
+
+    const autoCloseTimer = window.setTimeout(() => {
+      setBannerVisible(false);
+      try {
+        sessionStorage.setItem("pwa_install_banner_closed", "1");
+      } catch {
+        /* ignore */
+      }
+    }, 18000); // 18 segundos
+
+    return () => {
+      window.clearTimeout(autoCloseTimer);
+    };
+  }, [bannerVisible, modalOpen]);
+
   const handleDismissBanner = () => {
     setBannerVisible(false);
     try {
