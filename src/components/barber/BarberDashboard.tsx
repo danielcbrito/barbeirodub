@@ -384,9 +384,9 @@ export function BarberDashboard({
 
   return (
     <div
-      className="w-full max-w-5xl mx-auto px-4 sm:px-6 pb-32 space-y-4 select-none animate-fade-in"
+      className="w-full max-w-5xl mx-auto px-4 sm:px-6 pb-6 space-y-4 select-none animate-fade-in"
       style={{
-        paddingTop: "max(calc(env(safe-area-inset-top, 0px) + 0.5rem), 0.75rem)",
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.25rem)",
       }}
     >
       {/* ─── 1. Header Original Apple HIG: Olá Barbeiro + Barbearia / Notificação + Sino + Avatar ─── */}
