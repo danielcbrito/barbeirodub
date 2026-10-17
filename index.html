@@ -65,7 +65,8 @@
           theme = 'light';
         }
         var isFinancial = window.location.pathname.indexOf('carteira') !== -1 || window.location.pathname.indexOf('financeiro') !== -1;
-        var brand = isFinancial ? '#144439' : (theme === 'dark' ? '#0f0f0f' : '#FAFAFA');
+        var brand = theme === 'dark' ? '#0f0f0f' : '#FAFAFA';
+        var statusColor = isFinancial ? '#144439' : brand;
         document.documentElement.style.backgroundColor = brand;
         var metas = [
           'theme-color',
@@ -74,7 +75,7 @@
         ];
         metas.forEach(function (name) {
           var meta = document.querySelector('meta[name="' + name + '"]');
-          if (meta) meta.setAttribute('content', brand);
+          if (meta) meta.setAttribute('content', statusColor);
         });
         if (isFinancial) {
           var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');

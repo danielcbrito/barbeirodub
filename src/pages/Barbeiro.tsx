@@ -768,7 +768,7 @@ const Barbeiro = () => {
   // ========== LAYOUT MOBILE ==========
   if (isMobile) {
     return (
-      <div className={cn("flex flex-col min-h-app w-full", (location.pathname.includes("/carteira") || location.pathname.includes("/financeiro")) ? "bg-[#144439]" : "bg-background")}>
+      <div className="flex flex-col min-h-app w-full bg-background">
         {/* Modal de pendências de configuração */}
         <PendingSetupModal
           open={pendingSetupOpen}
@@ -810,8 +810,7 @@ const Barbeiro = () => {
         {/* Conteúdo Principal */}
         <main
           className={cn(
-            "flex-1 min-h-0",
-            (location.pathname.includes("/carteira") || location.pathname.includes("/financeiro")) ? "bg-[#144439]" : "bg-background",
+            "flex-1 min-h-0 bg-background",
             (location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/barbeiro/carteira") || location.pathname.includes("/barbeiro/financeiro") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/relatorios")) && "pb-0"
           )}
           style={

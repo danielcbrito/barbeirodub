@@ -36,18 +36,8 @@ export function applyStatusBarColor(color: string) {
   META_NAMES.forEach((name) => upsertMeta(name, resolvedColor));
 
   // No iOS Safari, Chrome e PWA standalone ("Adicionar à Tela de Início"):
-  // Garante que o topo absoluto (notch, Dynamic Island, relógio e bateria) fique 100% verde na carteira
   upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
-  if (resolvedColor === "#144439") {
-    document.documentElement.style.setProperty("background-color", "#144439", "important");
-    document.body.style.setProperty("background-color", "#144439", "important");
-    const rootEl = document.getElementById("root");
-    if (rootEl) rootEl.style.setProperty("background-color", "#144439", "important");
-    // Forçar reflow para o Safari iOS recalcular a cor da barra de status
-    if (typeof document.body.offsetHeight === "number") {
-      void document.body.offsetHeight;
-    }
-  } else if (resolvedColor === "#0D0D0D" || resolvedColor === "#0A0A0A" || resolvedColor === "#0f0f0f") {
+  if (resolvedColor === "#0D0D0D" || resolvedColor === "#0A0A0A" || resolvedColor === "#0f0f0f") {
     document.documentElement.style.setProperty("background-color", resolvedColor, "important");
     document.body.style.setProperty("background-color", resolvedColor, "important");
     const rootEl = document.getElementById("root");

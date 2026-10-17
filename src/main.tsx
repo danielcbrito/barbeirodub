@@ -176,14 +176,15 @@ if (window.visualViewport) {
 // da bottom nav (áreas do safe-area/home indicator) porque o inline style antigo
 // permanece.
 const syncThemeBackground = () => {
-  const path = typeof window !== "undefined" ? window.location.pathname : "";
-  if (path.includes("carteira") || path.includes("financeiro")) {
-    return;
-  }
   const isDark = document.documentElement.classList.contains("dark");
   const color = isDark ? DARK_APP_BACKGROUND : LIGHT_APP_BACKGROUND;
   document.documentElement.style.backgroundColor = color;
   if (document.body) document.body.style.backgroundColor = color;
+
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  if (path.includes("carteira") || path.includes("financeiro")) {
+    return;
+  }
   ["theme-color", "msapplication-navbutton-color", "msapplication-TileColor"].forEach((name) => {
     const meta = document.querySelector(`meta[name="${name}"]`);
     if (meta) meta.setAttribute("content", color);

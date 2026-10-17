@@ -377,7 +377,7 @@ const Admin = () => {
   // ========== LAYOUT MOBILE ==========
   if (isMobile) {
     return (
-      <div className={cn("relative min-h-app w-full", (isCarteiraRoute || isFinanceiroRoute) ? "bg-[#144439]" : "bg-background")}>
+      <div className="relative min-h-app w-full bg-background">
         {/* Background limpo */}
 
         {/* Drawer Menu */}
@@ -390,8 +390,7 @@ const Admin = () => {
         {/* Conteúdo Principal - padding otimizado para mobile */}
         <main
           className={cn(
-            "relative min-h-[calc(100dvh-56px)]",
-            (isCarteiraRoute || isFinanceiroRoute) ? "bg-[#144439]" : "bg-background",
+            "relative min-h-[calc(100dvh-56px)] bg-background",
             isImmersiveRoute && "pb-0"
           )}
           style={
