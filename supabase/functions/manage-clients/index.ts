@@ -28,7 +28,8 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
 
     if (userError || !user) {
       console.error("Auth error:", userError?.message);
