@@ -562,7 +562,7 @@ export function BarberMobileProfile({
           </button>
 
           {/* ═══ RODAPÉ: Sair da conta (esq) + Tema claro/escuro (dir) ═══ */}
-          <div className="pt-4 pb-8 flex items-center justify-between">
+          <div className="pt-3 pb-2 flex items-center justify-between">
             <button
               onClick={async () => {
                 if (loggingOut) return;

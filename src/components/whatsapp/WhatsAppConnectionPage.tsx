@@ -27,6 +27,8 @@ interface WhatsAppConnectionPageProps {
   unidadeNome?: string | null;
   onUnitChange?: (unitId: string) => void;
   onBack?: () => void;
+  onBackProp?: () => void;
+  hideAgent?: boolean;
 }
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "failed";
@@ -173,6 +175,7 @@ export function WhatsAppConnectionPage({
   barberName,
   onUnitChange: onUnitChangeProp,
   onBack: onBackProp,
+  hideAgent = false,
 }: WhatsAppConnectionPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -2358,74 +2361,76 @@ export function WhatsAppConnectionPage({
         {/* Lista Unificada Única (Sem abas, padrão 100% minimalista e sério) */}
         <div className="divide-y divide-border/25 pt-1">
           {/* Opção: Agente de IA */}
-          <div
-            ref={aiAgentOptionRef}
-            className="py-4 relative"
-          >
-            {/* Destaque infinito de tela a tela: faixa de ponta a ponta sem bordas, 100% na mesma cor (estilo marcador), piscando exatamente 3 vezes */}
-            {isHighlightedAgente && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{
-                  opacity: [0, 1, 0, 1, 0, 1, 0],
-                }}
-                transition={{
-                  delay: 0.3,
-                  duration: 2.1,
-                  times: [0, 0.16, 0.33, 0.5, 0.66, 0.83, 1],
-                  ease: "easeInOut",
-                }}
-                onAnimationComplete={() => setIsHighlightedAgente(false)}
-                className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-screen bg-emerald-500/[0.12] dark:bg-emerald-500/[0.16] pointer-events-none"
-              />
-            )}
-
-            <div className="relative z-10 flex items-center justify-between gap-4">
-              <div className="min-w-0 pr-2">
-                <p className="text-[13.5px] font-semibold text-foreground leading-snug">
-                  Agente de IA
-                </p>
-                <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                  Responde dúvidas sobre valores, serviços, endereço e realiza agendamentos no sistema.
-                </p>
-              </div>
-              <Switch
-                checked={agentActive && status === "connected"}
-                onCheckedChange={handleToggleAgent}
-                disabled={status !== "connected"}
-                className="data-[state=checked]:bg-black dark:data-[state=checked]:bg-white shrink-0"
-              />
-            </div>
-
-            {/* Quando ativo: surge imediatamente abaixo o acesso às Configurações do Atendimento */}
-            <AnimatePresence>
-              {agentActive && status === "connected" && (
+          {!hideAgent && (
+            <div
+              ref={aiAgentOptionRef}
+              className="py-4 relative"
+            >
+              {/* Destaque infinito de tela a tela: faixa de ponta a ponta sem bordas, 100% na mesma cor (estilo marcador), piscando exatamente 3 vezes */}
+              {isHighlightedAgente && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
-                  className="overflow-hidden pt-2.5 relative z-10"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setCurrentView("agent-config")}
-                    className="w-full py-2.5 px-3 rounded-xl bg-secondary/50 hover:bg-secondary/80 flex items-center justify-between text-left transition-colors group border border-border/30"
-                  >
-                    <div className="min-w-0 pr-2">
-                      <p className="text-[12.5px] font-medium text-foreground">
-                        Configurações do atendimento
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                        Tempo de pausa, tolerância de atraso e instruções da barbearia
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0" />
-                  </button>
-                </motion.div>
+                  initial={{ opacity: 0 }}
+                  animate={{
+                    opacity: [0, 1, 0, 1, 0, 1, 0],
+                  }}
+                  transition={{
+                    delay: 0.3,
+                    duration: 2.1,
+                    times: [0, 0.16, 0.33, 0.5, 0.66, 0.83, 1],
+                    ease: "easeInOut",
+                  }}
+                  onAnimationComplete={() => setIsHighlightedAgente(false)}
+                  className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-screen bg-emerald-500/[0.12] dark:bg-emerald-500/[0.16] pointer-events-none"
+                />
               )}
-            </AnimatePresence>
-          </div>
+
+              <div className="relative z-10 flex items-center justify-between gap-4">
+                <div className="min-w-0 pr-2">
+                  <p className="text-[13.5px] font-semibold text-foreground leading-snug">
+                    Agente de IA
+                  </p>
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
+                    Responde dúvidas sobre valores, serviços, endereço e realiza agendamentos no sistema.
+                  </p>
+                </div>
+                <Switch
+                  checked={agentActive && status === "connected"}
+                  onCheckedChange={handleToggleAgent}
+                  disabled={status !== "connected"}
+                  className="data-[state=checked]:bg-black dark:data-[state=checked]:bg-white shrink-0"
+                />
+              </div>
+
+              {/* Quando ativo: surge imediatamente abaixo o acesso às Configurações do Atendimento */}
+              <AnimatePresence>
+                {agentActive && status === "connected" && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className="overflow-hidden pt-2.5 relative z-10"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setCurrentView("agent-config")}
+                      className="w-full py-2.5 px-3 rounded-xl bg-secondary/50 hover:bg-secondary/80 flex items-center justify-between text-left transition-colors group border border-border/30"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="text-[12.5px] font-medium text-foreground">
+                          Configurações do atendimento
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                          Tempo de pausa, tolerância de atraso e instruções da barbearia
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0" />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
 
           {/* Opção 1: Avisar quando agendar */}
           <div className="py-4 flex items-center justify-between gap-4">

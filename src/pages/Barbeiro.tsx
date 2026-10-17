@@ -816,6 +816,8 @@ const Barbeiro = () => {
           style={
             location.pathname.includes("/barbeiro/promocoes") || location.pathname.includes("/agenda") || location.pathname.includes("/disparo") || location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/relatorios")
               ? undefined
+              : location.pathname.includes("/perfil")
+              ? { paddingBottom: "calc(4.75rem + var(--app-safe-bottom, 8px))" }
               : { paddingBottom: "calc(7.5rem + var(--app-safe-bottom, 8px) + env(safe-area-inset-bottom, 0px))" }
           }
         >
@@ -872,7 +874,7 @@ const Barbeiro = () => {
                     <Route path="perfil" element={<BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} />} />
                     <Route path="carteira" element={<CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" />} />
                     <Route path="configuracoes-perfil" element={<BarberSettingsPage />} />
-                    <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
+                    <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} hideAgent={!barberContext.isTenantAdmin} />} />
                     <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                     <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
                     <Route path="portfolio" element={<PortfolioManager barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} title="Meu Portfólio" showBack onBack={() => navigate("/barbeiro/perfil")} />} />

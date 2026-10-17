@@ -178,8 +178,8 @@ export function ProfilePortfolioCarousel({
       {/* Carrossel Horizontal */}
       {loading ? (
         <div
-          className="flex gap-2.5 overflow-x-auto pb-1 no-scrollbar overscroll-x-contain"
-          style={{ WebkitOverflowScrolling: "touch" }}
+          className="flex gap-2.5 overflow-x-auto pb-1 no-scrollbar overscroll-x-contain [&::-webkit-scrollbar]:hidden"
+          style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
           {[1, 2, 3].map((i) => (
             <div
@@ -190,8 +190,8 @@ export function ProfilePortfolioCarousel({
         </div>
       ) : (
         <div
-          className="flex items-center gap-2.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar overscroll-x-contain"
-          style={{ WebkitOverflowScrolling: "touch" }}
+          className="flex items-center gap-2.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar overscroll-x-contain [&::-webkit-scrollbar]:hidden"
+          style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
           {/* Card 1: Botão de Adicionar Foto */}
           <button

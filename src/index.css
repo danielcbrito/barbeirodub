@@ -1466,3 +1466,23 @@ html.platform-ios-pwa #root {
   will-change: opacity;
 }
 
+/* Utilitários globais de ocultação de barra de rolagem (iOS Safari, Android Chrome, Firefox, Edge)
+   Permite rolagem fluida e touch suave sem renderizar nenhuma barra ou trilha indesejada */
+.no-scrollbar,
+.scrollbar-none,
+.scrollbar-hide {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+  -webkit-appearance: none !important;
+}
+
+

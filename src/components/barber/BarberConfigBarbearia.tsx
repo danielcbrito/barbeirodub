@@ -397,6 +397,14 @@ export function BarberConfigBarbearia({
           onClick: () => navigate(`${appBasePath}/meus-dados`),
         },
         {
+          id: "whatsapp",
+          icon: MessageSquare,
+          label: "Atendimento & Notificações",
+          description: "WhatsApp conectado e lembretes automáticos de agendamento",
+          keywords: ["whatsapp", "atendimento", "notificacoes", "lembretes", "mensagens"],
+          onClick: () => setActiveScreen("whatsapp"),
+        },
+        {
           id: "horarios",
           icon: CalendarClock,
           label: "Horário de funcionamento",
@@ -877,6 +885,7 @@ export function BarberConfigBarbearia({
               tenantNome={activeUnit?.nome || tenantNome}
               barberName={barberContext.apelido}
               onBackProp={() => setActiveScreen("hub")}
+              hideAgent={!isTenantAdmin}
             />
           </div>
         );
