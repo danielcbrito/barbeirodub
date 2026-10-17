@@ -301,7 +301,7 @@ export function BarberMobileProfile({
     <>
       <div
         className="min-h-[var(--app-height,100dvh)] bg-background text-foreground"
-        style={{ paddingBottom: "calc(6.5rem + var(--app-safe-bottom, 8px))" }}
+        style={{ paddingBottom: "calc(5.75rem + var(--app-safe-bottom, 8px) + env(safe-area-inset-bottom, 0px))" }}
       >
         {/* ═══ BANNER FINO NO TOPO (edge-to-edge, sob a status bar) ═══ */}
         <div className="relative isolate bg-background">

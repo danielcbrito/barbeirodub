@@ -394,10 +394,8 @@ const Admin = () => {
             isImmersiveRoute && !isCarteiraRoute && !isFinanceiroRoute && "pb-0"
           )}
           style={
-            isImmersiveRoute && !isCarteiraRoute && !isFinanceiroRoute
+            (isImmersiveRoute && !isCarteiraRoute && !isFinanceiroRoute) || location.pathname.includes("/perfil")
               ? undefined
-              : location.pathname.includes("/perfil")
-              ? { paddingBottom: "calc(4.75rem + var(--app-safe-bottom, 8px))" }
               : { paddingBottom: "calc(7.5rem + var(--app-safe-bottom, 8px) + env(safe-area-inset-bottom, 0px))" }
           }
         >

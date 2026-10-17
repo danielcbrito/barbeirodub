@@ -1469,16 +1469,18 @@ export function CarteiraPage({
               </button>
             </div>
 
-            {/* Recipient Card (Exato como Imagem 2, com cores adaptáveis ao tema) */}
+            {/* Recipient Card (100% minimalista: ícone do Pix limpo sem quadradinho ao fundo) */}
             <div className="w-full rounded-2xl bg-card border border-border/80 p-3 mt-1 flex items-center justify-between shadow-xs">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-muted overflow-hidden flex items-center justify-center shrink-0 border border-border/60">
-                  {avatarUrl && !avatarFailed ? (
+                {avatarUrl && !avatarFailed ? (
+                  <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-border/60">
                     <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <PixLogoImage size={24} />
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                    <PixLogoImage size={28} />
+                  </div>
+                )}
                 <div className="min-w-0">
                   <p className="text-[15px] font-semibold text-foreground truncate leading-tight">
                     {barber?.woovi_subaccount_name || barbeiroNome}
@@ -1503,7 +1505,7 @@ export function CarteiraPage({
             </div>
           </div>
 
-          {/* 2. Valor Central e Subtítulo "no tax" / "sem taxa" (Exato como Imagem 2) */}
+          {/* 2. Valor Central e Subtítulo "sem taxa" */}
           <div className="flex-1 flex flex-col items-center justify-center px-4 py-2 my-auto">
             <div className="text-center">
               <p className="text-[52px] sm:text-[62px] font-bold text-foreground tracking-tight leading-none tabular-nums">
@@ -1532,35 +1534,41 @@ export function CarteiraPage({
             </div>
           </div>
 
-          {/* 3. Teclado Virtual Numérico + Slider "swipe to send" (Exato como Imagem 2) */}
+          {/* 3. Teclado Virtual Numérico + Slider "swipe to send" (distância ampla entre números e slider) */}
           <div
             className="flex-shrink-0 w-full max-w-sm mx-auto px-4"
             style={{
               paddingBottom: "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
             }}
           >
-            {/* Grid 3x4 do Teclado Numérico */}
-            <div className="grid grid-cols-3 gap-y-2 gap-x-6 text-center mb-5 select-none touch-manipulation">
+            {/* Grid 3x4 do Teclado Numérico — espaçamento maior mb-8 para afastar do botão de deslizar */}
+            <div className="grid grid-cols-3 gap-y-1.5 gap-x-6 text-center mb-8 sm:mb-10 select-none touch-manipulation">
               {["1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "0"].map((k) => (
                 <button
                   key={k}
                   type="button"
-                  onPointerDown={() => {
-                    try { navigator.vibrate?.(10); } catch {}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    handleNumpadPress(k);
                   }}
-                  onClick={() => handleNumpadPress(k)}
-                  className="h-13 sm:h-15 flex items-center justify-center text-[26px] sm:text-[28px] font-normal text-foreground active:scale-95 active:bg-muted/70 transition-colors duration-75 rounded-full hover:bg-muted/40 touch-manipulation select-none"
+                  onClick={(e) => {
+                    e.preventDefault();
+                  }}
+                  className="h-11 sm:h-12 flex items-center justify-center text-[25px] sm:text-[27px] font-normal text-foreground active:scale-95 active:bg-muted/70 transition-all duration-75 rounded-full hover:bg-muted/40 touch-manipulation select-none"
                 >
                   {k}
                 </button>
               ))}
               <button
                 type="button"
-                onPointerDown={() => {
-                  try { navigator.vibrate?.(10); } catch {}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  handleNumpadBackspace();
                 }}
-                onClick={() => handleNumpadBackspace()}
-                className="h-13 sm:h-15 flex items-center justify-center text-foreground active:scale-95 active:bg-muted/70 transition-colors duration-75 rounded-full hover:bg-muted/40 touch-manipulation select-none"
+                onClick={(e) => {
+                  e.preventDefault();
+                }}
+                className="h-11 sm:h-12 flex items-center justify-center text-foreground active:scale-95 active:bg-muted/70 transition-all duration-75 rounded-full hover:bg-muted/40 touch-manipulation select-none"
                 aria-label="Apagar dígito"
               >
                 <BackspaceIcon className="w-6 h-6 stroke-[1.8]" />

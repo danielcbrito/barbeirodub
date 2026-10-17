@@ -118,54 +118,127 @@ export function IconClientes3D({ className = "w-11 h-11" }: { className?: string
   );
 }
 
-/** 3. Serviços: Tesoura de precisão em aço polido 3D */
+/** 3. Serviços: Tesoura de precisão em aço polido 3D com detalhe clássico Barber Pole (vermelho, branco e azul) */
 export function IconServicos3D({ className = "w-11 h-11" }: { className?: string }) {
   return (
     <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
       <defs>
+        {/* Lâmina 1: Aço cirúrgico com alto contraste para não sumir no modo claro */}
         <linearGradient id="bladeGrad1" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#FFFFFF" />
-          <stop offset="45%" stopColor="#E4E4E7" />
-          <stop offset="100%" stopColor="#71717A" />
+          <stop offset="0%" stopColor="#F4F4F5" />
+          <stop offset="35%" stopColor="#D4D4D8" />
+          <stop offset="70%" stopColor="#71717A" />
+          <stop offset="100%" stopColor="#3F3F46" />
         </linearGradient>
+
+        {/* Lâmina 2: Aço titânio escuro facetado */}
         <linearGradient id="bladeGrad2" x1="1" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#D4D4D8" />
-          <stop offset="70%" stopColor="#3F3F46" />
+          <stop offset="0%" stopColor="#A1A1AA" />
+          <stop offset="40%" stopColor="#52525B" />
+          <stop offset="85%" stopColor="#27272A" />
           <stop offset="100%" stopColor="#18181B" />
         </linearGradient>
+
+        {/* Gradiente metálico para os anéis/olhais */}
+        <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#A1A1AA" />
+          <stop offset="50%" stopColor="#52525B" />
+          <stop offset="100%" stopColor="#27272A" />
+        </linearGradient>
+
+        {/* Barber Pole Striped Pattern para a luva decorativa da tesoura */}
+        <linearGradient id="barberPolePattern" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#EF4444" />
+          <stop offset="18%" stopColor="#EF4444" />
+          <stop offset="19%" stopColor="#FFFFFF" />
+          <stop offset="36%" stopColor="#FFFFFF" />
+          <stop offset="37%" stopColor="#2563EB" />
+          <stop offset="54%" stopColor="#2563EB" />
+          <stop offset="55%" stopColor="#FFFFFF" />
+          <stop offset="72%" stopColor="#FFFFFF" />
+          <stop offset="73%" stopColor="#EF4444" />
+          <stop offset="90%" stopColor="#EF4444" />
+          <stop offset="91%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#FFFFFF" />
+        </linearGradient>
+
         <filter id="scissorsShadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="4" stdDeviation="3.5" floodColor="#000000" floodOpacity="0.35" />
+          <feDropShadow dx="0" dy="4" stdDeviation="3.5" floodColor="#000000" floodOpacity="0.38" />
         </filter>
       </defs>
 
       <g filter="url(#scissorsShadow)">
-        {/* Lâmina 1 */}
+        {/* Lâmina 1 (Aço cirúrgico com contorno nítido que destaca no fundo branco e no fundo escuro) */}
         <path
-          d="M15 11 L24 23 L22.5 24.5 L12 13.5 C13 11.5 14 11 15 11 Z"
+          d="M15 10.5 L24 23 L22.5 24.5 L12 13 C12.8 11.2 13.8 10.6 15 10.5 Z"
           fill="url(#bladeGrad1)"
-          stroke="#52525B"
-          strokeWidth="0.6"
-        />
-        {/* Lâmina 2 */}
-        <path
-          d="M33 11 L24 23 L25.5 24.5 L36 13.5 C35 11.5 34 11 33 11 Z"
-          fill="url(#bladeGrad2)"
           stroke="#27272A"
+          strokeWidth="0.8"
+        />
+        {/* Bisel/facetamento de luz na Lâmina 1 */}
+        <path
+          d="M14.5 11.5 L23 22.5"
+          stroke="#FFFFFF"
           strokeWidth="0.6"
+          strokeLinecap="round"
+          opacity="0.85"
         />
 
-        {/* Hastes */}
-        <path d="M22.5 24.5 L17 31" stroke="#52525B" strokeWidth="2.6" strokeLinecap="round" />
-        <path d="M25.5 24.5 L31 31" stroke="#3F3F46" strokeWidth="2.6" strokeLinecap="round" />
+        {/* Lâmina 2 (Aço titânio escuro facetado) */}
+        <path
+          d="M33 10.5 L24 23 L25.5 24.5 L36 13 C35.2 11.2 34.2 10.6 33 10.5 Z"
+          fill="url(#bladeGrad2)"
+          stroke="#18181B"
+          strokeWidth="0.8"
+        />
+        {/* Bisel/facetamento de luz na Lâmina 2 */}
+        <path
+          d="M33.5 11.5 L25 22.5"
+          stroke="#E4E4E7"
+          strokeWidth="0.5"
+          strokeLinecap="round"
+          opacity="0.6"
+        />
 
-        {/* Olhais 3D */}
-        <circle cx="15" cy="34" r="4.5" stroke="url(#bladeGrad1)" strokeWidth="2.2" />
-        <circle cx="33" cy="34" r="4.5" stroke="url(#bladeGrad2)" strokeWidth="2.2" />
-        <path d="M37 32 C38.5 31 40 32 40.5 33.5" stroke="#71717A" strokeWidth="1.6" strokeLinecap="round" />
+        {/* Hastes estruturais metálicas */}
+        <path d="M22.5 24.5 L17 31" stroke="#3F3F46" strokeWidth="2.8" strokeLinecap="round" />
+        <path d="M25.5 24.5 L31 31" stroke="#27272A" strokeWidth="2.8" strokeLinecap="round" />
 
-        {/* Pivô central cromado */}
-        <circle cx="24" cy="23.5" r="2.8" fill="#E4E4E7" stroke="#18181B" strokeWidth="0.8" />
-        <circle cx="24" cy="23.5" r="1.1" fill="#FFFFFF" />
+        {/* ═══ DETALHE BARBER POLE CLÁSSICO (VERMELHO, BRANCO E AZUL) ═══ */}
+        {/* Luva decorativa na haste esquerda */}
+        <rect
+          x="18"
+          y="26"
+          width="4.2"
+          height="4.2"
+          rx="1"
+          transform="rotate(-40 18 26)"
+          fill="url(#barberPolePattern)"
+          stroke="#18181B"
+          strokeWidth="0.6"
+        />
+        {/* Anéis cromados delimitando o barber pole na haste */}
+        <line x1="17.8" y1="26.8" x2="20.2" y2="29.2" stroke="#E4E4E7" strokeWidth="0.6" strokeLinecap="round" />
+        <line x1="19.8" y1="24.8" x2="22.2" y2="27.2" stroke="#E4E4E7" strokeWidth="0.6" strokeLinecap="round" />
+
+        {/* Acento barber pole sutil no descanso do dedo (tang) */}
+        <circle cx="39.5" cy="32.5" r="1.3" fill="#EF4444" stroke="#18181B" strokeWidth="0.5" />
+        <circle cx="39.5" cy="32.5" r="0.6" fill="#2563EB" />
+
+        {/* Olhais / Anéis para os dedos (Aço acetinado de alto contraste) */}
+        <circle cx="15" cy="34" r="4.6" stroke="url(#ringGrad)" strokeWidth="2.4" />
+        <circle cx="15" cy="34" r="3.2" stroke="#18181B" strokeWidth="0.6" />
+        <circle cx="33" cy="34" r="4.6" stroke="url(#ringGrad)" strokeWidth="2.4" />
+        <circle cx="33" cy="34" r="3.2" stroke="#18181B" strokeWidth="0.6" />
+
+        {/* Tang / Descanso de dedo profissional com curva elegante */}
+        <path d="M37 32 C38.5 31 40 31.8 40.5 33" stroke="#52525B" strokeWidth="1.6" strokeLinecap="round" />
+
+        {/* Pivô central com anel de ajuste cromado e centro clássico */}
+        <circle cx="24" cy="23.5" r="3" fill="#D4D4D8" stroke="#18181B" strokeWidth="0.9" />
+        <circle cx="24" cy="23.5" r="1.8" fill="#18181B" />
+        {/* Micro-ponto vermelho no miolo do parafuso de ajuste (identidade clássica DUB/Barber) */}
+        <circle cx="24" cy="23.5" r="0.9" fill="#EF4444" />
       </g>
     </svg>
   );
