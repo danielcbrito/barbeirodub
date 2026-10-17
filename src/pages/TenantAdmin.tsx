@@ -553,7 +553,8 @@ const TenantAdmin = () => {
           <main
             className={cn(
               "relative min-h-[calc(100dvh-56px)] bg-background",
-              (location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo") || location.pathname.includes("/financeiro") || location.pathname.includes("/carteira")) && "pb-0 overflow-hidden"
+              (location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo")) && "pb-0 overflow-hidden",
+              (location.pathname.includes("/financeiro") || location.pathname.includes("/carteira")) && "pb-0"
             )}
             style={
               location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo") || location.pathname.includes("/financeiro") || location.pathname.includes("/carteira")

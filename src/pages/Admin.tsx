@@ -390,7 +390,7 @@ const Admin = () => {
         {/* Conteúdo Principal - padding otimizado para mobile */}
         <main
           className={cn(
-            "relative min-h-[calc(100dvh-56px)] bg-background",
+            isImmersiveRoute ? "relative min-h-dvh bg-background" : "relative min-h-[calc(100dvh-56px)] bg-background",
             isImmersiveRoute && "pb-0"
           )}
           style={

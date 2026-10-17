@@ -27,14 +27,14 @@ All colors MUST be HSL. */
     --sar: env(safe-area-inset-right, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
-    --app-height: 100svh;
+    --app-height: 100dvh;
     --app-safe-top: var(--sat);
     --app-safe-right: var(--sar);
     --app-safe-bottom: var(--sab);
     --app-safe-left: var(--sal);
     --app-bottom-nav-bleed: 0px;
     --app-bottom-nav-offset: 0px;
-    --kb-viewport-height: 100svh;
+    --kb-viewport-height: 100dvh;
     --kb-offset: 0px;
   }
 
@@ -287,7 +287,6 @@ All colors MUST be HSL. */
     overscroll-behavior-y: auto;
     min-height: 100%;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
     overflow-x: hidden;
     margin: 0;
     scroll-padding-top: calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 1rem);
@@ -348,7 +347,6 @@ All colors MUST be HSL. */
     width: 100%;
     min-height: 100%;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
     overscroll-behavior-x: none;
     overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -385,7 +383,6 @@ All colors MUST be HSL. */
   #root {
     min-height: 100%;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -395,7 +392,8 @@ All colors MUST be HSL. */
 
   @supports (-webkit-touch-callout: none) {
     html, body, #root {
-      min-height: var(--app-height, 100svh);
+      min-height: 100%;
+      min-height: 100dvh;
     }
   }
 
@@ -1382,14 +1380,13 @@ button, a, [role="button"] {
    sem cortes, sem travar o scroll e sem bordas brancas expostas. */
 html {
   min-height: 100%;
-  min-height: -webkit-fill-available;
+  height: 100%;
   background-color: hsl(var(--background));
 }
 
 body {
   min-height: 100%;
-  min-height: 100dvh;
-  min-height: -webkit-fill-available;
+  height: 100%;
   background-color: hsl(var(--background));
   overflow-x: hidden;
   overflow-y: auto;
@@ -1399,8 +1396,7 @@ body {
 
 #root {
   min-height: 100%;
-  min-height: 100dvh;
-  min-height: -webkit-fill-available;
+  height: 100%;
   background-color: hsl(var(--background));
   display: flex;
   flex-direction: column;

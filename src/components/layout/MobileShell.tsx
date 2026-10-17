@@ -43,7 +43,7 @@ export default function MobileShell() {
     <div
       className="mx-auto w-full max-w-lg antialiased overflow-x-hidden bg-background text-foreground"
       style={{
-        minHeight: "var(--app-height, 100svh)",
+        minHeight: "var(--app-height, 100dvh)",
         // Reserva a área da status bar (notch/dynamic island no iPhone)
         // exceto em rotas imersivas e financeiras, que gerenciam o topo por conta própria.
         paddingTop: (isImmersiveRoute || isFinancialRoute) ? 0 : "var(--app-safe-top, env(safe-area-inset-top, 0px))",
