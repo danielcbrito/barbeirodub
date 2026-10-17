@@ -876,16 +876,12 @@ const Barbeiro = () => {
                     <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                     <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
                     <Route path="portfolio" element={<PortfolioManager barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} title="Meu Portfólio" showBack onBack={() => navigate("/barbeiro/perfil")} />} />
-                    {barberContext.isTenantAdmin && (
-                      <>
-                        <Route path="config-barbearia" element={<BarberConfigBarbearia barberContext={barberContext} />} />
-                        <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/barbeiro" tenantId={barberContext.tenantId} />} />
-                        <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
-                        <Route path="barbeiros" element={<AdminBarbeiros basePath="/barbeiro" />} />
-                        <Route path="configuracoes" element={<AdminConfiguracoes />} />
-                        <Route path="unidades" element={<AdminUnidades basePath="/barbeiro" />} />
-                      </>
-                    )}
+                    <Route path="config-barbearia" element={<BarberConfigBarbearia barberContext={barberContext} />} />
+                    <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/barbeiro" tenantId={barberContext.tenantId} />} />
+                    <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
+                    <Route path="barbeiros" element={<AdminBarbeiros basePath="/barbeiro" />} />
+                    <Route path="configuracoes" element={<AdminConfiguracoes />} />
+                    <Route path="unidades" element={<AdminUnidades basePath="/barbeiro" />} />
                   </>
                 )}
               </Routes>
@@ -982,9 +978,12 @@ const Barbeiro = () => {
                       <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                       <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
                       <Route path="portfolio" element={<PortfolioManager barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} title="Meu Portfólio" showBack onBack={() => navigate("/barbeiro/perfil")} />} />
-                      {barberContext.isTenantAdmin && (
-                        <Route path="config-barbearia" element={<BarberConfigBarbearia barberContext={barberContext} />} />
-                      )}
+                      <Route path="config-barbearia" element={<BarberConfigBarbearia barberContext={barberContext} />} />
+                      <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/barbeiro" tenantId={barberContext.tenantId} />} />
+                      <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
+                      <Route path="barbeiros" element={<AdminBarbeiros basePath="/barbeiro" />} />
+                      <Route path="configuracoes" element={<AdminConfiguracoes />} />
+                      <Route path="unidades" element={<AdminUnidades basePath="/barbeiro" />} />
                     </>
                   )}
                 </Routes>

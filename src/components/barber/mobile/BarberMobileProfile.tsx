@@ -6,18 +6,21 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AvatarEditSheet } from "@/components/admin/mobile/AvatarEditSheet";
 import { BarberContext } from "@/pages/Barbeiro";
 import {
-  Loader2, ChevronRight, LogOut, Megaphone,
-  Send, Star, BarChart3, ArrowRight,
+  Loader2, ImagePlus, ChevronRight, LogOut, Megaphone,
+  Send, Star, MessageSquare, ArrowRight,
 } from "lucide-react";
 import { CopyCode } from "@/components/ui/copy-code-button";
 import { SetupCompletionBanner } from "@/components/barber/SetupCompletionBanner";
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import { useBarberAvaliacoes } from "@/hooks/useBarberAvaliacoes";
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
+import { useAtualizarBannerAdmin } from "@/hooks/useAdminMutations";
+import { resolveOwnerIdentity } from "@/lib/ownerIdentity";
 import { ThemeSegmentedToggle } from "@/components/profile/ThemeSegmentedToggle";
 import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
 import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
 import { ProfileInstagramBanner } from "@/components/profile/ProfileInstagramBanner";
+import { ProfilePortfolioCarousel } from "@/components/profile/ProfilePortfolioCarousel";
 
 interface BarberMobileProfileProps {
   barberContext: BarberContext;
@@ -26,12 +29,19 @@ interface BarberMobileProfileProps {
 }
 
 /**
- * Perfil mobile do Barbeiro — design IDÊNTICO ao AdminMobileProfile.
- * Diferenças pra funcionário: sem "Barbearias", sem edição de banner,
- * campanha leva pra tela "ainda não temos uma campanha pra você".
+ * Perfil mobile do Barbeiro — 100% IDÊNTICO ao AdminMobileProfile.
+ * Contém exatamente:
+ *  - Banner fino com botão Editar
+ *  - Header com Avatar sobreposto à logo da barbearia, estrelas e link
+ *  - 3 Cards: Disparo, WhatsApp, Campanhas
+ *  - Banner de setup inicial
+ *  - Padrão Apple HIG: Configurações gerais e Relatórios
+ *  - Banner Instagram
+ *  - Carrossel de Portfólio
+ *  - Card de Suporte
+ *  - Rodapé com Sair da conta e seletor de tema claro/escuro
  */
-// Cache síncrono em localStorage para render instantâneo (0ms) ao entrar no perfil.
-const PROFILE_CACHE_PREFIX = "dub:barber-profile:v1:";
+const PROFILE_CACHE_PREFIX = "dub:barber-profile:v2:";
 interface CachedProfile {
   email: string;
   avatarUrl: string | null;
@@ -39,9 +49,12 @@ interface CachedProfile {
   tenantLogo: string | null;
   tenantName: string;
   tenantSlug: string | null;
+  profileName: string;
+  unitsCount: number;
   updatedAt?: number;
 }
-const PROFILE_CACHE_TTL_MS = 60 * 1000; // Revalida em background só após 60s.
+const PROFILE_CACHE_TTL_MS = 60 * 1000;
+
 function readProfileCache(barbeiroId: string): CachedProfile | null {
   try {
     const raw = localStorage.getItem(PROFILE_CACHE_PREFIX + barbeiroId);
@@ -50,6 +63,7 @@ function readProfileCache(barbeiroId: string): CachedProfile | null {
     return null;
   }
 }
+
 function writeProfileCache(barbeiroId: string, data: CachedProfile) {
   try {
     localStorage.setItem(
@@ -61,7 +75,11 @@ function writeProfileCache(barbeiroId: string, data: CachedProfile) {
   }
 }
 
-export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isTenantAdmin = false }: BarberMobileProfileProps) {
+export function BarberMobileProfile({
+  barberContext,
+  basePath = "/barbeiro",
+  isTenantAdmin = false,
+}: BarberMobileProfileProps) {
   const navigate = useNavigate();
   const setupCompletion = useSetupCompletion({
     userId: barberContext.userId,
@@ -71,31 +89,35 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
     excludeSteps: ["whatsapp", "carteira"],
   });
 
-  // Hidratação síncrona do cache — evita spinner quando o perfil já foi visto.
   const cached = typeof window !== "undefined" ? readProfileCache(barberContext.barbeiroId) : null;
 
   const [loggingOut, setLoggingOut] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [showWhenToSend, setShowWhenToSend] = useState(false);
   const [email, setEmail] = useState(cached?.email ?? "");
+  const [profileName, setProfileName] = useState(cached?.profileName ?? barberContext.apelido ?? "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(cached?.avatarUrl ?? null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(cached?.bannerUrl ?? null);
   const [tenantLogo, setTenantLogo] = useState<string | null>(cached?.tenantLogo ?? null);
   const [tenantName, setTenantName] = useState<string>(cached?.tenantName ?? "");
   const [tenantSlug, setTenantSlug] = useState<string | null>(cached?.tenantSlug ?? null);
+  const [unitsCount, setUnitsCount] = useState<number>(cached?.unitsCount ?? 0);
   const [avatarEditOpen, setAvatarEditOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [barbeariaDrawerOpen, setBarbeariaDrawerOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const atualizarBanner = useAtualizarBannerAdmin();
 
   useEffect(() => {
     let mounted = true;
-    // Se o cache ainda está fresco, evita qualquer round-trip ao entrar na aba.
     if (cached?.updatedAt && Date.now() - cached.updatedAt < PROFILE_CACHE_TTL_MS) {
       return;
     }
+
     const doLoad = async () => {
       try {
-        // Sessão local — sem round-trip de rede.
         const { data: sessionData } = await supabase.auth.getSession();
         const user = sessionData.session?.user;
         if (!mounted || !user) return;
@@ -103,30 +125,49 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
         const userEmail = user.email || "";
         if (mounted) setEmail(userEmail);
 
-        // 3 queries em paralelo (tenant já embutido no join com barbeiros).
-        const [profileRes, barbeiroRes, bannerRes] = await Promise.all([
-          supabase.from("profiles").select("avatar_url").eq("id", user.id).maybeSingle(),
+        const [profileRes, barbeiroRes, bannerRes, identity] = await Promise.all([
+          supabase.from("profiles").select("avatar_url, banner_url").eq("id", user.id).maybeSingle(),
           supabase
             .from("barbeiros")
-            .select("foto_url, tenant_id, tenants:tenant_id(slug, nome, logo_url)")
+            .select("foto_url, apelido, tenant_id, tenants:tenant_id(id, slug, nome, logo_url, banner_url)")
             .eq("id", barberContext.barbeiroId)
             .maybeSingle(),
           supabase.rpc("get_admin_banner_for_barber", { p_barbeiro_id: barberContext.barbeiroId }),
+          resolveOwnerIdentity(user.id),
         ]);
         if (!mounted) return;
 
-        const nextAvatar = profileRes.data?.avatar_url || barbeiroRes.data?.foto_url || null;
-        const nextBanner = (!bannerRes.error && bannerRes.data) ? (bannerRes.data as string) : null;
-        const tenant = (barbeiroRes.data as { tenants?: { slug: string | null; nome: string | null; logo_url: string | null } | null } | null)?.tenants ?? null;
+        const barbData = barbeiroRes.data as any;
+        const tenant = barbData?.tenants ?? null;
+
+        const nextAvatar = profileRes.data?.avatar_url || barbData?.foto_url || null;
+        const nextBanner =
+          profileRes.data?.banner_url ||
+          ((!bannerRes.error && bannerRes.data) ? (bannerRes.data as string) : null) ||
+          tenant?.banner_url ||
+          null;
         const nextTenantSlug = tenant?.slug || null;
         const nextTenantName = tenant?.nome || "";
         const nextTenantLogo = tenant?.logo_url || null;
+        const nextProfileName = barberContext.apelido || barbData?.apelido || identity.displayName || "Barbeiro";
 
         setAvatarUrl(nextAvatar);
         setBannerUrl(nextBanner);
         setTenantSlug(nextTenantSlug);
         setTenantName(nextTenantName);
         setTenantLogo(nextTenantLogo);
+        setProfileName(nextProfileName);
+
+        let nextUnits = 0;
+        const effectiveTenantId = barberContext.tenantId || barbData?.tenant_id || tenant?.id;
+        if (effectiveTenantId) {
+          const { count } = await supabase
+            .from("tenant_unidades")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", effectiveTenantId);
+          nextUnits = count || 0;
+          setUnitsCount(nextUnits);
+        }
 
         writeProfileCache(barberContext.barbeiroId, {
           email: userEmail,
@@ -135,14 +176,19 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
           tenantLogo: nextTenantLogo,
           tenantName: nextTenantName,
           tenantSlug: nextTenantSlug,
+          profileName: nextProfileName,
+          unitsCount: nextUnits,
         });
       } catch (error) {
-        console.error("Erro ao carregar perfil:", error);
-      } finally {}
+        console.error("Erro ao carregar perfil do barbeiro:", error);
+      }
     };
+
     doLoad();
-    return () => { mounted = false; };
-  }, [barberContext.barbeiroId]);
+    return () => {
+      mounted = false;
+    };
+  }, [barberContext.barbeiroId, barberContext.tenantId, barberContext.apelido]);
 
   const fullLink = tenantSlug ? `https://dubagenda.lovable.app/${tenantSlug}` : "";
   const displayLink = tenantSlug ? `dubagenda.lovable.app/${tenantSlug}` : "";
@@ -157,8 +203,50 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
     e.target.value = "";
   };
 
-  const initials = barberContext.apelido
-    ? barberContext.apelido.charAt(0).toUpperCase()
+  const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !barberContext.userId) return;
+    if (!file.type.startsWith("image/")) { toast.error("Selecione apenas imagens"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Máximo 5MB"); return; }
+
+    setUploadingBanner(true);
+    try {
+      const fileName = `banner-${barberContext.userId}-${Date.now()}.webp`;
+      const filePath = `banners/${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true, contentType: file.type });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      const publicUrl = urlData.publicUrl;
+
+      atualizarBanner.mutate(
+        { userId: barberContext.userId, bannerUrl: publicUrl },
+        {
+          onSuccess: () => {
+            setBannerUrl(publicUrl);
+            const currentCache = readProfileCache(barberContext.barbeiroId);
+            if (currentCache) {
+              writeProfileCache(barberContext.barbeiroId, {
+                ...currentCache,
+                bannerUrl: publicUrl,
+              });
+            }
+          },
+        }
+      );
+    } catch (error: any) {
+      console.error("Erro ao fazer upload do banner:", error);
+      toast.error("Erro ao fazer upload do banner");
+    } finally {
+      setUploadingBanner(false);
+      e.target.value = "";
+    }
+  };
+
+  const initials = profileName
+    ? profileName.charAt(0).toUpperCase()
     : email ? email.charAt(0).toUpperCase() : "B";
 
   useStatusBarColor("app-background");
@@ -174,8 +262,6 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
   }, [barberReviews]);
 
   const handleCampaignClick = () => {
-    // A rota /promocoes já renderiza AdminPromocoes para tenant admin
-    // e BarberCampanhaEmpty para barbeiros funcionários.
     navigate(`${basePath}/promocoes`);
   };
 
@@ -208,13 +294,11 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
   return (
     <>
       <div
-        className="min-h-screen bg-background text-foreground"
+        className="min-h-[var(--app-height,100dvh)] bg-background text-foreground"
         style={{ paddingBottom: "calc(6.5rem + var(--app-safe-bottom, 8px))" }}
       >
-      {/* Container principal */}
-      <div className="max-w-lg mx-auto">
         {/* ═══ BANNER FINO NO TOPO (edge-to-edge, sob a status bar) ═══ */}
-        <div className="relative isolate bg-background pointer-events-none">
+        <div className="relative isolate bg-background">
           <div
             className="relative w-full overflow-hidden bg-muted pointer-events-none"
             style={{ height: "calc(6.5rem + var(--app-safe-top, env(safe-area-inset-top, 0px)))" }}
@@ -232,6 +316,22 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
             )}
             <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/5 to-background pointer-events-none" />
           </div>
+
+          {/* Botão trocar banner — canto superior direito, discreto */}
+          <button
+            onClick={() => bannerInputRef.current?.click()}
+            disabled={uploadingBanner}
+            className="absolute right-3 z-10 h-8 px-2.5 rounded-lg bg-black/40 backdrop-blur-sm flex items-center gap-1.5 text-white/90 hover:bg-black/60 active:scale-95 transition-all"
+            style={{ top: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 12px)" }}
+            aria-label="Alterar banner"
+          >
+            {uploadingBanner ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <ImagePlus className="h-3.5 w-3.5" />
+            )}
+            <span className="text-[11px] font-medium">Editar</span>
+          </button>
         </div>
 
         {/* ═══ HEADER ABAIXO DO BANNER — avatar sobrepondo 50/50 o banner ═══ */}
@@ -257,10 +357,10 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
               )}
             </button>
 
-            {/* Nome + subtítulo — 100% clean & sério, sem badge Dono/Barbeiro e sem status Ativo */}
+            {/* Nome + subtítulo — 100% clean & sério, sem badge e sem poluição */}
             <div className="min-w-0 flex-1 pb-1">
               <h2 className="text-[19px] font-bold text-foreground leading-tight truncate">
-                {barberContext.apelido || "Barbeiro"}
+                {profileName || "Barbeiro"}
               </h2>
               <div className="flex items-center gap-2 mt-1">
                 {tenantName && (
@@ -278,10 +378,19 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
                     <span className="text-[10.5px] text-muted-foreground/70">({barberStats.count})</span>
                   )}
                 </span>
+                {unitsCount > 1 && (
+                  <>
+                    <span className="text-muted-foreground/30 text-[10px]">•</span>
+                    <span className="text-[11px] text-muted-foreground shrink-0">
+                      {unitsCount} unidades
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
+          {/* Link de copiar — compacto e elegante */}
           {tenantSlug && (
             <div className="mt-4">
               <CopyCode code={fullLink} label={displayLink} />
@@ -290,6 +399,7 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
         </div>
 
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+        <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerChange} className="hidden" />
 
         {/* ═══ ACESSOS PRINCIPAIS ESTRATÉGICOS (3 CARDS 100% SÉRIOS & MINIMALISTAS - PADRÃO IMAGEM 2) ═══ */}
         <div className="grid grid-cols-3 gap-2.5 mt-5 mx-5">
@@ -381,56 +491,20 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
           />
         </div>
 
-        {/* ═══ ITENS DE CONFIGURAÇÃO (PADRÃO ATENDIMENTO & NOTIFICAÇÕES: 100% FLAT, SEM QUADRADOS EM VOLTA) ═══ */}
+        {/* ═══ ITENS E SEÇÕES ESTRATÉGICAS DO PERFIL (PADRÃO APPLE HIG - 100% IDÊNTICO AO ADMIN) ═══ */}
         <div className="mt-5 mx-5 space-y-6">
-          {/* Seção: Configurações (exibido apenas se for dono / admin) */}
-          {isTenantAdmin && (
-            <div>
-              <p className="text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-1">
-                Configurações
-              </p>
-              <div className="divide-y divide-border/25">
-                <ProfileMenuItem
-                  label="Configurações"
-                  description="Horários, serviços, clientes, equipe e dados"
-                  onClick={handleConfigBarbeariaClick}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Seção: Gestão & Atendimento Pessoal */}
-          <div>
-            <p className="text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-1">
-              Gestão & Atendimento Pessoal
-            </p>
-            <div className="divide-y divide-border/25">
-              <ProfileMenuItem label="Meus Serviços" description="Duração dos serviços que você atende" onClick={() => navigate(`${basePath}/servicos`)} />
-              <ProfileMenuItem label="Clientes" description="Seus clientes atendidos" onClick={() => navigate(`${basePath}/clientes?mode=meus`)} />
-              <ProfileMenuItem label="Avaliação" description="Notas e comentários dos seus clientes" onClick={() => navigate(`${basePath}/avaliacoes`)} />
-              <ProfileMenuItem label="Horário de funcionamento" description="Seus dias e horários de trabalho" onClick={() => navigate(`${basePath}/horarios`)} />
-              <ProfileMenuItem label="Portfólio" description="Fotos dos seus melhores cortes" onClick={() => navigate(`${basePath}/portfolio`)} />
-              <ProfileMenuItem label="Relatórios" description="Estatísticas e desempenho do seu trabalho" onClick={() => navigate(`${basePath}/relatorios`)} />
-              <ProfileMenuItem
-                label="Suporte"
-                description="Fale com nosso time de atendimento"
-                onClick={() => window.open("https://wa.me/5511963390043?text=" + encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"), "_blank", "noopener,noreferrer")}
-              />
-            </div>
-          </div>
-
-          {/* Seção: Conta & Ajustes */}
-          <div>
-            <p className="text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-1">
-              Conta & Ajustes
-            </p>
-            <div className="divide-y divide-border/25">
-              <ProfileMenuItem label="Financeiro" description="Receitas, extrato e formas de pagamento" onClick={() => navigate(`${basePath}/financeiro`)} />
-              <ProfileMenuItem label="WhatsApp" description="Conecte para confirmações e lembretes" onClick={() => navigate(`${basePath}/whatsapp`)} />
-              <ProfileMenuItem label="Instagram" description="Conecte seu perfil e exiba seus cortes" onClick={() => navigate(`${basePath}/instagram`)} />
-              <ProfileMenuItem label="Meus Dados" description="Foto, identificação, contato e endereço" onClick={() => navigate(`${basePath}/meus-dados`)} />
-              <ProfileMenuItem label="Segurança" description="Senha, autenticação e acessos" onClick={() => navigate(`${basePath}/seguranca`)} />
-            </div>
+          {/* Configurações Gerais e Relatórios — item direto sem título redundante */}
+          <div className="divide-y divide-border/25">
+            <ProfileMenuItem
+              label="Configurações gerais"
+              description="Horários, serviços, clientes, equipe e dados"
+              onClick={handleConfigBarbeariaClick}
+            />
+            <ProfileMenuItem
+              label="Relatórios"
+              description="Estatísticas, faturamento e desempenho"
+              onClick={() => navigate(`${basePath}/relatorios`)}
+            />
           </div>
 
           {/* ═══ BANNER DO INSTAGRAM ═══ */}
@@ -438,6 +512,42 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
             barbeiroId={barberContext.barbeiroId}
             basePath={basePath}
           />
+
+          {/* ═══ CARROSSEL DO PORTFÓLIO ═══ */}
+          <ProfilePortfolioCarousel
+            barbeiroId={barberContext.barbeiroId}
+            tenantId={barberContext.tenantId}
+            basePath={basePath}
+          />
+
+          {/* ═══ SUPORTE ESTRATÉGICO ═══ */}
+          <button
+            type="button"
+            onClick={() =>
+              window.open(
+                "https://wa.me/5511963390043?text=" +
+                  encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"),
+                "_blank",
+                "noopener,noreferrer"
+              )
+            }
+            className="w-full rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/50 p-3.5 flex items-center justify-between gap-3 text-left transition-all active:scale-[0.99] group shadow-xs cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-secondary border border-border/50 flex items-center justify-center text-foreground shrink-0">
+                <MessageSquare className="w-4 h-4 stroke-[2]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13.5px] font-medium text-foreground leading-tight">
+                  Precisa de ajuda?
+                </p>
+                <p className="text-[11.5px] text-muted-foreground mt-0.5 truncate">
+                  Fale com nosso time de atendimento no WhatsApp
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+          </button>
 
           {/* ═══ RODAPÉ: Sair da conta (esq) + Tema claro/escuro (dir) ═══ */}
           <div className="pt-4 pb-8 flex items-center justify-between">
@@ -469,7 +579,6 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
           </div>
         </div>
       </div>
-    </div>
 
       <AvatarEditSheet
         open={avatarEditOpen}
@@ -501,7 +610,7 @@ export function BarberMobileProfile({ barberContext, basePath = "/barbeiro", isT
   );
 }
 
-/* ─── Subcomponent: item 100% sério, alinhado à tipografia e padrão Atendimento & Notificações ─── */
+/* ─── Subcomponent: item 100% sério, alinhado à tipografia e padrão Apple HIG ─── */
 function ProfileMenuItem({
   label,
   description,
@@ -535,30 +644,6 @@ function ProfileMenuItem({
         </p>
       </div>
       <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
-    </button>
-  );
-}
-
-function CampaignMenuItem({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full bg-card rounded-2xl border border-border/60 shadow-sm p-4 text-left hover:border-border active:scale-[0.99] transition-all flex items-center justify-between gap-3"
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <Megaphone className="h-5 w-5 text-foreground flex-shrink-0" strokeWidth={1.8} />
-        <div className="min-w-0">
-          <span className="text-[14.5px] font-semibold text-foreground block leading-tight">
-            Ative uma campanha
-          </span>
-          <span className="text-[12px] text-muted-foreground block truncate mt-0.5">
-            Atraia mais clientes com promoções
-          </span>
-        </div>
-      </div>
-      <span className="text-[11.5px] font-bold bg-foreground text-background px-3.5 py-1.5 rounded-full flex-shrink-0 shadow-sm">
-        Criar
-      </span>
     </button>
   );
 }
