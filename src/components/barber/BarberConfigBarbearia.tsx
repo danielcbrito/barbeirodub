@@ -418,7 +418,7 @@ export function BarberConfigBarbearia({
           label: "Serviços",
           description: "Duração pessoal e serviços que você atende na barbearia",
           keywords: ["servicos", "cortes", "precos", "valores", "duracao", "barba"],
-          onClick: () => setActiveScreen("servicos-pessoal"),
+          onClick: () => setActiveScreen("servicos"),
         },
         {
           id: "clientes",
@@ -955,71 +955,18 @@ export function BarberConfigBarbearia({
           </div>
         );
       case "servicos":
-        return (
-          <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Serviços" onBack={() => setActiveScreen("hub")} />
-            <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
-              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
-                Escolha o catálogo de serviços que deseja configurar:
-              </p>
-              <div className="divide-y divide-border/25">
-                <button
-                  type="button"
-                  onClick={() => setActiveScreen("servicos-barbearia")}
-                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
-                >
-                  <div className="min-w-0 pr-3">
-                    <p className="text-[14.5px] font-medium text-foreground leading-snug">
-                      Configurar serviços da barbearia
-                    </p>
-                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
-                      Catálogo oficial de cortes, serviços e preços da barbearia
-                    </p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveScreen("servicos-pessoal")}
-                  className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
-                >
-                  <div className="min-w-0 pr-3">
-                    <p className="text-[14.5px] font-medium text-foreground leading-snug">
-                      Configurar os seus serviços
-                    </p>
-                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
-                      Duração pessoal e serviços que você atende na barbearia
-                    </p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
-                </button>
-              </div>
-            </div>
-          </div>
-        );
       case "servicos-barbearia":
       case "servicos-planos":
+      case "servicos-pessoal":
       case "planos":
         return (
           <BarberServicosPlanos
             tenantId={tenantId}
             appBasePath={appBasePath}
-            onBack={() => setActiveScreen("servicos")}
+            onBack={() => setActiveScreen("hub")}
             defaultTab={activeScreen === "planos" ? "planos" : "servicos"}
+            barberContext={barberContext}
           />
-        );
-      case "servicos-pessoal":
-        return (
-          <div className="pb-10 min-h-app bg-background">
-            <div className="max-w-md mx-auto">
-              <BarberCortes
-                barberContext={barberContext}
-                basePath={appBasePath}
-                onBack={() => setActiveScreen(isTenantAdmin ? "servicos" : "hub")}
-              />
-            </div>
-          </div>
         );
       case "avaliacoes":
         return (
@@ -1891,6 +1838,7 @@ interface BarberServicosPlanosProps {
   appBasePath?: string;
   onBack: () => void;
   defaultTab?: "servicos" | "planos";
+  barberContext: BarberContext;
 }
 
 function BarberServicosPlanos({
@@ -1898,6 +1846,7 @@ function BarberServicosPlanos({
   appBasePath,
   onBack,
   defaultTab = "servicos",
+  barberContext,
 }: BarberServicosPlanosProps) {
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<"servicos" | "planos">(defaultTab);
@@ -1950,7 +1899,12 @@ function BarberServicosPlanos({
 
       <div className="max-w-md mx-auto">
         {tab === "servicos" ? (
-          <AdminCortes tenantId={tenantId} basePath={appBasePath} hideHeader />
+          <BarberCortes
+            barberContext={barberContext}
+            tenantId={tenantId}
+            basePath={appBasePath}
+            hideHeader
+          />
         ) : (
           <AdminPlanos tenantId={tenantId} basePath={appBasePath} hideHeader />
         )}

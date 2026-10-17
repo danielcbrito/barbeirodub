@@ -59,6 +59,8 @@ interface Props {
   barberContext: BarberContext;
   basePath?: string;
   onBack?: () => void;
+  hideHeader?: boolean;
+  tenantId?: string;
 }
 
 /** Cores para a barra lateral de cada serviço — 100% idêntico ao AdminCortes */
@@ -119,7 +121,13 @@ const durationOptions = [
  *  - Qualquer alteração espelha única e exclusivamente no agendamento do barbeiro.
  *  - Campo de Valores / Preço bloqueado com segurança para barbeiros não-admin.
  */
-export function BarberCortes({ barberContext, basePath = "/barbeiro", onBack }: Props) {
+export function BarberCortes({
+  barberContext,
+  basePath = "/barbeiro",
+  onBack,
+  hideHeader = false,
+  tenantId,
+}: Props) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -132,7 +140,7 @@ export function BarberCortes({ barberContext, basePath = "/barbeiro", onBack }: 
 
   // Tenant efetivo
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(
-    barberContext.tenantId ?? null
+    tenantId ?? barberContext.tenantId ?? null
   );
 
   // Form state — idêntico ao AdminCortes
@@ -149,6 +157,11 @@ export function BarberCortes({ barberContext, basePath = "/barbeiro", onBack }: 
 
   // Resolução do tenant_id
   useEffect(() => {
+    if (tenantId) {
+      setResolvedTenantId(tenantId);
+      return;
+    }
+
     const resolveTenant = async () => {
       try {
         const [{ data: barberById }, { data: ownerTenant }] = await Promise.all([
@@ -174,7 +187,7 @@ export function BarberCortes({ barberContext, basePath = "/barbeiro", onBack }: 
     };
 
     resolveTenant();
-  }, [barberContext.userId, barberContext.barbeiroId, barberContext.tenantId]);
+  }, [tenantId, barberContext.userId, barberContext.barbeiroId, barberContext.tenantId]);
 
   /* ── Query de serviços do catálogo + durações personalizadas do barbeiro ── */
   const { data: queryResult, isLoading: loading } = useBarberServicos(
@@ -666,15 +679,26 @@ export function BarberCortes({ barberContext, basePath = "/barbeiro", onBack }: 
       {isMobile ? (
         <div>
           {/* Header Institucional com ScheduleHeader */}
-          <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md">
-            <ScheduleHeader
-              title="Serviços e Cortes"
-              onBack={
-                onBack
-                  ? onBack
-                  : () => navigate(`${basePath}/config-barbearia`)
-              }
-            />
+          <div className={cn("bg-background/95 backdrop-blur-md", !hideHeader && "sticky top-0 z-30")}>
+            {!hideHeader && (
+              <>
+                <ScheduleHeader
+                  title="Serviços e Planos"
+                  onBack={
+                    onBack
+                      ? onBack
+                      : () => navigate(`${basePath}/config-barbearia`)
+                  }
+                />
+
+                {/* Explicação da tela idêntica ao Admin */}
+                <div className="px-4 pt-1 pb-2 max-w-md mx-auto">
+                  <p className="text-sm text-muted-foreground/60 leading-relaxed font-light">
+                    Configure os serviços disponíveis, tempo estimado de atendimento e valores cobrados.
+                  </p>
+                </div>
+              </>
+            )}
 
             {/* Campo de Busca inteligente — idêntico ao AdminCortes */}
             <div className="px-4 py-3">
@@ -818,10 +842,10 @@ export function BarberCortes({ barberContext, basePath = "/barbeiro", onBack }: 
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-xl font-bold text-foreground">
-                Serviços e Cortes
+                Serviços e Planos
               </h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {servicos.length} serviços cadastrados na barbearia
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                Configure os serviços disponíveis, tempo estimado de atendimento e valores cobrados.
               </p>
             </div>
             {isTenantAdmin && (
