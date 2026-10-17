@@ -72,9 +72,11 @@ document.documentElement.dataset.platform = platformClass;
 
 const syncViewportVars = () => {
   const root = document.documentElement;
-  const layoutHeight = (isIOS && isStandalone)
-    ? (window.screen?.height || window.innerHeight)
-    : window.innerHeight;
+  const layoutHeight =
+    window.innerHeight ||
+    (isIOS && isStandalone ? window.screen?.height : 0) ||
+    document.documentElement.clientHeight ||
+    0;
   const visualHeight = window.visualViewport?.height || layoutHeight;
   const keyboardOffset = Math.max(0, layoutHeight - visualHeight);
 

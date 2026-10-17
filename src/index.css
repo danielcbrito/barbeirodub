@@ -393,7 +393,6 @@ All colors MUST be HSL. */
     html, body, #root {
       min-height: 100%;
       min-height: 100dvh;
-      min-height: -webkit-fill-available;
     }
   }
 
@@ -1380,13 +1379,13 @@ button, a, [role="button"] {
    sem cortes, sem travar o scroll e sem bordas brancas expostas. */
 html {
   min-height: 100%;
-  min-height: -webkit-fill-available;
+  min-height: 100dvh;
   background-color: hsl(var(--background));
 }
 
 body {
   min-height: 100%;
-  min-height: -webkit-fill-available;
+  min-height: 100dvh;
   background-color: hsl(var(--background));
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -1396,7 +1395,6 @@ body {
 #root {
   min-height: 100%;
   min-height: 100dvh;
-  min-height: -webkit-fill-available;
   background-color: hsl(var(--background));
   display: flex;
   flex-direction: column;
@@ -1410,6 +1408,16 @@ html.platform-android-browser body {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y pinch-zoom;
+}
+
+/* Fix exclusivo para iPhone PWA (Tela de Início pelo Safari):
+   Garante 100% de cobertura da tela física de ponta a ponta sem cortes nem barras brancas */
+html.platform-ios-pwa,
+html.platform-ios-pwa body,
+html.platform-ios-pwa #root {
+  min-height: 100% !important;
+  min-height: 100dvh !important;
+  background-color: hsl(var(--background));
 }
 
 /* ══════════════════════════════════════════════════════════════════════
