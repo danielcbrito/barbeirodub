@@ -1100,7 +1100,7 @@ export function CarteiraPage({
   };
 
   return (
-    <div className="min-h-app bg-background text-foreground pb-32 w-full pt-0 relative">
+    <div className="w-full bg-background text-foreground pt-0 relative">
       {/* Sangria superior para overscroll / rubber-band no iOS com a cor exata do topo do gradiente */}
       <div
         className="absolute -top-[50vh] left-0 right-0 h-[50vh] bg-[#144439] pointer-events-none"

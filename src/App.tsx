@@ -347,7 +347,7 @@ const App = () => (
       persistOptions={{
         persister: queryPersister!,
         maxAge: 1000 * 60 * 60 * 24, // 24h
-        buster: "v2-lite",
+        buster: "v3-clean",
         dehydrateOptions: {
           shouldDehydrateQuery: (q) =>
             q.state.status === "success" && isCriticalFastQuery(q.queryKey),
