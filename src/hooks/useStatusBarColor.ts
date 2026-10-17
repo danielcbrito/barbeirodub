@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const DEFAULT_COLOR = "#F4F5F7";
+const DEFAULT_COLOR = "#FAFAFA";
 const DARK_APP_COLOR = "#0f0f0f";
 
 const META_NAMES = [

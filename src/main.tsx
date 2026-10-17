@@ -60,7 +60,7 @@ const isStandalone =
   (navigator as any).standalone === true;
 
 const DARK_APP_BACKGROUND = "#0f0f0f";
-const LIGHT_APP_BACKGROUND = "#F4F5F7";
+const LIGHT_APP_BACKGROUND = "#FAFAFA";
 
 const platformClass = isIOS
   ? (isStandalone ? "platform-ios-pwa" : "platform-ios-browser")
@@ -176,6 +176,10 @@ if (window.visualViewport) {
 // da bottom nav (áreas do safe-area/home indicator) porque o inline style antigo
 // permanece.
 const syncThemeBackground = () => {
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  if (path.includes("carteira") || path.includes("financeiro")) {
+    return;
+  }
   const isDark = document.documentElement.classList.contains("dark");
   const color = isDark ? DARK_APP_BACKGROUND : LIGHT_APP_BACKGROUND;
   document.documentElement.style.backgroundColor = color;

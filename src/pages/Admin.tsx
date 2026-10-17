@@ -377,7 +377,7 @@ const Admin = () => {
   // ========== LAYOUT MOBILE ==========
   if (isMobile) {
     return (
-      <div className={cn("relative min-h-app w-full", isCarteiraRoute ? "bg-[#144439]" : "bg-background")}>
+      <div className={cn("relative min-h-app w-full", (isCarteiraRoute || isFinanceiroRoute) ? "bg-[#144439]" : "bg-background")}>
         {/* Background limpo */}
 
         {/* Drawer Menu */}
@@ -391,7 +391,7 @@ const Admin = () => {
         <main
           className={cn(
             "relative min-h-[calc(100dvh-56px)]",
-            isCarteiraRoute ? "bg-[#144439]" : "bg-background",
+            (isCarteiraRoute || isFinanceiroRoute) ? "bg-[#144439]" : "bg-background",
             isImmersiveRoute && "pb-0"
           )}
           style={
@@ -453,7 +453,7 @@ const Admin = () => {
                   )
                 } />
                 <Route path="avaliacoes" element={<AdminAvaliacoes />} />
-                <Route path="financeiro" element={<AdminFinanceiro />} />
+                <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId || (adminContext?.tenantBarberIds && adminContext.tenantBarberIds.length > 0 ? adminContext.tenantBarberIds[0] : null)} userName={adminContext?.apelido || "Admin"} basePath="/admin" />} />
                 <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext?.barbeiroId ?? null} basePath="/admin/perfil" />} />
                 <Route path="servicos/*" element={<AdminServicos />} />
                 <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />

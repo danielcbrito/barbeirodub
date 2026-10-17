@@ -1100,7 +1100,12 @@ export function CarteiraPage({
   };
 
   return (
-    <div className="min-h-app bg-background text-foreground pb-32 w-full pt-0">
+    <div className="min-h-app bg-background text-foreground pb-32 w-full pt-0 relative">
+      {/* Sangria superior para overscroll / rubber-band no iOS com a cor exata do topo do gradiente */}
+      <div
+        className="absolute -top-[50vh] left-0 right-0 h-[50vh] bg-[#144439] pointer-events-none"
+        aria-hidden="true"
+      />
       {/* HEADER VERDE: O gradiente natural do próprio header ocupa o topo e a status bar do iOS */}
       <header
         className="w-full bg-gradient-to-b from-[#144439] via-[#0d2e27] to-[#071a16] text-white rounded-b-[28px] sm:rounded-b-[32px] shadow-lg relative z-10 overflow-hidden"
