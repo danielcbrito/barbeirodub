@@ -390,13 +390,13 @@ const Admin = () => {
         {/* Conteúdo Principal - padding otimizado para mobile */}
         <main
           className={cn(
-            isImmersiveRoute && !isCarteiraRoute && !isFinanceiroRoute ? "relative min-h-dvh bg-background" : "relative min-h-[calc(100dvh-56px)] bg-background",
+            isImmersiveRoute && !isCarteiraRoute && !isFinanceiroRoute ? "relative min-h-screen bg-background" : "relative min-h-[calc(100vh-56px)] bg-background",
             isImmersiveRoute && !isCarteiraRoute && !isFinanceiroRoute && "pb-0"
           )}
           style={
             isImmersiveRoute && !isCarteiraRoute && !isFinanceiroRoute
               ? undefined
-              : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
+              : { paddingBottom: "calc(7.5rem + var(--app-safe-bottom, 8px) + env(safe-area-inset-bottom, 0px))" }
           }
         >
           <div

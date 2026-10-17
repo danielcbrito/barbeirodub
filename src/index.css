@@ -27,14 +27,14 @@ All colors MUST be HSL. */
     --sar: env(safe-area-inset-right, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
-    --app-height: 100dvh;
+    --app-height: 100vh;
     --app-safe-top: var(--sat);
     --app-safe-right: var(--sar);
     --app-safe-bottom: var(--sab);
     --app-safe-left: var(--sal);
     --app-bottom-nav-bleed: 0px;
     --app-bottom-nav-offset: 0px;
-    --kb-viewport-height: 100dvh;
+    --kb-viewport-height: 100vh;
     --kb-offset: 0px;
   }
 
@@ -286,7 +286,7 @@ All colors MUST be HSL. */
     overscroll-behavior-x: none;
     overscroll-behavior-y: auto;
     min-height: 100%;
-    min-height: 100dvh;
+    min-height: 100vh;
     overflow-x: hidden;
     margin: 0;
     scroll-padding-top: calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 1rem);
@@ -346,7 +346,7 @@ All colors MUST be HSL. */
     background: hsl(var(--background));
     width: 100%;
     min-height: 100%;
-    min-height: 100dvh;
+    min-height: 100vh;
     overscroll-behavior-x: none;
     overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -381,7 +381,8 @@ All colors MUST be HSL. */
 
   #root {
     min-height: 100%;
-    min-height: 100dvh;
+    min-height: 100vh;
+    min-height: var(--app-height, 100vh);
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -392,7 +393,8 @@ All colors MUST be HSL. */
   @supports (-webkit-touch-callout: none) {
     html, body, #root {
       min-height: 100%;
-      min-height: 100dvh;
+      min-height: 100vh;
+      min-height: var(--app-height, 100vh);
     }
   }
 
@@ -1348,12 +1350,14 @@ button, a, [role="button"] {
 /* App viewport utilities */
 .min-h-app {
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: var(--app-height, 100vh);
 }
 
 .h-app {
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: var(--app-height, 100vh);
 }
 
 .pt-safe-app {
@@ -1379,13 +1383,13 @@ button, a, [role="button"] {
    sem cortes, sem travar o scroll e sem bordas brancas expostas. */
 html {
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
   background-color: hsl(var(--background));
 }
 
 body {
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
   background-color: hsl(var(--background));
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -1394,7 +1398,8 @@ body {
 
 #root {
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: var(--app-height, 100vh);
   background-color: hsl(var(--background));
   display: flex;
   flex-direction: column;
@@ -1416,7 +1421,8 @@ html.platform-ios-pwa,
 html.platform-ios-pwa body,
 html.platform-ios-pwa #root {
   min-height: 100% !important;
-  min-height: 100dvh !important;
+  min-height: 100vh !important;
+  min-height: var(--app-height, 100vh) !important;
   background-color: hsl(var(--background));
 }
 

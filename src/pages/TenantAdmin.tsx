@@ -552,13 +552,13 @@ const TenantAdmin = () => {
         ) : (
           <main
             className={cn(
-              "relative min-h-[calc(100dvh-56px)] bg-background",
+              "relative min-h-[calc(100vh-56px)] bg-background",
               (location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo")) && "pb-0 overflow-hidden"
             )}
             style={
               location.pathname.includes("/tenant/admin/promocoes") || location.pathname.includes("/disparo")
                 ? undefined
-                : { paddingBottom: "calc(5.25rem + var(--app-safe-bottom, 8px))" }
+                : { paddingBottom: "calc(7.5rem + var(--app-safe-bottom, 8px) + env(safe-area-inset-bottom, 0px))" }
             }
           >
             <div

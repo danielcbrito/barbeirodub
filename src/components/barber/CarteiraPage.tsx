@@ -1204,7 +1204,7 @@ export function CarteiraPage({
       </header>
 
       {/* CONTEÚDO PRINCIPAL (ABAIXO DO HEADER VERDE) */}
-      <div className="relative z-10 px-4 pt-5 sm:px-6">
+      <div className="relative z-10 px-4 pt-5 pb-12 sm:px-6">
         <div className="mx-auto w-full max-w-md space-y-5">
           {loading ? (
             <div className="w-full rounded-2xl min-h-[160px] flex items-center justify-center border border-border/80 bg-card">
