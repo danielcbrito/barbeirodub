@@ -981,30 +981,7 @@ export function BarberClientes({
             </div>
           )}
 
-          {/* ── CARD PLANO: TRANSFORMAR EM PLANO (Apenas se a barbearia possuir planos ativos cadastrados) ── */}
-          {!client.activePlan && tenantHasPlans && (
-            <div className="px-4">
-              <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <CreditCard className="w-4 h-4 text-foreground/80 stroke-[1.8] flex-shrink-0" />
-                    <div>
-                      <p className="text-[13px] font-semibold text-foreground">Assinatura de Plano</p>
-                      <p className="text-[11px] text-muted-foreground">Cliente avulso (sem plano ativo)</p>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setClientToConvert(client)}
-                  className="w-full flex items-center justify-center gap-2 h-11 rounded-full bg-foreground text-background text-[13px] font-semibold hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs"
-                >
-                  <Plus className="w-4 h-4" />
-                  Transformar em plano
-                </button>
-              </div>
-            </div>
-          )}
+
 
           {!client.activePlan && loyaltyEnabled && client.pontos > 0 && (
             <div className="px-4">

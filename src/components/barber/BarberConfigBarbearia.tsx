@@ -507,9 +507,9 @@ export function BarberConfigBarbearia({
         id: "clientes",
         icon: UserCheck,
         label: "Clientes",
-        description: "Todos os clientes da barbearia ou seus clientes",
+        description: "Todos os clientes cadastrados na barbearia",
         keywords: ["clientes", "contatos", "base", "historico", "crm", "fidelidade"],
-        onClick: () => setActiveScreen("clientes"),
+        onClick: () => setActiveScreen("clientes-todos"),
       },
       {
         id: "avaliacoes",
@@ -1100,7 +1100,7 @@ export function BarberConfigBarbearia({
                 barberContext={barberContext}
                 forceViewMode="todos"
                 initialUnitId={selectedUnidadeId === "todas" ? undefined : selectedUnidadeId}
-                onBack={() => setActiveScreen("clientes")}
+                onBack={() => setActiveScreen("hub")}
               />
             </div>
           </div>
@@ -1112,7 +1112,7 @@ export function BarberConfigBarbearia({
               <BarberClientes
                 barberContext={barberContext}
                 forceViewMode="meus"
-                onBack={() => setActiveScreen(isTenantAdmin ? "clientes" : "hub")}
+                onBack={() => setActiveScreen("hub")}
               />
             </div>
           </div>

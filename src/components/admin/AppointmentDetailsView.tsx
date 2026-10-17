@@ -99,12 +99,38 @@ export function AppointmentDetailsView({
   const [planUsageCount, setPlanUsageCount] = useState<number>(0);
   const [planLimit, setPlanLimit] = useState<number>(4);
   const [hasPlan, setHasPlan] = useState(false);
+  const [convertingToPlan, setConvertingToPlan] = useState(false);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+  const [hasActivePlans, setHasActivePlans] = useState(false);
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
   const [paymentJustConfirmed, setPaymentJustConfirmed] = useState(false);
   const [confirmFinalizeOpen, setConfirmFinalizeOpen] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentBarberId, setCurrentBarberId] = useState<string | null>(null);
 
-  const isPlanAppointment = appointment?.tipo_agendamento === 'plano' || appointment?.payment_method === 'plano';
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      const uid = data.user?.id || null;
+      setCurrentUserId(uid);
+      if (uid) {
+        const { data: b } = await supabase
+          .from("barbeiros")
+          .select("id")
+          .eq("user_id", uid)
+          .maybeSingle();
+        if (b?.id) setCurrentBarberId(b.id);
+      }
+    });
+  }, []);
+
+  const isPlanAppointment =
+    appointment?.tipo_agendamento === 'plano' ||
+    appointment?.tipo_agendamento === 'assinatura' ||
+    appointment?.payment_method === 'plano' ||
+    appointment?.observacoes?.toLowerCase().includes('[plano]') ||
+    appointment?.observacoes?.toLowerCase().includes('assinatura');
+
   const planInfo = usePlanPaymentInfo(appointment?.user_id || '', isPlanAppointment && !!appointment);
   const resolvedBarbeiroId = appointment?.barbeiro_id ?? barbeiroId ?? null;
 
@@ -136,12 +162,52 @@ export function AppointmentDetailsView({
 
       return { ag, tenantId };
     },
-    enabled: !!appointment?.id && (renderAsPage ? true : false /* legado: usava `open` */),
+    enabled: !!appointment?.id && (renderAsPage || open),
     staleTime: 10_000,
   });
 
   const resolvedTenantId = cupomData?.tenantId || null;
 
+  /* ── Checa se a barbearia tem fidelidade e planos ativos ── */
+  useEffect(() => {
+    let mounted = true;
+    const checkTenantConfig = async () => {
+      try {
+        let tid = resolvedTenantId;
+        if (!tid && resolvedBarbeiroId) {
+          const { data: b } = await supabase
+            .from("barbeiros")
+            .select("tenant_id")
+            .eq("id", resolvedBarbeiroId)
+            .maybeSingle();
+          tid = b?.tenant_id || null;
+        }
+
+        // 1. Checa se o programa de fidelidade está ativo
+        let promoQuery = supabase
+          .from("promocoes")
+          .select("id")
+          .eq("ativo", true);
+        if (tid) promoQuery = promoQuery.eq("tenant_id", tid);
+        const { data: promo } = await promoQuery.limit(1).maybeSingle();
+        if (mounted) setLoyaltyEnabled(Boolean(promo));
+
+        // 2. Checa se a barbearia tem planos ativos
+        let planosQuery = supabase
+          .from("planos")
+          .select("id")
+          .eq("ativo", true);
+        if (tid) planosQuery = planosQuery.eq("tenant_id", tid);
+        const { data: planos } = await planosQuery.limit(1);
+        if (mounted) setHasActivePlans(Boolean(planos && planos.length > 0));
+      } catch (err) {
+        console.warn("Erro ao buscar configuracoes de fidelidade/planos:", err);
+      }
+    };
+
+    checkTenantConfig();
+    return () => { mounted = false; };
+  }, [resolvedTenantId, resolvedBarbeiroId, appointment?.id]);
 
   const appliedCupom: AppliedCupomInfo | null = (() => {
     const ag: any = cupomData?.ag;
@@ -208,14 +274,14 @@ export function AppointmentDetailsView({
     }
   }, [appointment?.id]);
 
-
   const loadClientPoints = async () => {
     if (!appointment?.user_id) return;
     try {
       // RPC SECURITY DEFINER: funciona para barbeiro, admin, tenant_admin e TI
+      const authBarberId = currentBarberId || resolvedBarbeiroId;
       const { data, error } = await (supabase as any).rpc(
         "get_client_loyalty_for_barber_view",
-        { p_user_id: appointment.user_id, p_barbeiro_id: resolvedBarbeiroId }
+        { p_user_id: appointment.user_id, p_barbeiro_id: authBarberId }
       );
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : null;
@@ -243,35 +309,109 @@ export function AppointmentDetailsView({
   /** requiredPoints já vem da RPC acima; mantido como no-op para compatibilidade */
   const loadRequiredPoints = async () => { /* handled by loadClientPoints */ };
 
+  /** Carrega uso do plano com busca direta robusta na tabela de assinaturas */
   const loadPlanUsage = async () => {
-    if (!appointment?.user_id || !resolvedBarbeiroId) {
-      if (!mountedRef.current) return;
-      setHasPlan(false);
-      setPlanLimit(4);
-      setPlanUsageCount(0);
+    let targetUserId = appointment?.user_id;
+
+    // Se o agendamento não tiver user_id direto, tenta encontrar por nome de perfil
+    if (!targetUserId && (appointment?.profile?.nome || appointment?.client_name)) {
+      const searchName = (appointment?.profile?.nome || appointment?.client_name || "").trim();
+      if (searchName) {
+        try {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("id")
+            .ilike("nome", searchName)
+            .limit(1)
+            .maybeSingle();
+          if (prof?.id) targetUserId = prof.id;
+        } catch {}
+      }
+    }
+
+    if (!targetUserId) {
+      const isMetaPlan = isPlanAppointment;
+      if (mountedRef.current) {
+        setHasPlan(isMetaPlan);
+        setPlanLimit(4);
+        setPlanUsageCount(isMetaPlan ? 1 : 0);
+      }
       return;
     }
 
     try {
-      // Usa RPC SECURITY DEFINER para evitar bloqueio de RLS no contexto do barbeiro
-      const { data, error } = await (supabase as any).rpc("get_plan_usage_for_barber_view", {
-        p_user_id: appointment.user_id,
-        p_barbeiro_id: resolvedBarbeiroId,
-      });
+      // 1. Consulta direta na tabela de assinaturas (identifica clientes com plano ativo como Samuel dos Santos Souza)
+      const { data: directSubs, error: subErr } = await supabase
+        .from("assinaturas")
+        .select("id, status, plano_id, next_billing_date, plano:planos(id, nome, limite_agendamentos_mes)")
+        .eq("user_id", targetUserId)
+        .in("status", ["active", "pending_cash", "pending_renewal", "suspended", "trialing"])
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      if (error) throw error;
+      if (!subErr && directSubs && directSubs.length > 0) {
+        const sub = directSubs[0];
+        const rawLimit = (sub as any)?.plano?.limite_agendamentos_mes;
+        const limit = rawLimit ? Math.max(1, Number(rawLimit)) : 4;
 
-      const usage = Array.isArray(data) ? data[0] : null;
+        // Contar agendamentos do mês atual
+        const monthPrefix = new Date().toISOString().slice(0, 7);
+        const { count } = await supabase
+          .from("agendamentos")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", targetUserId)
+          .gte("data", `${monthPrefix}-01`)
+          .not("status", "in", '("cancelled_by_admin","cancelled_by_user")');
 
+        if (!mountedRef.current) return;
+        setHasPlan(true);
+        setPlanLimit(limit);
+        setPlanUsageCount(count || 0);
+        return;
+      }
+
+      // 2. Fallback via RPC SECURITY DEFINER
+      const authBarberId = currentBarberId || resolvedBarbeiroId;
+      if (authBarberId) {
+        try {
+          const { data: rpcData, error: rpcErr } = await (supabase as any).rpc("get_plan_usage_for_barber_view", {
+            p_user_id: targetUserId,
+            p_barbeiro_id: authBarberId,
+          });
+
+          if (!rpcErr && rpcData) {
+            const usage = Array.isArray(rpcData) ? rpcData[0] : null;
+            if (usage && usage.has_plan) {
+              if (!mountedRef.current) return;
+              setHasPlan(true);
+              setPlanLimit(Math.max(1, Number(usage.plan_limit || 4)));
+              setPlanUsageCount(Math.max(0, Number(usage.used_count || 0)));
+              return;
+            }
+          }
+        } catch (rpcErr) {
+          console.warn("RPC plan check error:", rpcErr);
+        }
+      }
+
+      // 3. Fallback: metadados do próprio agendamento
       if (!mountedRef.current) return;
-      setHasPlan(Boolean(usage?.has_plan));
-      setPlanLimit(Math.max(1, Number(usage?.plan_limit || 4)));
-      setPlanUsageCount(Math.max(0, Number(usage?.used_count || 0)));
+      if (isPlanAppointment) {
+        setHasPlan(true);
+        setPlanLimit(4);
+        setPlanUsageCount(1);
+      } else {
+        setHasPlan(false);
+        setPlanLimit(4);
+        setPlanUsageCount(0);
+      }
     } catch (error) {
       console.error("Error loading plan usage:", error);
-      setHasPlan(false);
-      setPlanLimit(4);
-      setPlanUsageCount(0);
+      if (mountedRef.current) {
+        setHasPlan(isPlanAppointment);
+        setPlanLimit(4);
+        setPlanUsageCount(isPlanAppointment ? 1 : 0);
+      }
     }
   };
 
@@ -457,14 +597,6 @@ export function AppointmentDetailsView({
     }
   };
 
-  const [convertingToPlan, setConvertingToPlan] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setCurrentUserId(data.user?.id || null);
-    });
-  }, []);
 
   if (convertingToPlan && appointment) {
     return createPortal(
@@ -675,88 +807,89 @@ export function AppointmentDetailsView({
       )}
 
       {/* ── PLANO / FIDELIDADE ── */}
-      <div className="px-4">
-        <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-sm">
-          {isPlanAppointment || hasPlan ? (
-            <>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <CalendarCheck className="w-4 h-4 text-foreground/80 stroke-[1.8] flex-shrink-0" />
-                  <div>
-                    <p className="text-[13px] font-semibold text-foreground">Uso do Plano</p>
-                    <p className="text-[10px] text-muted-foreground">Mês atual</p>
-                  </div>
+      {isPlanAppointment || hasPlan ? (
+        <div className="px-4">
+          <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <CalendarCheck className="w-4 h-4 text-foreground/80 stroke-[1.8] flex-shrink-0" />
+                <div>
+                  <p className="text-[13px] font-semibold text-foreground">Uso do Plano</p>
+                  <p className="text-[10px] text-muted-foreground">Mês atual</p>
                 </div>
-                <span className="text-[15px] font-bold text-foreground tabular-nums">
-                  {planUsageCount}/{planLimit}
-                </span>
               </div>
-              <div className="flex gap-1.5 flex-wrap pt-1">
-                {Array.from({ length: planLimit }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "h-2 flex-1 min-w-[14px] rounded-full transition-all",
-                      i < planUsageCount ? "bg-foreground" : "bg-secondary"
-                    )}
-                  />
-                ))}
-              </div>
-              {planUsageCount >= planLimit ? (
-                <p className="text-[11px] font-medium text-amber-500">Limite mensal atingido</p>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  {planLimit - planUsageCount} {planLimit - planUsageCount === 1 ? "corte restante" : "cortes restantes"}
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <Award className="w-4 h-4 text-amber-500 stroke-[1.8] flex-shrink-0" />
-                  <div>
-                    <p className="text-[13px] font-semibold text-foreground">Programa Fidelidade</p>
-                    <p className="text-[10px] text-muted-foreground">Pontos acumulados</p>
-                  </div>
-                </div>
-                <span className="text-[15px] font-bold text-foreground tabular-nums">
-                  {clientPoints}/{requiredPoints}
-                </span>
-              </div>
-              <div className="flex gap-1.5 flex-wrap pt-1">
-                {Array.from({ length: requiredPoints }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "h-2 flex-1 min-w-[12px] rounded-full transition-all",
-                      i < clientPoints ? "bg-amber-500" : "bg-secondary"
-                    )}
-                  />
-                ))}
-              </div>
-              {clientPoints >= requiredPoints ? (
-                <p className="text-[11px] font-medium text-amber-500">Próximo corte gratuito disponível!</p>
-              ) : appointment.ponto_liberado ? (
-                <p className="text-[11px] text-emerald-500">Ponto registrado para este atendimento</p>
-              ) : null}
-
-              {isActiveStatus && !hasPlan && !isPlanAppointment && (
-                <div className="pt-2 border-t border-border/40">
-                  <button
-                    type="button"
-                    onClick={() => setConvertingToPlan(true)}
-                    className="w-full h-9 rounded-xl bg-secondary/50 hover:bg-secondary text-foreground text-[12px] font-medium flex items-center justify-center gap-1.5 transition-colors active:scale-[0.98]"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Vincular cliente a um plano</span>
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+              <span className="text-[15px] font-bold text-foreground tabular-nums">
+                {planUsageCount}/{planLimit}
+              </span>
+            </div>
+            <div className="flex gap-1.5 flex-wrap pt-1">
+              {Array.from({ length: planLimit }).map((_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "h-2 flex-1 min-w-[14px] rounded-full transition-all",
+                    i < planUsageCount ? "bg-foreground" : "bg-secondary"
+                  )}
+                />
+              ))}
+            </div>
+            {planUsageCount >= planLimit ? (
+              <p className="text-[11px] font-medium text-amber-500">Limite mensal atingido</p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                {planLimit - planUsageCount} {planLimit - planUsageCount === 1 ? "corte restante" : "cortes restantes"}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      ) : loyaltyEnabled ? (
+        <div className="px-4">
+          <div className="rounded-2xl bg-card border border-border/60 p-4 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Award className="w-5 h-5 text-amber-500 stroke-[1.8] flex-shrink-0" />
+                <div>
+                  <p className="text-[13px] font-semibold text-foreground">Programa Fidelidade</p>
+                  <p className="text-[10px] text-muted-foreground">Pontos acumulados</p>
+                </div>
+              </div>
+              <span className="text-[15px] font-bold text-foreground tabular-nums">
+                {clientPoints}/{requiredPoints}
+              </span>
+            </div>
+            <div className="flex gap-1.5 flex-wrap pt-1">
+              {Array.from({ length: requiredPoints }).map((_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "h-2 flex-1 min-w-[12px] rounded-full transition-all",
+                    i < clientPoints ? "bg-amber-500" : "bg-secondary"
+                  )}
+                />
+              ))}
+            </div>
+            {clientPoints >= requiredPoints ? (
+              <p className="text-[11px] font-medium text-amber-500">Próximo corte gratuito disponível!</p>
+            ) : appointment.ponto_liberado ? (
+              <p className="text-[11px] text-emerald-500">Ponto registrado para este atendimento</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── BOTAO VINCULAR CLIENTE A UM PLANO (Apenas se a barbearia tiver planos ativos E cliente não for de plano) ── */}
+      {isActiveStatus && !hasPlan && !isPlanAppointment && hasActivePlans && (
+        <div className="px-4">
+          <button
+            type="button"
+            onClick={() => setConvertingToPlan(true)}
+            className="w-full h-11 rounded-2xl bg-card border border-border/60 hover:bg-secondary/40 text-foreground text-[13px] font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-xs"
+          >
+            <Plus className="w-4 h-4 text-foreground/70" />
+            <span>Vincular cliente a um plano</span>
+          </button>
+        </div>
+      )}
 
       {/* ── HISTÓRICO DE VISITAS ── */}
       {history.length > 0 && (
@@ -854,18 +987,6 @@ export function AppointmentDetailsView({
                 )}
               </div>
             )}
-
-            {/* Opção discreta: Vincular ao Plano */}
-            {isActiveStatus && !hasPlan && !isPlanAppointment && (
-              <button
-                type="button"
-                onClick={() => setConvertingToPlan(true)}
-                className="w-full py-0.5 text-center text-[11px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors flex items-center justify-center gap-1"
-              >
-                <Plus className="w-3 h-3" />
-                <span>Vincular ao plano</span>
-              </button>
-            )}
           </div>
         )}
       </SheetContent>
@@ -961,18 +1082,6 @@ export function AppointmentDetailsView({
                 </button>
               )}
             </div>
-          )}
-
-          {/* Opção discreta: Vincular ao Plano */}
-          {isActiveStatus && !hasPlan && !isPlanAppointment && (
-            <button
-              type="button"
-              onClick={() => setConvertingToPlan(true)}
-              className="w-full py-0.5 text-center text-[11px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors flex items-center justify-center gap-1"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Vincular ao plano</span>
-            </button>
           )}
         </div>
       )}

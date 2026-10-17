@@ -706,13 +706,6 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
                 </button>
               )}
 
-              <button
-                onClick={() => setClientToConvert(client)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors"
-              >
-                <CreditCard className="w-4.5 h-4.5 text-primary" />
-                <span className="text-[13px] font-medium text-primary">Transformar cliente em plano</span>
-              </button>
 
               <button
                 onClick={() => confirmBlock(client)}
