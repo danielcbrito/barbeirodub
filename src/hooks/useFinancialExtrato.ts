@@ -115,90 +115,11 @@ export function useFinancialExtrato(
     queryFn: async (): Promise<PaginatedExtrato> => {
       const txns: Transaction[] = [];
 
-      /* ── Verificar subconta Asaas ── */
-      let hasSubaccount = false;
-      if (barbeiroId) {
-        const { data: bData } = await supabase
-          .from("barbeiros")
-          .select("asaas_account_id")
-          .eq("id", barbeiroId)
-          .maybeSingle();
-        hasSubaccount = !!bData?.asaas_account_id;
-      }
-
-      /* ── Asaas: dados vêm da API externa (sem paginação local) ── */
-      if (barbeiroId && hasSubaccount) {
-        try {
-          const { data: asaasData, error: asaasErr } = await supabase.functions.invoke(
-            "get-barber-asaas-data",
-            { body: { barbeiro_id: barbeiroId } }
-          );
-          if (!asaasErr && asaasData?.transactions) {
-            for (const t of asaasData.transactions) {
-              const isCredit = t.type === "PAYMENT_RECEIVED" || t.type === "DEPOSIT" || Number(t.value) > 0;
-              txns.push({
-                id: t.id, data: t.date || "",
-                descricao: t.description || "Movimentação Asaas",
-                tipo: isCredit ? "entrada" : t.type?.includes("FEE") ? "taxa" : "saida",
-                valor: Math.abs(Number(t.netValue || t.value || 0)),
-                status: t.status === "CONFIRMED" ? "Concluído" : "Pendente",
-                categoria: t.type === "TRANSFER" ? "saque" : t.type === "PAYMENT_RECEIVED" ? "comissao" : t.type === "DEPOSIT" ? "deposito" : t.type?.includes("FEE") ? "taxa" : "comissao",
-              });
-            }
-          }
-        } catch {
-          return await fetchLocalPaginated(txns, userId!, barbeiroId, pagina);
-        }
-        /* Paginação client-side para dados Asaas (API não suporta offset) */
-        txns.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-        const total = txns.length;
-        const start = pagina * ITENS_POR_PAGINA;
-        return {
-          transacoes: txns.slice(start, start + ITENS_POR_PAGINA),
-          total,
-          totalPaginas: Math.ceil(total / ITENS_POR_PAGINA),
-        };
-      }
-
-      /* ── Barbeiro sem subconta: paginação no banco ── */
-      if (barbeiroId && !hasSubaccount) {
-        return await fetchLocalPaginatedWithTaxes(barbeiroId, userId!, pagina);
-      }
-
-      /* ── Admin: dados Asaas ou local ── */
-      if (role === "admin") {
-        try {
-          const { data: asaasData, error: asaasErr } = await supabase.functions.invoke(
-            "get-asaas-financial-data",
-            { body: { dateFrom: null, dateTo: null } }
-          );
-          if (!asaasErr && asaasData?.transactions) {
-            for (const t of asaasData.transactions) {
-              txns.push({
-                id: t.id, data: t.date || "",
-                descricao: t.description || "Pagamento",
-                tipo: t.status === "REFUNDED" ? "saida" : "entrada",
-                valor: Math.abs(Number(t.netValue || t.value || 0)),
-                status: t.status === "RECEIVED" || t.status === "CONFIRMED" ? "Concluído" : "Pendente",
-                categoria: "pagamento",
-              });
-            }
-          }
-        } catch {
-          return await fetchLocalPaginated(txns, userId!, barbeiroId, pagina);
-        }
-        txns.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-        const total = txns.length;
-        const start = pagina * ITENS_POR_PAGINA;
-        return {
-          transacoes: txns.slice(start, start + ITENS_POR_PAGINA),
-          total,
-          totalPaginas: Math.ceil(total / ITENS_POR_PAGINA),
-        };
-      }
+      if (!userId) return { transacoes: [], total: 0, totalPaginas: 0 };
+      if (barbeiroId) return await fetchLocalPaginatedWithTaxes(barbeiroId, userId, pagina);
 
       /* ── Fallback local ── */
-      return await fetchLocalPaginated(txns, userId!, barbeiroId, pagina);
+      return await fetchLocalPaginated(txns, userId, barbeiroId, pagina);
     },
     staleTime: STALE_TIMES.FINANCEIRO,
     enabled: !!userId,

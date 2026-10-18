@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { invokeAuthenticatedFunction } from '@/lib/invokeAuthenticatedFunction';
 import { supabase } from "@/integrations/supabase/client";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -61,12 +62,6 @@ const PAYMENT_OPTIONS: PaymentOption[] = [
     label: "PIX",
     sublabel: "Pagamento instantâneo",
     icon: <QrCode className="w-5 h-5" />,
-  },
-  {
-    value: "credit_card",
-    label: "Cartão de Crédito",
-    sublabel: "Débito automático",
-    icon: <CreditCard className="w-5 h-5" />,
   },
   {
     value: "cash",
@@ -120,7 +115,7 @@ export function RenovacaoSheet({
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("renew-subscription", {
+      const { data, error } = await invokeAuthenticatedFunction("renew-subscription", {
         body: {
           assinatura_id: assinaturaId,
           forma_pagamento: formaPagamento,
@@ -129,10 +124,10 @@ export function RenovacaoSheet({
 
       if (error) throw new Error(error.message);
 
-      const result = data;
+      const result = data?.data ?? data;
 
       if (!result?.success && result?.success !== undefined) {
-        toast.error(result?.error || "Não foi possível renovar o plano");
+        toast.error(result?.error?.message || result?.error || "Não foi possível renovar o plano");
         setLoading(false);
         return;
       }
@@ -150,6 +145,7 @@ export function RenovacaoSheet({
           qr_code: result.pix_qr_code,
           copia_cola: result.pix_copia_cola || "",
         });
+        setInitialRenovacoes(result.initial_renovacoes ?? 0);
         setStep("pix");
         setLoading(false);
         return;
@@ -399,7 +395,7 @@ export function RenovacaoSheet({
                   <div className="flex justify-center">
                     <div className="bg-card border border-border rounded-2xl p-4">
                       <img
-                        src={`data:image/png;base64,${pixData.qr_code}`}
+                        src={pixData.qr_code.startsWith("https://") || pixData.qr_code.startsWith("data:") ? pixData.qr_code : `data:image/png;base64,${pixData.qr_code}`}
                         alt="QR Code PIX"
                         className="w-[200px] h-[200px]"
                       />

@@ -496,7 +496,7 @@ export function ProfileSettingsPage({
                   "Agendamentos e avaliações",
                   "Serviços, planos e promoções",
                   "Carteira digital e financeiro",
-                  "Subconta bancária (Asaas)",
+                  "Vínculo com a carteira (conta bancária não é encerrada)",
                   "WhatsApp (Evolution API)",
                   "Templates de mensagens",
                 ].map((text) => (

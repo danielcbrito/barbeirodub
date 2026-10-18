@@ -114,29 +114,7 @@ export function useBarberDados(barbeiroId: string) {
 
       if (error) throw error;
 
-      // Se CPF e email preenchidos, verificar/criar subconta Asaas
-      if (current.cpf?.trim() && current.email?.trim()) {
-        const { data: barber } = await supabase
-          .from("barbeiros")
-          .select("asaas_account_id")
-          .eq("id", barbeiroId)
-          .single();
-
-        if (!barber?.asaas_account_id) {
-          try {
-            await supabase.functions.invoke("create-asaas-subaccount", {
-              body: { barbeiro_id: barbeiroId },
-            });
-            toast.success("Dados salvos e conta financeira criada!");
-          } catch {
-            toast.success("Dados salvos (conta financeira será configurada em breve)");
-          }
-        } else {
-          toast.success("Dados salvos com sucesso");
-        }
-      } else {
-        toast.success("Dados salvos com sucesso");
-      }
+      toast.success("Dados salvos com sucesso");
 
       setOriginalData({ ...current });
       // Invalida cache para refletir mudanças

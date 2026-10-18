@@ -33,7 +33,7 @@ interface CachedSetup {
  * Verifica: foto, dados pessoais, endereço, serviços, horários, WhatsApp e carteira.
  *
  * Endereço: verifica barbeiros_private E informacoes_empresa (admin/tenant).
- * Carteira: verifica Woovi, Asaas legado, conta financeira configurada ou chaves PIX cadastradas.
+ * Carteira: verifica Woovi, conta financeira configurada ou chaves PIX cadastradas.
  *
  * Perf: hidrata sincronicamente do localStorage — mesma metodologia da agenda.
  * Cold start renderiza em ~0ms com o último snapshot enquanto revalida em background.
@@ -77,7 +77,7 @@ export function useSetupCompletion({
       // ── Fase 1: buscar barbeiro para descobrir tenant_id ──
       const barbeiroRes = await supabase
         .from("barbeiros")
-        .select("foto_url, asaas_account_id, woovi_pix_key, conta_configurada, conta_financeira_id, tenant_id")
+        .select("foto_url, woovi_pix_key, conta_configurada, conta_financeira_id, tenant_id")
         .eq("id", barbeiroId)
         .maybeSingle();
 
@@ -195,12 +195,10 @@ export function useSetupCompletion({
       // ── WhatsApp ──
       const hasWhatsApp = (whatsappRes.data as any)?.status === "connected";
 
-      // ── Carteira: Woovi, Asaas legado, conta financeira configurada ou chaves PIX cadastradas ──
+      // ── Carteira: Woovi, conta financeira configurada ou chaves PIX cadastradas ──
       const hasCarteira =
         !!barbeiroRes.data?.woovi_pix_key ||
-        !!barbeiroRes.data?.asaas_account_id ||
         (!!barbeiroRes.data?.conta_configurada && !!barbeiroRes.data?.conta_financeira_id) ||
-        !!(privateRes.data as any)?.asaas_api_key ||
         (pixRes.data?.length || 0) > 0 ||
         (bankRes.data?.length || 0) > 0 ||
         (depositRes.data?.length || 0) > 0;

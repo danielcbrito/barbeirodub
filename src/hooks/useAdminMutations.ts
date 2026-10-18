@@ -604,7 +604,6 @@ export function useCriarBarbeiro(tenantId: string) {
 
 /**
  * Soft-delete completo de barbeiro com cascade:
- * 1. Desativa subconta Asaas (non-blocking)
  * 2. Remove dados vinculados (horários, comissões, avaliações, tokens)
  * 3. Cancela agendamentos futuros pendentes/confirmados
  * 4. Desvincula agendamentos passados
@@ -616,23 +615,6 @@ export function useDeletarBarbeiro(tenantId: string) {
 
   return useMutation({
     mutationFn: async (barbeiroId: string) => {
-      // 0. Desativar subconta Asaas (non-blocking)
-      try {
-        const { data: barberData } = await supabase
-          .from("barbeiros")
-          .select("asaas_account_id")
-          .eq("id", barbeiroId)
-          .single();
-
-        if (barberData?.asaas_account_id) {
-          await supabase.functions.invoke("delete-asaas-subaccount", {
-            body: { barbeiro_id: barbeiroId },
-          });
-        }
-      } catch (asaasErr) {
-        console.error("[useDeletarBarbeiro] Asaas cleanup (non-blocking):", asaasErr);
-      }
-
       // 1. Cascade: remover dados vinculados
       await supabase.from("horarios_excepcionais_barbeiro").delete().eq("barbeiro_id", barbeiroId);
       await supabase.from("configuracoes_horario_barbeiro").delete().eq("barbeiro_id", barbeiroId);
@@ -661,8 +643,6 @@ export function useDeletarBarbeiro(tenantId: string) {
         .update({
           deleted_at: new Date().toISOString(),
           ativo: false,
-          asaas_account_id: null,
-          asaas_wallet_id: null,
         })
         .eq("id", barbeiroId);
 

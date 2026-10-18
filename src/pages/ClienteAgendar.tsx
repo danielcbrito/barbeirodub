@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { invokeAuthenticatedFunction } from '@/lib/invokeAuthenticatedFunction';
+import { isConfirmedWooviPayment } from '../../supabase/functions/_shared/woovi-payment-policy';
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, ChevronLeft, Clock, Check, Copy, Crown, Banknote } from "lucide-react";
 import { toast } from "sonner";
@@ -104,7 +106,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   // Durações personalizadas do barbeiro selecionado
   const [barberDurations, setBarberDurations] = useState<Map<string, number>>(new Map());
 
-  // Indica se o barbeiro selecionado possui banco (subconta Asaas) vinculado
+  // Indica se o barbeiro selecionado possui banco (subconta Woovi) vinculado
   const [barberHasBank, setBarberHasBank] = useState(false);
 
   // Verificação se usuário pode usar o plano (fluxo com servico_id)
@@ -177,7 +179,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           .eq("barbeiro_id", selectedBarberId),
         supabase
           .from("barbeiros")
-          .select("asaas_account_id, woovi_pix_key")
+          .select("woovi_pix_key")
           .eq("id", selectedBarberId)
           .single(),
       ]);
@@ -186,9 +188,9 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       (durationsRes.data || []).forEach((d) => map.set(d.servico_id, d.duracao_personalizada));
       setBarberDurations(map);
 
-      // Carteira do barbeiro: aceita Woovi (novo gateway) OU Asaas (legado)
+      // Carteira do barbeiro: Woovi
       const row: any = barberRes.data;
-      const hasBank = !!row?.woovi_pix_key || !!row?.asaas_account_id;
+      const hasBank = !!row?.woovi_pix_key;
       setBarberHasBank(hasBank);
     };
 
@@ -316,14 +318,14 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       const pollInterval = setInterval(async () => {
         try {
           const { data: pendingBooking, error } = await supabase
-            .from("pending_bookings")
-            .select("id")
-            .eq("id", pendingBookingId)
+            .from("woovi_charges")
+            .select("status")
+            .eq("correlation_id", `book-${pendingBookingId}`)
             .maybeSingle();
 
           if (error) return;
 
-          if (!pendingBooking) {
+          if (isConfirmedWooviPayment(pendingBooking?.status)) {
             setPaymentConfirmed(true);
             clearInterval(pollInterval);
             toast.success("Pagamento confirmado!");
@@ -869,7 +871,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         };
       }
 
-      const { data, error } = await supabase.functions.invoke('create-payment', {
+      const { data, error } = await invokeAuthenticatedFunction('create-payment', {
         body: payload,
       });
 
@@ -901,9 +903,9 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         
         toast.success("Agendamento criado! Pague na barbearia.");
         navigate("/cliente");
-      } else if (paymentMethod === 'pix' && data.asaasPayment?.pixQrCode) {
-        setPixQrCode(data.asaasPayment.pixQrCode.encodedImage);
-        setPixPayload(data.asaasPayment.pixQrCode.payload);
+      } else if (paymentMethod === 'pix' && data.wooviPayment?.pixQrCode) {
+        setPixQrCode(data.wooviPayment.pixQrCode.encodedImage);
+        setPixPayload(data.wooviPayment.pixQrCode.payload);
         setPendingBookingId(data.pendingBookingId || null);
         toast.success("QR Code gerado! Escaneie para pagar.");
         setStep(6);
@@ -911,7 +913,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         sessionStorage.removeItem('isRescheduling');
         sessionStorage.removeItem('rescheduleAppointmentId');
         
-        if (data.asaasPayment?.status === 'CONFIRMED') {
+        if (data.wooviPayment?.status === 'CONFIRMED') {
           toast.success("Pagamento aprovado! Agendamento confirmado.");
           navigate("/cliente");
         } else {
@@ -1771,14 +1773,6 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                     />
 
                     <PaymentOption
-                      value="card"
-                      selected={paymentMethod === 'card'}
-                      onSelect={() => setPaymentMethod('card')}
-                      title="Cartão de Crédito"
-                      description="Pagamento aprovado na hora"
-                    />
-
-                    <PaymentOption
                       value="cash"
                       selected={paymentMethod === 'cash'}
                       onSelect={() => setPaymentMethod('cash')}
@@ -2276,7 +2270,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                   {/* QR Code */}
                   <div className="bg-white rounded-2xl p-6 mb-6 flex justify-center">
                     <img 
-                      src={`data:image/png;base64,${pixQrCode}`} 
+                      src={pixQrCode.startsWith("https://") || pixQrCode.startsWith("data:") ? pixQrCode : `data:image/png;base64,${pixQrCode}`} 
                       alt="QR Code PIX" 
                       className="w-52 h-52"
                     />
