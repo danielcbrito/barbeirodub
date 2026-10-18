@@ -62,7 +62,9 @@ Deno.serve(async (req) => {
     console.log("[renew-subscription] Início:", { assinatura_id, forma_pagamento, userId: user.id });
 
     // ─── Step 3: Chamar RPC renovar_plano_cliente ───
-    const { data: rpcResult, error: rpcError } = await supabase.rpc("renovar_plano_cliente", {
+    const { data: rpcResult, error: rpcError } = original.status === 'pending_renewal' && forma_pagamento === 'pix'
+      ? { data: { success: true, novo_ciclo_fim: null, error: null, usos_restantes: null }, error: null }
+      : await supabase.rpc("renovar_plano_cliente", {
       p_assinatura_id: assinatura_id,
       p_forma_pagamento: forma_pagamento,
     });

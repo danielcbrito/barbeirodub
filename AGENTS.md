@@ -19,3 +19,7 @@ Todas as alterações, novos componentes, telas e fluxos no sistema Dub / Barbei
 
 ## Authenticated client operations
 - Call protected client-management functions through the shared authenticated invocation helper; it sends the current session token, refreshes once on 401, and returns recoverable errors without bypassing permissions.
+
+## Payment architecture
+- Create online Pix charges through the shared charge helper and settle them through the service-only atomic confirmation function after bank revalidation; this prevents duplicate financial writes and untrusted client prices.
+- Preserve historical provider columns and migrations as audit records, not as active integration paths; removing a provider must not erase financial history.

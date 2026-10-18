@@ -1,1 +1,4 @@
 project_id = "djtpzvujzmrrslirzwun"
+
+[functions.woovi-webhook]
+verify_jwt = false

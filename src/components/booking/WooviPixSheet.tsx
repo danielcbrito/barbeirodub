@@ -12,6 +12,7 @@
  */
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -42,11 +43,11 @@ export function WooviPixSheet({ open, onOpenChange, agendamentoId, onPaid }: Pro
   const generate = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("woovi-create-charge", {
+      const { data, error } = await invokeAuthenticatedFunction("woovi-create-charge", {
         body: { agendamento_id: agendamentoId },
       });
       if (error) throw error;
-      if (data?.success) setCharge(data.data);
+      if (data?.ok) setCharge(data);
       else throw new Error(data?.error?.message ?? "Falha ao gerar cobrança");
     } catch (err) {
       toast.error((err as Error).message);

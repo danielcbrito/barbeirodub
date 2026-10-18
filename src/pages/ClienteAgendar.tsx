@@ -838,6 +838,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       const mainService = selectedServices[0];
       const bookingData = {
         servico_id: mainService.id,
+        servico_ids: selectedServices.map(service => service.id),
         barbeiro_id: selectedBarberId,
         data: format(selectedDate, 'yyyy-MM-dd'),
         hora: selectedTime,

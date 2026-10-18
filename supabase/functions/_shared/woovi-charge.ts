@@ -1,5 +1,5 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { wooviFetch } from './woovi-client.ts';
+import { wooviFetch, WooviError } from './woovi-client.ts';
 
 interface ChargeInput {
   correlationID: string;
@@ -26,11 +26,18 @@ export async function createWooviCharge(admin: SupabaseClient<any>, input: Charg
   const { data: existing, error: existingError } = await admin.from('woovi_charges').select('value_centavos, user_id, barbeiro_id').eq('correlation_id', input.correlationID).single();
   if (existingError) throw existingError;
   if (existing.user_id !== input.userId || existing.barbeiro_id !== input.barberId || existing.value_centavos !== cents) throw new Error('CHARGE_INTENT_MISMATCH');
-  const response = await wooviFetch<ChargeResponse>('/api/v1/charge', { method: 'POST', body: {
-    correlationID: input.correlationID, value: cents, comment: input.comment,
-    splits: [{ splitType: 'SPLIT_SUB_ACCOUNT', pixKey: barber.woovi_pix_key, value: cents }],
-  } });
+  let response: ChargeResponse;
+  try {
+    response = await wooviFetch<ChargeResponse>(`/api/v1/charge/${encodeURIComponent(input.correlationID)}`);
+  } catch (error) {
+    if (!(error instanceof WooviError) || error.status !== 404) throw error;
+    response = await wooviFetch<ChargeResponse>('/api/v1/charge', { method: 'POST', body: {
+      correlationID: input.correlationID, value: cents, comment: input.comment,
+      splits: [{ splitType: 'SPLIT_SUB_ACCOUNT', pixKey: barber.woovi_pix_key, value: cents }],
+    } });
+  }
   const charge = response.charge;
+  if (charge?.value !== cents) throw new Error('BANK_CHARGE_VALUE_MISMATCH');
   if (!charge?.brCode) throw new Error('Woovi não retornou código Pix; cobrança precisa ser conferida antes de tentar novamente');
   const { error: saveError } = await admin.from('woovi_charges').update({
     charge_id: charge.identifier ?? null, br_code: charge.brCode, qr_code_image: charge.qrCodeImage ?? null,
