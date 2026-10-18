@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createWooviCharge } from '../_shared/woovi-charge.ts';
+import { assertWooviMethod } from '../_shared/woovi-payment-policy.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
 
 const corsHeaders = {
@@ -355,6 +357,12 @@ serve(async (req) => {
 
     const { bookingData, metodo, customerInfo, cardInfo, rescheduleFromId }: CreatePaymentRequest = await req.json();
 
+    assertWooviMethod(metodo);
+    if (rescheduleFromId) {
+      const { data: owned } = await supabase.from('agendamentos').select('id').eq('id', rescheduleFromId).eq('user_id', user.id).maybeSingle();
+      if (!owned) throw new Error('Agendamento anterior não pertence ao cliente');
+    }
+
     console.log('Received payment request:', { bookingData, metodo, hasCustomerInfo: !!customerInfo, hasCardInfo: !!cardInfo, isRescheduling: !!rescheduleFromId });
 
     // ============================================
@@ -383,7 +391,7 @@ serve(async (req) => {
     }
     console.log('[create-payment] Horário DISPONÍVEL, prosseguindo...');
 
-    // Fetch user profile for name and CPF used in Asaas
+    // Fetch user profile for name and CPF used in payment validation
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('nome, cpf')
@@ -394,7 +402,7 @@ serve(async (req) => {
       console.warn('Profile not found for user, proceeding with limited data:', { userId: user.id, error: profileError?.message });
     }
 
-    // Validate CPF if payment requires Asaas (PIX or Card)
+    // Validate CPF if payment requires profile validation (PIX or Card)
     if ((metodo === 'pix' || metodo === 'card') && profile?.cpf && !validateCPF(profile.cpf)) {
       console.error('Invalid CPF detected:', profile.cpf);
       return new Response(
@@ -586,340 +594,22 @@ serve(async (req) => {
 
     console.log('Pending booking created:', pendingBooking.id);
 
-    // Now integrate with Asaas
-    const asaasApiKey = Deno.env.get('ASAAS_API_KEY');
-    if (!asaasApiKey) {
-      console.error('ASAAS_API_KEY not configured');
-      // Clean up pending booking
-      await supabase.from('pending_bookings').delete().eq('id', pendingBooking.id);
-      return new Response(
-        JSON.stringify({ error: 'Payment gateway not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Create or get customer in Asaas
-    const asaasCustomer = {
-      name: profile?.nome || customerInfo?.name || 'Cliente',
-      email: user.email || customerInfo?.email || 'noemail@example.com',
-      cpfCnpj: profile?.cpf || customerInfo?.cpf || '',
-      externalReference: user.id,
-    };
-
-    console.log('Creating/fetching Asaas customer:', {
-      name: asaasCustomer.name,
-      email: asaasCustomer.email,
-      cpfCnpj: asaasCustomer.cpfCnpj ? '[REDACTED]' : 'missing',
-      externalReference: asaasCustomer.externalReference,
+    if (!bookingData.barbeiro_id) throw new Error('Barbeiro obrigatório');
+    const wooviPayment = await createWooviCharge(supabase, {
+      correlationID: `book-${pendingBooking.id}`, userId: user.id,
+      barberId: bookingData.barbeiro_id, amount: pendingBooking.preco,
+      comment: `Reserva ${pendingBooking.id.slice(0, 8)}`,
+      target: { pending_booking_id: pendingBooking.id, metadata: { reschedule_from_id: rescheduleFromId ?? null } },
     });
-
-    // Search for existing customer first
-    const customerSearchUrl = `https://api.asaas.com/v3/customers?externalReference=${user.id}`;
-    const customerSearchResponse = await fetch(customerSearchUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'access_token': asaasApiKey,
-      },
-    });
-
-    const customerSearchResult = await customerSearchResponse.json();
-    let customerId = null;
-
-    console.log('Customer search result:', { found: customerSearchResult.data?.length > 0, count: customerSearchResult.data?.length || 0 });
-
-    if (customerSearchResult.data && customerSearchResult.data.length > 0) {
-      customerId = customerSearchResult.data[0].id;
-      console.log('Using existing customer:', customerId);
-    } else {
-      // Create new customer
-      const customerCreateResponse = await fetch('https://api.asaas.com/v3/customers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'access_token': asaasApiKey,
-        },
-        body: JSON.stringify(asaasCustomer),
-      });
-
-      const customerCreateResult = await customerCreateResponse.json();
-
-      if (!customerCreateResponse.ok || customerCreateResult.errors) {
-        console.error('Asaas customer error:', customerCreateResult);
-        // Clean up pending booking
-        await supabase.from('pending_bookings').delete().eq('id', pendingBooking.id);
-        throw new Error(customerCreateResult.errors?.[0]?.description || 'Erro ao criar cliente no Asaas');
-      }
-
-      customerId = customerCreateResult.id;
-      console.log('Created new customer:', customerId);
-    }
-
-    // Create payment in Asaas
-    const asaasPaymentData: any = {
-      customer: customerId,
-      billingType: metodo === 'pix' ? 'PIX' : 'CREDIT_CARD',
-      value: bookingData.preco,
-      dueDate: new Date().toISOString().split('T')[0],
-      description: `Reserva #${pendingBooking.id.substring(0, 8)}`,
-      externalReference: pendingBooking.id, // Reference the pending booking
-    };
-
-    // ============================================
-    // SPLIT MARKETPLACE: Enviar valor para subconta do barbeiro
-    // ============================================
-    if (bookingData.barbeiro_id) {
-      const { data: barbeiroData } = await supabase
-        .from('barbeiros')
-        .select('asaas_wallet_id')
-        .eq('id', bookingData.barbeiro_id)
-        .single();
-
-      if (barbeiroData?.asaas_wallet_id) {
-        // 100% vai para o barbeiro — Asaas deduz a própria taxa automaticamente
-        asaasPaymentData.split = [
-          {
-            walletId: barbeiroData.asaas_wallet_id,
-            percentualValue: 100,
-          },
-        ];
-        console.log('[create-payment] Split configurado: 100% para wallet', barbeiroData.asaas_wallet_id);
-      } else {
-        console.warn('[create-payment] Barbeiro sem subconta Asaas — cobrança SEM split');
-      }
-    }
-
-    // For credit card, add card info
-    if (metodo === 'card') {
-      if (!cardInfo) {
-        console.error('Missing card info for card payment');
-        // Clean up pending booking
-        await supabase.from('pending_bookings').delete().eq('id', pendingBooking.id);
-        return new Response(
-          JSON.stringify({ error: 'Dados do cartão obrigatórios para pagamento com cartão' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      asaasPaymentData.creditCard = {
-        holderName: cardInfo.holderName,
-        number: cardInfo.number.replace(/\s/g, ''),
-        expiryMonth: cardInfo.expiryMonth,
-        expiryYear: cardInfo.expiryYear,
-        ccv: cardInfo.ccv,
-      };
-      asaasPaymentData.creditCardHolderInfo = {
-        name: cardInfo.holderName,
-        email: user.email || 'noemail@example.com',
-        cpfCnpj: (asaasCustomer.cpfCnpj || '').replace(/\D/g, ''),
-        postalCode: '00000000',
-        addressNumber: '0',
-        phone: '0000000000',
-      };
-    }
-
-    console.log('Creating Asaas payment:', { 
-      customer: customerId,
-      billingType: asaasPaymentData.billingType,
-      value: asaasPaymentData.value,
-      hasCard: metodo === 'card',
-      hasSplit: !!asaasPaymentData.split,
-    });
-
-    const asaasUrl = 'https://api.asaas.com/v3/payments';
-    console.log('Using Asaas URL:', asaasUrl);
-
-    const asaasPaymentResponse = await fetch(asaasUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'access_token': asaasApiKey,
-      },
-      body: JSON.stringify(asaasPaymentData),
-    });
-
-    const asaasPaymentResult = await asaasPaymentResponse.json();
-
-    console.log('Asaas payment response:', {
-      status: asaasPaymentResponse.status,
-      id: asaasPaymentResult.id,
-      hasError: !!asaasPaymentResult.errors,
-      errorMessage: asaasPaymentResult.errors?.[0]?.description
-    });
-
-    if (!asaasPaymentResponse.ok || asaasPaymentResult.errors) {
-      console.error('Asaas payment creation failed:', asaasPaymentResult);
-      // Clean up pending booking
-      await supabase.from('pending_bookings').delete().eq('id', pendingBooking.id);
-      throw new Error(asaasPaymentResult.errors?.[0]?.description || 'Payment creation failed');
-    }
-
-    // Update pending booking with payment intent ID
-    await supabase
-      .from('pending_bookings')
-      .update({ payment_intent_id: asaasPaymentResult.id })
-      .eq('id', pendingBooking.id);
-
-    // For card payments, if confirmed immediately, convert to appointment
-    if (metodo === 'card' && asaasPaymentResult.status === 'CONFIRMED') {
-      console.log('Card payment confirmed, creating appointment as CONFIRMED (auto-confirm)');
-      
-      // If rescheduling, cancel old appointment first
-      if (rescheduleFromId) {
-        console.log('Cancelling previous appointment:', rescheduleFromId);
-        await supabase
-          .from('agendamentos')
-          .update({
-            status: 'cancelled_by_user',
-            visivel_para_usuario: false,
-          })
-          .eq('id', rescheduleFromId);
-      }
-      
-      const { data: appointment, error: aptError } = await supabase
-        .from('agendamentos')
-        .insert({
-          user_id: user.id,
-          servico_id: pendingBooking.servico_id,
-          barbeiro_id: pendingBooking.barbeiro_id,
-          data: pendingBooking.data,
-          hora: pendingBooking.hora,
-          duracao: pendingBooking.duracao,
-          preco: pendingBooking.preco,
-          observacoes: pendingBooking.observacoes,
-          status: 'confirmed', // AUTO-CONFIRMADO: pagamento verificado
-          barbeiro_confirmou: true, // AUTO-CONFIRMADO
-          cliente_confirmou: true, // Cliente já pagou
-          payment_method: metodo,
-          remarcado_de: rescheduleFromId || null,
-        })
-        .select()
-        .single();
-
-      if (aptError) {
-        console.error('Failed to create appointment:', aptError);
-        throw aptError;
-      }
-
-      // Save payment record
-      const { data: payment, error: paymentError } = await supabase
-        .from('pagamentos')
-        .insert({
-          user_id: user.id,
-          agendamento_id: appointment.id,
-          metodo: metodo,
-          valor: pendingBooking.preco,
-          gateway_payment_id: asaasPaymentResult.id,
-          status: 'paid',
-          data_pagamento: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (paymentError) {
-        console.error('Failed to save payment record:', paymentError);
-        throw paymentError;
-      }
-
-      // Notificar barbeiro — 🔴 Novo Agendamento
-      try {
-        const { data: barberData } = await supabase
-          .from('barbeiros')
-          .select('user_id, apelido')
-          .eq('id', pendingBooking.barbeiro_id)
-          .single();
-
-        const { data: servicoData } = await supabase
-          .from('servicos')
-          .select('nome')
-          .eq('id', pendingBooking.servico_id)
-          .single();
-
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('nome')
-          .eq('id', user.id)
-          .single();
-
-        if (barberData?.user_id) {
-          await supabase.from('notificacoes').insert({
-            user_id: barberData.user_id,
-            titulo: '🔴 Novo Agendamento',
-            mensagem: `${profileData?.nome || 'Cliente'} agendou ${servicoData?.nome || 'serviço'} para ${pendingBooking.data} às ${pendingBooking.hora} (Cartão)`,
-            tipo: 'agendamento',
-            lida: false,
-          });
-        }
-      } catch (notifError) {
-        console.error('Error sending barber notification:', notifError);
-      }
-
-      // Delete pending booking
-      await supabase.from('pending_bookings').delete().eq('id', pendingBooking.id);
-
-      console.log('Card payment completed, appointment auto-confirmed:', appointment.id);
-    }
-
-    // For PIX, fetch the QR Code and SAVE it to pending_bookings for later retrieval
-    let pixQrCodeData = undefined;
-    if (metodo === 'pix' && asaasPaymentResult.id) {
-      try {
-        const qrCodeResponse = await fetch(`${asaasUrl}/${asaasPaymentResult.id}/pixQrCode`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'access_token': asaasApiKey,
-          },
-        });
-
-        if (qrCodeResponse.ok) {
-          pixQrCodeData = await qrCodeResponse.json();
-          console.log('PIX QR Code fetched successfully');
-          
-          // SALVAR QR Code no pending_booking para recuperação posterior
-          const { error: updateError } = await supabase
-            .from('pending_bookings')
-            .update({
-              pix_qr_code: pixQrCodeData.encodedImage,
-              pix_payload: pixQrCodeData.payload,
-              asaas_payment_id: asaasPaymentResult.id
-            })
-            .eq('id', pendingBooking.id);
-          
-          if (updateError) {
-            console.error('Error saving PIX QR code to pending_booking:', updateError);
-          } else {
-            console.log('PIX QR Code saved to pending_booking:', pendingBooking.id);
-          }
-        } else {
-          console.error('Failed to fetch PIX QR Code:', await qrCodeResponse.text());
-        }
-      } catch (error) {
-        console.error('Error fetching PIX QR Code:', error);
-      }
-    }
-
-    // Return response with payment details
-    const response: any = {
-      success: true,
-      paymentMethod: metodo,
-      pendingBookingId: pendingBooking.id,
-      pendingBooking: pendingBooking,
-      asaasPayment: {
-        id: asaasPaymentResult.id,
-        status: asaasPaymentResult.status,
-        value: asaasPaymentResult.value,
-      },
-    };
-
-    if (pixQrCodeData) {
-      response.asaasPayment.pixQrCode = pixQrCodeData;
-    }
-
-    return new Response(
-      JSON.stringify(response),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    const { error: saveError } = await supabase.from('pending_bookings').update({
+      payment_intent_id: wooviPayment.id,
+      pix_qr_code: wooviPayment.pixQrCode.encodedImage,
+      pix_payload: wooviPayment.pixQrCode.payload,
+    }).eq('id', pendingBooking.id);
+    if (saveError) throw saveError;
+    return new Response(JSON.stringify({ success: true, paymentMethod: 'pix',
+      pendingBookingId: pendingBooking.id, pendingBooking, wooviPayment,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
     console.error('Error processing payment:', error);

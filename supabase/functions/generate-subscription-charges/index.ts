@@ -1,181 +1,31 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.80.0';
 import { requireInternalCaller } from '../_shared/internal-auth.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
-};
-
+import { serviceClient } from '../_shared/woovi-auth.ts';
+import { createWooviCharge } from '../_shared/woovi-charge.ts';
+import { corsHeaders, jsonResponse } from '../_shared/woovi-client.ts';
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const unauthorized = requireInternalCaller(req);
   if (unauthorized) return unauthorized;
-
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const asaasApiKey = Deno.env.get('ASAAS_API_KEY');
-    if (!asaasApiKey) {
-      throw new Error('ASAAS_API_KEY not configured');
-    }
-
-    console.log('Starting subscription charge generation...');
-
-    // Get all active subscriptions with PIX payment method
-    const { data: subscriptions, error: subsError } = await supabase
-      .from('assinaturas')
-      .select(`
-        *,
-        planos!inner(*),
-        profiles!inner(*)
-      `)
-      .eq('status', 'active')
-      .eq('payment_method', 'pix');
-
-    if (subsError) throw subsError;
-
-    console.log(`Found ${subscriptions?.length || 0} active PIX subscriptions`);
-
-    const today = new Date();
+    const admin = serviceClient();
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    const { data: subscriptions, error } = await admin.from('assinaturas')
+      .select('id,user_id,barbeiro_id,next_billing_date,planos(nome,preco_mensal)')
+      .eq('status', 'active').eq('payment_method', 'pix').lte('next_billing_date', today).limit(100);
+    if (error) throw error;
     const results = [];
-
-    for (const subscription of subscriptions || []) {
+    for (const sub of subscriptions ?? []) {
       try {
-        const nextBilling = new Date(subscription.next_billing_date);
-        
-        // Check if billing is due (today or past due)
-        if (nextBilling <= today) {
-          console.log(`Generating charge for subscription ${subscription.id}`);
-
-          // Create customer in Asaas if needed
-          const customerData = {
-            name: subscription.profiles.nome,
-            email: subscription.profiles.id, // Using user ID as email reference
-            cpfCnpj: subscription.profiles.cpf || '00000000000',
-            externalReference: subscription.user_id,
-          };
-
-          let asaasCustomerId = subscription.gateway_subscription_id;
-
-          if (!asaasCustomerId) {
-            // Create customer
-            const customerResponse = await fetch('https://api.asaas.com/v3/customers', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'access_token': asaasApiKey,
-              },
-              body: JSON.stringify(customerData),
-            });
-
-            if (!customerResponse.ok) {
-              throw new Error(`Failed to create customer: ${await customerResponse.text()}`);
-            }
-
-            const customer = await customerResponse.json();
-            asaasCustomerId = customer.id;
-
-            // Update subscription with customer ID
-            await supabase
-              .from('assinaturas')
-              .update({ gateway_subscription_id: asaasCustomerId })
-              .eq('id', subscription.id);
-          }
-
-          // Create PIX payment in Asaas
-          const paymentData = {
-            customer: asaasCustomerId,
-            billingType: 'PIX',
-            value: subscription.planos.preco_mensal,
-            dueDate: today.toISOString().split('T')[0],
-            description: `Mensalidade ${subscription.planos.nome} - ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
-            externalReference: subscription.id,
-          };
-
-          const paymentResponse = await fetch('https://api.asaas.com/v3/payments', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'access_token': asaasApiKey,
-            },
-            body: JSON.stringify(paymentData),
-          });
-
-          if (!paymentResponse.ok) {
-            throw new Error(`Failed to create payment: ${await paymentResponse.text()}`);
-          }
-
-          const payment = await paymentResponse.json();
-
-          // Save payment to database
-          await supabase
-            .from('pagamentos')
-            .insert({
-              user_id: subscription.user_id,
-              assinatura_id: subscription.id,
-              metodo: 'pix',
-              valor: subscription.planos.preco_mensal,
-              status: 'pending',
-              gateway_payment_id: payment.id,
-            });
-
-          // Update next billing date (add 30 days)
-          const newNextBilling = new Date(nextBilling);
-          newNextBilling.setDate(newNextBilling.getDate() + 30);
-          
-          await supabase
-            .from('assinaturas')
-            .update({ 
-              next_billing_date: newNextBilling.toISOString().split('T')[0],
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', subscription.id);
-
-          results.push({
-            subscription_id: subscription.id,
-            payment_id: payment.id,
-            status: 'success',
-          });
-
-          console.log(`Charge created successfully for subscription ${subscription.id}`);
-        }
-      } catch (error) {
-        console.error(`Error processing subscription ${subscription.id}:`, error);
-        results.push({
-          subscription_id: subscription.id,
-          status: 'error',
-          error: (error as Error).message,
+        const plan = Array.isArray(sub.planos) ? sub.planos[0] : sub.planos;
+        if (!plan || !sub.barbeiro_id) throw new Error('Plano ou barbeiro ausente');
+        const payment = await createWooviCharge(admin, { correlationID: `due-${sub.id}-${sub.next_billing_date}`,
+          userId: sub.user_id, barberId: sub.barbeiro_id, amount: plan.preco_mensal,
+          comment: `Mensalidade ${plan.nome}`, target: { assinatura_id: sub.id },
         });
-      }
+        // Generating a charge is not payment: do not advance the paid cycle here.
+        results.push({ subscription_id: sub.id, payment_id: payment.id, status: 'pending_payment' });
+      } catch (error) { results.push({ subscription_id: sub.id, status: 'error', error: error instanceof Error ? error.message : 'Erro Woovi' }); }
     }
-
-    console.log('Subscription charge generation complete');
-
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        processed: results.length,
-        results 
-      }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
-
-  } catch (error: any) {
-    console.error('Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
-  }
+    return jsonResponse({ success: true, processed: results.length, results });
+  } catch (error) { return jsonResponse({ success: false, error: error instanceof Error ? error.message : 'Erro ao gerar cobranças' }, 500); }
 });
