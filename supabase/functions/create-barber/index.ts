@@ -4,7 +4,7 @@
  * REFATORADO: Usa _shared/response.ts e _shared/auth.ts
  * 
  * Fluxo: Verifica admin → cria auth user → cria barbeiro →
- *        armazena dados privados → atribui role → cria subconta Asaas
+ *        armazena dados privados → atribui role
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -153,25 +153,6 @@ Deno.serve(async (req) => {
       { user_id: newUserId, role: "barber" },
       { onConflict: "user_id,role" }
     );
-
-    // ═══ Criar subconta Asaas (non-blocking) ═══
-    try {
-      const subAccountResponse = await fetch(
-        `${Deno.env.get("SUPABASE_URL")}/functions/v1/create-asaas-subaccount`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          },
-          body: JSON.stringify({ barbeiro_id: barberData.id }),
-        }
-      );
-      const subResult = await subAccountResponse.json();
-      console.log("[create-barber] Subconta Asaas:", subResult);
-    } catch (subErr) {
-      console.error("[create-barber] Erro subconta Asaas (non-blocking):", subErr);
-    }
 
     return ok({
       barbeiro_id: barberData.id,

@@ -1,5 +1,4 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.80.0';
-import { getAsaasConfig } from '../_shared/asaas-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +9,6 @@ const corsHeaders = {
  * Edge Function: delete-tenant-account
  * 
  * Remove completamente uma barbearia (tenant) do sistema:
- * 1. Desativa subcontas Asaas de todos os barbeiros
  * 2. Remove instâncias WhatsApp da Evolution API
  * 3. Apaga todos os dados do banco vinculados ao tenant
  * 4. Remove o registro do tenant e o user_role do owner
@@ -25,7 +23,6 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
     const evolutionApiToken = Deno.env.get('EVOLUTION_API_TOKEN');
-    const asaasConfig = getAsaasConfig();
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -69,29 +66,13 @@ Deno.serve(async (req) => {
     // ═══ 1. Buscar todos os barbeiros do tenant ═══
     const { data: barbeiros } = await supabase
       .from('barbeiros')
-      .select('id, user_id, asaas_account_id')
+      .select('id, user_id')
       .eq('tenant_id', tenantId);
 
     const barbeiroIds = (barbeiros || []).map(b => b.id);
     const barbeiroUserIds = (barbeiros || []).filter(b => b.user_id).map(b => b.user_id!);
 
     log.push(`Barbeiros encontrados: ${barbeiroIds.length}`);
-
-    // ═══ 2. Desativar subcontas Asaas ═══
-    if (asaasConfig) {
-      for (const barb of (barbeiros || [])) {
-        if (!barb.asaas_account_id) continue;
-        try {
-          const resp = await fetch(`${asaasConfig.baseUrl}/accounts/${barb.asaas_account_id}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json', 'access_token': asaasConfig.apiKey },
-          });
-          log.push(`Asaas subconta ${barb.asaas_account_id}: ${resp.ok ? 'desativada' : 'erro'}`);
-        } catch (e) {
-          log.push(`Asaas subconta ${barb.asaas_account_id}: erro ${e}`);
-        }
-      }
-    }
 
     // ═══ 3. Remover instâncias WhatsApp da Evolution API ═══
     if (evolutionApiUrl && evolutionApiToken) {

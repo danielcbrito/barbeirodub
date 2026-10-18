@@ -30,7 +30,7 @@ const APP_KNOWLEDGE = `
 
 ### Pagamentos
 - Métodos: PIX, Cartão de Crédito, Dinheiro (na barbearia)
-- Gateway: Asaas
+- Gateway: Woovi
 - Webhook processa confirmação em até 5 minutos
 - Créditos podem ser usados como pagamento parcial
 
@@ -60,7 +60,7 @@ const APP_KNOWLEDGE = `
 
 ### "Pagamento não confirmou"
 → VERIFICAR: tabela pagamentos (status, gateway_payment_id)
-→ VERIFICAR: webhook_logs para eventos do Asaas
+→ VERIFICAR: webhook_logs para eventos do Woovi
 → AGUARDAR: até 5 minutos para webhook processar
 → VERIFICAR: pending_bookings se foi PIX
 
@@ -579,7 +579,7 @@ async function executeFunction(functionName: string, args: any, supabase: any, c
         const { data: webhookLogs } = await supabase
           .from('webhook_logs')
           .select('*')
-          .eq('provider', 'asaas')
+          .eq('provider', 'woovi')
           .order('created_at', { ascending: false })
           .limit(10);
 
