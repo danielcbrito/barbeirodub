@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -176,7 +177,7 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
     let cancelled = false;
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("manage-clients", {
+        const { data, error } = await invokeAuthenticatedFunction("manage-clients", {
           body: { action: "get-email", userId: selectedClient.id },
         });
         if (error || !data?.email || cancelled) return;
@@ -279,7 +280,7 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
       // Buscar emails via edge function
       let usersMap: Record<string, { email?: string }> = {};
       try {
-        const response = await supabase.functions.invoke("manage-clients", {
+        const response = await invokeAuthenticatedFunction("manage-clients", {
           body: { action: "list" },
         });
         if (response.data?.users) usersMap = response.data.users;
@@ -469,7 +470,7 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
     setDeleteDialogOpen(true);
     if (!client.email) {
       try {
-        const { data, error } = await supabase.functions.invoke("manage-clients", {
+        const { data, error } = await invokeAuthenticatedFunction("manage-clients", {
           body: { action: "get-email", userId: client.id },
         });
         if (!error && data?.email) {
@@ -494,7 +495,7 @@ export function AdminClientes({ basePath = "/admin", tenantId, barbeiroId }: Adm
         if (error) throw error;
         toast.success("Cliente removido da lista");
       } else {
-        const { data, error } = await supabase.functions.invoke("manage-clients", {
+        const { data, error } = await invokeAuthenticatedFunction("manage-clients", {
           body: { action: "delete", userId: clientToDelete.id },
         });
         if (error) throw error;

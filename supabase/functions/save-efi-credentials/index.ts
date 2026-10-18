@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
     // Importar chave AES
     const keyBytes = getMasterKey();
     const cryptoKey = await crypto.subtle.importKey(
-      "raw", keyBytes, { name: "AES-GCM" }, false, ["encrypt"],
+      "raw", new Uint8Array(keyBytes), { name: "AES-GCM" }, false, ["encrypt"],
     );
 
     // Criptografar os 3 campos sensíveis

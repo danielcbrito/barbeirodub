@@ -6,7 +6,7 @@
  * Padrão unificado para verificar tokens e roles.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail } from "./response.ts";
 
 /**
@@ -16,7 +16,7 @@ import { fail } from "./response.ts";
 export async function authenticateRequest(
   req: Request
 ): Promise<
-  | { supabase: ReturnType<typeof createClient>; user: { id: string; email?: string } }
+  | { supabase: SupabaseClient<any>; user: { id: string; email?: string } }
   | Response
 > {
   const authHeader = req.headers.get("Authorization");
@@ -47,7 +47,7 @@ export async function authenticateRequest(
  * Retorna true/false sem lançar erro.
  */
 export async function hasRole(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<any>,
   userId: string,
   role: string
 ): Promise<boolean> {
@@ -64,7 +64,7 @@ export async function hasRole(
 /**
  * Cria cliente Supabase com service role (para operações admin).
  */
-export function createServiceClient(): ReturnType<typeof createClient> {
+export function createServiceClient(): SupabaseClient<any> {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!

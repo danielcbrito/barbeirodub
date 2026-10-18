@@ -565,7 +565,7 @@ Deno.serve(async (req) => {
             console.warn(`⚠️ QR code não disponível via connect`);
           }
         } catch (e) {
-          console.error("❌ Erro ao buscar QR code via connect:", e.message);
+          console.error("❌ Erro ao buscar QR code via connect:", e instanceof Error ? e.message : String(e));
         }
       }
 
@@ -983,9 +983,10 @@ Deno.serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("❌ whatsapp-proxy error:", error.message, error.stack);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("❌ whatsapp-proxy error:", message, error instanceof Error ? error.stack : undefined);
     return new Response(
-      JSON.stringify({ error: error.message, code: "INTERNAL_ERROR" }),
+      JSON.stringify({ error: message, code: "INTERNAL_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

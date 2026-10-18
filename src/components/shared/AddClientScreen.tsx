@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { UserPlus, Loader2, User, Phone, Mail } from "lucide-react";
@@ -30,7 +31,7 @@ export function AddClientScreen({ onBack, onClientAdded, tenantId }: AddClientSc
 
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("manage-clients", {
+      const { data, error } = await invokeAuthenticatedFunction("manage-clients", {
         body: {
           action: "create",
           nome: nome.trim(),

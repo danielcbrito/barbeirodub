@@ -64,7 +64,7 @@ async function decryptPixKey(payload: {
   const keyBytes = getMasterKey();
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    keyBytes,
+    new Uint8Array(keyBytes),
     { name: "AES-GCM" },
     false,
     ["decrypt"],
@@ -77,7 +77,7 @@ async function decryptPixKey(payload: {
   combined.set(ciphertext, 0);
   combined.set(authTag, ciphertext.length);
 
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, combined);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(iv) }, cryptoKey, combined);
   return new TextDecoder().decode(decrypted).trim();
 }
 

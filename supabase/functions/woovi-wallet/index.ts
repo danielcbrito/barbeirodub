@@ -9,11 +9,11 @@
  * Actions: woovi_get_balance | woovi_history | woovi_withdraw
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ok, fail, handleCors, parseBody } from "../_shared/response.ts";
 import { wooviFetch } from "../_shared/woovi-client.ts";
 
-type SupabaseAdminClient = ReturnType<typeof createClient>;
+type SupabaseAdminClient = SupabaseClient<any>;
 
 const PAID_WOOVI_STATUSES = ["PAID", "paid", "COMPLETED", "ACTIVE_PAID"];
 const REFUNDED_WOOVI_STATUSES = ["REFUNDED", "refunded"];

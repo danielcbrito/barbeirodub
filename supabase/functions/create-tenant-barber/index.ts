@@ -35,6 +35,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    const callerId = user.id;
+
     // ── Parse body first to check for specific tenant_id ──
     const body = await req.json().catch(() => ({}));
     const { email, password, nome, telefone, apelido, comissao_pct, cpf, invite_only, tenant_id: requestedTenantId, redirect_to } = body;
@@ -139,11 +141,6 @@ Deno.serve(async (req) => {
 
       const trimmedEmail = email.trim().toLowerCase();
 
-      // Service role client
-      const supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
 
       // Check if email already has a barber in this tenant
       const { data: existingPrivates } = await supabaseAdmin

@@ -684,7 +684,7 @@ serve(async (req) => {
       }
 
       // ── Criar dono da barbearia teste ────────────
-      let barberOwnerId: string;
+      let barberOwnerId: string | undefined;
       const { data: barberOwner, error: e1 } =
         await supabaseAdmin.auth.admin.createUser({
           email: "teste.barbeiro@dub.internal",
@@ -718,6 +718,12 @@ serve(async (req) => {
         }
       } else {
         barberOwnerId = barberOwner.user.id;
+      }
+
+      if (!barberOwnerId) {
+        return new Response(JSON.stringify({ error: "Usuário barbeiro teste não localizado" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       await supabaseAdmin.from("profiles").upsert({
@@ -802,7 +808,7 @@ serve(async (req) => {
       });
 
       // ── Criar cliente teste ──────────────────────
-      let testClientId: string;
+      let testClientId: string | undefined;
       const { data: testClient, error: e3 } =
         await supabaseAdmin.auth.admin.createUser({
           email: "teste.cliente@dub.internal",
@@ -835,6 +841,12 @@ serve(async (req) => {
         }
       } else {
         testClientId = testClient.user.id;
+      }
+
+      if (!testClientId) {
+        return new Response(JSON.stringify({ error: "Usuário cliente teste não localizado" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       await supabaseAdmin.from("profiles").upsert({

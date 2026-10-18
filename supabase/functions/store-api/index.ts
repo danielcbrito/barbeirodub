@@ -12,7 +12,7 @@
  *   - clean_reservations → Limpar reservas expiradas (cron/manual)
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, ok, fail, handleCors, parseBody } from "../_shared/response.ts";
 import { getAsaasConfig } from "../_shared/asaas-config.ts";
 import { wooviFetch } from "../_shared/woovi-client.ts";
@@ -99,7 +99,7 @@ interface ValidatedItem {
 }
 
 type StoreApiBody = { action?: string; [key: string]: unknown };
-type SupabaseAdminClient = ReturnType<typeof createClient>;
+type SupabaseAdminClient = SupabaseClient<any>;
 
 async function handleCreateOrder(req: Request, body: StoreApiBody): Promise<Response> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

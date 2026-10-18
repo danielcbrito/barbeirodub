@@ -4,7 +4,7 @@
 import { corsHeaders, errorResponse, jsonResponse, wooviFetch, WooviError } from '../_shared/woovi-client.ts';
 import { requireUser } from '../_shared/woovi-auth.ts';
 
-interface Body { value_centavos: number }
+interface Body { value_centavos: number; pin?: string }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });

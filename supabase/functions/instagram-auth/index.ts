@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -236,7 +236,7 @@ Deno.serve(async (req) => {
  * Busca os últimos 12 posts do Instagram e salva no cache.
  */
 async function cachePosts(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseClient<any>,
   barbeiroId: string,
   accessToken: string
 ) {
