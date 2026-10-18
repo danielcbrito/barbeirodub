@@ -26,8 +26,10 @@ import {
   Star,
   Palette,
   ShieldCheck,
+  CreditCard,
   User,
 } from "lucide-react";
+import { BarberFormasPagamento } from "@/components/barber/BarberFormasPagamento";
 import { BarberContext } from "@/pages/Barbeiro";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import AdminHorarios from "@/components/admin/AdminHorarios";
@@ -109,19 +111,42 @@ export function BarberConfigBarbearia({
   const urlViewId = searchParams.get("view");
 
   const [activeScreen, setActiveScreen] = useState<HubScreen>(() => {
+    if (urlViewId === "formas-pagamento") return "formas-pagamento";
     if (urlViewId) return "clientes-todos";
     return "hub";
   });
 
   useEffect(() => {
     if (urlViewId && activeScreen === "hub") {
-      setActiveScreen("clientes-todos");
+      if (urlViewId === "formas-pagamento") {
+        setActiveScreen("formas-pagamento");
+      } else {
+        setActiveScreen("clientes-todos");
+      }
     }
   }, [urlViewId]);
   const [tenantNome, setTenantNome] = useState<string>(DEFAULT_COMPANY_NAME);
   const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(DEFAULT_COMPANY_LOGO);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(barberContext.tenantId || null);
+
+  const [resolvedBarbeiroId, setResolvedBarbeiroId] = useState<string>(barberContext.barbeiroId || "");
+
+  useEffect(() => {
+    if (!resolvedBarbeiroId && barberContext.userId) {
+      supabase
+        .from("barbeiros")
+        .select("id")
+        .eq("user_id", barberContext.userId)
+        .eq("ativo", true)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.id) setResolvedBarbeiroId(data.id);
+        });
+    }
+  }, [barberContext.userId, resolvedBarbeiroId]);
+
+  const effectiveBarbeiroId = barberContext.barbeiroId || resolvedBarbeiroId || "";
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -397,6 +422,14 @@ export function BarberConfigBarbearia({
           onClick: () => navigate(`${appBasePath}/meus-dados`),
         },
         {
+          id: "formas-pagamento",
+          icon: CreditCard,
+          label: "Formas de pagamentos",
+          description: "Pix e Pagamento na barbearia",
+          keywords: ["formas de pagamento", "pagamento", "pix", "dinheiro", "barbearia", "presencial", "checkout", "recebimento", "cartão"],
+          onClick: () => setActiveScreen("formas-pagamento"),
+        },
+        {
           id: "whatsapp",
           icon: MessageSquare,
           label: "Atendimento & Notificações",
@@ -463,6 +496,14 @@ export function BarberConfigBarbearia({
         description: "Nome, WhatsApp, endereço e redes sociais",
         keywords: ["nome", "whatsapp", "endereco", "contato", "telefone", "instagram", "redes", "cnpj", "localizacao", "dados"],
         onClick: () => setActiveScreen("dados-empresa"),
+      },
+      {
+        id: "formas-pagamento",
+        icon: CreditCard,
+        label: "Formas de pagamentos",
+        description: "Pix e Pagamento na barbearia",
+        keywords: ["formas de pagamento", "pagamento", "pix", "dinheiro", "barbearia", "presencial", "checkout", "recebimento", "cartão"],
+        onClick: () => setActiveScreen("formas-pagamento"),
       },
       {
         id: "whatsapp",
@@ -861,6 +902,15 @@ export function BarberConfigBarbearia({
   const renderSubScreen = () => {
     const tenantId = resolvedTenantId || barberContext.tenantId || undefined;
     switch (activeScreen) {
+      case "formas-pagamento":
+        return (
+          <BarberFormasPagamento
+            barbeiroId={effectiveBarbeiroId}
+            userId={barberContext.userId}
+            tenantId={resolvedTenantId || barberContext.tenantId}
+            onBack={() => setActiveScreen("hub")}
+          />
+        );
       case "dados-empresa":
         return (
           <div className="pb-10">

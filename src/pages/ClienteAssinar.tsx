@@ -23,6 +23,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AppHeader } from "@/components/ui/app-shell";
 import { resolveClientTenantId } from "@/lib/clientTenant";
+import {
+  fetchBarberPaymentMethods,
+  subscribeToBarberPaymentMethods,
+  BarberPaymentMethods,
+} from "@/lib/barberPaymentMethods";
 
 interface Plan {
   id: string;
@@ -159,6 +164,48 @@ const ClienteAssinar = () => {
   const [pixPayload, setPixPayload] = useState<string | null>(null);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [gatewaySubscriptionId, setGatewaySubscriptionId] = useState<string | null>(null);
+
+  // Formas de pagamento do barbeiro selecionado
+  const [barberPaymentMethods, setBarberPaymentMethods] = useState<BarberPaymentMethods>({
+    pix: true,
+    barbearia: true,
+  });
+
+  // Carrega e assina formas de pagamento do barbeiro em tempo real
+  useEffect(() => {
+    if (!selectedBarber?.id) {
+      setBarberPaymentMethods({ pix: true, barbearia: true });
+      return;
+    }
+
+    let mounted = true;
+    fetchBarberPaymentMethods(selectedBarber.id, resolvedTenantId).then((methods) => {
+      if (mounted) {
+        setBarberPaymentMethods(methods);
+        setPaymentMethod((prev) => {
+          if (prev === "pix" && !methods.pix && methods.barbearia) return "cash";
+          if (prev === "cash" && !methods.barbearia && methods.pix) return "pix";
+          return prev;
+        });
+      }
+    });
+
+    const unsubscribe = subscribeToBarberPaymentMethods(selectedBarber.id, (methods) => {
+      if (mounted) {
+        setBarberPaymentMethods(methods);
+        setPaymentMethod((prev) => {
+          if (prev === "pix" && !methods.pix && methods.barbearia) return "cash";
+          if (prev === "cash" && !methods.barbearia && methods.pix) return "pix";
+          return prev;
+        });
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [selectedBarber?.id, resolvedTenantId]);
 
   useEffect(() => {
     const init = async () => {
@@ -547,68 +594,72 @@ const ClienteAssinar = () => {
 
               <div className="space-y-3">
                 {/* PIX */}
-                <motion.div
-                  whileTap={{ scale: 0.98 }}
-                  className={cn(
-                    "p-4 rounded-xl border cursor-pointer transition-all",
-                    paymentMethod === 'pix'
-                      ? "bg-red-500/10 border-red-500/50 ring-2 ring-red-500/30"
-                      : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
-                  )}
-                  onClick={() => setPaymentMethod('pix')}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-5 h-5 rounded-full border-2 flex items-center justify-center",
-                      paymentMethod === 'pix' ? "border-red-500" : "border-zinc-600"
-                    )}>
-                      {paymentMethod === 'pix' && (
-                        <div className="w-3 h-3 rounded-full bg-red-500" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-zinc-400" />
-                        <h4 className="font-semibold text-foreground">PIX</h4>
+                {barberPaymentMethods.pix && (
+                  <motion.div
+                    whileTap={{ scale: 0.98 }}
+                    className={cn(
+                      "p-4 rounded-xl border cursor-pointer transition-all",
+                      paymentMethod === 'pix'
+                        ? "bg-red-500/10 border-red-500/50 ring-2 ring-red-500/30"
+                        : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                    )}
+                    onClick={() => setPaymentMethod('pix')}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                        paymentMethod === 'pix' ? "border-red-500" : "border-zinc-600"
+                      )}>
+                        {paymentMethod === 'pix' && (
+                          <div className="w-3 h-3 rounded-full bg-red-500" />
+                        )}
                       </div>
-                      <p className="text-xs text-zinc-500">
-                        Você receberá um QR Code todo mês
-                      </p>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Zap className="w-4 h-4 text-zinc-400" />
+                          <h4 className="font-semibold text-foreground">PIX</h4>
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                          Você receberá um QR Code todo mês
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                )}
 
                 {/* Pagar na Barbearia */}
-                <motion.div
-                  whileTap={{ scale: 0.98 }}
-                  className={cn(
-                    "p-4 rounded-xl border cursor-pointer transition-all",
-                    paymentMethod === 'cash'
-                      ? "bg-red-500/10 border-red-500/50 ring-2 ring-red-500/30"
-                      : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
-                  )}
-                  onClick={() => setPaymentMethod('cash')}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-5 h-5 rounded-full border-2 flex items-center justify-center",
-                      paymentMethod === 'cash' ? "border-red-500" : "border-zinc-600"
-                    )}>
-                      {paymentMethod === 'cash' && (
-                        <div className="w-3 h-3 rounded-full bg-red-500" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <Store className="w-4 h-4 text-zinc-400" />
-                        <h4 className="font-semibold text-foreground">Pagar na Barbearia</h4>
+                {barberPaymentMethods.barbearia && (
+                  <motion.div
+                    whileTap={{ scale: 0.98 }}
+                    className={cn(
+                      "p-4 rounded-xl border cursor-pointer transition-all",
+                      paymentMethod === 'cash'
+                        ? "bg-red-500/10 border-red-500/50 ring-2 ring-red-500/30"
+                        : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                    )}
+                    onClick={() => setPaymentMethod('cash')}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                        paymentMethod === 'cash' ? "border-red-500" : "border-zinc-600"
+                      )}>
+                        {paymentMethod === 'cash' && (
+                          <div className="w-3 h-3 rounded-full bg-red-500" />
+                        )}
                       </div>
-                      <p className="text-xs text-zinc-500">
-                        Pague presencialmente • Barbeiro confirma o pagamento
-                      </p>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Store className="w-4 h-4 text-zinc-400" />
+                          <h4 className="font-semibold text-foreground">Pagar na Barbearia</h4>
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                          Pague presencialmente • Barbeiro confirma o pagamento
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                )}
               </div>
 
               <Button

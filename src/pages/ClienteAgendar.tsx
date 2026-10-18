@@ -23,6 +23,11 @@ import { StepDots } from "@/components/booking/StepDots";
 import { BookingBottomBar } from "@/components/booking/BookingBottomBar";
 import { TimeSelectionBar } from "@/components/booking/TimeSelectionBar";
 import { fetchServiceOrder, sortServicesByCustomOrder } from "@/lib/servicesOrder";
+import {
+  fetchBarberPaymentMethods,
+  subscribeToBarberPaymentMethods,
+  BarberPaymentMethods,
+} from "@/lib/barberPaymentMethods";
 
 interface Service {
   id: string;
@@ -108,6 +113,12 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
   // Indica se o barbeiro selecionado possui banco (subconta Woovi) vinculado
   const [barberHasBank, setBarberHasBank] = useState(false);
+
+  // Formas de pagamento personalizadas do barbeiro selecionado (Pix e Pagamento na barbearia)
+  const [barberPaymentMethods, setBarberPaymentMethods] = useState<BarberPaymentMethods>({
+    pix: true,
+    barbearia: true,
+  });
 
   // Verificação se usuário pode usar o plano (fluxo com servico_id)
   const isPlanEligible =
@@ -196,6 +207,42 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
     loadBarberData();
   }, [selectedBarberId]);
+
+  // Carrega e assina em tempo real as formas de pagamento do barbeiro selecionado
+  useEffect(() => {
+    if (!selectedBarberId) {
+      setBarberPaymentMethods({ pix: true, barbearia: true });
+      return;
+    }
+
+    let mounted = true;
+    fetchBarberPaymentMethods(selectedBarberId, effectiveTenantId).then((methods) => {
+      if (mounted) {
+        setBarberPaymentMethods(methods);
+        setPaymentMethod((prev) => {
+          if (prev === "pix" && !methods.pix && methods.barbearia) return "cash";
+          if (prev === "cash" && !methods.barbearia && methods.pix) return "pix";
+          return prev;
+        });
+      }
+    });
+
+    const unsubscribe = subscribeToBarberPaymentMethods(selectedBarberId, (methods) => {
+      if (mounted) {
+        setBarberPaymentMethods(methods);
+        setPaymentMethod((prev) => {
+          if (prev === "pix" && !methods.pix && methods.barbearia) return "cash";
+          if (prev === "cash" && !methods.barbearia && methods.pix) return "pix";
+          return prev;
+        });
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [selectedBarberId, effectiveTenantId]);
 
   useEffect(() => {
     const initializeBooking = async () => {
@@ -812,6 +859,23 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     if (finalPrice === 0) {
       await createAppointmentWithCredits(totalPrice);
       return;
+    }
+
+    // Validações de formas de pagamento habilitadas para este barbeiro
+    if (paymentMethod === 'pix' && !barberPaymentMethods.pix) {
+      if (barberPaymentMethods.barbearia) {
+        setPaymentMethod('cash');
+        toast.info("O barbeiro aceita apenas pagamento na barbearia no momento.");
+        return;
+      }
+    }
+
+    if (paymentMethod === 'cash' && !barberPaymentMethods.barbearia) {
+      if (barberPaymentMethods.pix) {
+        setPaymentMethod('pix');
+        toast.info("O barbeiro aceita apenas pagamento via Pix no momento.");
+        return;
+      }
     }
 
     if (paymentMethod === 'card') {
@@ -1765,21 +1829,33 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                 {/* Opções normais — só aparecem quando NÃO tem plano com usos disponíveis */}
                 {!hasActivePlanWithUses && (
                   <>
-                    <PaymentOption
-                      value="pix"
-                      selected={paymentMethod === 'pix'}
-                      onSelect={() => setPaymentMethod('pix')}
-                      title="PIX"
-                      description="Pagamento instantâneo via QR Code"
-                    />
+                    {barberPaymentMethods.pix && (
+                      <PaymentOption
+                        value="pix"
+                        selected={paymentMethod === 'pix'}
+                        onSelect={() => setPaymentMethod('pix')}
+                        title="PIX"
+                        description="Pagamento instantâneo via QR Code"
+                      />
+                    )}
 
-                    <PaymentOption
-                      value="cash"
-                      selected={paymentMethod === 'cash'}
-                      onSelect={() => setPaymentMethod('cash')}
-                      title="Pagar na Barbearia"
-                      description="Pagamento presencial no dia"
-                    />
+                    {barberPaymentMethods.barbearia && (
+                      <PaymentOption
+                        value="cash"
+                        selected={paymentMethod === 'cash'}
+                        onSelect={() => setPaymentMethod('cash')}
+                        title="Pagar na Barbearia"
+                        description="Pagamento presencial no dia"
+                      />
+                    )}
+
+                    {!barberPaymentMethods.pix && !barberPaymentMethods.barbearia && (
+                      <div className="rounded-xl border border-border p-4 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          Nenhuma forma de pagamento disponível para este profissional.
+                        </p>
+                      </div>
+                    )}
 
                     {/* Resgate Grátis */}
                     {canUseRedemption && (

@@ -5,7 +5,7 @@ import {
   Search, Building2, Shield, Scissors, Users,
   Layers, Gift, Clock, Send, Wrench, ChevronRight,
   LogOut, Loader2, MessageCircle, Trash2, AlertTriangle, Crown, Headset,
-  MapPin, ShoppingBag, Palette, ArrowLeftRight,
+  MapPin, ShoppingBag, Palette, ArrowLeftRight, CreditCard,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -122,6 +122,7 @@ export function ProfileSettingsPage({
     {
       title: "Operações",
       items: [
+        { icon: CreditCard, label: "Formas de Pagamentos", description: "Habilitar ou desabilitar Pix e pagamento na barbearia", path: `${basePath}/config-barbearia?view=formas-pagamento` },
         { icon: Clock, label: "Gerenciamento de Horários", description: "Funcionamento, pausas e exceções da barbearia", path: `${basePath}/horarios?empresa=1` },
         { icon: Send, label: "Disparo de Mensagens", description: "Mensagens em massa via WhatsApp", path: `${basePath}/disparo` },
         { icon: MessageCircle, label: "WhatsApp", description: "Conexão, lembretes e automações", path: `${basePath}/whatsapp` },
