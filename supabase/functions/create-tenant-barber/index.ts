@@ -405,34 +405,11 @@ Deno.serve(async (req) => {
       role: "barber",
     }, { onConflict: "user_id,role" });
 
-    // Auto-create Asaas subaccount (non-blocking)
-    let subAccountResult: Record<string, unknown> | null = null;
-    if (cpf?.trim() && email?.trim()) {
-      try {
-        const subAccountResponse = await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/create-asaas-subaccount`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            },
-            body: JSON.stringify({ barbeiro_id: barberData.id }),
-          }
-        );
-        subAccountResult = await subAccountResponse.json();
-      } catch (subErr) {
-        console.error("[create-tenant-barber] Erro subconta Asaas:", subErr);
-        subAccountResult = { error: "Falha na criação automática da subconta" };
-      }
-    }
-
     return new Response(
       JSON.stringify({
         success: true,
         barbeiro_id: barberData.id,
         user_id: newUserId,
-        asaas_subaccount: subAccountResult,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

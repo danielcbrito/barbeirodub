@@ -4,6 +4,7 @@
  * Migrado para padrão ok/fail de _shared/response.ts
  */
 
+import { wooviFetch } from "../_shared/woovi-client.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ok, fail, handleCors } from "../_shared/response.ts";
 
@@ -49,29 +50,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ═══ Check 2: Asaas API ═══
-    const asaasKey = Deno.env.get("ASAAS_API_KEY");
-    if (asaasKey) {
-      const asaasStart = Date.now();
-      try {
-        const response = await fetch(
-          "https://api.asaas.com/v3/customers?limit=1",
-          { headers: { access_token: asaasKey } }
-        );
-        checks.push({
-          service_name: "asaas",
-          status: response.ok ? "healthy" : "degraded",
-          response_time_ms: Date.now() - asaasStart,
-          error_message: response.ok ? null : `HTTP ${response.status}`,
-        });
-      } catch (error: unknown) {
-        checks.push({
-          service_name: "asaas",
-          status: "down",
-          response_time_ms: Date.now() - asaasStart,
-          error_message: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
+    // Read-only Woovi account check; never initiates a financial operation.
+    const bankStart = Date.now();
+    try {
+      await wooviFetch('/api/v1/subaccount?limit=1');
+      checks.push({ service_name: 'woovi', status: 'healthy', response_time_ms: Date.now()-bankStart });
+    } catch (error) {
+      checks.push({ service_name: 'woovi', status: 'degraded', response_time_ms: Date.now()-bankStart,
+        error_message: error instanceof Error ? error.message : 'Falha ao consultar Woovi' });
     }
 
     // ═══ Check 3: Google Calendar ═══

@@ -9,7 +9,6 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
-import { getAsaasConfig } from "../_shared/asaas-config.ts";
 import { ok, fail, handleCors } from "../_shared/response.ts";
 
 Deno.serve(async (req) => {
@@ -21,7 +20,6 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
     const evolutionApiToken = Deno.env.get("EVOLUTION_API_TOKEN");
-    const asaasConfig = getAsaasConfig();
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -47,7 +45,7 @@ Deno.serve(async (req) => {
     // ═══ Buscar dados do barbeiro ═══
     const { data: barber, error: fetchErr } = await supabase
       .from("barbeiros")
-      .select("id, user_id, tenant_id, asaas_account_id, apelido")
+      .select("id, user_id, tenant_id, apelido")
       .eq("id", barbeiro_id)
       .maybeSingle();
 
@@ -79,19 +77,6 @@ Deno.serve(async (req) => {
     const barberUserId = barber.user_id;
 
     console.log(`[delete-barber] Iniciando exclusão do barbeiro ${barbId} (${barber.apelido})`);
-
-    // ═══ 1. Desativar subconta Asaas ═══
-    if (asaasConfig && barber.asaas_account_id) {
-      try {
-        const resp = await fetch(`${asaasConfig.baseUrl}/accounts/${barber.asaas_account_id}`, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json", access_token: asaasConfig.apiKey },
-        });
-        log.push(`Asaas subconta ${barber.asaas_account_id}: ${resp.ok ? "desativada" : "erro"}`);
-      } catch (e) {
-        log.push(`Asaas subconta erro: ${e}`);
-      }
-    }
 
     // ═══ 2. Remover instância WhatsApp ═══
     if (evolutionApiUrl && evolutionApiToken) {

@@ -51,7 +51,7 @@ interface MonthlyReport {
   receita_barbearia: number;
   receita_credito: number;
   receita_plano: number;
-  taxas_asaas: number;
+  taxas_gateway: number;
   lucro_liquido: number;
   total_agendamentos: number;
   agendamentos_completados: number;
@@ -101,7 +101,7 @@ export default function AdminRelatoriosMensais() {
     try {
       const { data, error } = await supabase
         .from('relatorios_mensais')
-        .select('id, ano, mes, receita_total, receita_app, receita_barbearia, receita_credito, receita_plano, taxas_asaas, lucro_liquido, total_agendamentos, agendamentos_completados, agendamentos_cancelados, agendamentos_no_show, variacao_receita_percentual, variacao_agendamentos_percentual, resumo_ia, insights_ia, created_at')
+        .select('id, ano, mes, receita_total, receita_app, receita_barbearia, receita_credito, receita_plano, taxas_gateway:taxas_asaas, lucro_liquido, total_agendamentos, agendamentos_completados, agendamentos_cancelados, agendamentos_no_show, variacao_receita_percentual, variacao_agendamentos_percentual, resumo_ia, insights_ia, created_at')
         .order('ano', { ascending: false })
         .order('mes', { ascending: false })
         .limit(50);
@@ -163,7 +163,7 @@ Receita Total:               R$ ${report.receita_total.toFixed(2)}
   ├─ Créditos:               R$ ${report.receita_credito.toFixed(2)}
   └─ Planos/Assinaturas:     R$ ${report.receita_plano.toFixed(2)}
 
-Taxas de Gateway (Asaas):    R$ ${report.taxas_asaas.toFixed(2)}
+Taxas históricas de gateway:    R$ ${report.taxas_gateway.toFixed(2)}
 Lucro Líquido:               R$ ${report.lucro_liquido.toFixed(2)}
 
 📅 AGENDAMENTOS DO MÊS
@@ -468,7 +468,7 @@ Sistema de Gestão - Barbearia
                                 R$ {selectedReport.lucro_liquido.toFixed(2)}
                               </p>
                               <p className="text-xs text-muted-foreground mt-1">
-                                -R$ {selectedReport.taxas_asaas.toFixed(2)} taxas
+                                -R$ {selectedReport.taxas_gateway.toFixed(2)} taxas
                               </p>
                             </CardContent>
                           </Card>
