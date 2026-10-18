@@ -28,6 +28,11 @@ import {
   subscribeToBarberPaymentMethods,
   BarberPaymentMethods,
 } from "@/lib/barberPaymentMethods";
+import {
+  checkClientPendingCancellationDebt,
+  ClienteDebitoCancelamento,
+} from "@/lib/barberCancellationFee";
+import { ClienteBloqueioTaxaModal } from "@/components/cliente/ClienteBloqueioTaxaModal";
 
 interface Service {
   id: string;
@@ -119,6 +124,9 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     pix: true,
     barbearia: true,
   });
+
+  // Débito de taxa de cancelamento pendente (bloqueia o app)
+  const [cancellationDebt, setCancellationDebt] = useState<ClienteDebitoCancelamento | null>(null);
 
   // Verificação se usuário pode usar o plano (fluxo com servico_id)
   const isPlanEligible =
@@ -248,6 +256,15 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     const initializeBooking = async () => {
       await loadUserCredits();
       await loadAvailableRedemptions();
+
+      // Checa se o cliente possui taxa de cancelamento pendente
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          const debt = await checkClientPendingCancellationDebt(session.user.id);
+          if (debt) setCancellationDebt(debt);
+        }
+      } catch {}
 
       const resolvedTenantId = await resolveClientTenantId({ forcedTenantId: effectiveTenantId });
 
@@ -2396,6 +2413,12 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Bloqueio por Taxa de Cancelamento */}
+      <ClienteBloqueioTaxaModal
+        debito={cancellationDebt}
+        onUnlocked={() => setCancellationDebt(null)}
+      />
     </div>
   );
 };

@@ -21,6 +21,11 @@ import { NotificationsSheet } from "@/components/NotificationsSheet";
 import { WalletSheet } from "@/components/WalletSheet";
 import { AnnouncementDialog } from "@/components/AnnouncementDialog";
 import { CancelledAppointmentBanner } from "@/components/CancelledAppointmentBanner";
+import {
+  checkClientPendingCancellationDebt,
+  ClienteDebitoCancelamento,
+} from "@/lib/barberCancellationFee";
+import { ClienteBloqueioTaxaModal } from "@/components/cliente/ClienteBloqueioTaxaModal";
 
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { AppointmentHistorySheet } from "@/components/AppointmentHistorySheet";
@@ -98,6 +103,7 @@ const Cliente = () => {
   const [_availableCredits, setAvailableCredits] = useState(0);
   const [payments, setPayments] = useState<any[]>([]);
   const [recentCancellations, setRecentCancellations] = useState<Appointment[]>([]);
+  const [cancellationDebt, setCancellationDebt] = useState<ClienteDebitoCancelamento | null>(null);
   const [activeTab, setActiveTab] = useState<ClienteTab>("inicio");
   const carrinho = useCarrinho();
   const { data: campaigns } = useClientCampaigns(profile?.barbearia_preferida_id ?? null, !!authUser);
@@ -123,6 +129,13 @@ const Cliente = () => {
     applyCachedUserData(authUser.id);
     void loadUserData(authUser.id);
     void redeemPendingReferral(authUser.id);
+
+    // Verifica débitos de cancelamento pendentes que bloqueiam o app
+    void checkClientPendingCancellationDebt(authUser.id).then((debt) => {
+      if (mountedRef.current) {
+        setCancellationDebt(debt);
+      }
+    });
   }, [authUser, isAuthReady, navigate]);
   // Realtime: escutar qualquer mudança em assinaturas do cliente
   // (nova assinatura, ativação por admin/barbeiro, renovação ou cancelamento).
@@ -816,6 +829,12 @@ const Cliente = () => {
       <BottomNavigation
         activeTab={activeTab}
         onTabChange={setActiveTab}
+      />
+
+      {/* Modal de Bloqueio por Taxa de Cancelamento */}
+      <ClienteBloqueioTaxaModal
+        debito={cancellationDebt}
+        onUnlocked={() => setCancellationDebt(null)}
       />
     </div>
   );
