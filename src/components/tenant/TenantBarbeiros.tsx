@@ -85,8 +85,6 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
   /* Creation result dialog */
   const [creationResult, setCreationResult] = useState<{
     barberName: string;
-    asaasStatus: "success" | "skipped" | "error";
-    asaasMessage: string;
   } | null>(null);
 
   /* Deactivate confirmation */
@@ -247,22 +245,7 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
         return;
       }
 
-      const sub = data?.asaas_subaccount;
-      let asaasStatus: "success" | "skipped" | "error" = "skipped";
-      let asaasMessage = "CPF não fornecido. O barbeiro pode ativar a carteira depois em Dados Pessoais.";
-
-      if (sub?.success) {
-        asaasStatus = "success";
-        asaasMessage = "Subconta Asaas criada com sucesso! A taxa de R$ 13,00 foi debitada da sua conta Asaas.";
-      } else if (sub?.already_exists) {
-        asaasStatus = "success";
-        asaasMessage = "O barbeiro já possuía uma subconta Asaas ativa.";
-      } else if (sub?.error) {
-        asaasStatus = "error";
-        asaasMessage = `Erro ao criar subconta: ${sub.error}. O barbeiro pode tentar novamente depois.`;
-      }
-
-      setCreationResult({ barberName: apelido.trim(), asaasStatus, asaasMessage });
+      setCreationResult({ barberName: apelido.trim() });
       resetForm();
       setIsDialogOpen(false);
       loadBarbeiros();
@@ -830,15 +813,6 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[14px]">
-              {creationResult?.asaasStatus === "success" ? (
-                <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                  <Scissors className="w-4 h-4 text-emerald-500" />
-                </div>
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
-                  <Scissors className="w-4 h-4 text-amber-500" />
-                </div>
-              )}
               Barbeiro Criado!
             </DialogTitle>
           </DialogHeader>
@@ -846,21 +820,6 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
             <p className="text-[13px] text-foreground">
               <strong>{creationResult?.barberName}</strong> foi cadastrado com sucesso na sua equipe.
             </p>
-            <div className={cn(
-              "rounded-lg p-3 border",
-              creationResult?.asaasStatus === "success"
-                ? "bg-emerald-500/[0.08] border-emerald-500/20"
-                : creationResult?.asaasStatus === "error"
-                ? "bg-destructive/[0.08] border-destructive/20"
-                : "bg-amber-500/[0.08] border-amber-500/20"
-            )}>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {creationResult?.asaasStatus === "success" && "✅ "}
-                {creationResult?.asaasStatus === "error" && "⚠️ "}
-                {creationResult?.asaasStatus === "skipped" && "💡 "}
-                {creationResult?.asaasMessage}
-              </p>
-            </div>
             <Button onClick={() => setCreationResult(null)} className="w-full h-9 text-[12px]">
               Entendido
             </Button>
@@ -957,12 +916,7 @@ function CreateTenantBarberDialog({
           </div>
         </div>
         <CompactFormField label="Telefone" icon={Phone} value={telefone} onChange={setTelefone} placeholder="(00) 00000-0000" />
-        <CompactFormField label="CPF (para criação automática da carteira)" icon={CreditCard} value={cpf} onChange={setCpf} placeholder="000.000.000-00" />
-        <div className="bg-muted/30 border border-border/30 rounded-lg p-2.5">
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
-            💡 Se o CPF for preenchido, a subconta Asaas será criada automaticamente. A taxa de <strong className="text-foreground">R$ 13,00</strong> será debitada da conta Asaas da sua barbearia.
-          </p>
-        </div>
+        <CompactFormField label="CPF" icon={CreditCard} value={cpf} onChange={setCpf} placeholder="000.000.000-00" />
         <div className="flex gap-2 pt-3">
           <Button type="button" variant="outline" onClick={onCancel} className="flex-1 h-9 text-[11px]">Cancelar</Button>
           <Button type="submit" disabled={creating} className="flex-1 h-9 text-[11px]">

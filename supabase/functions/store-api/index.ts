@@ -8,13 +8,12 @@
  *
  * Actions:
  *   - create_order       → Criar pedido (autenticado)
- *   - payment_webhook    → Webhook Asaas (sem auth, validação por token)
  *   - clean_reservations → Limpar reservas expiradas (cron/manual)
  */
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, ok, fail, handleCors, parseBody } from "../_shared/response.ts";
-import { getAsaasConfig } from "../_shared/asaas-config.ts";
+import { createWooviCharge } from "../_shared/woovi-charge.ts";
 import { wooviFetch } from "../_shared/woovi-client.ts";
 
 /* ═══════════════════════════════════════════════════════════
@@ -35,9 +34,6 @@ Deno.serve(async (req) => {
     switch (body.action) {
       case "create_order":
         response = await handleCreateOrder(req, body);
-        break;
-      case "payment_webhook":
-        response = await handlePaymentWebhook(req, body);
         break;
       case "clean_reservations":
         response = await handleCleanReservations();
@@ -138,6 +134,8 @@ async function handleCreateOrder(req: Request, body: StoreApiBody): Promise<Resp
     return fail("INVALID_PAYMENT", "Forma de pagamento inválida", 400);
   }
 
+  if (forma_pagamento === "cartao") return fail("UNSUPPORTED_METHOD", "Cartão online indisponível. Use Pix.", 400);
+
   // ── Validar tenant ──
   const { data: tenant } = await supabase
     .from("tenants")
@@ -214,7 +212,9 @@ async function handleCreateOrder(req: Request, body: StoreApiBody): Promise<Resp
       status: "pending_payment",
       payment_method: forma_pagamento,
       valor_total: total,
-      observacoes: observacoes_cliente || null,
+      observacoes_cliente: observacoes_cliente || null,
+      payment_provider: forma_pagamento === "pix" ? "woovi" : "local",
+      reservation_expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
     })
     .select("id, numero_pedido")
     .single();
@@ -281,215 +281,26 @@ async function handleCreateOrder(req: Request, body: StoreApiBody): Promise<Resp
       return ok({ pedido_id: pedidoId, numero_pedido: numeroPedido, status: "paid", total: 0, creditos_usados: subtotal });
     }
 
-    // PIX / CARTÃO (Asaas)
-    const asaasConfig = getAsaasConfig();
-    if (!asaasConfig) throw new Error("Asaas API key não configurada");
-
-    const customerId = await getOrCreateAsaasCustomer(supabase, user.id, asaasConfig);
-    if (!customerId) throw new Error("Não foi possível criar/buscar customer Asaas. Verifique seu CPF.");
-
-    const billingType = forma_pagamento === "pix" ? "PIX" : "CREDIT_CARD";
-    const today = new Date().toISOString().split("T")[0];
-
-    const paymentRes = await fetch(`${asaasConfig.baseUrl}/payments`, {
-      method: "POST",
-      headers: { access_token: asaasConfig.apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customer: customerId,
-        billingType,
-        value: total,
-        dueDate: today,
-        description: `Pedido ${numeroPedido} - ${tenant.nome}`,
-        externalReference: pedidoId,
-      }),
+    const { data: owner, error: ownerError } = await supabase.from('tenants').select('owner_user_id').eq('id', tenant_id).single();
+    const { data: barber, error: barberError } = await supabase.from('barbeiros').select('id')
+      .eq('tenant_id', tenant_id).eq('user_id', owner?.owner_user_id).eq('ativo', true).maybeSingle();
+    if (ownerError || barberError || !barber) throw new Error('Carteira Woovi do responsável pela loja não configurada');
+    const payment = await createWooviCharge(supabase, {
+      correlationID: `order-${pedidoId}`, userId: user.id, barberId: barber.id,
+      amount: total, comment: `Pedido ${numeroPedido}`, target: { pedido_id: pedidoId },
     });
-
-    if (!paymentRes.ok) {
-      const errText = await paymentRes.text();
-      console.error("[store-api:create_order] Asaas error:", errText);
-      throw new Error("Falha ao criar cobrança no gateway");
-    }
-
-    const paymentData = await paymentRes.json();
-    const updateData: Record<string, unknown> = { asaas_payment_id: paymentData.id };
-
-    if (forma_pagamento === "pix") {
-      const pixRes = await fetch(`${asaasConfig.baseUrl}/payments/${paymentData.id}/pixQrCode`, {
-        headers: { access_token: asaasConfig.apiKey, "Content-Type": "application/json" },
-      });
-      if (pixRes.ok) {
-        const pixData = await pixRes.json();
-        updateData.pix_qr_code = pixData.encodedImage || null;
-        updateData.pix_copia_cola = pixData.payload || null;
-      }
-    }
-
-    await supabase.from("pedidos").update(updateData).eq("id", pedidoId);
-
-    if (forma_pagamento === "pix") {
-      return ok({
-        pedido_id: pedidoId,
-        numero_pedido: numeroPedido,
-        status: "pending_payment",
-        total,
-        pix_qr_code: updateData.pix_qr_code || null,
-        pix_copia_cola: updateData.pix_copia_cola || null,
-      });
-    }
-
-    return ok({
-      pedido_id: pedidoId,
-      numero_pedido: numeroPedido,
-      status: "pending_payment",
-      total,
-      payment_url: paymentData.invoiceUrl || paymentData.bankSlipUrl || null,
+    const { error: saveError } = await supabase.from('pedidos').update({
+      payment_id: payment.id, pix_qr_code: payment.pixQrCode.encodedImage,
+      pix_copia_cola: payment.pixQrCode.payload,
+    }).eq('id', pedidoId);
+    if (saveError) throw saveError;
+    return ok({ pedido_id: pedidoId, numero_pedido: numeroPedido, status: 'pending_payment', total,
+      pix_qr_code: payment.pixQrCode.encodedImage, pix_copia_cola: payment.pixQrCode.payload,
     });
 
   } catch (innerError) {
     console.error("[store-api:create_order] Rollback:", innerError);
-    await supabase.from("reservas_estoque").delete().eq("pedido_id", pedidoId);
-    await supabase.from("pedidos").update({ status: "cancelled" }).eq("id", pedidoId);
     return fail("ORDER_PROCESSING_FAILED", innerError instanceof Error ? innerError.message : "Erro ao processar pedido", 500);
-  }
-}
-
-/* ── Asaas Customer Helper ── */
-
-async function getOrCreateAsaasCustomer(
-  supabase: SupabaseAdminClient, userId: string, asaasConfig: { apiKey: string; baseUrl: string }
-): Promise<string | null> {
-  const { data: profile } = await supabase.from("profiles").select("nome, cpf, email, telefone, asaas_customer_id").eq("id", userId).single();
-  if (!profile) return null;
-  if (profile.asaas_customer_id) return profile.asaas_customer_id;
-
-  const cpf = (profile.cpf || "").replace(/\D/g, "");
-  if (!cpf || cpf.length !== 11) return null;
-
-  const res = await fetch(`${asaasConfig.baseUrl}/customers`, {
-    method: "POST",
-    headers: { access_token: asaasConfig.apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: profile.nome || "Cliente DUB",
-      cpfCnpj: cpf,
-      email: profile.email || undefined,
-      mobilePhone: (profile.telefone || "").replace(/\D/g, "") || undefined,
-    }),
-  });
-
-  if (!res.ok) {
-    console.error("[store-api] Falha customer Asaas:", await res.text());
-    return null;
-  }
-
-  const customer = await res.json();
-  await supabase.from("profiles").update({ asaas_customer_id: customer.id }).eq("id", userId);
-  return customer.id;
-}
-
-/* ═══════════════════════════════════════════════════════════
- * ACTION: payment_webhook
- * ═══════════════════════════════════════════════════════════ */
-
-async function handlePaymentWebhook(_req: Request, body: StoreApiBody): Promise<Response> {
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
-  // Validar token
-  const webhookSecret = Deno.env.get("ASAAS_WEBHOOK_SECRET");
-  const incomingToken = (typeof body.asaas_access_token === "string" ? body.asaas_access_token : null) || _req.headers.get("asaas-access-token");
-  if (webhookSecret && incomingToken !== webhookSecret) {
-    return fail("UNAUTHORIZED", "Token inválido", 401);
-  }
-
-  const event = typeof body.event === "string" ? body.event : "";
-  const payment = body.payment as { id?: string } | undefined;
-  const paymentId = payment?.id;
-  if (!paymentId) return ok({ received: true, skipped: "no payment id" });
-
-  // Log
-  await supabase.from("webhook_logs").insert({ provider: "asaas_store", event_type: event, payload: body, processed_at: new Date().toISOString() }).then(() => {}, () => {});
-
-  // Buscar pedido
-  const { data: pedido } = await supabase
-    .from("pedidos")
-    .select("id, status, numero_pedido, user_id, tenant_id")
-    .eq("asaas_payment_id", paymentId)
-    .maybeSingle();
-
-  if (!pedido) return ok({ received: true, skipped: "not a store order" });
-
-  // Pagamento confirmado
-  if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
-    if (pedido.status === "paid") return ok({ received: true, skipped: "already_paid" });
-
-    const { error: finalizeError } = await supabase.rpc("store_finalize_paid_order", { p_pedido_id: pedido.id });
-    if (finalizeError) {
-      console.error("[store-api:webhook] Erro finalizar:", finalizeError);
-      await supabase.from("pedidos").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", pedido.id);
-    }
-
-    await supabase.from("notificacoes").insert({ user_id: pedido.user_id, tipo: "pedido_pago", titulo: "🛍️ Pedido confirmado!", mensagem: `Seu pedido ${pedido.numero_pedido} foi confirmado! Retire na barbearia.` });
-    await sendWhatsAppConfirmation(supabase, pedido);
-    return ok({ received: true, action: "confirmed", pedido_id: pedido.id });
-  }
-
-  // Pagamento vencido/cancelado
-  if (["PAYMENT_OVERDUE", "PAYMENT_DELETED", "PAYMENT_REFUNDED"].includes(event)) {
-    if (["cancelled", "expired"].includes(pedido.status)) return ok({ received: true, skipped: "already_cancelled" });
-
-    await supabase.from("pedidos").update({ status: "cancelled" }).eq("id", pedido.id);
-    await supabase.from("reservas_estoque").delete().eq("pedido_id", pedido.id);
-    await supabase.from("notificacoes").insert({ user_id: pedido.user_id, tipo: "pedido_cancelado", titulo: "❌ Pedido cancelado", mensagem: `Seu pedido ${pedido.numero_pedido} foi cancelado por falta de pagamento.` });
-    return ok({ received: true, action: "cancelled", pedido_id: pedido.id });
-  }
-
-  return ok({ received: true, skipped: `unhandled: ${event}` });
-}
-
-/* ── WhatsApp Helper ── */
-
-async function sendWhatsAppConfirmation(
-  supabase: SupabaseAdminClient,
-  pedido: { user_id: string; tenant_id?: string | null; numero_pedido: string },
-) {
-  try {
-    const { data: profile } = await supabase.from("profiles").select("nome, telefone").eq("id", pedido.user_id).single();
-    if (!profile?.telefone) return;
-
-    const { data: cfg } = await supabase.from("webhook_config").select("webhook_url, ativo").order("updated_at", { ascending: false }).limit(1).single();
-    if (!cfg?.webhook_url || !cfg?.ativo) return;
-
-    // Buscar instância WhatsApp do tenant
-    let whatsappInst: { instance_name: string; api_key: string; status: string } | null = null;
-    if (pedido.tenant_id) {
-      const { data: inst } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name, api_key, status")
-        .eq("status", "connected")
-        .limit(1)
-        .maybeSingle();
-      whatsappInst = inst;
-    }
-    if (!whatsappInst) return;
-
-    const firstName = (profile.nome || "Cliente").split(" ")[0];
-    const phone = (profile.telefone || "").replace(/\D/g, "").replace(/^(?!55)/, "55") + "@s.whatsapp.net";
-
-    await fetch(cfg.webhook_url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        evento: "pedido_loja_confirmado",
-        programado: false,
-        timestamp: new Date().toISOString(),
-        pedido_id: pedido.id,
-        total_contatos: 1,
-        whatsapp_instance: { instance_name: whatsappInst.instance_name, api_key: whatsappInst.api_key, status: whatsappInst.status },
-        tenant_id: pedido.tenant_id,
-        contatos: [{ cliente_id: pedido.user_id, cliente_nome: profile.nome, cliente_telefone: profile.telefone, cliente_telefone_whatsapp: phone, mensagem: `Olá ${firstName}! 🎉\n\nSeu pedido *${pedido.numero_pedido}* foi confirmado!\n\nRetire na barbearia quando quiser. Aguardamos você! 💈` }],
-      }),
-    });
-  } catch (e) {
-    console.error("[store-api:whatsapp] Erro:", e);
   }
 }
 

@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.release_woovi_plan_after_first_cut() FROM PUBLIC, anon, authenticated; GRANT EXECUTE ON FUNCTION public.release_woovi_plan_after_first_cut() TO service_role;

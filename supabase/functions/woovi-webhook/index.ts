@@ -3,6 +3,7 @@
 
 import { corsHeaders, jsonResponse, wooviFetch } from '../_shared/woovi-client.ts';
 import { serviceClient } from '../_shared/woovi-auth.ts';
+import { assertConfirmedAmount } from '../_shared/woovi-payment-policy.ts';
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/internal-auth.ts';
 
 interface WooviWebhookEvent {
@@ -49,7 +50,7 @@ Deno.serve(async (req) => {
   // Registra bruto para auditoria (best-effort).
   try {
     await admin.from('webhook_logs').insert({
-      source: 'woovi',
+      provider: 'woovi',
       event_type: payload.event ?? 'unknown',
       payload: payload as unknown as Record<string, unknown>,
     });
@@ -85,54 +86,18 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: true, ignored: true, reason: 'not_completed_at_source' });
   }
 
-  // Atualiza cobrança.
-  const { data: chargeRow } = await admin
-    .from('woovi_charges')
-    .update({ status: 'COMPLETED', paid_at: new Date().toISOString() })
-    .eq('correlation_id', correlationId)
-    .select('id, agendamento_id, barbeiro_id, user_id, value_centavos')
-    .maybeSingle();
-
-  if (!chargeRow) {
-    console.warn('[woovi-webhook] Cobrança desconhecida no banco:', correlationId);
-    return jsonResponse({ ok: true, ignored: true, reason: 'unknown_charge' });
+  const { data: chargeRow, error: lookupError } = await admin.from('woovi_charges')
+    .select('value_centavos').eq('correlation_id', correlationId).maybeSingle();
+  if (lookupError) return jsonResponse({ error: 'DB_ERROR' }, 500);
+  if (!chargeRow) return jsonResponse({ error: 'UNKNOWN_CHARGE' }, 404);
+  try { assertConfirmedAmount(chargeRow.value_centavos, confirmedValue, confirmedStatus); }
+  catch { return jsonResponse({ error: 'VALUE_MISMATCH' }, 409); }
+  const { data, error } = await admin.rpc('confirm_woovi_payment', {
+    p_correlation_id: correlationId, p_value_centavos: confirmedValue,
+  });
+  if (error) {
+    console.error('[woovi-webhook] Reconciliação necessária:', error.message);
+    return jsonResponse({ error: 'RECONCILIATION_REQUIRED', message: error.message }, 409);
   }
-
-  // Segurança financeira: valor confirmado precisa bater com valor esperado (tolerância 1 centavo).
-  if (chargeRow.value_centavos && Math.abs(confirmedValue - chargeRow.value_centavos) > 1) {
-    console.error('[woovi-webhook] Valor divergente entre banco e Woovi — não credita', {
-      correlationId,
-      confirmedValue,
-      expected: chargeRow.value_centavos,
-    });
-    return jsonResponse({ error: 'VALUE_MISMATCH' }, 409);
-  }
-
-  if (chargeRow.agendamento_id) {
-    await admin.from('agendamentos')
-      .update({ status: 'confirmado' })
-      .eq('id', chargeRow.agendamento_id)
-      .in('status', ['pendente', 'pendente_pagamento']);
-  }
-
-  if (chargeRow.barbeiro_id && chargeRow.value_centavos) {
-    const { data: barb } = await admin
-      .from('barbeiros')
-      .select('user_id')
-      .eq('id', chargeRow.barbeiro_id)
-      .maybeSingle();
-    if (barb?.user_id) {
-      await admin.from('wallet_transactions').insert({
-        user_id: barb.user_id,
-        type: 'credit',
-        amount: chargeRow.value_centavos / 100,
-        status: 'completed',
-        description: 'Pagamento Woovi',
-        gateway_payment_id: correlationId,
-        metadata: { source: 'woovi', event },
-      });
-    }
-  }
-
-  return jsonResponse({ ok: true });
+  return jsonResponse({ ok: true, result: data });
 });

@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
  * WalletAccountGate — Bloqueia carteira até equipe configurar
  * ═══════════════════════════════════════════════════════════
  *
- * Verifica se o barbeiro já tem carteira Woovi/Asaas ou conta financeira configurada.
+ * Verifica se o barbeiro já tem carteira Woovi ou conta financeira configurada.
  * premium com CTA para WhatsApp do suporte. A configuração é
  * feita manualmente pela equipe via painel admin/TI.
  */

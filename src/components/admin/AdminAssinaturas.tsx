@@ -246,7 +246,7 @@ export function AdminAssinaturas({
       pix: "PIX",
       credit_card: "Cartão crédito",
       debit_card: "Cartão débito",
-      asaas: "App",
+      woovi: "Pix Woovi",
     };
     return map[method] || method;
   };

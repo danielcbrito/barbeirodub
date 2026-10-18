@@ -33,43 +33,10 @@ export function AdminAPIs() {
 
         {/* Payment APIs */}
         <TabsContent value="payment" className="space-y-6 mt-6">
-          <Card className="card-glass p-6">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow-red">
-                <Key className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Asaas</h3>
-                <p className="text-xs text-muted-foreground">Gateway de pagamento</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="asaas-api-key">API Key</Label>
-                <Input
-                  id="asaas-api-key"
-                  type="password"
-                  placeholder="••••••••••••••••"
-                  className="input-premium mt-2"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="asaas-webhook-secret">Webhook Secret</Label>
-                <Input
-                  id="asaas-webhook-secret"
-                  type="password"
-                  placeholder="••••••••••••••••"
-                  className="input-premium mt-2"
-                />
-              </div>
-
-              <Button className="bg-gradient-primary shadow-glow-red hover:scale-[1.02] transition-all">
-                Salvar Configurações
-              </Button>
-            </div>
-          </Card>
+          <div className="py-6 border-b border-border">
+            <h3 className="text-lg font-semibold">Woovi</h3>
+            <p className="text-sm text-muted-foreground mt-2">Pagamentos Pix</p>
+          </div>
         </TabsContent>
 
         {/* Communication APIs */}

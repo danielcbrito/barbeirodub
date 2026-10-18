@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { invokeAuthenticatedFunction } from '@/lib/invokeAuthenticatedFunction';
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -142,7 +143,7 @@ const ClienteAssinar = () => {
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'cash'>('card');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'cash'>('pix');
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(null);
   
@@ -338,20 +339,20 @@ const ClienteAssinar = () => {
         };
       }
 
-      const { data, error } = await supabase.functions.invoke('create-subscription', {
+      const { data, error } = await invokeAuthenticatedFunction('create-subscription', {
         body: payload
       });
 
       if (error) throw error;
 
-      if (paymentMethod === 'pix' && data.asaasSubscription?.firstPayment?.pixQrCode) {
-        setPixQrCode(data.asaasSubscription.firstPayment.pixQrCode.encodedImage);
-        setPixPayload(data.asaasSubscription.firstPayment.pixQrCode.payload);
-        setGatewaySubscriptionId(data.asaasSubscription.id);
+      if (paymentMethod === 'pix' && data.wooviSubscription?.firstPayment?.pixQrCode) {
+        setPixQrCode(data.wooviSubscription.firstPayment.pixQrCode.encodedImage);
+        setPixPayload(data.wooviSubscription.firstPayment.pixQrCode.payload);
+        setGatewaySubscriptionId(data.wooviSubscription.id);
         toast.success("QR Code gerado! Escaneie para pagar.");
         setStep(5);
       } else if (paymentMethod === 'card') {
-        if (data.asaasSubscription?.firstPayment?.status === 'CONFIRMED') {
+        if (data.wooviSubscription?.firstPayment?.status === 'CONFIRMED') {
           toast.success("Pagamento aprovado! Assinatura ativada.");
           navigate("/cliente");
         } else {
@@ -545,38 +546,6 @@ const ClienteAssinar = () => {
               </div>
 
               <div className="space-y-3">
-                {/* Cartão */}
-                <motion.div
-                  whileTap={{ scale: 0.98 }}
-                  className={cn(
-                    "p-4 rounded-xl border cursor-pointer transition-all",
-                    paymentMethod === 'card'
-                      ? "bg-red-500/10 border-red-500/50 ring-2 ring-red-500/30"
-                      : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
-                  )}
-                  onClick={() => setPaymentMethod('card')}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-5 h-5 rounded-full border-2 flex items-center justify-center",
-                      paymentMethod === 'card' ? "border-red-500" : "border-zinc-600"
-                    )}>
-                      {paymentMethod === 'card' && (
-                        <div className="w-3 h-3 rounded-full bg-red-500" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="w-4 h-4 text-zinc-400" />
-                        <h4 className="font-semibold text-foreground">Cartão de Crédito</h4>
-                      </div>
-                      <p className="text-xs text-zinc-500">
-                        Cobrança automática mensal
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-
                 {/* PIX */}
                 <motion.div
                   whileTap={{ scale: 0.98 }}
@@ -859,7 +828,7 @@ const ClienteAssinar = () => {
                   <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 space-y-6">
                     <div className="flex justify-center bg-white p-4 rounded-xl">
                       <img
-                        src={`data:image/png;base64,${pixQrCode}`}
+                        src={pixQrCode.startsWith("https://") || pixQrCode.startsWith("data:") ? pixQrCode : `data:image/png;base64,${pixQrCode}`}
                         alt="QR Code PIX"
                         className="w-64 h-64"
                       />

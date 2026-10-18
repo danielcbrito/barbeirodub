@@ -47,39 +47,7 @@ serve(async (req) => {
       throw new Error('Nenhuma assinatura encontrada para cancelar');
     }
 
-    const asaasApiKey = Deno.env.get('ASAAS_API_KEY');
-    if (!asaasApiKey) {
-      throw new Error('Asaas API key not configured');
-    }
-
-    // Cancel subscription in Asaas
-    if (subscription.gateway_subscription_id) {
-      console.log('Canceling Asaas subscription:', subscription.gateway_subscription_id);
-
-      const asaasResponse = await fetch(
-        `https://api.asaas.com/v3/subscriptions/${subscription.gateway_subscription_id}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'access_token': asaasApiKey,
-          },
-        }
-      );
-
-      if (!asaasResponse.ok) {
-        const errorText = await asaasResponse.text();
-        console.error('Asaas cancellation error:', {
-          status: asaasResponse.status,
-          statusText: asaasResponse.statusText,
-          body: errorText
-        });
-        throw new Error('Erro ao cancelar assinatura no gateway de pagamento');
-      }
-
-      console.log('Asaas subscription canceled successfully');
-    }
-
+    // Plans use one-off Pix charges; cancellation stops local renewal, not an automatic card debit.
     // Update subscription status in database
     const { error: updateError } = await supabase
       .from('assinaturas')
