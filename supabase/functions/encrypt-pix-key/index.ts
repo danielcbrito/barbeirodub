@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
     const keyBytes = getMasterKey();
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      keyBytes,
+      new Uint8Array(keyBytes),
       { name: "AES-GCM" },
       false,
       ["encrypt"],

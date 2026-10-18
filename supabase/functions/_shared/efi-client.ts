@@ -112,7 +112,7 @@ export async function getEfiAccessToken(env: EfiEnv = "test"): Promise<string> {
  */
 export async function efiRequest<T = any>(
   path: string,
-  init: RequestInit & { body?: any; env?: EfiEnv } = {}
+  init: Omit<RequestInit, "body"> & { body?: unknown; env?: EfiEnv } = {}
 ): Promise<T> {
   const env: EfiEnv = init.env ?? "test";
   const token = await getEfiAccessToken(env);
