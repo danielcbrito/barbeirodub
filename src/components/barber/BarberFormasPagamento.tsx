@@ -11,6 +11,10 @@ import {
   fetchBarberCancellationFee,
   saveBarberCancellationFee,
   BarberCancellationFeeConfig,
+  ClienteDebitoCancelamento,
+  fetchBarberPendingCancellationDebts,
+  dispenseCancellationDebt,
+  subscribeToBarberPendingDebts,
 } from "@/lib/barberCancellationFee";
 import {
   Loader2,
@@ -23,6 +27,11 @@ import {
   Clock,
   ShieldAlert,
   Check,
+  Users,
+  Unlock,
+  RefreshCw,
+  Phone,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +65,24 @@ export function BarberFormasPagamento({
   });
   const [savingFee, setSavingFee] = useState(false);
 
+  // ── Clientes com taxa de cancelamento pendente
+  const [pendingDebts, setPendingDebts] = useState<ClienteDebitoCancelamento[]>([]);
+  const [loadingDebts, setLoadingDebts] = useState(true);
+  const [releasingId, setReleasingId] = useState<string | null>(null);
+
+  // Função para buscar clientes com débitos pendentes
+  const loadDebts = async () => {
+    try {
+      setLoadingDebts(true);
+      const debts = await fetchBarberPendingCancellationDebts(barbeiroId, tenantId);
+      setPendingDebts(debts);
+    } catch (err) {
+      console.error("Erro ao buscar clientes com débitos:", err);
+    } finally {
+      setLoadingDebts(false);
+    }
+  };
+
   // Carrega configurações do banco de dados ao montar
   useEffect(() => {
     let mounted = true;
@@ -81,6 +108,42 @@ export function BarberFormasPagamento({
       mounted = false;
     };
   }, [barbeiroId, tenantId]);
+
+  // Carrega e assina débitos em tempo real
+  useEffect(() => {
+    if (!barbeiroId) return;
+    loadDebts();
+    const unsubscribe = subscribeToBarberPendingDebts(barbeiroId, () => {
+      loadDebts();
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [barbeiroId, tenantId]);
+
+  // Handler para liberar cliente manualmente
+  const handleReleaseClient = async (debito: ClienteDebitoCancelamento) => {
+    setReleasingId(debito.id);
+    const previous = [...pendingDebts];
+    // Optimistic UI imediata
+    setPendingDebts((prev) => prev.filter((d) => d.id !== debito.id));
+
+    try {
+      await dispenseCancellationDebt({
+        debitoId: debito.id,
+        clienteId: debito.cliente_id,
+        barbeiroId,
+        tenantId,
+      });
+      const nomeCliente = debito.cliente_nome || "Cliente";
+      toast.success(`${nomeCliente} foi liberado(a)! O aplicativo dele(a) foi desbloqueado com sucesso.`);
+    } catch (err: any) {
+      setPendingDebts(previous);
+      toast.error(err?.message || "Erro ao liberar cliente. Tente novamente.");
+    } finally {
+      setReleasingId(null);
+    }
+  };
 
   // Handler para alternar formas de pagamento
   const handleToggle = async (key: "pix" | "barbearia", nextVal: boolean) => {
@@ -488,6 +551,133 @@ export function BarberFormasPagamento({
                       )}
                       <span>Salvar regras de cancelamento</span>
                     </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ═══ SEÇÃO 3: CLIENTES COM TAXA PENDENTE (BLOQUEADOS) ═══ */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+                    Clientes com Taxa Pendente
+                  </span>
+                  {pendingDebts.length > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                      {pendingDebts.length} {pendingDebts.length === 1 ? "bloqueado" : "bloqueados"}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      Nenhum bloqueado
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadDebts}
+                  disabled={loadingDebts}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                  title="Atualizar lista de clientes"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", loadingDebts && "animate-spin")} />
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-border/40 bg-card p-4 space-y-3 shadow-xs text-left">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shrink-0 mt-0.5">
+                    <Users className="w-5 h-5 stroke-[1.8]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-semibold text-foreground leading-tight">
+                      Gerenciar clientes bloqueados
+                    </p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Clientes que cancelaram agendamentos e estão com o aplicativo travado aguardando o acerto da taxa. Você pode liberar o acesso de qualquer cliente manualmente com um clique.
+                    </p>
+                  </div>
+                </div>
+
+                {loadingDebts ? (
+                  <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-[12px]">Verificando débitos pendentes...</span>
+                  </div>
+                ) : pendingDebts.length === 0 ? (
+                  <div className="py-6 px-4 rounded-xl bg-secondary/20 border border-border/30 text-center space-y-2">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 mx-auto">
+                      <ShieldCheck className="w-5 h-5 stroke-[1.8]" />
+                    </div>
+                    <p className="text-[13px] font-medium text-foreground">
+                      Nenhum cliente bloqueado no momento
+                    </p>
+                    <p className="text-[11.5px] text-muted-foreground max-w-sm mx-auto leading-relaxed">
+                      Quando algum cliente cancelar um agendamento sujeito à taxa, ele aparecerá aqui com o aplicativo travado até que pague via Pix ou seja liberado por você.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 pt-1">
+                    {pendingDebts.map((debito) => (
+                      <div
+                        key={debito.id}
+                        className="p-3.5 rounded-xl bg-secondary/30 border border-border/40 hover:border-border/60 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          {/* Avatar com inicial */}
+                          <div className="w-9 h-9 rounded-full bg-secondary border border-border flex items-center justify-center text-foreground font-bold text-[13px] shrink-0">
+                            {(debito.cliente_nome || "C").charAt(0).toUpperCase()}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[13.5px] font-semibold text-foreground truncate">
+                                {debito.cliente_nome || "Cliente sem identificação"}
+                              </span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                App Bloqueado
+                              </span>
+                            </div>
+
+                            {debito.cliente_telefone && (
+                              <div className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground mt-0.5">
+                                <Phone className="w-3 h-3 text-muted-foreground/70" />
+                                <span>{debito.cliente_telefone}</span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground/80 mt-1 flex-wrap">
+                              <span className="font-semibold text-foreground">
+                                Taxa: R$ {debito.valor_taxa.toFixed(2).replace(".", ",")}
+                                {debito.porcentagem_aplicada ? ` (${debito.porcentagem_aplicada}%)` : ""}
+                              </span>
+                              <span>•</span>
+                              <span>
+                                Cancelado em {new Date(debito.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às {new Date(debito.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Botão de Liberar */}
+                        <div className="flex items-center justify-end sm:shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/20">
+                          <button
+                            type="button"
+                            onClick={() => handleReleaseClient(debito)}
+                            disabled={releasingId === debito.id}
+                            className="w-full sm:w-auto h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-all disabled:opacity-50"
+                          >
+                            {releasingId === debito.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Unlock className="w-3.5 h-3.5" />
+                            )}
+                            <span>Liberar cliente</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

@@ -19,8 +19,8 @@ export function ClienteBloqueioTaxaModal({ debito, onUnlocked }: ClienteBloqueio
 
     // Escuta em tempo real o pagamento / liberação do débito
     const unsubscribe = subscribeToClientCancellationDebts(debito.cliente_id, (updatedDebt) => {
-      if (!updatedDebt || updatedDebt.status === "pago") {
-        toast.success("Taxa de cancelamento quitada! Seu aplicativo foi desbloqueado.");
+      if (!updatedDebt || updatedDebt.status === "pago" || updatedDebt.status === "dispensado" || (updatedDebt.status as string) === "liberado_manual") {
+        toast.success("Taxa de cancelamento liberada! Seu aplicativo foi desbloqueado.");
         onUnlocked();
       }
     });

@@ -294,16 +294,24 @@ export async function checkClientPendingCancellationDebt(
  */
 export async function registerCancellationDebt({
   clienteId,
+  clienteNome,
+  clienteTelefone,
   barbeiroId,
+  barbeiroNome,
   tenantId,
   agendamentoId,
+  servicoNome,
   valorServico,
   dataHoraAgendamento,
 }: {
   clienteId: string;
+  clienteNome?: string;
+  clienteTelefone?: string;
   barbeiroId: string;
+  barbeiroNome?: string;
   tenantId?: string | null;
   agendamentoId?: string;
+  servicoNome?: string;
   valorServico: number;
   dataHoraAgendamento?: Date | string;
 }): Promise<ClienteDebitoCancelamento | null> {
@@ -343,7 +351,10 @@ export async function registerCancellationDebt({
   const novoDebito: ClienteDebitoCancelamento = {
     id: crypto.randomUUID(),
     cliente_id: clienteId,
+    cliente_nome: clienteNome,
+    cliente_telefone: clienteTelefone,
     barbeiro_id: barbeiroId,
+    barbeiro_nome: barbeiroNome,
     tenant_id: tenantId || null,
     agendamento_id: agendamentoId || null,
     valor_taxa: valorTaxa,
@@ -355,7 +366,7 @@ export async function registerCancellationDebt({
     created_at: new Date().toISOString(),
   };
 
-  // 4. Salva no banco de dados
+  // 4. Salva no banco de dados na tabela dedicada (se existir)
   try {
     await (supabase as any)
       .from("cliente_debitos_cancelamento")
@@ -374,7 +385,7 @@ export async function registerCancellationDebt({
       });
   } catch {}
 
-  // 5. Salva também em informacoes_empresa (garante funcionamento imediato)
+  // 5. Salva na chave do cliente para bloqueio instantâneo do app
   try {
     const chave = `debito_cancelamento_${clienteId}`;
     await supabase.from("informacoes_empresa").upsert({
@@ -386,6 +397,41 @@ export async function registerCancellationDebt({
     } as any, { onConflict: "tenant_id,chave" });
   } catch {}
 
+  // 6. Indexa na lista de débitos pendentes do barbeiro
+  try {
+    const listKey = `lista_debitos_pendentes_${barbeiroId}`;
+    const { data: listRow } = await supabase
+      .from("informacoes_empresa")
+      .select("id, valor")
+      .eq("chave", listKey)
+      .maybeSingle();
+
+    let list: ClienteDebitoCancelamento[] = [];
+    if (listRow?.valor) {
+      try { list = JSON.parse(listRow.valor); } catch {}
+    }
+    // Remove qualquer duplicata e adiciona o novo no início
+    list = [novoDebito, ...list.filter((d) => d.id !== novoDebito.id && d.cliente_id !== novoDebito.cliente_id)];
+
+    if (listRow?.id) {
+      await supabase
+        .from("informacoes_empresa")
+        .update({
+          valor: JSON.stringify(list),
+          atualizado_em: new Date().toISOString(),
+        } as any)
+        .eq("id", listRow.id);
+    } else {
+      await supabase.from("informacoes_empresa").insert({
+        chave: listKey,
+        categoria: "debitos_barbeiro",
+        valor: JSON.stringify(list),
+        tenant_id: tenantId || null,
+        ativo: true,
+      } as any);
+    }
+  } catch {}
+
   return novoDebito;
 }
 
@@ -394,9 +440,10 @@ export async function registerCancellationDebt({
  */
 export async function markCancellationDebtAsPaid(
   debitoId: string,
-  clienteId: string
+  clienteId: string,
+  barbeiroId?: string
 ): Promise<boolean> {
-  if (!debitoId) return false;
+  if (!debitoId && !clienteId) return false;
 
   try {
     await (supabase as any)
@@ -405,15 +452,272 @@ export async function markCancellationDebtAsPaid(
         status: "pago",
         pago_em: new Date().toISOString(),
       })
-      .eq("id", debitoId);
+      .eq(debitoId ? "id" : "cliente_id", debitoId || clienteId);
   } catch {}
 
   try {
     const chave = `debito_cancelamento_${clienteId}`;
-    await supabase.from("informacoes_empresa").delete().eq("chave", chave);
+    const { data: existing } = await supabase
+      .from("informacoes_empresa")
+      .select("id, valor")
+      .eq("chave", chave)
+      .maybeSingle();
+
+    if (existing?.id) {
+      let parsed: any = {};
+      try { parsed = JSON.parse(existing.valor); } catch {}
+      parsed.status = "pago";
+      parsed.pago_em = new Date().toISOString();
+
+      await supabase
+        .from("informacoes_empresa")
+        .update({
+          valor: JSON.stringify(parsed),
+          ativo: false,
+          atualizado_em: new Date().toISOString(),
+        } as any)
+        .eq("id", existing.id);
+    }
+  } catch {}
+
+  // Remove da lista do barbeiro se especificado
+  if (barbeiroId) {
+    try {
+      const listKey = `lista_debitos_pendentes_${barbeiroId}`;
+      const { data: listRow } = await supabase
+        .from("informacoes_empresa")
+        .select("id, valor")
+        .eq("chave", listKey)
+        .maybeSingle();
+
+      if (listRow?.valor) {
+        try {
+          const list: ClienteDebitoCancelamento[] = JSON.parse(listRow.valor);
+          const filtered = list.filter((d) => d.id !== debitoId && d.cliente_id !== clienteId);
+          await supabase
+            .from("informacoes_empresa")
+            .update({
+              valor: JSON.stringify(filtered),
+              atualizado_em: new Date().toISOString(),
+            } as any)
+            .eq("id", listRow.id);
+        } catch {}
+      }
+    } catch {}
+  }
+
+  return true;
+}
+
+/**
+ * Libera/dispensa manualmente a taxa de cancelamento do cliente.
+ * Atualiza o banco para desbloquear o aplicativo do cliente instantaneamente.
+ */
+export async function dispenseCancellationDebt({
+  debitoId,
+  clienteId,
+  barbeiroId,
+  tenantId,
+}: {
+  debitoId: string;
+  clienteId: string;
+  barbeiroId: string;
+  tenantId?: string | null;
+}): Promise<boolean> {
+  if (!debitoId && !clienteId) return false;
+
+  // 1. Atualizar tabela cliente_debitos_cancelamento se existir
+  try {
+    await (supabase as any)
+      .from("cliente_debitos_cancelamento")
+      .update({
+        status: "dispensado",
+        dispensado_em: new Date().toISOString(),
+      })
+      .eq(debitoId ? "id" : "cliente_id", debitoId || clienteId);
+  } catch {}
+
+  // 2. Atualizar informacoes_empresa debito_cancelamento_${clienteId}
+  // Marcando como 'liberado_manual' e ativo: false para desbloqueio em tempo real
+  try {
+    const chave = `debito_cancelamento_${clienteId}`;
+    const { data: existing } = await supabase
+      .from("informacoes_empresa")
+      .select("id, valor")
+      .eq("chave", chave)
+      .maybeSingle();
+
+    if (existing?.id) {
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(existing.valor);
+      } catch {}
+
+      parsed.status = "liberado_manual";
+      parsed.dispensado_em = new Date().toISOString();
+
+      await supabase
+        .from("informacoes_empresa")
+        .update({
+          valor: JSON.stringify(parsed),
+          ativo: false,
+          atualizado_em: new Date().toISOString(),
+        } as any)
+        .eq("id", existing.id);
+    }
+  } catch {}
+
+  // 3. Atualizar a lista indexada do barbeiro
+  try {
+    const listKey = `lista_debitos_pendentes_${barbeiroId}`;
+    const { data: listRow } = await supabase
+      .from("informacoes_empresa")
+      .select("id, valor")
+      .eq("chave", listKey)
+      .maybeSingle();
+
+    if (listRow?.valor) {
+      try {
+        const list: ClienteDebitoCancelamento[] = JSON.parse(listRow.valor);
+        const filtered = list.filter((d) => d.id !== debitoId && d.cliente_id !== clienteId);
+        await supabase
+          .from("informacoes_empresa")
+          .update({
+            valor: JSON.stringify(filtered),
+            atualizado_em: new Date().toISOString(),
+          } as any)
+          .eq("id", listRow.id);
+      } catch {}
+    }
   } catch {}
 
   return true;
+}
+
+/**
+ * Busca todos os clientes com taxas de cancelamento pendentes para um barbeiro específico.
+ */
+export async function fetchBarberPendingCancellationDebts(
+  barbeiroId: string,
+  tenantId?: string | null
+): Promise<ClienteDebitoCancelamento[]> {
+  if (!barbeiroId) return [];
+
+  const mapById = new Map<string, ClienteDebitoCancelamento>();
+
+  // 1. Buscar da tabela cliente_debitos_cancelamento se existir
+  try {
+    const { data, error } = await (supabase as any)
+      .from("cliente_debitos_cancelamento")
+      .select("*, profiles:cliente_id(nome, telefone)")
+      .eq("barbeiro_id", barbeiroId)
+      .eq("status", "pendente")
+      .order("created_at", { ascending: false });
+
+    if (!error && Array.isArray(data)) {
+      for (const item of data) {
+        const deb: ClienteDebitoCancelamento = {
+          id: item.id,
+          cliente_id: item.cliente_id,
+          cliente_nome: item.profiles?.nome || item.cliente_nome,
+          cliente_telefone: item.profiles?.telefone || item.cliente_telefone,
+          barbeiro_id: item.barbeiro_id,
+          tenant_id: item.tenant_id,
+          agendamento_id: item.agendamento_id,
+          valor_taxa: Number(item.valor_taxa) || 0,
+          tipo_taxa: item.tipo_taxa || "porcentagem",
+          porcentagem_aplicada: item.porcentagem_aplicada ? Number(item.porcentagem_aplicada) : null,
+          valor_servico_original: item.valor_servico_original ? Number(item.valor_servico_original) : null,
+          motivo: item.motivo,
+          status: item.status,
+          pix_charge_id: item.pix_charge_id,
+          pix_payload: item.pix_payload,
+          pix_qrcode: item.pix_qrcode,
+          created_at: item.created_at,
+        };
+        mapById.set(deb.id, deb);
+      }
+    }
+  } catch {}
+
+  // 2. Buscar da lista indexada em informacoes_empresa: lista_debitos_pendentes_${barbeiroId}
+  try {
+    const listKey = `lista_debitos_pendentes_${barbeiroId}`;
+    const { data: listRow } = await supabase
+      .from("informacoes_empresa")
+      .select("valor")
+      .eq("chave", listKey)
+      .maybeSingle();
+
+    if (listRow?.valor) {
+      const parsedList = JSON.parse(listRow.valor);
+      if (Array.isArray(parsedList)) {
+        for (const item of parsedList) {
+          if (item?.status === "pendente" && !mapById.has(item.id)) {
+            mapById.set(item.id, item);
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // 3. Buscar débitos gerais em informacoes_empresa onde categoria = 'debitos_cliente' e ativo = true
+  try {
+    const { data: rows } = await supabase
+      .from("informacoes_empresa")
+      .select("valor")
+      .eq("categoria", "debitos_cliente")
+      .eq("ativo", true);
+
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        if (row.valor) {
+          try {
+            const parsed = JSON.parse(row.valor);
+            if (
+              parsed?.barbeiro_id === barbeiroId &&
+              parsed?.status === "pendente" &&
+              !mapById.has(parsed.id)
+            ) {
+              mapById.set(parsed.id, parsed);
+            }
+          } catch {}
+        }
+      }
+    }
+  } catch {}
+
+  const results = Array.from(mapById.values());
+
+  // 4. Se algum cliente estiver sem nome, busca no profiles para enriquecer a exibição
+  const missingNameUserIds = results
+    .filter((d) => !d.cliente_nome && d.cliente_id)
+    .map((d) => d.cliente_id);
+
+  if (missingNameUserIds.length > 0) {
+    try {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, nome, telefone")
+        .in("id", missingNameUserIds);
+
+      if (Array.isArray(profiles)) {
+        const profMap = new Map(profiles.map((p) => [p.id, p]));
+        for (const res of results) {
+          if (!res.cliente_nome && res.cliente_id && profMap.has(res.cliente_id)) {
+            const p = profMap.get(res.cliente_id)!;
+            res.cliente_nome = p.nome;
+            res.cliente_telefone = p.telefone;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Ordenar decrescente por data de criação
+  results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  return results;
 }
 
 /**
@@ -453,6 +757,10 @@ export function subscribeToClientCancellationDebts(
         filter: `chave=eq.debito_cancelamento_${clienteId}`,
       },
       (payload) => {
+        if (payload.eventType === "DELETE") {
+          onUpdate(null);
+          return;
+        }
         const row = payload.new as any;
         if (row?.valor) {
           try {
@@ -464,6 +772,48 @@ export function subscribeToClientCancellationDebts(
           } catch {}
         }
         onUpdate(null);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Assina atualizações em tempo real na lista de débitos de um barbeiro.
+ */
+export function subscribeToBarberPendingDebts(
+  barbeiroId: string,
+  onUpdate: () => void
+): () => void {
+  if (!barbeiroId) return () => {};
+
+  const channel = supabase
+    .channel(`barbeiro-debitos-${barbeiroId}-${Date.now()}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "cliente_debitos_cancelamento",
+        filter: `barbeiro_id=eq.${barbeiroId}`,
+      },
+      () => {
+        onUpdate();
+      }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "informacoes_empresa",
+        filter: `chave=eq.lista_debitos_pendentes_${barbeiroId}`,
+      },
+      () => {
+        onUpdate();
       }
     )
     .subscribe();

@@ -69,11 +69,13 @@ Quando o cliente solicitar o cancelamento de um agendamento:
          - Se `tipo === 'fixo'`: `valorTaxa = taxaConfig.valor;`
 
 3. **Registrar o Débito e Bloqueio no Banco:**
-   Ao confirmar o cancelamento, crie o registro de débito:
+   Ao confirmar o cancelamento, crie o registro de débito incluindo os dados do cliente:
    ```typescript
    const novoDebito = {
      id: crypto.randomUUID(),
      cliente_id: clienteId,
+     cliente_nome: clienteNome || user.user_metadata?.nome || user.email || "Cliente",
+     cliente_telefone: clienteTelefone || user.user_metadata?.telefone || null,
      barbeiro_id: barbeiroId,
      agendamento_id: agendamentoId,
      valor_taxa: valorTaxa,
@@ -93,6 +95,23 @@ Quando o cliente solicitar o cancelamento de um agendamento:
      valor: JSON.stringify(novoDebito),
      ativo: true
    }, { onConflict: "chave" });
+
+   // Indexa na lista de débitos pendentes do barbeiro
+   try {
+     const listKey = `lista_debitos_pendentes_${barbeiroId}`;
+     const { data: listRow } = await supabase.from("informacoes_empresa").select("id, valor").eq("chave", listKey).maybeSingle();
+     let currentList = [];
+     if (listRow?.valor) {
+       try { currentList = JSON.parse(listRow.valor); } catch {}
+     }
+     currentList = [novoDebito, ...currentList.filter(d => d.id !== novoDebito.id && d.cliente_id !== novoDebito.cliente_id)];
+     await supabase.from("informacoes_empresa").upsert({
+       chave: listKey,
+       categoria: "debitos_barbeiro",
+       valor: JSON.stringify(currentList),
+       ativo: true
+     }, { onConflict: "chave" });
+   } catch {}
    ```
 
 ---
@@ -130,6 +149,32 @@ No componente raiz do app (App Shell / Layout principal do Cliente):
        - Botão **"Pagar taxa via Pix para desbloquear"**.
        - Ao clicar, exibe o QR Code Pix e o botão "Copiar código Pix Copia e Cola".
 
-3. **Desbloqueio em Tempo Real:**
-   - Adicione listener Realtime em `informacoes_empresa` com filtro `chave=eq.debito_cancelamento_${user.id}`.
-   - Assim que o pagamento for confirmado (ou a chave for removida/marcada como `status: 'pago'`), feche o modal de bloqueio e libere o uso do aplicativo imediatamente sem necessidade de recarregar a página.
+3. **Desbloqueio em Tempo Real (Pagamento Pix OU Liberação Manual pelo Barbeiro):**
+   - Adicione listener Realtime em `informacoes_empresa` com filtro `chave=eq.debito_cancelamento_${user.id}`:
+   ```typescript
+   const channel = supabase
+     .channel(`debito-${user.id}`)
+     .on("postgres_changes", {
+       event: "*",
+       schema: "public",
+       table: "informacoes_empresa",
+       filter: `chave=eq.debito_cancelamento_${user.id}`
+     }, (payload) => {
+       if (payload.eventType === "DELETE") {
+         desbloquearApp();
+         return;
+       }
+       if (payload.new?.valor) {
+         try {
+           const parsed = JSON.parse(payload.new.valor);
+           // Se status for 'pago', 'dispensado' ou 'liberado_manual', desbloqueia imediatamente!
+           if (parsed.status === "pago" || parsed.status === "dispensado" || parsed.status === "liberado_manual") {
+             desbloquearApp();
+             return;
+           }
+         } catch {}
+       }
+     })
+     .subscribe();
+   ```
+   - O aplicativo é liberado instantaneamente na tela do cliente sem necessidade de recarregar a página!
