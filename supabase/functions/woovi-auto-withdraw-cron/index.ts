@@ -37,8 +37,9 @@ Deno.serve(async (req) => {
 
     for (const b of barbers ?? []) {
       try {
+        if (!b.woovi_pix_key) continue;
         const bal = await wooviFetch<{ subAccount: { balance: number } }>(
-          `/api/v1/subaccount/${encodeURIComponent(b.woovi_pix_key!)}`,
+          `/api/v1/subaccount/${encodeURIComponent(b.woovi_pix_key)}`,
         );
         const balance = bal.subAccount?.balance ?? 0;
 
@@ -49,8 +50,8 @@ Deno.serve(async (req) => {
         }
 
         await wooviFetch(
-          `/api/v1/subaccount/${encodeURIComponent(b.woovi_pix_key!)}/withdraw`,
-          { method: "POST", body: JSON.stringify({ value: balance }) },
+          `/api/v1/subaccount/${encodeURIComponent(b.woovi_pix_key)}/withdraw`,
+          { method: "POST", body: { value: balance } },
         );
 
         await admin.from("saques").insert({
@@ -58,7 +59,7 @@ Deno.serve(async (req) => {
           barbeiro_id: b.id,
           valor: balance / 100,
           status: "processando",
-          chave_pix_valor: b.woovi_pix_key!,
+          chave_pix_valor: b.woovi_pix_key,
           chave_pix_tipo: b.woovi_pix_key_type ?? "random",
         });
 

@@ -5,6 +5,7 @@ import { requireUser } from '../_shared/woovi-auth.ts';
 
 interface WooviSubaccount {
   SubAccount?: { name?: string; pixKey?: string; balance?: number };
+  subAccount?: { name?: string; pixKey?: string; balance?: number };
 }
 
 Deno.serve(async (req) => {
@@ -14,17 +15,19 @@ Deno.serve(async (req) => {
   if (ctx instanceof Response) return ctx;
   const { userId, admin } = ctx;
 
-  const { data: barb } = await admin
+  const { data: barb, error: barberError } = await admin
     .from('barbeiros')
     .select('id, woovi_pix_key')
     .eq('user_id', userId)
     .maybeSingle();
 
+  if (barberError) return errorResponse('DB_ERROR', 'Não foi possível consultar a carteira', 500);
   if (!barb?.woovi_pix_key) return jsonResponse({ balance_centavos: 0, has_subaccount: false });
 
   try {
     const resp = await wooviFetch<WooviSubaccount>(`/api/v1/subaccount/${encodeURIComponent(barb.woovi_pix_key)}`);
-    const balance = resp.SubAccount?.balance ?? 0;
+    const balance = resp.subAccount?.balance ?? resp.SubAccount?.balance;
+    if (typeof balance !== 'number' || !Number.isFinite(balance)) return errorResponse('INVALID_BANK_RESPONSE', 'Woovi não retornou um saldo válido', 502);
     return jsonResponse({ balance_centavos: balance, has_subaccount: true, pix_key: barb.woovi_pix_key });
   } catch (e) {
     if (e instanceof WooviError) return errorResponse('WOOVI_ERROR', e.message, 400, { woovi: e.body });
