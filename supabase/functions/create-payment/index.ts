@@ -297,6 +297,7 @@ async function checkTimeSlotAvailability(
 interface CreatePaymentRequest {
   bookingData: {
     servico_id: string;
+    servico_ids?: string[];
     barbeiro_id: string | null;
     data: string;
     hora: string;
@@ -358,6 +359,22 @@ serve(async (req) => {
     const { bookingData, metodo, customerInfo, cardInfo, rescheduleFromId }: CreatePaymentRequest = await req.json();
 
     assertWooviMethod(metodo);
+    if (!bookingData?.barbeiro_id || !bookingData.servico_id) throw new Error('Serviço e barbeiro obrigatórios');
+    const serviceIds = [...new Set(bookingData.servico_ids ?? [bookingData.servico_id])];
+    if (!serviceIds.length || serviceIds.length > 20 || !serviceIds.includes(bookingData.servico_id)) throw new Error('Serviços inválidos');
+    const { data: barber, error: barberError } = await supabase.from('barbeiros').select('tenant_id').eq('id', bookingData.barbeiro_id).eq('ativo', true).single();
+    const { data: services, error: servicesError } = await supabase.from('servicos').select('id,preco,duracao_minutos,tenant_id').in('id', serviceIds).eq('ativo', true);
+    const { data: durations, error: durationError } = await supabase.from('barbeiro_servico_duracao').select('servico_id,duracao_personalizada').eq('barbeiro_id', bookingData.barbeiro_id).in('servico_id', serviceIds);
+    if (barberError || servicesError || durationError || !barber || services?.length !== serviceIds.length) throw new Error('Não foi possível validar os serviços');
+    if (services.some(service => service.tenant_id !== barber.tenant_id)) throw new Error('Serviço não pertence à barbearia selecionada');
+    const officialPrice = services.reduce((sum, service) => sum + Math.round(Number(service.preco) * 100), 0);
+    // Partial credits need atomic consumption when the callback creates the appointment.
+    // Fail closed rather than sell a discounted appointment without consuming credit.
+    if (Math.round(Number(bookingData.preco) * 100) !== officialPrice) {
+      return new Response(JSON.stringify({ error: 'Preço divergente ou créditos parciais: esta combinação precisa ser reconciliada antes do pagamento.', code: 'PRICE_RECONCILIATION_REQUIRED' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    bookingData.preco = officialPrice / 100;
+    bookingData.duracao = services.reduce((sum, service) => sum + Number(durations?.find(duration => duration.servico_id === service.id)?.duracao_personalizada ?? service.duracao_minutos), 0);
     if (rescheduleFromId) {
       const { data: owned } = await supabase.from('agendamentos').select('id').eq('id', rescheduleFromId).eq('user_id', user.id).maybeSingle();
       if (!owned) throw new Error('Agendamento anterior não pertence ao cliente');
