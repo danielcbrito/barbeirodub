@@ -319,22 +319,7 @@ export type Database = {
           phone?: string
           role?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "agent_conversations_barbershop_id_fkey"
-            columns: ["barbershop_id"]
-            isOneToOne: false
-            referencedRelation: "barbershops"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_conversations_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       agent_knowledge: {
         Row: {
@@ -370,15 +355,7 @@ export type Database = {
           updated_at?: string
           version?: number
         }
-        Relationships: [
-          {
-            foreignKeyName: "agent_knowledge_barbershop_id_fkey"
-            columns: ["barbershop_id"]
-            isOneToOne: false
-            referencedRelation: "barbershops"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       agent_memories: {
         Row: {
@@ -408,22 +385,7 @@ export type Database = {
           updated_at?: string
           value?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "agent_memories_barbershop_id_fkey"
-            columns: ["barbershop_id"]
-            isOneToOne: false
-            referencedRelation: "barbershops"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_memories_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       agent_skills: {
         Row: {
@@ -456,15 +418,7 @@ export type Database = {
           name?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "agent_skills_barbershop_id_fkey"
-            columns: ["barbershop_id"]
-            isOneToOne: false
-            referencedRelation: "barbershops"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       agente_config: {
         Row: {
@@ -781,54 +735,6 @@ export type Database = {
           resumo_ia?: string | null
           severidade?: string
           titulo?: string
-        }
-        Relationships: []
-      }
-      anuncios_app: {
-        Row: {
-          ativo: boolean
-          created_at: string
-          created_by: string | null
-          cta_label: string | null
-          cta_target: string | null
-          cta_tipo: string
-          descricao: string | null
-          id: string
-          imagem_path: string
-          ordem: number
-          titulo: string
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          ativo?: boolean
-          created_at?: string
-          created_by?: string | null
-          cta_label?: string | null
-          cta_target?: string | null
-          cta_tipo?: string
-          descricao?: string | null
-          id?: string
-          imagem_path: string
-          ordem?: number
-          titulo: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          ativo?: boolean
-          created_at?: string
-          created_by?: string | null
-          cta_label?: string | null
-          cta_target?: string | null
-          cta_tipo?: string
-          descricao?: string | null
-          id?: string
-          imagem_path?: string
-          ordem?: number
-          titulo?: string
-          updated_at?: string
-          updated_by?: string | null
         }
         Relationships: []
       }
@@ -1476,30 +1382,6 @@ export type Database = {
           },
         ]
       }
-      barbershops: {
-        Row: {
-          active: boolean
-          created_at: string
-          id: string
-          name: string
-          slug: string | null
-        }
-        Insert: {
-          active?: boolean
-          created_at?: string
-          id?: string
-          name: string
-          slug?: string | null
-        }
-        Update: {
-          active?: boolean
-          created_at?: string
-          id?: string
-          name?: string
-          slug?: string | null
-        }
-        Relationships: []
-      }
       bloqueios_cliente_barbeiro: {
         Row: {
           barbeiro_id: string
@@ -1538,63 +1420,6 @@ export type Database = {
             columns: ["barbeiro_id"]
             isOneToOne: false
             referencedRelation: "barbeiros_public"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      bookings: {
-        Row: {
-          barber_id: string | null
-          barbershop_id: string
-          created_at: string
-          customer_id: string | null
-          ends_at: string | null
-          id: string
-          metadata: Json
-          service_id: string | null
-          starts_at: string
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          barber_id?: string | null
-          barbershop_id: string
-          created_at?: string
-          customer_id?: string | null
-          ends_at?: string | null
-          id?: string
-          metadata?: Json
-          service_id?: string | null
-          starts_at: string
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          barber_id?: string | null
-          barbershop_id?: string
-          created_at?: string
-          customer_id?: string | null
-          ends_at?: string | null
-          id?: string
-          metadata?: Json
-          service_id?: string | null
-          starts_at?: string
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "bookings_barbershop_id_fkey"
-            columns: ["barbershop_id"]
-            isOneToOne: false
-            referencedRelation: "barbershops"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bookings_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
         ]
@@ -1862,71 +1687,6 @@ export type Database = {
             columns: ["vencedor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      client_booking_blocks: {
-        Row: {
-          barbeiro_id: string | null
-          blocked_by_user_id: string
-          client_user_id: string
-          created_at: string
-          id: string
-          scope: string
-          tenant_id: string
-          unidade_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          barbeiro_id?: string | null
-          blocked_by_user_id: string
-          client_user_id: string
-          created_at?: string
-          id?: string
-          scope: string
-          tenant_id: string
-          unidade_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          barbeiro_id?: string | null
-          blocked_by_user_id?: string
-          client_user_id?: string
-          created_at?: string
-          id?: string
-          scope?: string
-          tenant_id?: string
-          unidade_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_booking_blocks_barbeiro_id_fkey"
-            columns: ["barbeiro_id"]
-            isOneToOne: false
-            referencedRelation: "barbeiros"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_booking_blocks_barbeiro_id_fkey"
-            columns: ["barbeiro_id"]
-            isOneToOne: false
-            referencedRelation: "barbeiros_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_booking_blocks_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_booking_blocks_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_unidades"
             referencedColumns: ["id"]
           },
         ]
@@ -2511,44 +2271,6 @@ export type Database = {
         }
         Relationships: []
       }
-      customers: {
-        Row: {
-          barbershop_id: string
-          created_at: string
-          id: string
-          name: string | null
-          notes: string | null
-          phone: string
-          updated_at: string
-        }
-        Insert: {
-          barbershop_id: string
-          created_at?: string
-          id?: string
-          name?: string | null
-          notes?: string | null
-          phone: string
-          updated_at?: string
-        }
-        Update: {
-          barbershop_id?: string
-          created_at?: string
-          id?: string
-          name?: string | null
-          notes?: string | null
-          phone?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "customers_barbershop_id_fkey"
-            columns: ["barbershop_id"]
-            isOneToOne: false
-            referencedRelation: "barbershops"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       depositos: {
         Row: {
           barbeiro_id: string | null
@@ -2605,88 +2327,6 @@ export type Database = {
             columns: ["barbeiro_id"]
             isOneToOne: false
             referencedRelation: "barbeiros_public"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      discount_coupon_redemptions: {
-        Row: {
-          appointment_id: string | null
-          coupon_id: string
-          id: string
-          used_at: string
-          user_id: string
-        }
-        Insert: {
-          appointment_id?: string | null
-          coupon_id: string
-          id?: string
-          used_at?: string
-          user_id: string
-        }
-        Update: {
-          appointment_id?: string | null
-          coupon_id?: string
-          id?: string
-          used_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "discount_coupon_redemptions_coupon_id_fkey"
-            columns: ["coupon_id"]
-            isOneToOne: false
-            referencedRelation: "discount_coupons"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      discount_coupons: {
-        Row: {
-          active: boolean
-          code: string
-          created_at: string
-          created_by: string | null
-          expires_at: string | null
-          id: string
-          nome: string | null
-          percent: number
-          starts_at: string | null
-          tenant_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          code: string
-          created_at?: string
-          created_by?: string | null
-          expires_at?: string | null
-          id?: string
-          nome?: string | null
-          percent: number
-          starts_at?: string | null
-          tenant_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          code?: string
-          created_at?: string
-          created_by?: string | null
-          expires_at?: string | null
-          id?: string
-          nome?: string | null
-          percent?: number
-          starts_at?: string | null
-          tenant_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "discount_coupons_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -3076,39 +2716,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      efi_saldo_alertas: {
-        Row: {
-          ambiente: string
-          created_at: string
-          detalhes: Json | null
-          id: string
-          limite_minimo: number
-          resolvido: boolean
-          resolvido_em: string | null
-          saldo_atual: number
-        }
-        Insert: {
-          ambiente: string
-          created_at?: string
-          detalhes?: Json | null
-          id?: string
-          limite_minimo?: number
-          resolvido?: boolean
-          resolvido_em?: string | null
-          saldo_atual: number
-        }
-        Update: {
-          ambiente?: string
-          created_at?: string
-          detalhes?: Json | null
-          id?: string
-          limite_minimo?: number
-          resolvido?: boolean
-          resolvido_em?: string | null
-          saldo_atual?: number
-        }
-        Relationships: []
       }
       efi_webhook_events: {
         Row: {
@@ -4156,213 +3763,6 @@ export type Database = {
           },
         ]
       }
-      payment_events: {
-        Row: {
-          created_at: string
-          details: Json
-          event_type: string
-          from_status: string | null
-          id: string
-          payment_id: string
-          to_status: string | null
-          triggered_by: string | null
-        }
-        Insert: {
-          created_at?: string
-          details?: Json
-          event_type: string
-          from_status?: string | null
-          id?: string
-          payment_id: string
-          to_status?: string | null
-          triggered_by?: string | null
-        }
-        Update: {
-          created_at?: string
-          details?: Json
-          event_type?: string
-          from_status?: string | null
-          id?: string
-          payment_id?: string
-          to_status?: string | null
-          triggered_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_events_payment_id_fkey"
-            columns: ["payment_id"]
-            isOneToOne: false
-            referencedRelation: "payments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_receipts: {
-        Row: {
-          created_at: string
-          file_type: string | null
-          file_url: string
-          id: string
-          ocr_extracted: Json | null
-          ocr_failure_reason: string | null
-          ocr_processed_at: string | null
-          ocr_score: number | null
-          ocr_status: string
-          ocr_validated: boolean | null
-          payment_id: string
-          uploaded_by: string
-        }
-        Insert: {
-          created_at?: string
-          file_type?: string | null
-          file_url: string
-          id?: string
-          ocr_extracted?: Json | null
-          ocr_failure_reason?: string | null
-          ocr_processed_at?: string | null
-          ocr_score?: number | null
-          ocr_status?: string
-          ocr_validated?: boolean | null
-          payment_id: string
-          uploaded_by: string
-        }
-        Update: {
-          created_at?: string
-          file_type?: string | null
-          file_url?: string
-          id?: string
-          ocr_extracted?: Json | null
-          ocr_failure_reason?: string | null
-          ocr_processed_at?: string | null
-          ocr_score?: number | null
-          ocr_status?: string
-          ocr_validated?: boolean | null
-          payment_id?: string
-          uploaded_by?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_receipts_payment_id_fkey"
-            columns: ["payment_id"]
-            isOneToOne: false
-            referencedRelation: "payments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payments: {
-        Row: {
-          agendamento_id: string | null
-          amount: number
-          barbeiro_id: string
-          confirmation_method: string | null
-          confirmed_at: string | null
-          confirmed_by: string | null
-          created_at: string
-          currency: string
-          expires_at: string
-          failed_at: string | null
-          id: string
-          marked_probably_paid_at: string | null
-          metadata: Json
-          pix_key_used_hash: string | null
-          pix_payload: string | null
-          pix_qr_code: string | null
-          provider: string
-          provider_payment_id: string | null
-          qr_generated_at: string
-          status: string
-          tenant_id: string | null
-          txid_internal: string
-          txid_pix: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          agendamento_id?: string | null
-          amount: number
-          barbeiro_id: string
-          confirmation_method?: string | null
-          confirmed_at?: string | null
-          confirmed_by?: string | null
-          created_at?: string
-          currency?: string
-          expires_at?: string
-          failed_at?: string | null
-          id?: string
-          marked_probably_paid_at?: string | null
-          metadata?: Json
-          pix_key_used_hash?: string | null
-          pix_payload?: string | null
-          pix_qr_code?: string | null
-          provider?: string
-          provider_payment_id?: string | null
-          qr_generated_at?: string
-          status?: string
-          tenant_id?: string | null
-          txid_internal: string
-          txid_pix?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          agendamento_id?: string | null
-          amount?: number
-          barbeiro_id?: string
-          confirmation_method?: string | null
-          confirmed_at?: string | null
-          confirmed_by?: string | null
-          created_at?: string
-          currency?: string
-          expires_at?: string
-          failed_at?: string | null
-          id?: string
-          marked_probably_paid_at?: string | null
-          metadata?: Json
-          pix_key_used_hash?: string | null
-          pix_payload?: string | null
-          pix_qr_code?: string | null
-          provider?: string
-          provider_payment_id?: string | null
-          qr_generated_at?: string
-          status?: string
-          tenant_id?: string | null
-          txid_internal?: string
-          txid_pix?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payments_agendamento_id_fkey"
-            columns: ["agendamento_id"]
-            isOneToOne: false
-            referencedRelation: "agendamentos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payments_barbeiro_id_fkey"
-            columns: ["barbeiro_id"]
-            isOneToOne: false
-            referencedRelation: "barbeiros"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payments_barbeiro_id_fkey"
-            columns: ["barbeiro_id"]
-            isOneToOne: false
-            referencedRelation: "barbeiros_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payments_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       pedido_itens: {
         Row: {
           created_at: string
@@ -5059,41 +4459,6 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      produto_imagens: {
-        Row: {
-          alt: string | null
-          created_at: string
-          id: string
-          ordem: number
-          produto_id: string
-          url: string
-        }
-        Insert: {
-          alt?: string | null
-          created_at?: string
-          id?: string
-          ordem?: number
-          produto_id: string
-          url: string
-        }
-        Update: {
-          alt?: string | null
-          created_at?: string
-          id?: string
-          ordem?: number
-          produto_id?: string
-          url?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "produto_imagens_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "produtos"
             referencedColumns: ["id"]
           },
         ]
@@ -6010,44 +5375,6 @@ export type Database = {
           },
         ]
       }
-      tenant_cakto_events: {
-        Row: {
-          cakto_order_id: string | null
-          created_at: string
-          event_type: string
-          id: string
-          payload: Json
-          processed: boolean
-          tenant_id: string | null
-        }
-        Insert: {
-          cakto_order_id?: string | null
-          created_at?: string
-          event_type: string
-          id?: string
-          payload?: Json
-          processed?: boolean
-          tenant_id?: string | null
-        }
-        Update: {
-          cakto_order_id?: string | null
-          created_at?: string
-          event_type?: string
-          id?: string
-          payload?: Json
-          processed?: boolean
-          tenant_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_cakto_events_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tenant_clientes: {
         Row: {
           added_by: string | null
@@ -6909,39 +6236,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      whatsapp_signup_otp: {
-        Row: {
-          attempts: number
-          code: string
-          created_at: string
-          expires_at: string
-          id: string
-          phone: string
-          verification_token: string | null
-          verified_at: string | null
-        }
-        Insert: {
-          attempts?: number
-          code: string
-          created_at?: string
-          expires_at: string
-          id?: string
-          phone: string
-          verification_token?: string | null
-          verified_at?: string | null
-        }
-        Update: {
-          attempts?: number
-          code?: string
-          created_at?: string
-          expires_at?: string
-          id?: string
-          phone?: string
-          verification_token?: string | null
-          verified_at?: string | null
-        }
-        Relationships: []
       }
       whatsapp_verification_codes: {
         Row: {
