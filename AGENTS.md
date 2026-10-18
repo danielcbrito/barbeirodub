@@ -16,3 +16,6 @@ Todas as alterações, novos componentes, telas e fluxos no sistema Dub / Barbei
 3. **Botões de Ação Primários**: Botões principais confortáveis (`h-[52px]` ou `h-[54px]`), formato tradicional de pílula (`rounded-full` ou `rounded-2xl`), largura total (`w-full`), cores sólidas (`bg-foreground text-background`), texto direto e sem setas desnecessárias.
 4. **Campos de Busca Amplos**: Inputs de busca no formato pílula `h-[54px] rounded-full`, com sobreposição em tela cheia via Portal (`createPortal(..., document.body)` com `fixed inset-0 z-[999999]`), autofocus imediato e visual limpo.
 5. **Consistência Total**: Aplicar em todo o app (Dashboard Inicial, Agenda, Disparos, Perfil, Configurações e Telas de Clientes).
+
+## Authenticated client operations
+- Call protected client-management functions through the shared authenticated invocation helper; it sends the current session token, refreshes once on 401, and returns recoverable errors without bypassing permissions.

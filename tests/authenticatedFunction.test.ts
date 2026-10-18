@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createAuthenticatedFunction } from "./authenticatedFunction";
+import { createAuthenticatedFunction } from "../src/lib/authenticatedFunction";
 
 const unauthorized = () => Object.assign(new Error("Unauthorized"), { context: { status: 401 } });
 

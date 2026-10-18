@@ -1,5 +1,6 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { STALE_TIMES } from "@/lib/queryConstants";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
@@ -343,7 +344,7 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
       /* ── 7. Emails via edge function ── */
       let usersMap: Record<string, { email?: string }> = {};
       try {
-        const response = await supabase.functions.invoke("manage-clients", {
+        const response = await invokeAuthenticatedFunction("manage-clients", {
           body: { action: "list" },
         });
         if (response.data?.users) usersMap = response.data.users;
