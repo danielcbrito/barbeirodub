@@ -6991,13 +6991,17 @@ export type Database = {
       woovi_charges: {
         Row: {
           agendamento_id: string | null
+          assinatura_id: string | null
           barbeiro_id: string | null
           br_code: string | null
           charge_id: string | null
           correlation_id: string
           created_at: string
           id: string
+          metadata: Json
           paid_at: string | null
+          pedido_id: string | null
+          pending_booking_id: string | null
           qr_code_image: string | null
           raw_response: Json | null
           refunded_at: string | null
@@ -7009,13 +7013,17 @@ export type Database = {
         }
         Insert: {
           agendamento_id?: string | null
+          assinatura_id?: string | null
           barbeiro_id?: string | null
           br_code?: string | null
           charge_id?: string | null
           correlation_id: string
           created_at?: string
           id?: string
+          metadata?: Json
           paid_at?: string | null
+          pedido_id?: string | null
+          pending_booking_id?: string | null
           qr_code_image?: string | null
           raw_response?: Json | null
           refunded_at?: string | null
@@ -7027,13 +7035,17 @@ export type Database = {
         }
         Update: {
           agendamento_id?: string | null
+          assinatura_id?: string | null
           barbeiro_id?: string | null
           br_code?: string | null
           charge_id?: string | null
           correlation_id?: string
           created_at?: string
           id?: string
+          metadata?: Json
           paid_at?: string | null
+          pedido_id?: string | null
+          pending_booking_id?: string | null
           qr_code_image?: string | null
           raw_response?: Json | null
           refunded_at?: string | null
@@ -7052,6 +7064,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "woovi_charges_assinatura_id_fkey"
+            columns: ["assinatura_id"]
+            isOneToOne: false
+            referencedRelation: "assinaturas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "woovi_charges_barbeiro_id_fkey"
             columns: ["barbeiro_id"]
             isOneToOne: false
@@ -7063,6 +7082,20 @@ export type Database = {
             columns: ["barbeiro_id"]
             isOneToOne: false
             referencedRelation: "barbeiros_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "woovi_charges_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "woovi_charges_pending_booking_id_fkey"
+            columns: ["pending_booking_id"]
+            isOneToOne: false
+            referencedRelation: "pending_bookings"
             referencedColumns: ["id"]
           },
         ]
@@ -7228,6 +7261,10 @@ export type Database = {
           rows_deleted: number
           table_name: string
         }[]
+      }
+      confirm_woovi_payment: {
+        Args: { p_correlation_id: string; p_value_centavos: number }
+        Returns: Json
       }
       confirmar_transacao: {
         Args: { p_efi_e2e_id: string; p_transacao_id: string }
