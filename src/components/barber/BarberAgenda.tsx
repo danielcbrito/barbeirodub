@@ -18,8 +18,19 @@ import {
   Filter,
   ExternalLink,
   Check,
+  CheckCheck,
   Loader2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { BarberContext } from "@/pages/Barbeiro";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -325,6 +336,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   }, [appointments]);
 
   const [isFinalizingDay, setIsFinalizingDay] = useState(false);
+  const [finalizeAllModalOpen, setFinalizeAllModalOpen] = useState(false);
 
   const handleFinalizeDay = async () => {
     if (dayPendingAppointments.length === 0) {
@@ -691,6 +703,31 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                 );
               })}
             </div>
+            {/* Botão Finalizar Todos no fim da lista */}
+            <div className="pt-6 pb-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setFinalizeAllModalOpen(true)}
+                disabled={dayPendingAppointments.length === 0 || isFinalizingDay}
+                className={cn(
+                  "w-full max-w-sm h-11 rounded-2xl font-semibold text-[13.5px] flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm select-none",
+                  dayPendingAppointments.length === 0
+                    ? "bg-secondary/70 text-muted-foreground/60 border border-border/40 cursor-not-allowed"
+                    : "bg-foreground text-background hover:opacity-90 active:opacity-80 cursor-pointer"
+                )}
+              >
+                {isFinalizingDay ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCheck className="w-4 h-4 stroke-[2.2]" />
+                )}
+                <span>
+                  {dayPendingAppointments.length === 0
+                    ? "Todos os cortes finalizados"
+                    : `Finalizar todos (${dayPendingAppointments.length})`}
+                </span>
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -747,6 +784,49 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
         onCompleteBulk={overdueState.completeBulk}
         isCompleting={overdueState.isCompleting}
       />
+
+      {/* ══════ MODAL DE CONFIRMAÇÃO CENTRAL: FINALIZAR TODOS OS CORTES ══════ */}
+      <AlertDialog open={finalizeAllModalOpen} onOpenChange={setFinalizeAllModalOpen}>
+        <AlertDialogContent className="max-w-[340px] sm:max-w-sm rounded-[24px] p-6 border border-border/60 bg-card shadow-2xl space-y-4">
+          <AlertDialogHeader className="flex flex-col items-center text-center space-y-2">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-500 mb-1">
+              <CheckCheck className="w-6 h-6 stroke-[2.2]" />
+            </div>
+            <AlertDialogTitle className="text-[17px] font-semibold text-foreground tracking-tight text-center">
+              Finalizar todos os cortes?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[12.5px] text-muted-foreground leading-relaxed px-1 text-center">
+              {dayPendingAppointments.length === 1
+                ? "Deseja marcar 1 agendamento pendente deste dia como concluído?"
+                : `Deseja marcar todos os ${dayPendingAppointments.length} agendamentos pendentes deste dia como concluídos?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter className="flex-row gap-2.5 pt-2 sm:space-x-0">
+            <AlertDialogCancel
+              disabled={isFinalizingDay}
+              className="flex-1 h-11 rounded-xl text-[13px] font-medium border-border/50 hover:bg-secondary mt-0"
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                setFinalizeAllModalOpen(false);
+                handleFinalizeDay();
+              }}
+              disabled={isFinalizingDay}
+              className="flex-1 h-11 rounded-xl text-[13px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+            >
+              {isFinalizingDay ? (
+                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+              ) : (
+                "Finalizar"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

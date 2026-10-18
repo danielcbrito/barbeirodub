@@ -2360,11 +2360,11 @@ export function WhatsAppConnectionPage({
 
         {/* Lista Unificada Única (Sem abas, padrão 100% minimalista e sério) */}
         <div className="divide-y divide-border/25 pt-1">
-          {/* Opção: Agente de IA */}
+          {/* Opção: Agente de IA (Em breve — transparente) */}
           {!hideAgent && (
             <div
               ref={aiAgentOptionRef}
-              className="py-4 relative"
+              className="py-4 relative opacity-45 select-none"
             >
               {/* Destaque infinito de tela a tela: faixa de ponta a ponta sem bordas, 100% na mesma cor (estilo marcador), piscando exatamente 3 vezes */}
               {isHighlightedAgente && (
@@ -2386,49 +2386,29 @@ export function WhatsAppConnectionPage({
 
               <div className="relative z-10 flex items-center justify-between gap-4">
                 <div className="min-w-0 pr-2">
-                  <p className="text-[13.5px] font-semibold text-foreground leading-snug">
-                    Agente de IA
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13.5px] font-semibold text-foreground leading-snug">
+                      Agente de IA
+                    </p>
+                    <span className="text-[9.5px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border/40 shrink-0">
+                      Em breve
+                    </span>
+                  </div>
                   <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
                     Responde dúvidas sobre valores, serviços, endereço e realiza agendamentos no sistema.
                   </p>
                 </div>
-                <Switch
-                  checked={agentActive && status === "connected"}
-                  onCheckedChange={handleToggleAgent}
-                  disabled={status !== "connected"}
-                  className="data-[state=checked]:bg-black dark:data-[state=checked]:bg-white shrink-0"
-                />
+                <div className="shrink-0 flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-muted-foreground/70 hidden sm:inline">
+                    Em breve
+                  </span>
+                  <Switch
+                    checked={false}
+                    disabled={true}
+                    className="data-[state=checked]:bg-black dark:data-[state=checked]:bg-white shrink-0 cursor-not-allowed opacity-50"
+                  />
+                </div>
               </div>
-
-              {/* Quando ativo: surge imediatamente abaixo o acesso às Configurações do Atendimento */}
-              <AnimatePresence>
-                {agentActive && status === "connected" && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.18, ease: "easeOut" }}
-                    className="overflow-hidden pt-2.5 relative z-10"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setCurrentView("agent-config")}
-                      className="w-full py-2.5 px-3 rounded-xl bg-secondary/50 hover:bg-secondary/80 flex items-center justify-between text-left transition-colors group border border-border/30"
-                    >
-                      <div className="min-w-0 pr-2">
-                        <p className="text-[12.5px] font-medium text-foreground">
-                          Configurações do atendimento
-                        </p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                          Tempo de pausa, tolerância de atraso e instruções da barbearia
-                        </p>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0" />
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
           )}
 
