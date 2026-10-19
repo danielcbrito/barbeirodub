@@ -31,6 +31,8 @@ import {
   History,
   CalendarCheck,
   Banknote,
+  ShieldCheck,
+  Unlock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -61,6 +63,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { ClientPlanConversionScreen } from "@/components/shared/ClientPlanConversionScreen";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import { useConfirmarPagamentoPlano } from "@/hooks/useAdminMutations";
+import {
+  checkClientPendingCancellationDebt,
+  dispenseCancellationDebt,
+  fetchBarberPendingCancellationDebts,
+  type ClienteDebitoCancelamento,
+} from "@/lib/barberCancellationFee";
 
 /* ─── Helper: WhatsApp SVG Icon ─── */
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -267,6 +275,153 @@ function ClientAllVisitsScreen({
   );
 }
 
+/* ─── Tela Completa Dedicada: Taxa de Cancelamento do Cliente ─── */
+function ClientCancellationDebtScreen({
+  client,
+  barbeiroId,
+  tenantId,
+  onBack,
+}: {
+  client: BarberClient;
+  barbeiroId: string;
+  tenantId?: string | null;
+  onBack: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [releasing, setReleasing] = useState(false);
+
+  const { data: debt, isLoading } = useQuery({
+    queryKey: ["client-pending-debt-screen", client.id],
+    queryFn: () => checkClientPendingCancellationDebt(client.id),
+    staleTime: 5_000,
+  });
+
+  const handleRelease = async () => {
+    if (!debt) return;
+    setReleasing(true);
+    try {
+      await dispenseCancellationDebt({
+        debitoId: debt.id,
+        clienteId: client.id,
+        barbeiroId,
+        tenantId,
+      });
+      toast.success(`${client.nome} foi liberado(a)! Aplicativo desbloqueado.`);
+      queryClient.invalidateQueries({ queryKey: ["client-pending-debt-screen", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["client-pending-debt", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["barber-pending-debts-list"] });
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao liberar cliente");
+    } finally {
+      setReleasing(false);
+    }
+  };
+
+  return (
+    <div className="pb-12 min-h-app bg-background text-foreground">
+      <ScheduleHeader
+        title="Taxa de cancelamento"
+        onBack={onBack}
+      />
+
+      <div className="max-w-md mx-auto px-4 pt-3 space-y-4">
+        {isLoading ? (
+          <div className="rounded-2xl border border-border/20 bg-secondary/15 p-12 flex flex-col items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <span className="text-[12px] text-muted-foreground">Verificando débitos...</span>
+          </div>
+        ) : debt ? (
+          <div className="space-y-4">
+            {/* Card com status e valor */}
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-5 space-y-4 shadow-xs text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Débito Pendente
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                  App Bloqueado
+                </span>
+              </div>
+
+              <div>
+                <p className="text-[12px] text-muted-foreground">Valor da taxa de cancelamento</p>
+                <p className="text-[32px] font-extrabold text-foreground tracking-tight tabular-nums mt-0.5">
+                  R$ {debt.valor_taxa.toFixed(2).replace(".", ",")}
+                </p>
+                {debt.porcentagem_aplicada ? (
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                    Calculado como {debt.porcentagem_aplicada}% do valor original do serviço
+                  </p>
+                ) : (
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                    Taxa fixa por cancelamento fora do prazo
+                  </p>
+                )}
+              </div>
+
+              <div className="h-px bg-border/40" />
+
+              <div className="space-y-2 text-[12px]">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Cliente</span>
+                  <span className="font-semibold text-foreground truncate max-w-[200px]">{client.nome}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Profissional</span>
+                  <span className="font-semibold text-foreground">{debt.barbeiro_nome || "Barbearia"}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Cancelado em</span>
+                  <span className="font-semibold text-foreground">
+                    {format(new Date(debt.created_at), "dd/MM/yyyy 'às' HH:mm")}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Aviso explicativo */}
+            <div className="p-3.5 rounded-xl bg-secondary/25 border border-border/30 text-left space-y-1">
+              <p className="text-[12.5px] font-semibold text-foreground">
+                Regra de desbloqueio
+              </p>
+              <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+                O aplicativo deste cliente permanece bloqueado para novos agendamentos até que ele realize o pagamento via Pix no app dele, ou você dispense a taxa abaixo.
+              </p>
+            </div>
+
+            {/* Botão de Liberar */}
+            <button
+              type="button"
+              onClick={handleRelease}
+              disabled={releasing}
+              className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-[13px] font-semibold flex items-center justify-center gap-2 shadow-xs transition-all disabled:opacity-50"
+            >
+              {releasing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Unlock className="w-4 h-4" />
+              )}
+              <span>Liberar cliente e remover taxa</span>
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border/20 bg-secondary/15 p-8 text-center space-y-2.5">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 mx-auto">
+              <ShieldCheck className="w-5 h-5 stroke-[1.8]" />
+            </div>
+            <p className="text-[14px] font-semibold text-foreground">
+              Nenhuma taxa pendente
+            </p>
+            <p className="text-[12px] text-muted-foreground max-w-xs mx-auto leading-relaxed">
+              {client.nome} está em dia e não possui nenhum débito ou bloqueio de cancelamento no aplicativo.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Helper: open WhatsApp ─── */
 function openWhatsApp(telefone: string | null) {
   if (!telefone) {
@@ -393,6 +548,7 @@ export function BarberClientes({
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [clientToConvert, setClientToConvert] = useState<BarberClient | null>(null);
   const [viewingAllVisitsClient, setViewingAllVisitsClient] = useState<BarberClient | null>(null);
+  const [viewingDebtClient, setViewingDebtClient] = useState<BarberClient | null>(null);
 
   /* Block dialog */
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
@@ -407,6 +563,24 @@ export function BarberClientes({
   const [clientToCancelPlan, setClientToCancelPlan] = useState<BarberClient | null>(null);
   const [cancellingPlan, setCancellingPlan] = useState(false);
 
+  /* Consulta débitos pendentes de cancelamento da barbearia para badges na lista */
+  const { data: barberDebtsList = [] } = useQuery({
+    queryKey: ["barber-pending-debts-list", barberContext.barbeiroId, barberTenantId || barberContext.tenantId],
+    queryFn: async () => {
+      if (!barberContext.barbeiroId) return [];
+      return fetchBarberPendingCancellationDebts(
+        barberContext.barbeiroId,
+        barberTenantId || barberContext.tenantId || undefined
+      );
+    },
+    enabled: !!barberContext.barbeiroId,
+    staleTime: 1000 * 30,
+  });
+
+  const clientsWithDebtSet = useMemo(() => {
+    return new Set(barberDebtsList.map((d) => d.cliente_id));
+  }, [barberDebtsList]);
+
   /** Invalida o cache de clientes e revalida listas */
   const invalidateClients = () => {
     if (barberContext.barbeiroId) {
@@ -417,9 +591,18 @@ export function BarberClientes({
     queryClient.invalidateQueries({
       queryKey: ["tenant-clientes"],
     });
+    queryClient.invalidateQueries({
+      queryKey: ["barber-pending-debts-list"],
+    });
     if (viewId) {
       queryClient.invalidateQueries({
         queryKey: ["client-subscription-detail", viewId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["client-pending-debt", viewId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["client-pending-debt-screen", viewId],
       });
     }
     refetchTenantClients();
@@ -442,6 +625,7 @@ export function BarberClientes({
       .on("postgres_changes", { event: "*", schema: "public", table: "plano_agendamentos_usos" }, handleChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "tenant_clientes" }, handleChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "pagamentos_plano_barbearia" }, handleChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "debitos_cancelamento" }, handleChange)
       .subscribe();
 
     return () => {
@@ -464,6 +648,7 @@ export function BarberClientes({
       .channel(`barber-client-view-${viewId}-${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "assinaturas", filter: `user_id=eq.${viewId}` }, handleDetailChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "plano_agendamentos_usos", filter: `user_id=eq.${viewId}` }, handleDetailChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "debitos_cancelamento", filter: `cliente_id=eq.${viewId}` }, handleDetailChange)
       .subscribe();
 
     return () => {
@@ -495,6 +680,17 @@ export function BarberClientes({
     }
     return baseClient;
   }, [baseClient, detailFetched, detailActivePlan]);
+
+  /* ─── Consulta débito de cancelamento pendente do cliente em visualização ─── */
+  const { data: activeClientDebt } = useQuery({
+    queryKey: ["client-pending-debt", viewId],
+    queryFn: async () => {
+      if (!viewId) return null;
+      return checkClientPendingCancellationDebt(viewId);
+    },
+    enabled: !!viewId,
+    staleTime: 1000 * 15,
+  });
 
   /* ─── Filtered list ─── */
   const filteredClients = useMemo(() => {
@@ -803,6 +999,20 @@ export function BarberClientes({
     );
   }
 
+  if (viewingDebtClient) {
+    return (
+      <ClientCancellationDebtScreen
+        client={viewingDebtClient}
+        barbeiroId={barberContext.barbeiroId}
+        tenantId={barberTenantId || barberContext.tenantId}
+        onBack={() => {
+          setViewingDebtClient(null);
+          invalidateClients();
+        }}
+      />
+    );
+  }
+
   // ═══════════════════════════════════
   // CLIENT DETAIL FULL-PAGE VIEW
   // ═══════════════════════════════════
@@ -1058,6 +1268,23 @@ export function BarberClientes({
                   />
                 </>
               )}
+
+              <ActionRow
+                icon={Banknote}
+                label="Taxa de cancelamento"
+                badge={
+                  activeClientDebt ? (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[11px] font-semibold tabular-nums">
+                      R$ {activeClientDebt.valor_taxa.toFixed(2).replace(".", ",")} pendente
+                    </span>
+                  ) : (
+                    <span className="text-[11.5px] font-medium text-muted-foreground/60">
+                      Em dia
+                    </span>
+                  )
+                }
+                onClick={() => setViewingDebtClient(client)}
+              />
 
               <ActionRow
                 icon={client.blocked ? CheckCircle : Ban}
@@ -1504,6 +1731,11 @@ export function BarberClientes({
                     <span className="text-[11.5px] text-muted-foreground tabular-nums hidden sm:inline">
                       {client.total_agendamentos} {client.total_agendamentos === 1 ? "agendamento" : "agendamentos"}
                     </span>
+                    {clientsWithDebtSet.has(client.id) && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-semibold tabular-nums">
+                        Taxa pendente
+                      </span>
+                    )}
                     {client.activePlan ? (
                       <div className="flex items-center gap-1.5">
                         {client.activePlan.is_pending_cash && (
@@ -1748,6 +1980,7 @@ function ActionRow({
   destructive = false,
   disabled = false,
   loading = false,
+  badge,
 }: {
   icon: React.ElementType;
   label: string;
@@ -1755,6 +1988,7 @@ function ActionRow({
   destructive?: boolean;
   disabled?: boolean;
   loading?: boolean;
+  badge?: React.ReactNode;
 }) {
   return (
     <button
@@ -1785,6 +2019,7 @@ function ActionRow({
       >
         {label}
       </span>
+      {badge}
       <ChevronRight className="w-4 h-4 text-muted-foreground/40 shrink-0" />
     </button>
   );

@@ -30,7 +30,7 @@ const DEFAULT_FEE_CONFIG: BarberCancellationFeeConfig = {
   habilitado: false,
   tipo: "porcentagem",
   valor: 20, // 20% padrão quando ativado
-  horas_antecedencia: 0, // qualquer cancelamento por padrão
+  horas_antecedencia: 2, // Cancelamento gratuito até 2 horas antes do horário
 };
 
 const MEM_CACHE = new Map<string, { data: BarberCancellationFeeConfig; timestamp: number }>();
@@ -321,15 +321,20 @@ export async function registerCancellationDebt({
   const config = await fetchBarberCancellationFee(barbeiroId, tenantId);
   if (!config.habilitado) return null;
 
-  // 2. Verifica a regra de antecedência (se configurada)
-  if (config.horas_antecedencia > 0 && dataHoraAgendamento) {
+  // 2. Regra do sistema: cancelamento gratuito até 2 horas antes do atendimento.
+  // Se cancelar com menos de 2 horas ou por não comparecimento, aplica a taxa.
+  const horasLimite = typeof config.horas_antecedencia === "number" && config.horas_antecedencia > 0
+    ? config.horas_antecedencia
+    : 2;
+
+  if (dataHoraAgendamento) {
     const agendamentoDate = new Date(dataHoraAgendamento);
     const agora = new Date();
     const diffMs = agendamentoDate.getTime() - agora.getTime();
     const diffHoras = diffMs / (1000 * 60 * 60);
 
-    // Se o cancelamento ocorreu com antecedência suficiente, não cobra taxa
-    if (diffHoras >= config.horas_antecedencia) {
+    // Se o cancelamento ocorreu com 2 horas ou mais de antecedência, é gratuito
+    if (diffHoras >= horasLimite) {
       return null;
     }
   }

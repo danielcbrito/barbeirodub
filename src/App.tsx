@@ -128,7 +128,9 @@ function AppStatusBarSync() {
   useEffect(() => {
     const sync = () => {
       const path = typeof window !== "undefined" ? window.location.pathname : "";
-      if (path.includes("carteira") || path.includes("financeiro")) {
+      if (path === "/") {
+        applyStatusBarColor("#FAF5F2");
+      } else if (path.includes("carteira") || path.includes("financeiro")) {
         applyStatusBarColor("#144439");
       } else {
         applyStatusBarColor("app-background");
@@ -269,11 +271,34 @@ function AppRoutes() {
   const { showRefreshOverlay, handleRefresh } = useRefreshRequired();
   const location = useLocation();
 
+  // Sincronização inteligente de tema por rota:
+  // - Na Landing Page ("/"): SEMPRE força a versão branca (tema claro), garantindo contraste e legibilidade perfeita.
+  // - Nas demais telas (login, barbeiro, admin, cliente, etc.): restaura a preferência salva do usuário (escuro/claro).
   useEffect(() => {
-    if (location.pathname.includes("carteira") || location.pathname.includes("financeiro")) {
-      applyStatusBarColor("#144439");
+    if (typeof document === "undefined") return;
+
+    if (location.pathname === "/") {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
+      document.documentElement.style.colorScheme = "light";
+      applyStatusBarColor("#FAF5F2");
     } else {
-      applyStatusBarColor("app-background");
+      const savedTheme = localStorage.getItem("dub-theme-v3") || "light";
+      if (savedTheme === "dark") {
+        document.documentElement.classList.remove("light");
+        document.documentElement.classList.add("dark");
+        document.documentElement.style.colorScheme = "dark";
+      } else {
+        document.documentElement.classList.remove("dark");
+        document.documentElement.classList.add("light");
+        document.documentElement.style.colorScheme = "light";
+      }
+
+      if (location.pathname.includes("carteira") || location.pathname.includes("financeiro")) {
+        applyStatusBarColor("#144439");
+      } else {
+        applyStatusBarColor("app-background");
+      }
     }
   }, [location.pathname]);
 

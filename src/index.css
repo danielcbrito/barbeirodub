@@ -1238,32 +1238,81 @@ div:has(> a[href*="lovable.dev"]) {
 }
 
 /* ===================================================
+   PROTEÇÃO TOTAL DA TELA DE BOAS-VINDAS (VERSÃO BRANCA)
+   Garante que mesmo se o usuário tiver tema escuro ativo no sistema,
+   esta tela NUNCA fique com texto branco em fundo claro.
+   =================================================== */
+.index-welcome-page,
+.index-welcome-page *,
+.force-light,
+.force-light *,
+[data-theme="light"],
+[data-theme="light"] * {
+  text-shadow: none !important;
+}
+
+.index-welcome-page,
+.index-welcome-page h1,
+.index-welcome-page .welcome-title,
+.index-welcome-page [class*="text-zinc-900"],
+[data-theme="light"] [class*="text-zinc-900"],
+.force-light [class*="text-zinc-900"] {
+  color: #18181b !important;
+}
+
+.index-welcome-page .welcome-logo-text,
+.index-welcome-page [class*="text-zinc-800"],
+[data-theme="light"] [class*="text-zinc-800"],
+.force-light [class*="text-zinc-800"] {
+  color: #27272a !important;
+}
+
+.index-welcome-page button.bg-white,
+.index-welcome-page [class*="text-zinc-950"],
+[data-theme="light"] [class*="text-zinc-950"],
+.force-light [class*="text-zinc-950"] {
+  color: #09090b !important;
+}
+
+.index-welcome-page p,
+.index-welcome-page [class*="text-zinc-500"],
+[data-theme="light"] [class*="text-zinc-500"],
+.force-light [class*="text-zinc-500"] {
+  color: #71717a !important;
+}
+
+.index-welcome-page button.underline,
+.index-welcome-page .welcome-link {
+  color: #18181b !important;
+}
+
+/* ===================================================
    LEGIBILIDADE DARK MODE (SEGURO)
    Reforca apenas textos neutros/apagados sem quebrar cores semanticas
    (primary/success/destructive/blue/green/agenda/calendar).
    =================================================== */
 
-/* Texto neutro mais claro (sem tocar nas cores de status) */
-:root:not(.light) .text-muted-foreground,
-:root:not(.light) [class*="text-muted-foreground/"],
-:root:not(.light) [class*="text-zinc-"],
-:root:not(.light) [class*="text-neutral-"],
-:root:not(.light) [class*="text-slate-"],
-:root:not(.light) [class*="text-gray-"],
-:root:not(.light) [class*="text-stone-"] {
+/* Texto neutro mais claro (apenas quando não estiver em superfícies claras forçadas) */
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) .text-muted-foreground,
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-muted-foreground/"],
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-zinc-"],
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-neutral-"],
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-slate-"],
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-gray-"],
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-stone-"] {
   color: hsl(0 0% 100%) !important;
   text-shadow: 0 0 1px rgba(255,255,255,0.85), 0 0 6px rgba(255,255,255,0.22);
 }
 
 /* Icones neutros seguem o mesmo reforco */
-:root:not(.light) .text-muted-foreground svg,
-:root:not(.light) [class*="text-muted-foreground/"] svg,
-:root:not(.light) svg[class*="text-muted-foreground/"],
-:root:not(.light) [class*="text-zinc-"] svg,
-:root:not(.light) [class*="text-neutral-"] svg,
-:root:not(.light) [class*="text-slate-"] svg,
-:root:not(.light) [class*="text-gray-"] svg,
-:root:not(.light) [class*="text-stone-"] svg {
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) .text-muted-foreground svg,
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-muted-foreground/"] svg,
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) svg[class*="text-muted-foreground/"],
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-zinc-"] svg,
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-neutral-"] svg,
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-slate-"] svg,
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-gray-"] svg,
+:root:not(.light) :not(.index-welcome-page):not(.index-welcome-page *):not(.force-light):not(.force-light *):not([data-theme="light"]):not([data-theme="light"] *) [class*="text-stone-"] svg {
   color: hsl(0 0% 100%) !important;
 }
 

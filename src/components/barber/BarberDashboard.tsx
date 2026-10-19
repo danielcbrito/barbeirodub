@@ -33,6 +33,7 @@ import {
   CampaignAdIcon3D,
   PinLocationSolid,
 } from "@/components/shared/Category3DIcons";
+import { BarberHomeCarousel } from "@/components/barber/BarberHomeCarousel";
 
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -518,39 +519,8 @@ export function BarberDashboard({
         <NextAppointmentCard appointment={data.nextAppointment} basePath={basePath} />
       </section>
 
-      {/* ─── 5. Anúncio: Ative sua Campanha (Card sólido na paleta oficial, sem gradiente) ─── */}
-      <section className="w-full rounded-2xl bg-card border border-border/40 p-4 sm:p-5 shadow-xs">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                Campanhas
-              </span>
-              <h2 className="text-base sm:text-lg font-semibold text-foreground tracking-tight leading-snug">
-                Ative sua campanha
-              </h2>
-              <p className="text-[12.5px] text-muted-foreground font-normal leading-relaxed">
-                Atraia novos clientes e preencha sua agenda com promoções e cupons exclusivos.
-              </p>
-            </div>
-
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => navigate(`${basePath}/promocoes`)}
-                className="h-9 px-4 rounded-full bg-foreground text-background font-semibold text-xs inline-flex items-center gap-1.5 shadow-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer"
-              >
-                <span>Ver campanhas</span>
-                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
-              </button>
-            </div>
-          </div>
-
-          <div className="shrink-0 flex items-center justify-center">
-            <CampaignAdIcon3D className="w-20 h-20 sm:w-24 sm:h-24 object-contain select-none pointer-events-none" />
-          </div>
-        </div>
-      </section>
+      {/* ─── 5. Carrossel de Destaques: Instagram Oficial & Campanhas ─── */}
+      <BarberHomeCarousel basePath={basePath} />
 
       {/* ─── 6. Faturamento do Mês (Para acompanhar de forma limpa e estratégica) ─── */}
       <section className="w-full text-left">

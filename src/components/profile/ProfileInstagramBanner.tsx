@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, ExternalLink, RefreshCw, Unlink, Check, ChevronDown, SlidersHorizontal } from "lucide-react";
@@ -30,6 +30,21 @@ const getCachedConnection = (bId: string | null): InstagramConnection | null => 
 
 export function ProfileInstagramBanner({ barbeiroId, basePath = "/barbeiro" }: ProfileInstagramBannerProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const [isHighlighted, setIsHighlighted] = useState(false);
+
+  useEffect(() => {
+    const shouldHighlight =
+      searchParams.get("highlight") === "instagram" ||
+      (location.state as any)?.highlight === "instagram";
+    if (shouldHighlight) {
+      setIsHighlighted(true);
+      const timer = setTimeout(() => setIsHighlighted(false), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, location.state]);
+
   const cached = getCachedConnection(barbeiroId);
   const [loading, setLoading] = useState(!cached && !!barbeiroId);
   const [refreshing, setRefreshing] = useState(false);
@@ -147,7 +162,14 @@ export function ProfileInstagramBanner({ barbeiroId, basePath = "/barbeiro" }: P
   // ═══ NÃO CONECTADO: BANNER LIMPO E ESTRATÉGICO ═══
   if (!connection) {
     return (
-      <div className="w-full rounded-2xl border border-border/50 bg-card p-4 shadow-xs flex items-center justify-between gap-3 transition-all hover:border-border/80">
+      <div
+        className={cn(
+          "w-full rounded-2xl border bg-card p-4 shadow-xs flex items-center justify-between gap-3 transition-all",
+          isHighlighted
+            ? "border-emerald-500 ring-2 ring-emerald-500/50 shadow-[0_0_25px_rgba(16,185,129,0.35)] animate-pulse"
+            : "border-border/50 hover:border-border/80"
+        )}
+      >
         <div className="flex items-center gap-3.5 min-w-0">
           <img
             src={instagramIcon}

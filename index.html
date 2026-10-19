@@ -64,8 +64,10 @@
         } catch (e) {
           theme = 'light';
         }
+        var isWelcome = window.location.pathname === '/';
+        var activeTheme = isWelcome ? 'light' : theme;
         var isFinancial = window.location.pathname.indexOf('carteira') !== -1 || window.location.pathname.indexOf('financeiro') !== -1;
-        var brand = theme === 'dark' ? '#0f0f0f' : '#FAFAFA';
+        var brand = isWelcome ? '#FAF5F2' : (activeTheme === 'dark' ? '#0f0f0f' : '#FAFAFA');
         var statusColor = isFinancial ? '#144439' : brand;
         document.documentElement.style.backgroundColor = brand;
         var metas = [
@@ -81,7 +83,7 @@
           var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
           if (appleMeta) appleMeta.setAttribute('content', 'black-translucent');
         }
-        if (theme === 'dark') document.documentElement.classList.add('dark');
+        if (activeTheme === 'dark') document.documentElement.classList.add('dark');
         else document.documentElement.classList.add('light');
         if (document.body) document.body.style.backgroundColor = brand;
         else document.addEventListener('DOMContentLoaded', function () {
