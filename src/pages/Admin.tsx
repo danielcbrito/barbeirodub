@@ -481,7 +481,7 @@ const Admin = () => {
                 } />
                 <Route path="meus-planos" element={<AdminMeusPlanos basePath="/admin" />} />
                 <Route path="configuracoes-perfil" element={<ProfileSettingsPage />} />
-                <Route path="dados-empresa/*" element={<AdminDadosEmpresa />} />
+                <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
                 <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath="/admin" tenantId={adminContext?.tenantId} />} />
                 <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath="/admin" tenantNome={adminContext?.apelido} />} />
                 <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} title="Portfólio da Barbearia" showBack onBack={() => navigate("/admin")} /> : null} />
@@ -546,7 +546,7 @@ const Admin = () => {
                   <Route path="horarios" element={<AdminHorarios tenantId={adminContext?.tenantId || undefined} />} />
                   <Route path="dev" element={<AdminDev />} />
                   <Route path="disparo" element={<AdminDisparo />} />
-                  <Route path="dados-empresa/*" element={<AdminDadosEmpresa />} />
+                  <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
                   <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath="/admin" tenantId={adminContext?.tenantId} />} />
                   <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath="/admin" tenantNome={adminContext?.apelido} />} />
                   <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} title="Portfólio da Barbearia" showBack onBack={() => navigate("/admin")} /> : null} />

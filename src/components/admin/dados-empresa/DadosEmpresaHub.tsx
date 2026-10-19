@@ -85,7 +85,20 @@ export function DadosEmpresaHub({ basePath = "/admin", tenantId, selectedUnidade
             .select("logo_url")
             .eq("id", tenantId)
             .maybeSingle();
-          if (data?.logo_url) setLogoUrl(data.logo_url);
+          if (data?.logo_url) {
+            setLogoUrl(data.logo_url);
+            return;
+          }
+          const { data: infoData } = await supabase
+            .from("informacoes_empresa")
+            .select("valor")
+            .eq("chave", "logo_url")
+            .eq("tenant_id", tenantId)
+            .maybeSingle();
+          if (infoData?.valor) {
+            setLogoUrl(infoData.valor);
+            return;
+          }
         } else {
           const { data } = await supabase
             .from("informacoes_empresa")
@@ -144,6 +157,31 @@ export function DadosEmpresaHub({ basePath = "/admin", tenantId, selectedUnidade
           .from("tenants")
           .update({ logo_url: publicUrl })
           .eq("id", tenantId);
+
+        const { data: existing } = await supabase
+          .from("informacoes_empresa")
+          .select("id")
+          .eq("chave", "logo_url")
+          .eq("tenant_id", tenantId)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from("informacoes_empresa")
+            .update({ valor: publicUrl, atualizado_em: new Date().toISOString() } as any)
+            .eq("id", existing.id);
+        } else {
+          await supabase
+            .from("informacoes_empresa")
+            .insert({
+              chave: "logo_url",
+              categoria: "empresa",
+              valor: publicUrl,
+              ativo: true,
+              tenant_id: tenantId,
+              atualizado_em: new Date().toISOString(),
+            } as any);
+        }
       } else {
         const { data: existing } = await supabase
           .from("informacoes_empresa")

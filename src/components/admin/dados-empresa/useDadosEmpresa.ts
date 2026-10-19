@@ -260,6 +260,37 @@ export function useDadosEmpresa(
             .insert(row as any);
         }
       }
+
+      // Sincronizar também com a tabela tenants quando escopo tenant
+      if (isTenantScope && tenantId) {
+        try {
+          const tenantPayload: Record<string, any> = {};
+          if (updatedData.nome) tenantPayload.nome = updatedData.nome;
+          if (updatedData.slogan !== undefined) tenantPayload.slogan = updatedData.slogan;
+          if (updatedData.cnpj !== undefined) tenantPayload.cnpj = updatedData.cnpj;
+          if (updatedData.cpf !== undefined) tenantPayload.cpf = updatedData.cpf;
+          if (updatedData.email !== undefined) tenantPayload.email = updatedData.email;
+          if (updatedData.telefone !== undefined) tenantPayload.telefone = updatedData.telefone;
+          if (updatedData.whatsapp !== undefined) tenantPayload.whatsapp = updatedData.whatsapp;
+          if (updatedData.site !== undefined) tenantPayload.site = updatedData.site;
+          if (updatedData.rua !== undefined) tenantPayload.rua = updatedData.rua;
+          if (updatedData.numero !== undefined) tenantPayload.numero = updatedData.numero;
+          if (updatedData.bairro !== undefined) tenantPayload.bairro = updatedData.bairro;
+          if (updatedData.cidade !== undefined) tenantPayload.cidade = updatedData.cidade;
+          if (updatedData.estado !== undefined) tenantPayload.estado = updatedData.estado;
+          const fullAddress = [updatedData.rua, updatedData.numero, updatedData.bairro, updatedData.cidade, updatedData.estado]
+            .filter(Boolean)
+            .join(", ");
+          if (fullAddress) tenantPayload.endereco_completo = fullAddress;
+
+          if (Object.keys(tenantPayload).length > 0) {
+            await supabase.from("tenants").update(tenantPayload as any).eq("id", tenantId);
+          }
+        } catch (syncErr) {
+          console.warn("[useDadosEmpresa] Erro ao sincronizar tabela tenants:", syncErr);
+        }
+      }
+
       setData(updatedData);
       setOriginalData(updatedData);
       toast.success("Dados salvos com sucesso");

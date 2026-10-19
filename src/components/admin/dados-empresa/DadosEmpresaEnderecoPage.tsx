@@ -19,7 +19,7 @@ export function DadosEmpresaEnderecoPage({ basePath = "/admin", tenantId, unidad
   const isUnitScope = !!tenantId && !!unidadeId && !isTenantRootUnit(unidadeId);
   const { data, loading, saving, hasChanges, update, saveData } = useDadosEmpresa(
     tenantId,
-    isUnitScope ? "unit" : basePath.startsWith("/tenant/admin") ? "tenant" : "global",
+    isUnitScope ? "unit" : tenantId ? "tenant" : "global",
     unidadeId,
   );
   const backPath = `${basePath}/dados-empresa${buildDadosEmpresaSearch(unidadeId)}`;
