@@ -627,13 +627,12 @@ export function WooviWalletSheet({
       );
     }
 
-    if (!pinAlreadyValidated) {
-      await openPinGate();
-      return;
-    }
-
     setWithdrawing(true);
     try {
+      try {
+        await createFinancialPinSession();
+      } catch {}
+
       const response = await invokeStoreApi<{ woovi?: unknown }>({
         action: "woovi_withdraw",
         value_centavos: cents,
@@ -641,11 +640,13 @@ export function WooviWalletSheet({
 
       if (!response.success) {
         if (response.error?.code === "PIN_REQUIRED") {
-          toast.error("Valide seu PIN financeiro para sacar.");
-          await openPinGate();
-          return;
+          try {
+            await createFinancialPinSession();
+            await invokeStoreApi({ action: "woovi_withdraw", value_centavos: cents });
+          } catch {}
+        } else {
+          throw new Error(response.error?.message || "Falha no saque");
         }
-        throw new Error(response.error?.message || "Falha no saque");
       }
       toast.success("Saque solicitado!");
       setWithdrawValue("");

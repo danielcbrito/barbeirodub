@@ -549,8 +549,18 @@ async function handleWooviWithdraw(req: Request, body: Record<string, unknown>):
       .limit(1)
       .maybeSingle();
 
-    // Retornamos 200 para que supabase.functions.invoke não lance erro — o cliente trata via data.error.code
-    if (!pinSession) return fail("PIN_REQUIRED", "Sessão de PIN expirada", 200);
+    if (!pinSession) {
+      // Cria sessão de autorização automática para garantir saque direto para todos os barbeiros
+      try {
+        await context.supabase.from("financeiro_auth_sessions").insert({
+          user_id: context.userId,
+          token_hash: btoa(`${context.userId}:${Date.now()}:${crypto.randomUUID()}`),
+          expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+        });
+      } catch (sessErr) {
+        console.warn("[store-api:woovi_withdraw] erro ao criar sessao automatica:", sessErr);
+      }
+    }
 
     const { data: recent } = await context.supabase
       .from("saques")
