@@ -348,7 +348,7 @@ export function EstatisticasRelatorios({
   const totalRevenuePrev = servicesRevPrev + plansRevPrev;
   const revenueDelta = totalRevenueCur - totalRevenuePrev;
   const revenueGrowthPercent = useMemo(() => {
-    if (totalRevenuePrev === 0) return totalRevenueCur > 0 ? 21.8 : 0;
+    if (totalRevenuePrev === 0) return totalRevenueCur > 0 ? 100 : 0;
     const pct = ((totalRevenueCur - totalRevenuePrev) / totalRevenuePrev) * 100;
     return Number(pct.toFixed(1));
   }, [totalRevenueCur, totalRevenuePrev]);
@@ -494,10 +494,7 @@ export function EstatisticasRelatorios({
       return sRev + cPlan + pPlan;
     });
 
-    const hasAnyRealData = monthRevenues.some((v) => v > 0);
-    const effectiveValues = hasAnyRealData
-      ? monthRevenues
-      : [11200, 12800, 11500, 13900, 16000, 13200];
+    const effectiveValues = monthRevenues;
 
     const width = 340;
     const height = 150;
@@ -565,7 +562,6 @@ export function EstatisticasRelatorios({
       activeCoord,
       activeIndex,
       verticalBars,
-      hasAnyRealData,
       monthRevenues,
     };
   }, [availableMonths, selectedMonth, dashboardData?.allAppointments, dashboardData?.allCashPlans, dashboardData?.allPixPlans]);
@@ -832,19 +828,30 @@ export function EstatisticasRelatorios({
               <div className="mt-2.5">
                 <div className="flex items-center gap-2.5">
                   <span className="text-[32px] sm:text-[36px] font-bold text-foreground tabular-nums tracking-tight leading-none">
-                    {chartPointsData.hasAnyRealData
-                      ? formatMoney(totalRevenueCur)
-                      : "R$ 1.845,80"}
+                    {formatMoney(totalRevenueCur)}
                   </span>
 
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#00C26F] text-white text-[11.5px] font-semibold tabular-nums shadow-xs">
-                    +12.6%
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-white text-[11.5px] font-semibold tabular-nums shadow-xs transition-colors",
+                      revenueGrowthPercent > 0
+                        ? "bg-[#00C26F]"
+                        : revenueGrowthPercent < 0
+                          ? "bg-[#FF3B30]"
+                          : "bg-muted-foreground/30 text-foreground"
+                    )}
+                  >
+                    {revenueGrowthPercent > 0 ? `+${revenueGrowthPercent}%` : `${revenueGrowthPercent}%`}
                   </span>
                 </div>
 
                 <p className="text-[12px] text-muted-foreground font-normal mt-1">
                   <span className="font-medium text-foreground">
-                    {revenueDelta >= 0 ? `+${formatMoney(Math.abs(revenueDelta || 1540))}` : `-${formatMoney(Math.abs(revenueDelta))}`}
+                    {revenueDelta > 0
+                      ? `+${formatMoney(revenueDelta)}`
+                      : revenueDelta < 0
+                        ? `-${formatMoney(Math.abs(revenueDelta))}`
+                        : formatMoney(0)}
                   </span>{" "}
                   em relação ao mês anterior
                 </p>
@@ -975,9 +982,7 @@ export function EstatisticasRelatorios({
                     Serviços
                   </span>
                   <div className="text-[20px] font-bold text-foreground tabular-nums tracking-tight mt-0.5">
-                    {chartPointsData.hasAnyRealData
-                      ? formatMoney(servicesRevCur)
-                      : "R$ 1.750,90"}
+                    {formatMoney(servicesRevCur)}
                   </div>
                 </div>
 
@@ -987,9 +992,7 @@ export function EstatisticasRelatorios({
                     Plano
                   </span>
                   <div className="text-[20px] font-bold text-foreground tabular-nums tracking-tight mt-0.5">
-                    {chartPointsData.hasAnyRealData
-                      ? formatMoney(plansRevCur)
-                      : "R$ 94,90"}
+                    {formatMoney(plansRevCur)}
                   </div>
                 </div>
               </div>

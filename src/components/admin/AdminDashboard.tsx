@@ -309,11 +309,12 @@ export function AdminDashboard({
         .not("status", "in", '("cancelled_by_admin","cancelled_by_user")')
         .order("hora", { ascending: true });
 
-      const targetBId = effectiveBarbeiroId || adminContext.barbeiroId;
+      const targetBId = adminContext.barbeiroId;
       if (targetBId) {
         todayQuery = todayQuery.eq("barbeiro_id", targetBId);
-      } else if (!adminContext.isAdmin && tenantId && tenantBarberIds && tenantBarberIds.length > 0) {
-        todayQuery = todayQuery.in("barbeiro_id", tenantBarberIds);
+      } else if (tenantId) {
+        const bIds = tenantBarberIds && tenantBarberIds.length > 0 ? tenantBarberIds : ["__none__"];
+        todayQuery = todayQuery.in("barbeiro_id", bIds);
       }
 
       const { data: realTodayApts } = await todayQuery;
@@ -429,7 +430,7 @@ export function AdminDashboard({
   const currentMonthEnd = useMemo(() => format(endOfMonth(now), "yyyy-MM-dd"), [now]);
 
   const { data: historicalAppointments = [] } = useQuery({
-    queryKey: ["admin-chart-appointments", adminContext.barbeiroId || tenantId || "global"],
+    queryKey: ["admin-chart-appointments", adminContext.barbeiroId || tenantId || "global", tenantBarberIds],
     queryFn: async () => {
       let query = supabase
         .from("agendamentos")
@@ -441,8 +442,9 @@ export function AdminDashboard({
 
       if (adminContext.barbeiroId) {
         query = query.eq("barbeiro_id", adminContext.barbeiroId);
-      } else if (!adminContext.isAdmin && tenantId && tenantBarberIds && tenantBarberIds.length > 0) {
-        query = query.in("barbeiro_id", tenantBarberIds);
+      } else if (tenantId) {
+        const bIds = tenantBarberIds && tenantBarberIds.length > 0 ? tenantBarberIds : ["__none__"];
+        query = query.in("barbeiro_id", bIds);
       }
 
       const { data: apts } = await query;
@@ -457,24 +459,31 @@ export function AdminDashboard({
       const isCur = idx === 5;
       const isPrev = idx === 4;
 
-      if (isCur && data.monthRevenue > 0) return data.monthRevenue;
-      if (isPrev && data.lastMonthRevenue > 0) return data.lastMonthRevenue;
-
       const sum = historicalAppointments
         .filter((a) => a.data?.startsWith(mStr))
         .reduce((acc, a) => acc + Number(a.preco || 0), 0);
 
-      if (sum > 0) return sum;
+      if (isCur) {
+        return data.monthRevenue > 0 ? data.monthRevenue : sum;
+      }
+      if (isPrev) {
+        return data.lastMonthRevenue > 0 ? data.lastMonthRevenue : sum;
+      }
 
-      const base = data.monthRevenue > 0 ? data.monthRevenue : 5400;
-      const fallbackFactors = [0.65, 0.72, 0.81, 0.88, 0.95, 1.0];
-      return Math.round(base * fallbackFactors[idx]);
+      return sum;
     });
 
     const currentRev = monthRevenues[selectedMonthIndex] ?? monthRevenues[5];
     const prevRev = selectedMonthIndex > 0 ? monthRevenues[selectedMonthIndex - 1] : monthRevenues[0];
     const diff = currentRev - prevRev;
-    const growthPercent = prevRev > 0 ? Number(((diff / prevRev) * 100).toFixed(1)) : 12.6;
+    let growthPercent = 0;
+    if (prevRev > 0) {
+      growthPercent = Number(((diff / prevRev) * 100).toFixed(1));
+    } else if (currentRev > 0) {
+      growthPercent = 100;
+    } else {
+      growthPercent = 0;
+    }
 
     const width = 340;
     const height = 74;
@@ -758,13 +767,15 @@ export function AdminDashboard({
                   "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums text-white shadow-xs transition-colors",
                   !revenueVisible
                     ? "bg-muted-foreground/40 text-background"
-                    : chartData.growthPercent >= 0
+                    : chartData.growthPercent > 0
                       ? "bg-[#34C759]"
-                      : "bg-[#FF3B30]"
+                      : chartData.growthPercent < 0
+                        ? "bg-[#FF3B30]"
+                        : "bg-muted-foreground/30 text-foreground"
                 )}
               >
                 {revenueVisible
-                  ? chartData.growthPercent >= 0
+                  ? chartData.growthPercent > 0
                     ? `+${chartData.growthPercent}%`
                     : `${chartData.growthPercent}%`
                   : "••%"}
@@ -774,9 +785,11 @@ export function AdminDashboard({
             <p className="text-[12px] text-muted-foreground font-normal mt-1">
               <span className="font-medium text-foreground">
                 {revenueVisible
-                  ? chartData.diff >= 0
-                    ? `+${formatMoney(Math.abs(chartData.diff))}`
-                    : `-${formatMoney(Math.abs(chartData.diff))}`
+                  ? chartData.diff > 0
+                    ? `+${formatMoney(chartData.diff)}`
+                    : chartData.diff < 0
+                      ? `-${formatMoney(Math.abs(chartData.diff))}`
+                      : formatMoney(0)
                   : "R$\u00A0•••••"}
               </span>{" "}
               em relação ao mês anterior
