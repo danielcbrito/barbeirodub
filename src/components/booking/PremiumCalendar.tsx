@@ -9,9 +9,16 @@ interface PremiumCalendarProps {
   onSelectDate: (date: Date) => void;
   disabledDates?: Date[];
   minDate?: Date;
+  isDateDisabled?: (date: Date) => boolean;
 }
 
-export function PremiumCalendar({ selectedDate, onSelectDate, disabledDates = [], minDate }: PremiumCalendarProps) {
+export function PremiumCalendar({
+  selectedDate,
+  onSelectDate,
+  disabledDates = [],
+  minDate,
+  isDateDisabled: customIsDateDisabled,
+}: PremiumCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(selectedDate || new Date());
 
   const calendarDays = useMemo(() => {
@@ -31,6 +38,7 @@ export function PremiumCalendar({ selectedDate, onSelectDate, disabledDates = []
     const today = startOfDay(new Date());
     if (isBefore(date, today)) return true;
     if (minDate && isBefore(date, startOfDay(minDate))) return true;
+    if (customIsDateDisabled && customIsDateDisabled(date)) return true;
     return disabledDates.some(d => isSameDay(d, date));
   };
 

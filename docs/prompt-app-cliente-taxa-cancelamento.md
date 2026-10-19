@@ -178,3 +178,37 @@ No componente raiz do app (App Shell / Layout principal do Cliente):
      .subscribe();
    ```
    - O aplicativo é liberado instantaneamente na tela do cliente sem necessidade de recarregar a página!
+
+---
+
+### 4. Restrição de Dias da Semana para Clientes com Plano Ativo (Isolado por Barbearia)
+
+Em barbearias que configurarem dias específicos para clientes de planos (por exemplo, agendamento permitido apenas **terça, quarta e quinta-feira**):
+
+1. **Buscar Regras do Tenant / Barbearia:**
+   ```typescript
+   const { data: regraData } = await supabase
+     .from("informacoes_empresa")
+     .select("valor")
+     .eq("tenant_id", currentTenantId)
+     .eq("chave", "regras_agendamento_plano")
+     .maybeSingle();
+
+   let diasPermitidos: number[] | null = null;
+   if (regraData?.valor) {
+     try {
+       const parsed = JSON.parse(regraData.valor);
+       if (Array.isArray(parsed?.dias_permitidos)) {
+         diasPermitidos = parsed.dias_permitidos; // Ex: [2, 3, 4] = Terça, Quarta e Quinta
+       }
+     } catch {}
+   }
+   ```
+
+2. **Aplicar a Restrição SOMENTE se o Cliente Estiver Usando o Plano:**
+   - Se o cliente estiver agendando avulso (pagando com Pix/cartão) ou se a barbearia NÃO tiver `dias_permitidos` configurado, **TODOS os dias da semana continuam disponíveis normalmente** (sem interferir em outras barbearias).
+   - Se o cliente estiver agendando utilizando os benefícios do plano ativo E a barbearia tiver `diasPermitidos` (ex: `[2, 3, 4]`):
+     - No calendário de datas: dias que não estejam na lista (Domingo `0`, Segunda `1`, Sexta `5`, Sábado `6`) ficam **desabilitados e não clicáveis**.
+     - Exiba o card informativo:
+       *"🌟 Agendamentos do plano disponíveis exclusivamente às terças, quartas e quintas-feiras nesta barbearia."*
+

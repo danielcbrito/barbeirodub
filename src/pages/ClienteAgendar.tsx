@@ -33,6 +33,10 @@ import {
   ClienteDebitoCancelamento,
 } from "@/lib/barberCancellationFee";
 import { ClienteBloqueioTaxaModal } from "@/components/cliente/ClienteBloqueioTaxaModal";
+import {
+  fetchTenantPlanRules,
+  TenantPlanRules,
+} from "@/lib/tenantPlanRules";
 
 interface Service {
   id: string;
@@ -47,6 +51,7 @@ interface Barber {
   apelido: string;
   foto_url: string | null;
   unidade_id: string | null;
+  tenant_id?: string | null;
 }
 
 interface ActiveSubscription {
@@ -63,6 +68,7 @@ interface ActiveSubscription {
   isPendingCash?: boolean;
   /** Preço mensal do plano (usado para cobrar no primeiro corte de plano cash) */
   preco_mensal?: number;
+  tenant_id?: string | null;
 }
 
 interface ClienteAgendarProps {
@@ -128,6 +134,9 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   // Débito de taxa de cancelamento pendente (bloqueia o app)
   const [cancellationDebt, setCancellationDebt] = useState<ClienteDebitoCancelamento | null>(null);
 
+  // Regras exclusivas de agendamento de plano da barbearia (isoladas por tenant)
+  const [tenantPlanRules, setTenantPlanRules] = useState<TenantPlanRules | null>(null);
+
   // Verificação se usuário pode usar o plano (fluxo com servico_id)
   const isPlanEligible =
     !isRescheduling &&
@@ -150,6 +159,50 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     // limite 0 = ilimitado
     return limite === 0 || usados < limite;
   }, [activeSubscription]);
+
+  /**
+   * true quando o agendamento atual está consumindo o plano ativo do cliente
+   */
+  const isBookingWithPlan = useMemo(() => {
+    if (isRescheduling) return false;
+    return isPlanEligible || (!isPlanFlow && hasActivePlanWithUses);
+  }, [isRescheduling, isPlanEligible, isPlanFlow, hasActivePlanWithUses]);
+
+  /**
+   * Tenant efetivo para busca de regras isoladas
+   */
+  const currentTenantId = useMemo(() => {
+    return (
+      effectiveTenantId ||
+      activeSubscription?.tenant_id ||
+      barbers.find((b) => b.id === selectedBarberId)?.tenant_id ||
+      null
+    );
+  }, [effectiveTenantId, activeSubscription?.tenant_id, barbers, selectedBarberId]);
+
+  // Carrega regras exclusivas do plano do tenant
+  useEffect(() => {
+    if (!currentTenantId) {
+      setTenantPlanRules(null);
+      return;
+    }
+    let isMounted = true;
+    fetchTenantPlanRules(currentTenantId).then((rules) => {
+      if (isMounted) setTenantPlanRules(rules);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentTenantId]);
+
+  // Se o agendamento for com plano e a data previamente selecionada não for permitida, limpa a seleção
+  useEffect(() => {
+    if (isBookingWithPlan && selectedDate && tenantPlanRules?.dias_permitidos) {
+      if (!tenantPlanRules.dias_permitidos.includes(selectedDate.getDay())) {
+        setSelectedDate(undefined);
+      }
+    }
+  }, [isBookingWithPlan, tenantPlanRules, selectedDate]);
 
   /**
    * true quando o plano existe mas os usos mensais estão esgotados.
@@ -468,7 +521,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   const loadBarbers = async (tenantId?: string | null) => {
     let query = supabase
       .from("barbeiros")
-      .select("id, apelido, foto_url, unidade_id")
+      .select("id, apelido, foto_url, unidade_id, tenant_id")
       .eq("ativo", true)
       .is("deleted_at", null)
       .order("apelido");
@@ -601,7 +654,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           status,
           payment_method,
           cash_payment_confirmed,
-          plano:planos(nome, limite_agendamentos_mes, servico_id, preco_mensal)
+          plano:planos(nome, limite_agendamentos_mes, servico_id, preco_mensal, tenant_id)
         `)
         .eq("user_id", session.user.id)
         .in("status", ["active", "pending_cash"])
@@ -670,6 +723,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           servico: servicoVinculado,
           isPendingCash,
           preco_mensal: planoData.preco_mensal || 0,
+          tenant_id: planoData.tenant_id || null,
         };
 
         setActiveSubscription(activeSubscriptionData);
@@ -784,9 +838,19 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     
     // Validação de data
     const dateStep = isPlanFlow ? 2 : (isRescheduling ? 2 : 3);
-    if (step === dateStep && !selectedDate) {
-      toast.error("Selecione uma data");
-      return;
+    if (step === dateStep) {
+      if (!selectedDate) {
+        toast.error("Selecione uma data");
+        return;
+      }
+      if (
+        isBookingWithPlan &&
+        tenantPlanRules?.dias_permitidos &&
+        !tenantPlanRules.dias_permitidos.includes(selectedDate.getDay())
+      ) {
+        toast.error("O agendamento do plano nesta barbearia está disponível somente de terça a quinta-feira.");
+        return;
+      }
     }
     
     // Validação de horário
@@ -861,6 +925,13 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     // Forçar uso do plano quando elegível (fluxo com servico_id)
     // OU quando tem plano ativo com usos disponíveis (fluxo sem servico_id)
     if (isPlanEligible || (!isPlanFlow && hasActivePlanWithUses && !isRescheduling)) {
+      if (
+        tenantPlanRules?.dias_permitidos &&
+        !tenantPlanRules.dias_permitidos.includes(selectedDate.getDay())
+      ) {
+        toast.error("O agendamento do plano nesta barbearia está disponível somente de terça a quinta-feira.");
+        return;
+      }
       await createAppointmentWithPlan();
       return;
     }
@@ -1703,9 +1774,40 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                 </p>
               </div>
 
+              {/* Aviso para agendamentos com plano onde a barbearia restringe dias da semana */}
+              {isBookingWithPlan && tenantPlanRules?.dias_permitidos && (
+                <div className="mb-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3 text-left">
+                  <Crown className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-[12.5px] leading-relaxed">
+                    <p className="font-semibold text-foreground">
+                      Dias exclusivos para clientes com plano ativo
+                    </p>
+                    <p className="text-muted-foreground mt-0.5">
+                      Nesta barbearia, os agendamentos do plano estão disponíveis exclusivamente às <strong>terças, quartas e quintas-feiras</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <PremiumCalendar
                 selectedDate={selectedDate}
-                onSelectDate={setSelectedDate}
+                onSelectDate={(date) => {
+                  if (
+                    isBookingWithPlan &&
+                    tenantPlanRules?.dias_permitidos &&
+                    !tenantPlanRules.dias_permitidos.includes(date.getDay())
+                  ) {
+                    toast.warning("Para clientes do plano nesta barbearia, agendamentos são permitidos somente de terça a quinta-feira.");
+                    return;
+                  }
+                  setSelectedDate(date);
+                }}
+                isDateDisabled={(date) => {
+                  if (isBookingWithPlan && tenantPlanRules?.dias_permitidos) {
+                    return !tenantPlanRules.dias_permitidos.includes(date.getDay());
+                  }
+                  return false;
+                }}
               />
 
               {selectedDate && (
