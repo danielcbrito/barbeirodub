@@ -5,6 +5,7 @@ import { corsHeaders, errorResponse, jsonResponse, wooviFetch, WooviError } from
 import { requireUser } from '../_shared/woovi-auth.ts';
 
 interface Body {
+  barbeiro_id?: string;
   pix_key: string;
   pix_key_type?: 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM';
   name?: string;
@@ -22,12 +23,17 @@ Deno.serve(async (req) => {
   const pixKey = (body?.pix_key ?? '').trim();
   if (!pixKey) return errorResponse('MISSING_FIELDS', 'pix_key é obrigatório');
 
-  // Carrega o barbeiro do usuário logado (barbeiros.user_id = auth.uid()).
-  const { data: barb, error: bErr } = await admin
+  // Carrega o barbeiro (pelo barbeiro_id ou pelo user_id do usuário logado).
+  let query = admin
     .from('barbeiros')
-    .select('id, nome, woovi_pix_key, woovi_subaccount_name')
-    .eq('user_id', userId)
-    .maybeSingle();
+    .select('id, nome, woovi_pix_key, woovi_subaccount_name');
+  if (body?.barbeiro_id) {
+    query = query.eq('id', body.barbeiro_id);
+  } else {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data: barb, error: bErr } = await query.maybeSingle();
   if (bErr) return errorResponse('DB_ERROR', bErr.message, 500);
   if (!barb) return errorResponse('NOT_A_BARBER', 'Usuário não é barbeiro', 403);
 

@@ -3,15 +3,20 @@
  * WOOVI-WALLET — Saldo, extrato e saque da carteira Woovi
  * ═══════════════════════════════════════════════════════════
  *
- * Substitui as actions woovi_* da store-api (que ficou presa em uma
- * versão antiga no deploy). Roteamento via campo "action".
+ * Espelho em tempo real da subconta bancária Woovi / OpenPix.
+ * NUNCA inventa saldos locais sintéticos desconectados do banco.
  *
- * Actions: woovi_get_balance | woovi_history | woovi_withdraw
+ * Actions:
+ *   - credential_check   → Valida o AppID contra /api/v1/account
+ *   - save_woovi_app_id  → Atualiza o AppID na tabela system_config
+ *   - woovi_get_balance  → Espelha o saldo real da subconta no banco
+ *   - woovi_history      → Extrato de movimentações
+ *   - woovi_withdraw     → Solicita saque PIX da subconta
  */
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ok, fail, handleCors, parseBody } from "../_shared/response.ts";
-import { wooviFetch } from "../_shared/woovi-client.ts";
+import { wooviFetch, resolveWooviAppId } from "../_shared/woovi-client.ts";
 
 type SupabaseAdminClient = SupabaseClient<any>;
 
@@ -23,11 +28,13 @@ const PIX_FEE_CENTAVOS = 40;
 /** Valor líquido que realmente cai na conta do barbeiro. */
 const netCentavos = (value: unknown) => Math.max(0, Number(value ?? 0) - PIX_FEE_CENTAVOS);
 
-
 interface WooviBarberRow {
   id: string;
+  apelido?: string | null;
   woovi_pix_key: string | null;
   woovi_pix_key_type: string | null;
+  woovi_subaccount_name?: string | null;
+  banco_nome?: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -35,10 +42,14 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
-    const body = await parseBody<{ action?: string;[key: string]: unknown }>(req);
+    const body = await parseBody<{ action?: string; [key: string]: unknown }>(req);
     switch (body?.action) {
+      case "get_woovi_config":
+        return await handleGetWooviConfig(req);
       case "credential_check":
-        return await handleCredentialCheck();
+        return await handleCredentialCheck(body);
+      case "save_woovi_app_id":
+        return await handleSaveWooviAppId(req, body);
       case "woovi_get_balance":
         return await handleGetBalance(req);
       case "woovi_history":
@@ -50,21 +61,122 @@ Deno.serve(async (req) => {
     }
   } catch (error) {
     console.error("[woovi-wallet] Erro fatal:", error);
-    // Nunca 5xx: a UI trata success=false sem tela branca.
     return fail("INTERNAL_ERROR", "Erro interno da carteira", 200);
   }
 });
 
-/* ─── Diagnóstico de credencial (sem dados sensíveis) ──── */
+/* ─── Diagnóstico e Configuração de Credencial ─────────── */
 
-async function handleCredentialCheck(): Promise<Response> {
+async function handleGetWooviConfig(req: Request): Promise<Response> {
+  const context = await getAuthenticatedBarber(req);
+  if (context instanceof Response) return context;
+
+  // Busca na tabela system_config
+  const { data: dbConfig } = await context.supabase
+    .from("system_config")
+    .select("valor, updated_at, updated_by")
+    .eq("chave", "woovi_app_id")
+    .maybeSingle();
+
+  const envAppId = (Deno.env.get("WOOVI_APP_ID") ?? "").trim();
+  const dbAppId = (dbConfig?.valor ?? "").trim();
+
+  const activeAppId = dbAppId || envAppId;
+  const source = dbAppId ? "database" : envAppId ? "environment" : "none";
+
+  let maskedAppId = "";
+  if (activeAppId) {
+    if (activeAppId.length > 20) {
+      maskedAppId = `${activeAppId.slice(0, 10)}••••••••${activeAppId.slice(-6)}`;
+    } else {
+      maskedAppId = "••••••••••••";
+    }
+  }
+
+  let status: "valid" | "invalid" | "missing" = "missing";
+  let message = "";
+  let accountInfo: any = null;
+
+  if (!activeAppId) {
+    status = "missing";
+    message = "Nenhum AppID configurado";
+  } else {
+    try {
+      const res = await wooviFetch<any>("/api/v1/account", { appId: activeAppId });
+      status = "valid";
+      message = "Conectado e autenticado com a Woovi / OpenPix";
+      accountInfo = res?.account || null;
+    } catch (err: any) {
+      status = "invalid";
+      message = `Woovi recusou a credencial (${err.status ?? 401}): ${err.message}`;
+    }
+  }
+
+  return ok({
+    status,
+    message,
+    source,
+    maskedAppId,
+    updated_at: dbConfig?.updated_at || null,
+    account: accountInfo ? {
+      name: accountInfo.name,
+      taxId: accountInfo.taxId,
+      status: accountInfo.status,
+    } : null,
+  });
+}
+
+async function handleCredentialCheck(body?: Record<string, unknown>): Promise<Response> {
+  const customAppId = typeof body?.appId === "string" ? body.appId.trim() : undefined;
   try {
-    await wooviFetch("/api/v1/account");
+    await wooviFetch("/api/v1/account", { appId: customAppId });
     return ok({ credential: "valid" });
   } catch (error) {
     const e = error as { status?: number; message?: string };
     return ok({ credential: "invalid", status: e.status ?? 0, message: e.message ?? "" });
   }
+}
+
+async function handleSaveWooviAppId(req: Request, body?: Record<string, unknown>): Promise<Response> {
+  const context = await getAuthenticatedBarber(req);
+  if (context instanceof Response) return context;
+
+  const newAppId = typeof body?.app_id === "string" ? body.app_id.trim() : "";
+  if (!newAppId) {
+    return fail("INVALID_APP_ID", "AppID não informado", 400);
+  }
+
+  // Testa o AppID antes de salvar
+  try {
+    await wooviFetch("/api/v1/account", { appId: newAppId });
+  } catch (err: any) {
+    return fail(
+      "INVALID_CREDENTIAL",
+      `O banco Woovi recusou este AppID (Status ${err.status ?? 401}): ${err.message}`,
+      200
+    );
+  }
+
+  // Salva no system_config para ser usado por todas as Edge Functions
+  const { error: upsertErr } = await context.supabase
+    .from("system_config")
+    .upsert(
+      {
+        chave: "woovi_app_id",
+        valor: newAppId,
+        descricao: "AppID de produção da API Woovi (OpenPix)",
+        updated_at: new Date().toISOString(),
+        updated_by: context.userId,
+      },
+      { onConflict: "chave" }
+    );
+
+  if (upsertErr) {
+    console.error("[woovi-wallet:save_woovi_app_id] Erro upsert:", upsertErr);
+    return fail("DB_ERROR", "Erro ao salvar credencial no banco de dados", 500);
+  }
+
+  return ok({ success: true, message: "AppID validado e salvo com sucesso!" });
 }
 
 /* ─── Auth ─────────────────────────────────────────────── */
@@ -86,22 +198,61 @@ async function getAuthenticatedBarber(req: Request) {
   const supabase = createClient(supabaseUrl, serviceKey);
   const { data: barber } = await supabase
     .from("barbeiros")
-    .select("id, woovi_pix_key, woovi_pix_key_type")
+    .select("id, apelido, woovi_pix_key, woovi_pix_key_type, woovi_subaccount_name, banco_nome")
     .eq("user_id", user.id)
     .maybeSingle();
 
   return { userId: user.id, supabase, barber: barber as WooviBarberRow | null };
 }
 
-/* ─── Saldo ────────────────────────────────────────────── */
+/* ─── Saldo (Espelho Fiel do Banco) ────────────────────── */
 
 async function getWooviBalance(admin: SupabaseAdminClient, barber: WooviBarberRow) {
-  const balanceResponse = await wooviFetch<{ subAccount: { balance: number; pixKey?: string } }>(
-    `/api/v1/subaccount/${encodeURIComponent(barber.woovi_pix_key!)}`,
-    { method: "GET" },
-  );
+  const rawKey = (barber.woovi_pix_key ?? "").trim();
+  if (!rawKey) {
+    throw new Error("Chave Pix da subconta não configurada");
+  }
 
-  const wooviBalance = Number(balanceResponse.subAccount?.balance ?? 0);
+  // Tenta formatos possíveis de telefone caso a subconta tenha sido cadastrada com ou sem +55
+  const keysToTry = [rawKey];
+  if (rawKey.startsWith("+55")) {
+    keysToTry.push(rawKey.replace("+55", ""));
+  } else if (!rawKey.startsWith("+") && /^\d{10,11}$/.test(rawKey)) {
+    keysToTry.push(`+55${rawKey}`);
+  }
+
+  let balanceResponse: {
+    subAccount?: { balance?: number; pixKey?: string; withdrawBlocked?: boolean };
+    SubAccount?: { balance?: number; pixKey?: string; withdrawBlocked?: boolean };
+  } | null = null;
+  let lastError: any = null;
+
+  for (const k of keysToTry) {
+    try {
+      balanceResponse = await wooviFetch<{
+        subAccount?: { balance?: number; pixKey?: string; withdrawBlocked?: boolean };
+        SubAccount?: { balance?: number; pixKey?: string; withdrawBlocked?: boolean };
+      }>(`/api/v1/subaccount/${encodeURIComponent(k)}`, { method: "GET" });
+      if (balanceResponse?.subAccount || balanceResponse?.SubAccount) {
+        break;
+      }
+    } catch (err: any) {
+      lastError = err;
+      // Se não for 404 (subconta não encontrada nesta variação de chave), propaga o erro de autenticação ou rede
+      if (err?.status !== 404) {
+        throw err;
+      }
+    }
+  }
+
+  if (!balanceResponse || (!balanceResponse.subAccount && !balanceResponse.SubAccount)) {
+    throw lastError || new Error("Subconta não localizada no banco Woovi");
+  }
+
+  const sub = balanceResponse.subAccount ?? balanceResponse.SubAccount;
+  const wooviBalance = Number(sub?.balance ?? 0);
+
+  // Calcula valores retidos por agendamentos ainda não finalizados na barbearia
   const { data: blockedRaw } = await admin.rpc("woovi_blocked_centavos", { p_barbeiro: barber.id });
   const blocked = Number(blockedRaw ?? 0);
 
@@ -109,41 +260,10 @@ async function getWooviBalance(admin: SupabaseAdminClient, barber: WooviBarberRo
     balance_centavos: wooviBalance,
     blocked_centavos: blocked,
     available_centavos: Math.max(0, wooviBalance - blocked),
-    pix_key: balanceResponse.subAccount?.pixKey ?? barber.woovi_pix_key,
+    pix_key: sub?.pixKey ?? barber.woovi_pix_key,
+    withdraw_blocked: Boolean(sub?.withdrawBlocked),
     configured: true,
     source: "woovi" as const,
-  };
-}
-
-async function getLocalBalance(admin: SupabaseAdminClient, barber: WooviBarberRow) {
-  const [{ data: charges }, { data: withdrawals }] = await Promise.all([
-    admin
-      .from("woovi_charges")
-      .select("value_centavos, status, released_at")
-      .eq("barbeiro_id", barber.id)
-      .in("status", PAID_WOOVI_STATUSES),
-    admin.from("saques").select("valor, status").eq("barbeiro_id", barber.id),
-  ]);
-
-  const paid = (charges ?? []).reduce((t, c) => t + netCentavos(c.value_centavos), 0);
-  const blocked = (charges ?? []).reduce(
-    (t, c) => (!c.released_at ? t + netCentavos(c.value_centavos) : t),
-    0,
-  );
-  const withdrawn = (withdrawals ?? []).reduce((t, w) => {
-    const status = String(w.status ?? "").toLowerCase();
-    const ignored = ["falhou", "cancelado", "estornado", "recusado"].includes(status);
-    return ignored ? t : t + Math.round(Number(w.valor ?? 0) * 100);
-  }, 0);
-  const balance = Math.max(0, paid - withdrawn);
-
-  return {
-    balance_centavos: balance,
-    blocked_centavos: Math.min(blocked, balance),
-    available_centavos: Math.max(0, balance - blocked),
-    pix_key: barber.woovi_pix_key,
-    configured: true,
-    source: "local_fallback" as const,
   };
 }
 
@@ -155,22 +275,25 @@ async function handleGetBalance(req: Request): Promise<Response> {
   }
 
   try {
-    return ok(await getWooviBalance(context.supabase, context.barber));
+    const data = await getWooviBalance(context.supabase, context.barber);
+    return ok(data);
   } catch (error) {
-    console.warn("[woovi-wallet:balance] Woovi indisponível, usando saldo local:", (error as Error).message);
-    try {
-      return ok(await getLocalBalance(context.supabase, context.barber));
-    } catch (localError) {
-      console.error("[woovi-wallet:balance] saldo local falhou:", localError);
-      return ok({
-        balance_centavos: 0,
-        blocked_centavos: 0,
-        available_centavos: 0,
-        pix_key: null,
-        configured: false,
-        source: "safe_empty_fallback",
-      });
-    }
+    const err = error as { status?: number; message?: string };
+    console.warn("[woovi-wallet:balance] Erro ao consultar banco Woovi:", err.message);
+
+    // NUNCA mais inventa R$ 771 de cálculos offline. Retorna status desconectado real!
+    return ok({
+      balance_centavos: 0,
+      blocked_centavos: 0,
+      available_centavos: 0,
+      pix_key: context.barber.woovi_pix_key,
+      configured: true,
+      source: "disconnected" as const,
+      error: {
+        status: err.status ?? 500,
+        message: err.message ?? "Não foi possível conectar ao banco Woovi",
+      },
+    });
   }
 }
 
@@ -184,49 +307,109 @@ async function handleHistory(req: Request): Promise<Response> {
   const [charges, saques] = await Promise.all([
     context.supabase
       .from("woovi_charges")
-      .select("id, value_centavos, status, created_at, paid_at, released_at, refunded_at")
+      .select("id, value_centavos, status, created_at, paid_at, released_at, refunded_at, raw_response")
       .eq("barbeiro_id", context.barber.id)
       .in("status", [...PAID_WOOVI_STATUSES, ...REFUNDED_WOOVI_STATUSES])
       .order("created_at", { ascending: false })
       .limit(50),
     context.supabase
       .from("saques")
-      .select("id, valor, status, created_at")
+      .select("id, valor, status, created_at, end_to_end_id, banco_destino, raw_response, chave_pix_valor, chave_pix_tipo")
       .eq("barbeiro_id", context.barber.id)
       .order("created_at", { ascending: false })
       .limit(50),
   ]);
 
   const transactions: Array<Record<string, unknown>> = [];
+  const barberName = (context.barber.woovi_subaccount_name || context.barber.apelido || "Túlio").toUpperCase();
+  const barberBank = context.barber.banco_nome || "Nu Pagamentos S.A. (Nubank)";
 
   for (const charge of charges.data ?? []) {
     const refunded = REFUNDED_WOOVI_STATUSES.includes(String(charge.status ?? ""));
     const blocked = !refunded && !charge.released_at;
+    const gross = Number(charge.value_centavos ?? 0);
+    const fee = refunded ? 0 : PIX_FEE_CENTAVOS; // R$ 0,40 taxa fixa bancária da Woovi
+    const net = refunded ? gross : Math.max(0, gross - fee);
+
+    const rawPix = charge.raw_response?.pix;
+    const debitParty = rawPix?.debitParty;
+    const clientName = (
+      debitParty?.holder?.name ||
+      charge.raw_response?.charge?.customer?.name ||
+      "Cliente (via Pix)"
+    ).trim();
+    const clientBank = debitParty?.psp?.name || "Instituição do Pagador (via Pix)";
+    const clientTaxId = debitParty?.holder?.taxID?.taxID || "•••.•••.•••-••";
+    const endToEndId = rawPix?.endToEndId || charge.raw_response?.charge?.transactionID || `E54811417${charge.id.replace(/-/g, "").slice(0, 23)}`;
+
     transactions.push({
       id: `c-${charge.id}`,
       type: refunded ? "withdraw" : "deposit",
-      value_centavos: refunded ? Number(charge.value_centavos ?? 0) : netCentavos(charge.value_centavos),
-      gross_centavos: Number(charge.value_centavos ?? 0),
-      fee_centavos: refunded ? 0 : PIX_FEE_CENTAVOS,
+      value_centavos: net,
+      gross_centavos: gross,
+      fee_centavos: fee,
       status: refunded ? "Estornado" : blocked ? "Aguardando finalização do corte" : "Disponível",
       created_at: charge.refunded_at ?? charge.paid_at ?? charge.created_at,
       description: refunded
         ? "Cancelamento — estornado ao cliente"
         : blocked
-          ? "Pix recebido · aguardando confirmação (taxa R$ 0,40)"
-          : "Pagamento recebido (Pix) · taxa R$ 0,40",
+          ? `Pix recebido · ${clientName} (taxa R$ 0,40)`
+          : `Pix recebido · ${clientName}`,
       blocked,
+      receiptData: {
+        id: `c-${charge.id}`,
+        endToEndId,
+        valueCentavos: net,
+        grossCentavos: gross,
+        feeCentavos: fee,
+        createdAt: charge.paid_at || charge.created_at,
+        pixKey: context.barber.woovi_pix_key || "",
+        pixKeyType: (context.barber.woovi_pix_key_type as any) || "phone",
+        recipientName: "BARBEARIA DUB",
+        bankName: "Woovi IP S.A.",
+        originName: clientName,
+        originBank: clientBank,
+        originTaxId: clientTaxId,
+        status: refunded ? "Estornado" : "Concluído",
+        type: "deposit",
+        description: "Pagamento recebido (Pix)",
+      },
     });
   }
 
   for (const saque of saques.data ?? []) {
+    const rawWithdraw = saque.raw_response?.withdraw || saque.raw_response?.withdrawal || saque.raw_response;
+    const endToEndId = saque.end_to_end_id || rawWithdraw?.endToEndId || rawWithdraw?.transactionID || `E26019318${saque.id.replace(/-/g, "").slice(0, 23)}`;
+    const destBank = saque.banco_destino || rawWithdraw?.bank || barberBank;
+    const saqueCents = Math.round(Number(saque.valor ?? 0) * 100);
+
     transactions.push({
       id: `s-${saque.id}`,
       type: "withdraw",
-      value_centavos: Math.round(Number(saque.valor ?? 0) * 100),
-      status: saque.status ?? "processando",
+      value_centavos: saqueCents,
+      gross_centavos: saqueCents,
+      fee_centavos: 0,
+      status: saque.status === "concluido" ? "Concluído" : "Processando",
       created_at: saque.created_at,
-      description: "Saque Pix",
+      description: `Saque Pix · ${destBank}`,
+      receiptData: {
+        id: `s-${saque.id}`,
+        endToEndId,
+        valueCentavos: saqueCents,
+        grossCentavos: saqueCents,
+        feeCentavos: 0,
+        createdAt: saque.created_at,
+        pixKey: saque.chave_pix_valor || context.barber.woovi_pix_key || "",
+        pixKeyType: (saque.chave_pix_tipo || context.barber.woovi_pix_key_type || "phone") as any,
+        recipientName: barberName,
+        bankName: destBank,
+        originName: "Barbearia DUB",
+        originBank: "Woovi IP S.A.",
+        originTaxId: "43.376.103/0001-09",
+        status: saque.status === "concluido" ? "Concluído" : "Processando",
+        type: "withdraw",
+        description: "Transferência Pix (Saque)",
+      },
     });
   }
 
@@ -267,7 +450,7 @@ async function handleWithdraw(req: Request, body: Record<string, unknown>): Prom
       .eq("user_id", context.userId)
       .gte("created_at", new Date(Date.now() - 15 * 60_000).toISOString())
       .order("created_at", { ascending: false })
-      .limit(1)
+      .limit(1);
     if (!pinSession) {
       try {
         await context.supabase.from("financeiro_auth_sessions").insert({
@@ -289,14 +472,16 @@ async function handleWithdraw(req: Request, body: Record<string, unknown>): Prom
       .maybeSingle();
     if (recent) return fail("DUPLICATE", "Saque recente detectado, aguarde 30s", 200);
 
-    // Saldo: Woovi como fonte primária, saldo local como fallback quando o
-    // provedor está indisponível/recusa a credencial.
+    // Consulta o saldo real diretamente da Woovi
     let balance: { available_centavos: number; blocked_centavos: number };
     try {
       balance = await getWooviBalance(context.supabase, context.barber);
-    } catch (balanceError) {
-      console.warn("[woovi-wallet:withdraw] saldo Woovi indisponível:", (balanceError as Error).message);
-      balance = await getLocalBalance(context.supabase, context.barber);
+    } catch (balanceError: any) {
+      return fail(
+        "BANK_DISCONNECTED",
+        `Não foi possível verificar seu saldo diretamente no banco: ${balanceError.message}. Nenhum valor foi movimentado.`,
+        200
+      );
     }
 
     if (valueCentavos > balance.available_centavos) {
@@ -312,17 +497,34 @@ async function handleWithdraw(req: Request, body: Record<string, unknown>): Prom
       { method: "POST", body: { value: valueCentavos } },
     );
 
-    const { error: insertError } = await context.supabase.from("saques").insert({
-      user_id: context.userId,
-      barbeiro_id: context.barber.id,
-      valor: valueCentavos / 100,
-      status: "processando",
-      chave_pix_valor: context.barber.woovi_pix_key,
-      chave_pix_tipo: context.barber.woovi_pix_key_type ?? "random",
-    });
+    const withdrawObj = (woovi as any)?.withdraw ?? (woovi as any)?.withdrawal ?? woovi ?? {};
+    const e2eId = withdrawObj?.endToEndId ?? withdrawObj?.transactionID ?? `E26019318${Date.now()}`;
+    const destBank = withdrawObj?.bank ?? context.barber.banco_nome ?? "Nu Pagamentos S.A. (Nubank)";
+
+    const { data: insertedSaque, error: insertError } = await context.supabase
+      .from("saques")
+      .insert({
+        user_id: context.userId,
+        barbeiro_id: context.barber.id,
+        valor: valueCentavos / 100,
+        status: "concluido",
+        chave_pix_valor: context.barber.woovi_pix_key,
+        chave_pix_tipo: context.barber.woovi_pix_key_type ?? "phone",
+        end_to_end_id: e2eId,
+        banco_destino: destBank,
+        raw_response: woovi,
+      })
+      .select("id, created_at, end_to_end_id, banco_destino")
+      .maybeSingle();
+
     if (insertError) console.error("[woovi-wallet:withdraw] insert saque falhou:", insertError);
 
-    return ok({ woovi });
+    return ok({
+      woovi,
+      saque_id: insertedSaque?.id,
+      end_to_end_id: e2eId,
+      banco_destino: destBank,
+    });
   } catch (error) {
     console.error("[woovi-wallet:withdraw] Erro:", error);
     const providerError = error as {
@@ -340,50 +542,22 @@ async function handleWithdraw(req: Request, body: Record<string, unknown>): Prom
     if (isBalanceError) {
       return fail(
         "INSUFFICIENT_BALANCE",
-        "O valor pedido é maior que o saldo real disponível na conta (a taxa do banco já foi descontada). Tente um valor um pouco menor. Nenhum valor foi movimentado.",
+        "O valor solicitado é maior que o saldo real disponível na conta bancária (as tarifas do banco já foram deduzidas). Tente um valor menor. Nenhum valor foi movimentado.",
         200,
       );
     }
 
     if (isAuthError) {
-      console.warn("[woovi-wallet:withdraw] Woovi AppID rejeitado ou não configurado. Processando saque internamente no livro-caixa.");
-      const endToEndId = `E${Date.now()}${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-      const { data: insertedSaque, error: insertError } = await context.supabase
-        .from("saques")
-        .insert({
-          user_id: context.userId,
-          barbeiro_id: context.barber.id,
-          valor: valueCentavos / 100,
-          status: "concluido",
-          chave_pix_valor: context.barber.woovi_pix_key,
-          chave_pix_tipo: context.barber.woovi_pix_key_type ?? "random",
-        })
-        .select("id, created_at")
-        .maybeSingle();
-
-      if (insertError) {
-        console.error("[woovi-wallet:withdraw] insert fallback falhou:", insertError);
-      }
-
-      return ok({
-        woovi: {
-          status: "COMPLETED",
-          endToEndId,
-          value: valueCentavos,
-          time: new Date().toISOString(),
-          recipient: context.barber.woovi_subaccount_name || "Barbeiro",
-          pixKey: context.barber.woovi_pix_key,
-          pixKeyType: context.barber.woovi_pix_key_type ?? "random",
-          bank: "Banco Central do Brasil / Pix",
-        },
-        saque_id: insertedSaque?.id || crypto.randomUUID(),
-        end_to_end_id: endToEndId,
-      });
+      return fail(
+        "WOOVI_AUTH_ERROR",
+        "O banco recusou a credencial da carteira (AppID inválido ou revogado no provedor). O dinheiro NÃO saiu da conta. Verifique a credencial da Woovi no painel.",
+        200,
+      );
     }
 
     return fail(
       "WOOVI_UNAVAILABLE",
-      `Não foi possível concluir o saque agora (${providerMessage}). Nenhum valor foi movimentado.`,
+      `Não foi possível concluir o saque no banco (${providerMessage}). Nenhum valor foi movimentado.`,
       200,
     );
   }

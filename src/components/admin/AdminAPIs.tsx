@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Key, Webhook, Mail, MessageSquare, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { AdminWebhook } from "./AdminWebhook";
+import { AdminWoovi } from "./AdminWoovi";
 
 export function AdminAPIs() {
   return (
@@ -19,24 +20,21 @@ export function AdminAPIs() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="webhooks" className="w-full">
+      <Tabs defaultValue="payment" className="w-full">
         <TabsList className="bg-secondary/50 border border-border/50">
+          <TabsTrigger value="payment">Pagamentos & Woovi</TabsTrigger>
           <TabsTrigger value="webhooks">Webhook</TabsTrigger>
-          <TabsTrigger value="payment">Pagamentos</TabsTrigger>
           <TabsTrigger value="communication">Comunicação</TabsTrigger>
         </TabsList>
+
+        {/* Payment APIs */}
+        <TabsContent value="payment" className="space-y-6 mt-6">
+          <AdminWoovi />
+        </TabsContent>
 
         {/* Webhooks - Usando componente dedicado */}
         <TabsContent value="webhooks" className="space-y-6 mt-6">
           <AdminWebhook />
-        </TabsContent>
-
-        {/* Payment APIs */}
-        <TabsContent value="payment" className="space-y-6 mt-6">
-          <div className="py-6 border-b border-border">
-            <h3 className="text-lg font-semibold">Woovi</h3>
-            <p className="text-sm text-muted-foreground mt-2">Pagamentos Pix</p>
-          </div>
         </TabsContent>
 
         {/* Communication APIs */}

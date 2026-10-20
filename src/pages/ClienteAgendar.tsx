@@ -937,7 +937,8 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     }
 
     const totalPrice = getTotalPrice();
-    const finalPrice = Math.max(0, totalPrice - availableCredits);
+    const debtAmount = cancellationDebt?.valor_taxa || 0;
+    const finalPrice = Math.max(0, totalPrice - availableCredits) + debtAmount;
 
     if (totalPrice === 0 && useRedemption) {
       await createAppointmentWithRedemption();
@@ -1733,6 +1734,32 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                     onToggle={() => toggleService(service)}
                   />
                 ))}
+
+                {/* Taxa de cancelamento anterior */}
+                {cancellationDebt && cancellationDebt.valor_taxa > 0 && (
+                  <div className="w-full rounded-[24px] p-4 transition-all duration-200 border bg-white border-neutral-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.02)] select-none">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-[15px] font-semibold text-neutral-900 mb-0.5 tracking-tight">
+                          Taxa de cancelamento anterior
+                        </h3>
+                        <p className="text-[12px] text-neutral-500 mb-2.5 line-clamp-2 leading-relaxed">
+                          Referente ao agendamento cancelado anteriormente. Será somada automaticamente ao agendamento.
+                        </p>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[14px] font-semibold text-neutral-900 tabular-nums">
+                            R$ {cancellationDebt.valor_taxa.toFixed(2).replace('.', ',')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 flex items-center gap-1.5 mt-0.5">
+                        <div className="w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center">
+                          <Check className="w-4 h-4 stroke-[2.5]" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Premium Bottom Bar */}
@@ -2078,7 +2105,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-foreground">Valor a pagar</span>
                       <span className="text-2xl font-bold text-primary">
-                        R$ {Math.max(0, getTotalPrice() - availableCredits).toFixed(2).replace('.', ',')}
+                        R$ {Math.max(0, getTotalPrice() - availableCredits + (cancellationDebt?.valor_taxa || 0)).toFixed(2).replace('.', ',')}
                       </span>
                     </div>
                   </div>

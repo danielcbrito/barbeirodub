@@ -1,6 +1,8 @@
 // Cliente HTTP compartilhado da API Woovi (OpenPix).
 // Uso: const data = await wooviFetch<T>('/api/v1/charge', { method:'POST', body:{...} })
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const WOOVI_BASE = 'https://api.woovi.com';
 
 export class WooviError extends Error {
@@ -18,10 +20,39 @@ export interface WooviFetchInit {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
   headers?: Record<string, string>;
+  appId?: string;
+}
+
+export async function resolveWooviAppId(customAppId?: string): Promise<string> {
+  const explicit = (customAppId ?? '').trim();
+  if (explicit) return explicit;
+
+  // 1. Tenta carregar do banco de dados (tabela system_config) para permitir atualização sem redeploy
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && serviceKey) {
+      const admin = createClient(supabaseUrl, serviceKey);
+      const { data } = await admin
+        .from('system_config')
+        .select('valor')
+        .eq('chave', 'woovi_app_id')
+        .maybeSingle();
+
+      if (data?.valor && typeof data.valor === 'string' && data.valor.trim().length > 0) {
+        return data.valor.trim();
+      }
+    }
+  } catch (err) {
+    console.warn('[woovi-client] Erro ao buscar woovi_app_id em system_config:', err);
+  }
+
+  // 2. Fallback para a variável de ambiente
+  return (Deno.env.get('WOOVI_APP_ID') ?? '').trim();
 }
 
 export async function wooviFetch<T = unknown>(path: string, init: WooviFetchInit = {}): Promise<T> {
-  const appId = (Deno.env.get('WOOVI_APP_ID') ?? '').trim();
+  const appId = await resolveWooviAppId(init.appId);
   if (!appId) throw new WooviError(500, null, 'WOOVI_APP_ID não configurado');
 
   const url = path.startsWith('http') ? path : `${WOOVI_BASE}${path}`;
