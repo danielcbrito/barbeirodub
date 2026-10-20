@@ -11,6 +11,8 @@ import {
   fetchBarberCancellationFee,
   saveBarberCancellationFee,
   BarberCancellationFeeConfig,
+  fetchBarberPendingCancellationDebts,
+  ClienteDebitoCancelamento,
 } from "@/lib/barberCancellationFee";
 import {
   Loader2,
@@ -19,10 +21,15 @@ import {
   Percent,
   DollarSign,
   CheckCircle2,
+  AlertCircle,
+  Users,
+  ShieldCheck,
+  Info,
 } from "lucide-react";
 import pixLogo from "@/assets/pix-logo.png";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { BarberDebitosPendentesModal } from "./BarberDebitosPendentesModal";
 
 interface BarberFormasPagamentoProps {
   barbeiroId: string;
@@ -71,15 +78,20 @@ export function BarberFormasPagamento({
   // Modal com o aviso estratégico explicando a regra de cancelamento
   const [showExplainModal, setShowExplainModal] = useState(false);
 
+  // Modal de gerenciamento de taxas pendentes de clientes
+  const [showDebtsModal, setShowDebtsModal] = useState(false);
+  const [pendingDebtsCount, setPendingDebtsCount] = useState<number>(0);
+
   // Carrega configurações do banco de dados ao montar
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         setLoading(true);
-        const [paymentData, feeData] = await Promise.all([
+        const [paymentData, feeData, debtsData] = await Promise.all([
           fetchBarberPaymentMethods(barbeiroId, tenantId),
           fetchBarberCancellationFee(barbeiroId, tenantId),
+          fetchBarberPendingCancellationDebts(barbeiroId, tenantId),
         ]);
 
         if (mounted) {
@@ -87,6 +99,7 @@ export function BarberFormasPagamento({
           setFeeConfig(feeData);
           setDraftFeeConfig(feeData);
           setInputValue(String(feeData.valor ?? (feeData.tipo === "porcentagem" ? 20 : 15)));
+          setPendingDebtsCount(debtsData.length);
         }
       } catch (err) {
         console.error("Erro ao carregar configurações de pagamento:", err);
@@ -168,7 +181,7 @@ export function BarberFormasPagamento({
           ? 20
           : 15
         : draftFeeConfig.tipo === "porcentagem"
-        ? Math.min(100, Math.round(num))
+        ? Math.min(100, Math.max(1, Math.round(num)))
         : Math.round(num * 100) / 100;
 
     const nextConfig: BarberCancellationFeeConfig = {
@@ -190,7 +203,7 @@ export function BarberFormasPagamento({
       setDraftFeeConfig(nextConfig);
       setInputValue(String(cleanVal));
 
-      // Dispara o modal explicativo estratégico
+      toast.success("Configurações de taxa salvas com sucesso!");
       setShowExplainModal(true);
     } catch (err: any) {
       console.error("Erro ao salvar taxa de cancelamento:", err);
@@ -201,13 +214,13 @@ export function BarberFormasPagamento({
   };
 
   /* ═══════════════════════════════════════════════════════════════════════ */
-  /* ═══ SUB-PÁGINA DEDICADA: CONFIGURAÇÃO DE COBRANÇA POR CANCELAMENTO ═══ */
+  /* ═══ SUB-PÁGINA DEDICADA: CONFIGURAÇÃO DE TAXA DE CANCELAMENTO E FALTA ═══ */
   /* ═══════════════════════════════════════════════════════════════════════ */
   if (view === "cancellation-fee") {
     return (
       <div className="pb-16 min-h-app bg-background text-foreground">
         <ScheduleHeader
-          title="Cobrança por cancelamento"
+          title="Taxa de cancelamento e falta"
           onBack={() => setView("main")}
         />
 
@@ -218,14 +231,27 @@ export function BarberFormasPagamento({
             transition={{ duration: 0.16, ease: "easeOut" }}
             className="space-y-6"
           >
-            {/* Linha Principal: Ativar / Desativar a taxa */}
+            {/* Card explicativo obrigatório da Regra do Sistema */}
+            <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-primary shrink-0" />
+                <h4 className="text-[13px] font-semibold text-foreground tracking-tight">
+                  Regra do Sistema
+                </h4>
+              </div>
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                O cliente tem direito a <strong>cancelamento gratuito até 2 horas antes</strong> do horário marcado. Se o cliente cancelar faltando menos de 2 horas ou não comparecer (falta), a sua taxa será cobrada automaticamente.
+              </p>
+            </div>
+
+            {/* Linha Principal: Ativar / Desativar a cobrança */}
             <div className="py-4 flex items-center justify-between gap-4 border-b border-border/25">
               <div className="min-w-0 pr-2">
                 <p className="text-[13.5px] font-medium text-foreground leading-snug">
-                  Ativar cobrança por cancelamento
+                  Cobrar taxa de cancelamento e falta
                 </p>
                 <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                  Aplica taxa caso o agendamento seja cancelado com menos de 2 horas ou por falta.
+                  Aplica taxa configurada caso o cliente desmarque tardiamente ou não compareça.
                 </p>
               </div>
               <Switch
@@ -235,7 +261,7 @@ export function BarberFormasPagamento({
                 }
                 disabled={savingFee}
                 className="data-[state=checked]:bg-black dark:data-[state=checked]:bg-white shrink-0"
-                aria-label="Ativar cobrança por cancelamento"
+                aria-label="Cobrar taxa de cancelamento e falta"
               />
             </div>
 
@@ -249,7 +275,7 @@ export function BarberFormasPagamento({
                   transition={{ duration: 0.18, ease: "easeOut" }}
                   className="space-y-5 overflow-hidden pt-1"
                 >
-                  {/* 1. Tipo de cobrança */}
+                  {/* 1. Tipo de cobrança: Porcentagem ou Valor Fixo */}
                   <div className="space-y-2">
                     <label className="text-[13px] font-medium text-foreground block">
                       Tipo de cobrança
@@ -285,12 +311,12 @@ export function BarberFormasPagamento({
                     </div>
                   </div>
 
-                  {/* 2. Campo de digitação confortável preenchendo a largura inteira */}
+                  {/* 2. Campo de digitação de valor */}
                   <div className="space-y-1.5">
                     <label className="text-[13px] font-medium text-foreground block">
                       {draftFeeConfig.tipo === "porcentagem"
-                        ? "Porcentagem da taxa"
-                        : "Valor fixo da taxa"}
+                        ? "Porcentagem da taxa (%)"
+                        : "Valor fixo da taxa (R$)"}
                     </label>
 
                     <div className="relative w-full">
@@ -322,15 +348,15 @@ export function BarberFormasPagamento({
 
                     <p className="text-[11.5px] text-muted-foreground pt-0.5 leading-relaxed">
                       {draftFeeConfig.tipo === "porcentagem"
-                        ? "Calculada sobre o valor do serviço agendado."
-                        : "Valor fixo cobrado por cancelamento ou não comparecimento."}
+                        ? "Calculada automaticamente sobre o valor original do serviço agendado (ex: 20%)."
+                        : "Valor fixo cobrado por cancelamento com menos de 2h ou falta (ex: R$ 15,00)."}
                     </p>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Botão de Salvar — surge automaticamente ao alterar qualquer configuração */}
+            {/* Botão de Salvar — surge quando houver alterações */}
             <AnimatePresence>
               {hasChanges && (
                 <motion.div
@@ -358,7 +384,7 @@ export function BarberFormasPagamento({
           </motion.div>
         </div>
 
-        {/* Modal / Notificação estratégica explicando como funciona a regra para o cliente */}
+        {/* Modal explicativo das regras */}
         <AnimatePresence>
           {showExplainModal && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
@@ -382,10 +408,10 @@ export function BarberFormasPagamento({
                   </div>
                   <div>
                     <h3 className="text-[15.5px] font-bold text-foreground tracking-tight">
-                      Regras de cancelamento
+                      Configuração Atualizada!
                     </h3>
                     <p className="text-[11.5px] text-muted-foreground">
-                      Como a cobrança é aplicada aos seus agendamentos
+                      Como a regra funciona para os clientes
                     </p>
                   </div>
                 </div>
@@ -401,7 +427,7 @@ export function BarberFormasPagamento({
                   <div className="py-2.5 flex items-start gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
                     <p className="text-foreground leading-relaxed">
-                      <strong>Menos de 2 horas ou falta:</strong> é aplicada a taxa de{" "}
+                      <strong>Menos de 2 horas ou falta (no-show):</strong> é aplicada a sua taxa de{" "}
                       <strong>
                         {feeConfig.tipo === "porcentagem"
                           ? `${feeConfig.valor}% do valor do serviço`
@@ -413,14 +439,14 @@ export function BarberFormasPagamento({
                   <div className="py-2.5 flex items-start gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <p className="text-foreground leading-relaxed">
-                      <strong>Pagamento via Pix:</strong> o sistema solicita o reembolso do cliente descontando o valor da taxa configurada.
+                      <strong>Pagamento via Pix:</strong> o sistema retém o valor da taxa e estorna o restante.
                     </p>
                   </div>
 
                   <div className="py-2.5 flex items-start gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-foreground/60 mt-1.5 shrink-0" />
                     <p className="text-foreground leading-relaxed">
-                      <strong>Pagamento na barbearia:</strong> a taxa é lançada automaticamente como pendência na conta do cliente e somada no próximo agendamento dele.
+                      <strong>Pagamento na barbearia:</strong> a taxa é lançada como pendência na conta do cliente e somada automaticamente no próximo agendamento dele.
                     </p>
                   </div>
                 </div>
@@ -444,16 +470,16 @@ export function BarberFormasPagamento({
   }
 
   /* ═══════════════════════════════════════════════════════════════════════ */
-  /* ═══ VISÃO PRINCIPAL: MÉTODOS DE PAGAMENTO E LINK DE CANCELAMENTO ═══ */
+  /* ═══ VISÃO PRINCIPAL: MÉTODOS DE RECEBIMENTO E POLÍTICAS DE TAXAS ═══ */
   /* ═══════════════════════════════════════════════════════════════════════ */
   return (
     <div className="pb-12 min-h-app bg-background text-foreground">
-      <ScheduleHeader title="Formas de pagamentos" onBack={onBack} />
+      <ScheduleHeader title="Pagamentos e Taxas" onBack={onBack} />
 
       <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
         {/* Descrição minimalista */}
         <p className="text-[12px] text-muted-foreground leading-relaxed px-1 font-light">
-          Configure os métodos de recebimento e as políticas de cancelamento para seus atendimentos. Suas preferências refletem no app do cliente em tempo real.
+          Configure as formas de pagamento aceitas e as regras de cancelamento e falta. Suas preferências refletem no app do cliente em tempo real.
         </p>
 
         {loading ? (
@@ -462,9 +488,8 @@ export function BarberFormasPagamento({
             <span className="text-[12.5px] text-muted-foreground">Carregando opções...</span>
           </div>
         ) : (
-          /* Lista Unificada Padrão Atendimento & Notificações (100% flat, divide-y divide-border/25) */
           <div className="divide-y divide-border/25 pt-1">
-            {/* Opção 1: Pix — Símbolo limpo, sem caixa por trás, sem badge online */}
+            {/* Opção 1: Receber via Pix */}
             <div className="py-4 flex items-center justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0 pr-2">
                 <img
@@ -474,10 +499,10 @@ export function BarberFormasPagamento({
                 />
                 <div className="min-w-0 flex-1">
                   <p className="text-[13.5px] font-medium text-foreground leading-snug">
-                    Pix
+                    Receber via Pix
                   </p>
                   <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Cobrança instantânea gerada automaticamente no checkout via QR Code e código Copia e Cola.
+                    Ativa pagamentos antecipados via Pix no checkout do app do cliente (QR Code e Copia e Cola).
                   </p>
                 </div>
               </div>
@@ -486,11 +511,11 @@ export function BarberFormasPagamento({
                 onCheckedChange={(val) => handleTogglePaymentMethod("pix", val)}
                 disabled={savingKey !== null}
                 className="data-[state=checked]:bg-black dark:data-[state=checked]:bg-white shrink-0"
-                aria-label="Habilitar Pix"
+                aria-label="Receber via Pix"
               />
             </div>
 
-            {/* Opção 2: Pagamento na barbearia — Símbolo limpo, sem caixa por trás, sem badge presencial */}
+            {/* Opção 2: Pagamento na barbearia */}
             <div className="py-4 flex items-center justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0 pr-2">
                 <Store className="w-5 h-5 stroke-[1.8] text-foreground shrink-0 mt-0.5" />
@@ -499,7 +524,7 @@ export function BarberFormasPagamento({
                     Pagamento na barbearia
                   </p>
                   <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                    O cliente agenda no app e realiza o acerto financeiro presencialmente no dia do atendimento.
+                    Permite que o cliente agende no app e realize o acerto presencialmente no balcão no dia do atendimento.
                   </p>
                 </div>
               </div>
@@ -508,11 +533,11 @@ export function BarberFormasPagamento({
                 onCheckedChange={(val) => handleTogglePaymentMethod("barbearia", val)}
                 disabled={savingKey !== null}
                 className="data-[state=checked]:bg-black dark:data-[state=checked]:bg-white shrink-0"
-                aria-label="Habilitar Pagamento na barbearia"
+                aria-label="Pagamento na barbearia"
               />
             </div>
 
-            {/* Opção 3: Cobrança por cancelamento — Sem ícone ao lado, com setinha para navegar à sub-página */}
+            {/* Opção 3: Taxa de cancelamento e falta */}
             <button
               type="button"
               onClick={handleOpenCancellationFeeView}
@@ -521,7 +546,7 @@ export function BarberFormasPagamento({
               <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-2">
                   <p className="text-[13.5px] font-medium text-foreground leading-snug">
-                    Cobrança por cancelamento
+                    Taxa de cancelamento e falta
                   </p>
                   <span className="text-[11.5px] text-muted-foreground font-normal">
                     · {feeConfig.habilitado
@@ -532,8 +557,42 @@ export function BarberFormasPagamento({
                   </span>
                 </div>
                 <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                  Configure taxa automática caso o cliente desmarque ou cancele o horário.
+                  Taxa cobrada caso o cliente cancele com menos de 2h ou falte ao atendimento marcado.
                 </p>
+              </div>
+              <ChevronRight
+                className="w-4 h-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0"
+                strokeWidth={1.8}
+              />
+            </button>
+
+            {/* Opção 4: Gestão de Dívidas e Taxas Pendentes */}
+            <button
+              type="button"
+              onClick={() => setShowDebtsModal(true)}
+              className="w-full py-4 flex items-center justify-between gap-4 text-left hover:opacity-80 active:opacity-60 transition-opacity group"
+            >
+              <div className="flex items-start gap-3 min-w-0 pr-2">
+                <Users className="w-5 h-5 text-foreground shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13.5px] font-medium text-foreground leading-snug">
+                      Clientes com taxas pendentes
+                    </p>
+                    {pendingDebtsCount > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10.5px] font-semibold tabular-nums">
+                        {pendingDebtsCount} {pendingDebtsCount === 1 ? "cliente" : "clientes"}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        Em dia
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
+                    Visualize débitos pendentes de faltas/cancelamentos e libere clientes manualmente por cortesia.
+                  </p>
+                </div>
               </div>
               <ChevronRight
                 className="w-4 h-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0"
@@ -543,11 +602,30 @@ export function BarberFormasPagamento({
           </div>
         )}
 
-        {/* Rodapé com aviso discreto de regra */}
-        <p className="text-[11px] text-muted-foreground/60 px-1 pt-2">
-          Pelo menos um método de pagamento deve permanecer ativado para que os clientes consigam agendar.
-        </p>
+        {/* Rodapé com aviso da regra obrigatória */}
+        <div className="p-3.5 rounded-xl border border-border/40 bg-secondary/20 space-y-1 text-left">
+          <p className="text-[11.5px] font-medium text-foreground flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-foreground/70" />
+            Regra garantida pelo sistema
+          </p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            O cancelamento gratuito até 2 horas de antecedência é garantido pelo sistema. Pelo menos um método de pagamento deve permanecer ativo para permitir novos agendamentos.
+          </p>
+        </div>
       </div>
+
+      {/* Modal de Gestão de Débitos Pendentes */}
+      <BarberDebitosPendentesModal
+        open={showDebtsModal}
+        onOpenChange={setShowDebtsModal}
+        barbeiroId={barbeiroId}
+        tenantId={tenantId}
+        onDebtUpdated={() => {
+          fetchBarberPendingCancellationDebts(barbeiroId, tenantId).then((debts) => {
+            setPendingDebtsCount(debts.length);
+          });
+        }}
+      />
     </div>
   );
 }

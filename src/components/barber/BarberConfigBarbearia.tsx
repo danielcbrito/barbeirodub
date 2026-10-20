@@ -424,9 +424,9 @@ export function BarberConfigBarbearia({
         {
           id: "formas-pagamento",
           icon: CreditCard,
-          label: "Formas de pagamentos",
-          description: "Pix e Pagamento na barbearia",
-          keywords: ["formas de pagamento", "pagamento", "pix", "dinheiro", "barbearia", "presencial", "checkout", "recebimento", "cartão"],
+          label: "Pagamentos e Taxas",
+          description: "Pix, Pagamento na barbearia e taxa de cancelamento/falta",
+          keywords: ["formas de pagamento", "pagamento", "taxas", "cancelamento", "falta", "pix", "dinheiro", "barbearia", "presencial", "checkout", "recebimento", "cartão"],
           onClick: () => setActiveScreen("formas-pagamento"),
         },
         {
@@ -500,9 +500,9 @@ export function BarberConfigBarbearia({
       {
         id: "formas-pagamento",
         icon: CreditCard,
-        label: "Formas de pagamentos",
-        description: "Pix e Pagamento na barbearia",
-        keywords: ["formas de pagamento", "pagamento", "pix", "dinheiro", "barbearia", "presencial", "checkout", "recebimento", "cartão"],
+        label: "Pagamentos e Taxas",
+        description: "Pix, Pagamento na barbearia e taxa de cancelamento/falta",
+        keywords: ["formas de pagamento", "pagamento", "taxas", "cancelamento", "falta", "pix", "dinheiro", "barbearia", "presencial", "checkout", "recebimento", "cartão"],
         onClick: () => setActiveScreen("formas-pagamento"),
       },
       {
@@ -988,7 +988,7 @@ export function BarberConfigBarbearia({
           <div className="pb-10 min-h-app bg-background">
             <ScheduleHeader title="Horário da Barbearia" onBack={() => setActiveScreen("horarios")} />
             <div className="px-4 pt-3 max-w-md mx-auto">
-              <AdminHorarios hideTitle companyMode tenantId={tenantId} />
+              <AdminHorarios hideTitle companyMode tenantId={tenantId} unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined} />
             </div>
           </div>
         );
@@ -1000,7 +1000,7 @@ export function BarberConfigBarbearia({
               onBack={() => setActiveScreen(isTenantAdmin ? "horarios" : "hub")}
             />
             <div className="px-4 pt-3 max-w-md mx-auto">
-              <AdminHorarios hideTitle barbeiroId={barberContext.barbeiroId} tenantId={tenantId} />
+              <AdminHorarios hideTitle barbeiroId={barberContext.barbeiroId} tenantId={tenantId} unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined} />
             </div>
           </div>
         );

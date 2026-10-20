@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import { extractWalkInName, isWhatsAppAppointment, extractWhatsAppName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
+import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { AdminContext } from "@/pages/Admin";
@@ -772,6 +773,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                 const horaFormatted = rawHora.slice(0, 5);
 
                 const isCompleted = apt.status === "completed" || apt.status === "no_show";
+                const debtInfo = extractDebtFromAppointment(apt);
 
                 return (
                   <div
@@ -821,6 +823,11 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                         {apt.profile?.nome || "Cliente"}
                       </span>
                       {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
+                      {debtInfo.hasDebt && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 text-[10px] font-semibold tabular-nums shrink-0">
+                          + R$ {debtInfo.debtAmount.toFixed(2).replace(".", ",")} taxa
+                        </span>
+                      )}
                     </div>
 
                     {/* Footer: Hora + Duração + Pagamento + Preço */}
@@ -847,14 +854,21 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                           PLANO
                         </div>
                       ) : (
-                        <span className={cn(
-                          "text-sm font-semibold tabular-nums",
-                          apt.is_free ? "text-muted-foreground/40 line-through" : "text-foreground"
-                        )}>
-                          {apt.is_free
-                            ? "Grátis"
-                            : `R$ ${typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco.toFixed(2).replace('.', ',') : "0,00"}`}
-                        </span>
+                        <div className="text-right">
+                          <span className={cn(
+                            "text-sm font-semibold tabular-nums block",
+                            apt.is_free ? "text-muted-foreground/40 line-through" : "text-foreground"
+                          )}>
+                            {apt.is_free
+                              ? "Grátis"
+                              : `R$ ${typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco.toFixed(2).replace('.', ',') : "0,00"}`}
+                          </span>
+                          {debtInfo.hasDebt && (
+                            <span className="text-[9.5px] text-amber-600 dark:text-amber-400 font-medium block tabular-nums">
+                              Com taxa inclusa
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

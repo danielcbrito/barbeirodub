@@ -823,10 +823,31 @@ export function useSalvarHorarioAdmin(tenantId: string) {
       hora_almoco_fim?: string;
       aberto: boolean;
     }) => {
-      const { error } = await supabase
-        .from("configuracoes_horario")
-        .upsert(horario as never);
+      const payload = {
+        aberto: horario.aberto,
+        hora_abertura: horario.hora_abertura,
+        hora_fechamento: horario.hora_fechamento,
+        hora_almoco_inicio: horario.hora_almoco_inicio || null,
+        hora_almoco_fim: horario.hora_almoco_fim || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await supabase
+        .from("configuracoes_horario_unidade" as any)
+        .update(payload)
+        .eq("tenant_id", tenantId)
+        .eq("dia_semana", horario.dia_semana)
+        .select();
       if (error) throw error;
+      if (!data || (data as any[]).length === 0) {
+        const { error: insErr } = await supabase
+          .from("configuracoes_horario_unidade" as any)
+          .insert({
+            tenant_id: tenantId,
+            dia_semana: horario.dia_semana,
+            ...payload,
+          });
+        if (insErr) throw insErr;
+      }
     },
 
     onMutate: async (horario) => {

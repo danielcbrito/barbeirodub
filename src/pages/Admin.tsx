@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, Suspense, useState, useRef, lazy } from "react";
-import { useNavigate, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { useNavigate, Routes, Route, useLocation, Navigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
@@ -462,7 +462,7 @@ const Admin = () => {
                 <Route path="configuracoes" element={<AdminConfiguracoes />} />
                 <Route path="apis" element={<AdminAPIs />} />
                 <Route path="seguranca/*" element={<AdminSeguranca />} />
-                <Route path="horarios" element={<AdminMobileHorarios barbeiroId={adminContext?.barbeiroId || undefined} tenantId={adminContext?.tenantId || undefined} />} />
+                <Route path="horarios" element={<AdminMobileHorariosRoute barbeiroId={adminContext?.barbeiroId || undefined} tenantId={adminContext?.tenantId || undefined} />} />
                 <Route path="dev" element={<AdminDev />} />
                 <Route path="disparo" element={<AdminDisparo />} />
                 <Route path="perfil" element={<AdminMobileProfile />} />
@@ -543,7 +543,7 @@ const Admin = () => {
                   <Route path="configuracoes" element={<AdminConfiguracoes />} />
                   <Route path="apis" element={<AdminAPIs />} />
                   <Route path="seguranca/*" element={<AdminSeguranca />} />
-                  <Route path="horarios" element={<AdminHorarios tenantId={adminContext?.tenantId || undefined} />} />
+                  <Route path="horarios" element={<AdminDesktopHorariosRoute barbeiroId={adminContext?.barbeiroId || undefined} tenantId={adminContext?.tenantId || undefined} />} />
                   <Route path="dev" element={<AdminDev />} />
                   <Route path="disparo" element={<AdminDisparo />} />
                   <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
@@ -598,5 +598,34 @@ const Admin = () => {
     </div>
   );
 };
+
+function AdminMobileHorariosRoute({ barbeiroId, tenantId }: { barbeiroId?: string; tenantId?: string }) {
+  const [searchParams] = useSearchParams();
+  const isCompanyMode = searchParams.get("empresa") === "1" || searchParams.get("scope") === "company";
+
+  return (
+    <AdminMobileHorarios
+      key={isCompanyMode ? 'company-mobile' : 'personal-mobile'}
+      basePath="/admin"
+      barbeiroId={isCompanyMode ? undefined : barbeiroId}
+      companyMode={isCompanyMode}
+      tenantId={tenantId}
+    />
+  );
+}
+
+function AdminDesktopHorariosRoute({ barbeiroId, tenantId }: { barbeiroId?: string; tenantId?: string }) {
+  const [searchParams] = useSearchParams();
+  const isCompanyMode = searchParams.get("empresa") === "1" || searchParams.get("scope") === "company" || !barbeiroId;
+
+  return (
+    <AdminHorarios
+      key={isCompanyMode ? 'company-desktop' : 'personal-desktop'}
+      barbeiroId={isCompanyMode ? undefined : barbeiroId}
+      companyMode={isCompanyMode}
+      tenantId={tenantId}
+    />
+  );
+}
 
 export default Admin;

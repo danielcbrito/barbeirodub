@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { MobileManualBookingModal } from "./MobileManualBookingModal";
 import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
+import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
@@ -1031,6 +1032,8 @@ export function AdminMobileAgenda({
                 ? apt.preco.toFixed(2).replace('.', ',')
                 : '0,00';
 
+              const debtInfo = extractDebtFromAppointment(apt);
+
               return (
                 <div
                   key={apt.id}
@@ -1101,6 +1104,11 @@ export function AdminMobileAgenda({
                         {isNoShow && (
                           <span className="text-[11px] font-normal text-muted-foreground/60 shrink-0">
                             (Não veio)
+                          </span>
+                        )}
+                        {debtInfo.hasDebt && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 text-[10px] font-semibold tabular-nums shrink-0">
+                            + R$ {debtInfo.debtAmount.toFixed(2).replace(".", ",")}
                           </span>
                         )}
                         {isWhatsAppAppointment(apt.observacoes) && (

@@ -48,6 +48,7 @@ import { ClientPlanConversionScreen } from "@/components/shared/ClientPlanConver
 import type { TimelineAppointment } from "@/hooks/useBarberAgenda";
 import { isWhatsAppAppointment } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
+import { extractDebtFromAppointment, dispenseCancellationDebt } from "@/lib/barberCancellationFee";
 
 function CurvedBackArrow({ className }: { className?: string }) {
   return (
@@ -106,6 +107,7 @@ export function AppointmentDetailsView({
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
   const [paymentJustConfirmed, setPaymentJustConfirmed] = useState(false);
   const [confirmFinalizeOpen, setConfirmFinalizeOpen] = useState(false);
+  const [confirmNoShowOpen, setConfirmNoShowOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentBarberId, setCurrentBarberId] = useState<string | null>(null);
 
@@ -444,7 +446,20 @@ export function AppointmentDetailsView({
         isPrepaid,
       },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
+          // Se possuía taxa de cancelamento pendente somada neste agendamento, dá baixa no débito
+          const debtInfo = extractDebtFromAppointment(appointment);
+          if (debtInfo.hasDebt && appointment.user_id) {
+            try {
+              await dispenseCancellationDebt({
+                clienteId: appointment.user_id,
+                barbeiroId: resolvedBarbeiroId || undefined,
+                tenantId: resolvedTenantId,
+              });
+            } catch (err) {
+              console.warn("Erro ao quitar taxa pendente no atendimento:", err);
+            }
+          }
           toast.success("Atendimento finalizado");
           onUpdate();
           onClose();
@@ -639,6 +654,7 @@ export function AppointmentDetailsView({
   const isCancelled = appointment.status === 'cancelled_by_admin' || appointment.status === 'cancelled_by_user';
   const isNoShow = appointment.status === 'no_show';
   const isPending = appointment.status === 'pending';
+  const debtInfo = extractDebtFromAppointment(appointment);
 
   const isToday = appointment.data === format(new Date(), 'yyyy-MM-dd');
   const dateLabel = isToday 
@@ -795,6 +811,45 @@ export function AppointmentDetailsView({
           </div>
         </div>
       </div>
+
+      {/* ── DISCRIMINAÇÃO DE TAXA PENDENTE SOMADA (SE HOUVER) ── */}
+      {debtInfo.hasDebt && (
+        <div className="px-4">
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-4 space-y-3 shadow-xs">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="text-[13px] font-bold tracking-tight">
+                Taxa de cancelamento/falta anterior somada
+              </span>
+            </div>
+
+            <div className="divide-y divide-amber-500/15 text-[12.5px]">
+              <div className="py-1.5 flex justify-between text-muted-foreground">
+                <span>Serviço:</span>
+                <span className="tabular-nums font-medium text-foreground">
+                  R$ {debtInfo.servicePrice.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+              <div className="py-1.5 flex justify-between text-amber-600 dark:text-amber-400 font-medium">
+                <span>Taxa anterior (cancelamento/falta):</span>
+                <span className="tabular-nums font-semibold">
+                  + R$ {debtInfo.debtAmount.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+              <div className="pt-2 flex justify-between text-[14px] font-bold text-foreground">
+                <span>Total a cobrar no balcão:</span>
+                <span className="tabular-nums text-foreground">
+                  R$ {debtInfo.totalToCollect.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground/80 leading-relaxed pt-0.5 border-t border-amber-500/15">
+              O cliente possuía uma dívida pendente que foi unificada automaticamente a este agendamento presencial. Lembre-se de cobrar o total de <strong>R$ {debtInfo.totalToCollect.toFixed(2).replace(".", ",")}</strong> no balcão.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── OBSERVAÇÕES ── */}
       {appointment.observacoes && (
@@ -1067,7 +1122,7 @@ export function AppointmentDetailsView({
 
               {canNoShow && (
                 <button 
-                  onClick={handleNoShow} 
+                  onClick={() => setConfirmNoShowOpen(true)} 
                   disabled={isActing}
                   className={cn(
                     "flex-1 h-10 rounded-xl text-[12px] font-medium flex items-center justify-center gap-1.5",
@@ -1205,6 +1260,49 @@ export function AppointmentDetailsView({
               className="w-full h-9 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
             >
               Voltar
+            </button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* ═══ DIALOG CONFIRMAÇÃO DE FALTA (NO-SHOW) ═══ */}
+      <AlertDialog open={confirmNoShowOpen} onOpenChange={setConfirmNoShowOpen}>
+        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background">
+          <AlertDialogHeader className="space-y-2 text-center sm:text-center">
+            <div className="w-12 h-12 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center mx-auto text-destructive mb-1">
+              <UserX className="w-6 h-6 stroke-[1.8]" />
+            </div>
+            <AlertDialogTitle className="text-[17px] font-semibold tracking-tight text-foreground">
+              Confirmar falta do cliente?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[12.5px] text-muted-foreground leading-relaxed">
+              O agendamento de <strong className="text-foreground">{appointment?.profile?.nome || "Cliente"}</strong> será marcado como <strong className="text-foreground">Falta</strong>.
+              <br /><br />
+              {isPrepaid ? (
+                <span>O cliente já realizou pagamento antecipado (Pix). O valor correspondente à taxa de cancelamento/falta será retido.</span>
+              ) : (
+                <span>Como o agendamento é com pagamento presencial na barbearia, a taxa configurada será registrada como pendência na conta do cliente e somada no próximo agendamento dele.</span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="pt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmNoShowOpen(false)}
+              className="flex-1 h-11 rounded-full bg-secondary border border-border/60 text-[13px] font-medium text-foreground hover:bg-secondary/80 transition-all"
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmNoShowOpen(false);
+                handleNoShow();
+              }}
+              disabled={isActing}
+              className="flex-1 h-11 rounded-full bg-destructive text-destructive-foreground text-[13px] font-semibold hover:opacity-90 active:scale-[0.99] transition-all shadow-xs"
+            >
+              Sim, registrar falta
             </button>
           </div>
         </AlertDialogContent>

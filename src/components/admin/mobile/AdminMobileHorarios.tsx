@@ -48,11 +48,13 @@ export function AdminMobileHorarios({
 }: AdminMobileHorariosProps) {
   const [searchParams] = useSearchParams();
   const scope = searchParams.get('scope'); // 'self' | 'units' | null
+  const isEmpresaParam = searchParams.get('empresa') === '1' || searchParams.get('scope') === 'company';
+  const effectiveCompanyMode = companyMode || isEmpresaParam;
   const unitIds = useMemo(() => {
     const raw = searchParams.get('unit_ids');
     return raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
   }, [searchParams]);
-  const scopeUnits = scope === 'units' && unitIds.length > 0;
+  const scopeUnits = (scope === 'units' && unitIds.length > 0) || effectiveCompanyMode;
 
   const [configs, setConfigs] = useState<HorarioConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,18 +80,17 @@ export function AdminMobileHorarios({
   const originalRef = useRef<string>('');
 
   // Decide qual tabela usar:
-  // - scope=units  → horários DA BARBEARIA (configuracoes_horario_unidade),
+  // - scope=units / companyMode / isEmpresaParam / !barbeiroId → horários DA BARBEARIA (configuracoes_horario_unidade),
   //   sem tocar no horário pessoal de nenhum barbeiro.
-  // - scope=self   → horário pessoal do barbeiro (configuracoes_horario_barbeiro).
-  // - companyMode  → tabela global legada.
-  const useUnitTable = scopeUnits && !companyMode;
-  const usePerBarber = !!barbeiroId && !companyMode && !useUnitTable;
+  // - scope=self / barbeiro pessoal → horário pessoal do barbeiro (configuracoes_horario_barbeiro).
+  const useUnitTable = (scopeUnits || effectiveCompanyMode || !barbeiroId);
+  const usePerBarber = !!barbeiroId && !effectiveCompanyMode && !useUnitTable;
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(tenantId ?? null);
 
   useEffect(() => {
     loadConfigs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbeiroId, companyMode, useUnitTable, unitIds.join(',')]);
+  }, [barbeiroId, effectiveCompanyMode, useUnitTable, unitIds.join(',')]);
 
   const resolveTenantId = async (): Promise<string | null> => {
     if (resolvedTenantId) return resolvedTenantId;
@@ -110,7 +111,33 @@ export function AdminMobileHorarios({
         .maybeSingle();
       if (data?.tenant_id) { setResolvedTenantId(data.tenant_id); return data.tenant_id; }
     }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      const { data: barb } = await supabase
+        .from('barbeiros')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (barb?.tenant_id) { setResolvedTenantId(barb.tenant_id); return barb.tenant_id; }
+      const { data: ten } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('owner_user_id', user.id)
+        .maybeSingle();
+      if (ten?.id) { setResolvedTenantId(ten.id); return ten.id; }
+    }
     return null;
+  };
+
+  const resolveDefaultUnitId = async (tId: string | null): Promise<string | null> => {
+    if (!tId) return null;
+    const { data } = await supabase
+      .from('tenant_unidades')
+      .select('id')
+      .eq('tenant_id', tId)
+      .order('is_sede', { ascending: false })
+      .limit(1);
+    return data && data.length > 0 ? data[0].id : null;
   };
 
   const defaultUnitConfigs = (): HorarioConfig[] =>
@@ -132,13 +159,26 @@ export function AdminMobileHorarios({
       let error: any = null;
 
       if (useUnitTable) {
-        await resolveTenantId();
-        const res = await (supabase as any).from('configuracoes_horario_unidade')
-          .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
-          .eq('unidade_id', unitIds[0])
-          .order('dia_semana');
-        if (res.error) throw res.error;
-        data = res.data && res.data.length > 0 ? res.data : defaultUnitConfigs();
+        const tId = await resolveTenantId();
+        const targetUnitId = unitIds[0] || (await resolveDefaultUnitId(tId));
+        let res: any = null;
+
+        if (targetUnitId) {
+          res = await (supabase as any).from('configuracoes_horario_unidade')
+            .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
+            .eq('unidade_id', targetUnitId)
+            .order('dia_semana');
+        }
+
+        if ((!res || !res.data || res.data.length === 0) && tId) {
+          res = await (supabase as any).from('configuracoes_horario_unidade')
+            .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
+            .eq('tenant_id', tId)
+            .order('dia_semana');
+        }
+
+        if (res?.error) throw res.error;
+        data = res?.data && res.data.length > 0 ? res.data : defaultUnitConfigs();
       } else if (usePerBarber) {
         const res = await supabase
           .from('configuracoes_horario_barbeiro')
@@ -160,12 +200,16 @@ export function AdminMobileHorarios({
           error = retry.error;
         }
       } else {
-        const res = await supabase
-          .from('configuracoes_horario')
-          .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos')
-          .order('dia_semana');
-        data = res.data;
-        error = res.error;
+        const tId = await resolveTenantId();
+        let res: any = null;
+        if (tId) {
+          res = await (supabase as any)
+            .from('configuracoes_horario_unidade')
+            .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
+            .eq('tenant_id', tId)
+            .order('dia_semana');
+        }
+        data = res?.data && res.data.length > 0 ? res.data : defaultUnitConfigs();
       }
 
       if (error) throw error;
@@ -202,12 +246,50 @@ export function AdminMobileHorarios({
     try {
       const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
 
-      // ── Escopo BARBEARIA: grava só o horário da unidade ──
-      if (useUnitTable) {
-        const tId = await resolveTenantId();
-        if (!tId) throw new Error('Não foi possível identificar a barbearia');
+      if (usePerBarber && barbeiroId) {
+        // ── Escopo HORÁRIO PESSOAL DO BARBEIRO ──
+        for (const config of configs) {
+          const payload = {
+            aberto: config.aberto,
+            hora_abertura: config.hora_abertura || '09:00',
+            hora_fechamento: config.hora_fechamento || '20:00',
+            hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+            hora_almoco_fim: sanitize(config.hora_almoco_fim),
+            delay_entre_servicos: config.delay_entre_servicos
+          };
 
-        for (const unidadeId of unitIds) {
+          const res = await supabase
+            .from('configuracoes_horario_barbeiro')
+            .update(payload)
+            .eq('barbeiro_id', barbeiroId)
+            .eq('dia_semana', config.dia_semana)
+            .select();
+          if (res.error) throw res.error;
+          if (!res.data || res.data.length === 0) {
+            await supabase.rpc('initialize_barber_hours', { p_barbeiro_id: barbeiroId });
+            const retry = await supabase
+              .from('configuracoes_horario_barbeiro')
+              .update(payload)
+              .eq('barbeiro_id', barbeiroId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+            if (retry.error) throw retry.error;
+          }
+        }
+
+        toast.success('Horário pessoal salvo com sucesso!');
+        await loadConfigs();
+        return;
+      }
+
+      // ── Escopo BARBEARIA: grava só o horário da unidade / tenant ──
+      const tId = await resolveTenantId();
+      if (!tId) throw new Error('Não foi possível identificar a barbearia');
+      const defaultUId = await resolveDefaultUnitId(tId);
+      const targetUnitIds = unitIds.length > 0 ? unitIds : (defaultUId ? [defaultUId] : []);
+
+      if (targetUnitIds.length > 0) {
+        for (const unidadeId of targetUnitIds) {
           for (const config of configs) {
             const payload = {
               aberto: config.aberto,
@@ -239,59 +321,40 @@ export function AdminMobileHorarios({
             }
           }
         }
+      } else {
+        for (const config of configs) {
+          const payload = {
+            aberto: config.aberto,
+            hora_abertura: config.hora_abertura || '09:00',
+            hora_fechamento: config.hora_fechamento || '20:00',
+            hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+            hora_almoco_fim: sanitize(config.hora_almoco_fim),
+            delay_entre_servicos: config.delay_entre_servicos,
+            updated_at: new Date().toISOString(),
+          };
 
-        toast.success('Horário da barbearia atualizado! O horário pessoal de cada barbeiro continua o mesmo.');
-        await loadConfigs();
-        return;
-      }
-
-      const targetBarberIds: string[] = usePerBarber ? [barbeiroId as string] : [];
-
-      for (const config of configs) {
-        const payload = {
-          aberto: config.aberto,
-          hora_abertura: config.hora_abertura || '09:00',
-          hora_fechamento: config.hora_fechamento || '20:00',
-          hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
-          hora_almoco_fim: sanitize(config.hora_almoco_fim),
-          delay_entre_servicos: config.delay_entre_servicos
-        };
-
-        if (usePerBarber) {
-          for (const bId of targetBarberIds) {
-            const res = await supabase
-              .from('configuracoes_horario_barbeiro')
-              .update(payload)
-              .eq('barbeiro_id', bId)
-              .eq('dia_semana', config.dia_semana)
-              .select();
-            if (res.error) throw res.error;
-            if (!res.data || res.data.length === 0) {
-              await supabase.rpc('initialize_barber_hours', { p_barbeiro_id: bId });
-              const retry = await supabase
-                .from('configuracoes_horario_barbeiro')
-                .update(payload)
-                .eq('barbeiro_id', bId)
-                .eq('dia_semana', config.dia_semana)
-                .select();
-              if (retry.error) throw retry.error;
-            }
-          }
-        } else {
-          const res = await supabase
-            .from('configuracoes_horario')
+          const upd = await (supabase as any).from('configuracoes_horario_unidade')
             .update(payload)
+            .eq('tenant_id', tId)
             .eq('dia_semana', config.dia_semana)
             .select();
-          if (res.error) throw res.error;
-          if (!res.data || res.data.length === 0) {
-            throw new Error(`Falha ao salvar dia ${config.dia_semana}: nenhuma linha atualizada (verifique permissões)`);
+          if (upd.error) throw upd.error;
+
+          if (!upd.data || upd.data.length === 0) {
+            const ins = await (supabase as any).from('configuracoes_horario_unidade')
+              .insert({
+                tenant_id: tId,
+                dia_semana: config.dia_semana,
+                ...payload,
+              })
+              .select();
+            if (ins.error) throw ins.error;
           }
         }
       }
-      toast.success('Configurações salvas com sucesso!');
-      await loadConfigs();
 
+      toast.success('Horário da barbearia atualizado! O horário pessoal de cada barbeiro continua o mesmo.');
+      await loadConfigs();
     } catch (error: any) {
       console.error('Erro ao salvar configurações:', error);
       toast.error(error?.message || 'Erro ao salvar configurações');

@@ -115,7 +115,8 @@ export async function resolveBusinessHours(
         .select("*")
         .eq("data", date)
         .eq("tenant_id", tenantId)
-        .is("unidade_id", null)
+        .order("unidade_id", { nullsFirst: false })
+        .limit(1)
         .maybeSingle();
       excecaoData = tenantGlobalExc;
     }
@@ -175,8 +176,9 @@ export async function resolveBusinessHours(
         .from("configuracoes_horario_unidade")
         .select("*")
         .eq("tenant_id", tenantId)
-        .is("unidade_id", null)
         .eq("dia_semana", dayOfWeek)
+        .order("unidade_id", { nullsFirst: false })
+        .limit(1)
         .maybeSingle();
       unitConfig = data;
     }

@@ -43,6 +43,7 @@ interface AdminHorariosProps {
   onViewModeChange?: (mode: 'list' | 'day' | 'advanced') => void;
   companyMode?: boolean;
   tenantId?: string;
+  unidadeId?: string;
   /** Esconde a seta de voltar no cabeçalho da tela do dia. */
   dayHideBackArrow?: boolean;
   /** Texto do botão principal na tela do dia. */
@@ -74,8 +75,39 @@ const createDefaultConfigs = (zeroed = false): HorarioConfig[] =>
     slot_interval_minutes: null,
   }));
 
+export const formatTimeClean = (value: string | null | undefined, fallback = '09:00'): string => {
+  if (!value) return fallback;
+  const trimmed = String(value).trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    const h = match[1].padStart(2, '0');
+    const m = match[2].padStart(2, '0');
+    return `${h}:${m}`;
+  }
+  return fallback;
+};
+
+export const timeToMinutes = (
+  value: string | null | undefined,
+  fallback = 0,
+  isCloseTime = false
+): number => {
+  if (!value) return fallback;
+  const trimmed = String(value).trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    const h = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    if (isCloseTime && h === 0 && m === 0) {
+      return 24 * 60; // 1440 min (meia-noite / fim do dia)
+    }
+    return h * 60 + m;
+  }
+  return fallback;
+};
+
 const toTime = (value: string | null | undefined, fallback: string) =>
-  value ? value.slice(0, 5) : fallback;
+  formatTimeClean(value, fallback);
 
 const normalizeConfig = (config: HorarioConfig): HorarioConfig => ({
   ...config,
@@ -109,6 +141,7 @@ export default function AdminHorarios({
   onViewModeChange,
   companyMode,
   tenantId,
+  unidadeId,
   dayHideBackArrow,
   daySaveLabel,
   dayHideSaveWhenUnchanged,
@@ -125,33 +158,136 @@ export default function AdminHorarios({
   const [activeSubScreen, setActiveSubScreen] = useState<'ferias' | 'excecoes' | null>(null);
   const saveSlotMutation = useSaveSlotInterval();
   const [tenantSlot, setTenantSlot] = useState<number | null>(null);
+  const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(tenantId ?? null);
+  const [resolvedUnidadeId, setResolvedUnidadeId] = useState<string | null>(unidadeId ?? null);
+
   useEffect(() => {
-    if (!tenantId) return;
-    supabase.from('tenants').select('slot_interval_minutes').eq('id', tenantId).maybeSingle()
+    if (tenantId) setResolvedTenantId(tenantId);
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (unidadeId) setResolvedUnidadeId(unidadeId);
+  }, [unidadeId]);
+
+  const resolveTenantAndUnit = async (): Promise<{ tId: string | null; uId: string | null }> => {
+    let tId = resolvedTenantId || tenantId || null;
+    let uId = resolvedUnidadeId || unidadeId || null;
+
+    if (!tId && barbeiroId) {
+      const { data } = await supabase
+        .from('barbeiros')
+        .select('tenant_id, unidade_id')
+        .eq('id', barbeiroId)
+        .maybeSingle();
+      if (data?.tenant_id) {
+        tId = data.tenant_id;
+        if (!uId && data.unidade_id) uId = data.unidade_id;
+      }
+    }
+
+    if (!tId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const { data: barb } = await supabase
+          .from('barbeiros')
+          .select('tenant_id, unidade_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (barb?.tenant_id) {
+          tId = barb.tenant_id;
+          if (!uId && barb.unidade_id) uId = barb.unidade_id;
+        } else {
+          const { data: ten } = await supabase
+            .from('tenants')
+            .select('id')
+            .eq('owner_user_id', user.id)
+            .maybeSingle();
+          if (ten?.id) tId = ten.id;
+        }
+      }
+    }
+
+    if (tId && !uId) {
+      const { data: units } = await supabase
+        .from('tenant_unidades')
+        .select('id')
+        .eq('tenant_id', tId)
+        .order('is_sede', { ascending: false })
+        .limit(1);
+      if (units && units.length > 0) {
+        uId = units[0].id;
+      }
+    }
+
+    if (tId && tId !== resolvedTenantId) setResolvedTenantId(tId);
+    if (uId && uId !== resolvedUnidadeId) setResolvedUnidadeId(uId);
+
+    return { tId, uId };
+  };
+
+  useEffect(() => {
+    const effectiveTId = tenantId || resolvedTenantId;
+    if (!effectiveTId) return;
+    supabase.from('tenants').select('slot_interval_minutes').eq('id', effectiveTId).maybeSingle()
       .then(({ data }) => {
         const v = (data as { slot_interval_minutes?: number } | null)?.slot_interval_minutes;
         if (typeof v === 'number') setTenantSlot(v);
       });
-  }, [tenantId]);
+  }, [tenantId, resolvedTenantId]);
+
   const [hasChanges, setHasChanges] = useState(false);
   const originalRef = useRef<string>('');
   const [companyHoursCache, setCompanyHoursCache] = useState<Array<{dia_semana: number; aberto: boolean; hora_abertura: string; hora_fechamento: string}>>([]);
   const [applyToWeek, setApplyToWeek] = useState<{ sourceDay: number; selectedDays: number[] } | null>(null);
 
-  // Carregar horários globais da barbearia para validação (quando barbeiro pessoal)
+  // Carregar horários da barbearia (unidade/tenant) para validação (quando barbeiro pessoal)
   useEffect(() => {
     if (barbeiroId && !companyMode) {
-      supabase
-        .from('configuracoes_horario')
-        .select('dia_semana, aberto, hora_abertura, hora_fechamento')
-        .order('dia_semana')
-        .then(({ data }) => {
-          if (data) setCompanyHoursCache(data);
-        });
+      (async () => {
+        const { tId, uId } = await resolveTenantAndUnit();
+        let list: any[] | null = null;
+        if (uId) {
+          const { data } = await (supabase as any)
+            .from('configuracoes_horario_unidade')
+            .select('dia_semana, aberto, hora_abertura, hora_fechamento')
+            .eq('unidade_id', uId)
+            .order('dia_semana');
+          if (data && data.length > 0) list = data;
+        }
+        if (!list && tId) {
+          const { data } = await (supabase as any)
+            .from('configuracoes_horario_unidade')
+            .select('dia_semana, aberto, hora_abertura, hora_fechamento')
+            .eq('tenant_id', tId)
+            .order('dia_semana');
+          if (data && data.length > 0) list = data;
+        }
+        if (list && list.length > 0) {
+          setCompanyHoursCache(list.map((c: any) => ({
+            ...c,
+            hora_abertura: formatTimeClean(c.hora_abertura, '09:00'),
+            hora_fechamento: formatTimeClean(c.hora_fechamento, '20:00'),
+          })));
+          return;
+        }
+        supabase
+          .from('configuracoes_horario')
+          .select('dia_semana, aberto, hora_abertura, hora_fechamento')
+          .order('dia_semana')
+          .then(({ data }) => {
+            if (data) {
+              setCompanyHoursCache(data.map((c: any) => ({
+                ...c,
+                hora_abertura: formatTimeClean(c.hora_abertura, '09:00'),
+                hora_fechamento: formatTimeClean(c.hora_fechamento, '20:00'),
+              })));
+            }
+          });
+      })();
     }
-  }, [barbeiroId, companyMode]);
+  }, [barbeiroId, companyMode, tenantId, unidadeId]);
 
-  useEffect(() => { loadConfigs(); }, [barbeiroId, companyMode]);
+  useEffect(() => { loadConfigs(); }, [barbeiroId, companyMode, tenantId, unidadeId]);
 
   useEffect(() => {
     if (!resetToListSignal) return;
@@ -190,6 +326,7 @@ export default function AdminHorarios({
       let error: any = null;
 
       if (barbeiroId && !companyMode) {
+        // Horário individual do barbeiro
         const res = await supabase
           .from('configuracoes_horario_barbeiro')
           .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
@@ -198,12 +335,38 @@ export default function AdminHorarios({
         data = res.data;
         error = res.error;
       } else {
-        const res = await supabase
-          .from('configuracoes_horario')
-          .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos')
-          .order('dia_semana');
-        data = res.data;
-        error = res.error;
+        // Horário da barbearia (unidade / tenant)
+        const { tId, uId } = await resolveTenantAndUnit();
+        let res: any = null;
+
+        if (uId) {
+          res = await (supabase as any)
+            .from('configuracoes_horario_unidade')
+            .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
+            .eq('unidade_id', uId)
+            .order('dia_semana');
+        }
+
+        if ((!res || !res.data || res.data.length === 0) && tId) {
+          res = await (supabase as any)
+            .from('configuracoes_horario_unidade')
+            .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
+            .eq('tenant_id', tId)
+            .order('dia_semana');
+        }
+
+        if (res?.data && res.data.length > 0) {
+          data = res.data;
+          error = res.error;
+        } else {
+          // Se ainda não há linhas na barbearia, exibe defaults baseados no template global
+          const defaultRes = await supabase
+            .from('configuracoes_horario')
+            .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos')
+            .order('dia_semana');
+          data = defaultRes.data;
+          error = defaultRes.error;
+        }
       }
 
       if (error) throw error;
@@ -216,8 +379,7 @@ export default function AdminHorarios({
         originalRef.current = JSON.stringify(normalized);
         setHasChanges(false);
       } else {
-        // Sem configs salvas ainda: no onboarding começa 00:00-00:00 (força configurar);
-        // fora do onboarding, defaults 09:00 - 20:00.
+        // Sem configs salvas ainda: no onboarding começa 00:00-00:00; fora dele, 09:00 - 20:00.
         const defaults = createDefaultConfigs(forceOnboardingDefaultHours);
         setConfigs(defaults);
         originalRef.current = JSON.stringify(defaults);
@@ -247,26 +409,40 @@ export default function AdminHorarios({
 
   /**
    * Valida se os horários do barbeiro estão dentro da janela da barbearia.
+   * Se targetDiaSemana for informado, valida APENAS aquele dia específico,
+   * evitando que eventuais divergências em outros dias bloqueiem a edição do dia atual.
    */
-  const validateAgainstCompanyHours = (): string | null => {
+  const validateAgainstCompanyHours = (targetDiaSemana?: number): string | null => {
     if (forceOnboardingDefaultHours) return null;
     if (!barbeiroId || companyMode || companyHoursCache.length === 0) return null;
 
     const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-    for (const cfg of configs) {
+    const configsToValidate = targetDiaSemana !== undefined
+      ? configs.filter(c => c.dia_semana === targetDiaSemana)
+      : configs;
+
+    for (const cfg of configsToValidate) {
       if (!cfg.aberto) continue;
       const company = companyHoursCache.find(c => c.dia_semana === cfg.dia_semana);
       if (!company || !company.aberto) {
         return `${DIAS[cfg.dia_semana]}: a barbearia está fechada neste dia.`;
       }
-      const open = cfg.hora_abertura || '09:00';
-      const close = cfg.hora_fechamento || '18:00';
-      if (open < company.hora_abertura) {
-        return `${DIAS[cfg.dia_semana]}: abertura (${open}) antes do horário da barbearia (${company.hora_abertura}).`;
+      const barberOpenMin = timeToMinutes(cfg.hora_abertura, 9 * 60, false);
+      const barberCloseMin = timeToMinutes(cfg.hora_fechamento, 18 * 60, true);
+      const companyOpenMin = timeToMinutes(company.hora_abertura, 9 * 60, false);
+      const companyCloseMin = timeToMinutes(company.hora_fechamento, 20 * 60, true);
+
+      const openStr = formatTimeClean(cfg.hora_abertura, '09:00');
+      const closeStr = formatTimeClean(cfg.hora_fechamento, '18:00');
+      const companyOpenStr = formatTimeClean(company.hora_abertura, '09:00');
+      const companyCloseStr = formatTimeClean(company.hora_fechamento, '20:00');
+
+      if (barberOpenMin < companyOpenMin) {
+        return `${DIAS[cfg.dia_semana]}: abertura (${openStr}) antes do horário da barbearia (${companyOpenStr}).`;
       }
-      if (close > company.hora_fechamento) {
-        return `${DIAS[cfg.dia_semana]}: fechamento (${close}) após o horário da barbearia (${company.hora_fechamento}).`;
+      if (barberCloseMin > companyCloseMin) {
+        return `${DIAS[cfg.dia_semana]}: fechamento (${closeStr}) após o horário da barbearia (${companyCloseStr}).`;
       }
     }
     return null;
@@ -287,45 +463,201 @@ export default function AdminHorarios({
     return saveConfigs();
   };
 
-  const saveConfigs = async (): Promise<boolean> => {
+  /**
+   * Salva exclusivamente o dia selecionado, garantindo isolamento total contra outros dias.
+   */
+  const saveSingleDay = async (config: HorarioConfig): Promise<boolean> => {
     setSaving(true);
     try {
       const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
 
-      // Salvar todos os dias em paralelo para máxima velocidade
-      const promises = configs.map(config => {
+      if (barbeiroId && !companyMode) {
+        // ── Salvar horário PESSOAL do barbeiro (apenas este dia) ──
         const payload = {
           aberto: config.aberto,
           hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
           hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
           hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
           hora_almoco_fim: sanitize(config.hora_almoco_fim),
-          delay_entre_servicos: config.delay_entre_servicos
+          delay_entre_servicos: config.delay_entre_servicos,
+          ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
         };
 
-        if (barbeiroId && !companyMode) {
-          return supabase
+        const upd = await (supabase as any)
+          .from('configuracoes_horario_barbeiro')
+          .update(payload)
+          .eq('barbeiro_id', barbeiroId)
+          .eq('dia_semana', config.dia_semana)
+          .select();
+
+        if (upd.error) throw upd.error;
+
+        if (!upd.data || upd.data.length === 0) {
+          const ins = await (supabase as any)
             .from('configuracoes_horario_barbeiro')
-            .upsert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana } as any, {
-              onConflict: 'barbeiro_id,dia_semana',
-            })
+            .insert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana })
+            .select();
+          if (ins.error) throw ins.error;
+        }
+
+        if (!hideSaveButton) toast.success('Seu horário pessoal foi salvo com sucesso!');
+      } else {
+        // ── Salvar horário da BARBEARIA (apenas este dia) ──
+        const { tId, uId } = await resolveTenantAndUnit();
+        if (!tId) throw new Error('Não foi possível identificar a barbearia');
+
+        const payload = {
+          aberto: config.aberto,
+          hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+          hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+          hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+          hora_almoco_fim: sanitize(config.hora_almoco_fim),
+          delay_entre_servicos: config.delay_entre_servicos,
+          updated_at: new Date().toISOString(),
+        };
+
+        let upd = null;
+        if (uId) {
+          upd = await (supabase as any)
+            .from('configuracoes_horario_unidade')
+            .update(payload)
+            .eq('unidade_id', uId)
+            .eq('dia_semana', config.dia_semana)
             .select();
         } else {
-          return supabase
-            .from('configuracoes_horario')
-            .upsert({ ...payload, dia_semana: config.dia_semana } as any, {
-              onConflict: 'dia_semana',
-            })
+          upd = await (supabase as any)
+            .from('configuracoes_horario_unidade')
+            .update(payload)
+            .eq('tenant_id', tId)
+            .eq('dia_semana', config.dia_semana)
             .select();
         }
+
+        if (upd?.error) throw upd.error;
+
+        if (!upd?.data || upd.data.length === 0) {
+          const ins = await (supabase as any)
+            .from('configuracoes_horario_unidade')
+            .insert({
+              tenant_id: tId,
+              unidade_id: uId || null,
+              dia_semana: config.dia_semana,
+              ...payload,
+            })
+            .select();
+          if (ins.error) throw ins.error;
+        }
+
+        if (!hideSaveButton) {
+          toast.success('Horário da barbearia atualizado com sucesso!');
+        }
+      }
+
+      setConfigs(prev => {
+        const next = prev.map(c => c.dia_semana === config.dia_semana ? normalizeConfig(config) : c);
+        originalRef.current = JSON.stringify(next);
+        setHasChanges(false);
+        return next;
       });
+      return true;
+    } catch (error: any) {
+      console.error('Erro ao salvar dia:', error);
+      toast.error(error?.message || 'Erro ao salvar configurações');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
 
-      const results = await Promise.all(promises);
+  const saveConfigs = async (): Promise<boolean> => {
+    setSaving(true);
+    try {
+      const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
 
-      for (const res of results) {
-        if (res.error) throw res.error;
-        if (!res.data || res.data.length === 0) {
-          throw new Error('Falha ao salvar: nenhuma linha atualizada (verifique permissões)');
+      if (barbeiroId && !companyMode) {
+        // ── Salvar horário PESSOAL do barbeiro (apenas este barbeiro) ──
+        const promises = configs.map(async (config) => {
+          const payload = {
+            aberto: config.aberto,
+            hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+            hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+            hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+            hora_almoco_fim: sanitize(config.hora_almoco_fim),
+            delay_entre_servicos: config.delay_entre_servicos,
+            ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
+          };
+
+          const upd = await (supabase as any)
+            .from('configuracoes_horario_barbeiro')
+            .update(payload)
+            .eq('barbeiro_id', barbeiroId)
+            .eq('dia_semana', config.dia_semana)
+            .select();
+
+          if (upd.error) throw upd.error;
+          if (!upd.data || upd.data.length === 0) {
+            const ins = await (supabase as any)
+              .from('configuracoes_horario_barbeiro')
+              .insert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana })
+              .select();
+            if (ins.error) throw ins.error;
+          }
+        });
+
+        await Promise.all(promises);
+
+        if (!hideSaveButton) toast.success('Seu horário pessoal foi salvo com sucesso!');
+      } else {
+        // ── Salvar horário da BARBEARIA (apenas configuracoes_horario_unidade) ──
+        const { tId, uId } = await resolveTenantAndUnit();
+        if (!tId) throw new Error('Não foi possível identificar a barbearia');
+
+        for (const config of configs) {
+          const payload = {
+            aberto: config.aberto,
+            hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+            hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+            hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+            hora_almoco_fim: sanitize(config.hora_almoco_fim),
+            delay_entre_servicos: config.delay_entre_servicos,
+            updated_at: new Date().toISOString(),
+          };
+
+          let upd = null;
+          if (uId) {
+            upd = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .update(payload)
+              .eq('unidade_id', uId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+          } else {
+            upd = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .update(payload)
+              .eq('tenant_id', tId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+          }
+
+          if (upd?.error) throw upd.error;
+
+          if (!upd?.data || upd.data.length === 0) {
+            const ins = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .insert({
+                tenant_id: tId,
+                unidade_id: uId || null,
+                dia_semana: config.dia_semana,
+                ...payload,
+              })
+              .select();
+            if (ins.error) throw ins.error;
+          }
+        }
+
+        if (!hideSaveButton) {
+          toast.success('Horário da barbearia atualizado com sucesso! Os horários pessoais de cada barbeiro permanecem intactos.');
         }
       }
 
@@ -334,7 +666,6 @@ export default function AdminHorarios({
       setConfigs(normalizedConfigs);
       originalRef.current = JSON.stringify(normalizedConfigs);
       setHasChanges(false);
-      if (!hideSaveButton) toast.success('Configurações salvas com sucesso!');
       return true;
     } catch (error: any) {
       console.error('Erro ao salvar configurações:', error);
@@ -394,28 +725,81 @@ export default function AdminHorarios({
       setSaving(true);
       try {
         const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
-        const promises = nextConfigs.map(config => {
-          const payload = {
-            aberto: config.aberto,
-            hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
-            hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
-            hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
-            hora_almoco_fim: sanitize(config.hora_almoco_fim),
-            delay_entre_servicos: config.delay_entre_servicos,
-          };
-          if (barbeiroId) {
-            return supabase
+
+        if (barbeiroId && !companyMode) {
+          const promises = nextConfigs.map(async (config) => {
+            const payload = {
+              aberto: config.aberto,
+              hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+              hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+              hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+              hora_almoco_fim: sanitize(config.hora_almoco_fim),
+              delay_entre_servicos: config.delay_entre_servicos,
+              ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
+            };
+            const upd = await (supabase as any)
               .from('configuracoes_horario_barbeiro')
-              .upsert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana } as any, { onConflict: 'barbeiro_id,dia_semana' })
+              .update(payload)
+              .eq('barbeiro_id', barbeiroId)
+              .eq('dia_semana', config.dia_semana)
               .select();
+            if (upd.error) throw upd.error;
+            if (!upd.data || upd.data.length === 0) {
+              const ins = await (supabase as any)
+                .from('configuracoes_horario_barbeiro')
+                .insert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana })
+                .select();
+              if (ins.error) throw ins.error;
+            }
+          });
+          await Promise.all(promises);
+        } else {
+          const { tId, uId } = await resolveTenantAndUnit();
+          if (!tId) throw new Error('Não foi possível identificar a barbearia');
+
+          for (const config of nextConfigs) {
+            const payload = {
+              aberto: config.aberto,
+              hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+              hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+              hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+              hora_almoco_fim: sanitize(config.hora_almoco_fim),
+              delay_entre_servicos: config.delay_entre_servicos,
+              updated_at: new Date().toISOString(),
+            };
+
+            let upd = null;
+            if (uId) {
+              upd = await (supabase as any)
+                .from('configuracoes_horario_unidade')
+                .update(payload)
+                .eq('unidade_id', uId)
+                .eq('dia_semana', config.dia_semana)
+                .select();
+            } else {
+              upd = await (supabase as any)
+                .from('configuracoes_horario_unidade')
+                .update(payload)
+                .eq('tenant_id', tId)
+                .eq('dia_semana', config.dia_semana)
+                .select();
+            }
+            if (upd?.error) throw upd.error;
+
+            if (!upd?.data || upd.data.length === 0) {
+              const ins = await (supabase as any)
+                .from('configuracoes_horario_unidade')
+                .insert({
+                  tenant_id: tId,
+                  unidade_id: uId || null,
+                  dia_semana: config.dia_semana,
+                  ...payload,
+                })
+                .select();
+              if (ins.error) throw ins.error;
+            }
           }
-          return supabase
-            .from('configuracoes_horario')
-            .upsert({ ...payload, dia_semana: config.dia_semana } as any, { onConflict: 'dia_semana' })
-            .select();
-        });
-        const results = await Promise.all(promises);
-        for (const r of results) if (r.error) throw r.error;
+        }
         const normalized = nextConfigs.map(normalizeConfig);
         setConfigs(normalized);
         originalRef.current = JSON.stringify(normalized);
@@ -452,14 +836,24 @@ export default function AdminHorarios({
   if (selectedConfig) {
     const handleBackFromDay = async () => {
       if (autoSaveOnDayExit && hasChanges) {
-        const saved = await saveConfigs();
+        const validationError = validateAgainstCompanyHours(selectedConfig.dia_semana);
+        if (validationError) {
+          toast.error(validationError, { duration: 5000 });
+          return;
+        }
+        const saved = await saveSingleDay(selectedConfig);
         if (!saved) return;
       }
       setSelectedDay(null);
     };
 
     const handleConfirmDay = async () => {
-      const saved = await handleSaveClick();
+      const validationError = validateAgainstCompanyHours(selectedConfig.dia_semana);
+      if (validationError) {
+        toast.error(validationError, { duration: 5000 });
+        return false;
+      }
+      const saved = await saveSingleDay(selectedConfig);
       if (!saved) return false;
       setSelectedDay(null);
       return true;

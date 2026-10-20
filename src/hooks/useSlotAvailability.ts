@@ -293,9 +293,21 @@ export function useSlotAvailability(
 
       let config: any = null;
       let daySlotOverride: number | null = null;
+      let tenantId: string | null = null;
+      let unidadeId: string | null = null;
 
       // 1. Tentar config do barbeiro
       if (barbeiroId) {
+        const { data: barbRow } = await supabase
+          .from('barbeiros')
+          .select('tenant_id, unidade_id')
+          .eq('id', barbeiroId)
+          .maybeSingle();
+        if (barbRow) {
+          tenantId = (barbRow as any).tenant_id || null;
+          unidadeId = (barbRow as any).unidade_id || null;
+        }
+
         const { data: barberExcecao } = await supabase
           .from('horarios_excepcionais_barbeiro')
           .select('aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim')
@@ -335,7 +347,80 @@ export function useSlotAvailability(
         }
       }
 
-      // 2. Fallback para config global
+      // 2. Tentar config da barbearia / unidade (se o barbeiro não tem config específica)
+      if (!config && tenantId) {
+        let excecaoData: any = null;
+        if (unidadeId) {
+          const { data: unitExc } = await supabase
+            .from('horarios_excepcionais')
+            .select('aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim')
+            .eq('data', dateStr)
+            .eq('tenant_id', tenantId)
+            .eq('unidade_id', unidadeId)
+            .maybeSingle();
+          excecaoData = unitExc;
+        }
+        if (!excecaoData) {
+          const { data: tenantExc } = await supabase
+            .from('horarios_excepcionais')
+            .select('aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim')
+            .eq('data', dateStr)
+            .eq('tenant_id', tenantId)
+            .order('unidade_id', { nullsFirst: false })
+            .limit(1)
+            .maybeSingle();
+          excecaoData = tenantExc;
+        }
+        if (excecaoData) {
+          config = {
+            aberto: excecaoData.aberto ?? false,
+            hora_abertura: excecaoData.hora_abertura || '09:00',
+            hora_fechamento: excecaoData.hora_fechamento || '20:00',
+            hora_almoco_inicio: excecaoData.hora_almoco_inicio,
+            hora_almoco_fim: excecaoData.hora_almoco_fim,
+            delay_entre_servicos: DEFAULT_DELAY_MINUTES
+          };
+        }
+      }
+
+      // 3. Tentar horário regular da barbearia (configuracoes_horario_unidade)
+      if (!config && tenantId) {
+        let unitData: any = null;
+        if (unidadeId) {
+          const { data } = await supabase
+            .from('configuracoes_horario_unidade')
+            .select('aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
+            .eq('unidade_id', unidadeId)
+            .eq('dia_semana', dayOfWeek)
+            .maybeSingle();
+          unitData = data;
+        }
+        if (!unitData) {
+          const { data } = await supabase
+            .from('configuracoes_horario_unidade')
+            .select('aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
+            .eq('tenant_id', tenantId)
+            .eq('dia_semana', dayOfWeek)
+            .order('unidade_id', { nullsFirst: false })
+            .limit(1)
+            .maybeSingle();
+          unitData = data;
+        }
+        if (unitData) {
+          config = {
+            aberto: unitData.aberto ?? false,
+            hora_abertura: unitData.hora_abertura || '09:00',
+            hora_fechamento: unitData.hora_fechamento || '20:00',
+            hora_almoco_inicio: unitData.hora_almoco_inicio,
+            hora_almoco_fim: unitData.hora_almoco_fim,
+            delay_entre_servicos: unitData.delay_entre_servicos || DEFAULT_DELAY_MINUTES
+          };
+          const dv = (unitData as { slot_interval_minutes?: number | null }).slot_interval_minutes;
+          if (typeof dv === 'number' && dv >= 1 && dv <= 120) daySlotOverride = dv;
+        }
+      }
+
+      // 4. Fallback para config global
       if (!config) {
         const { data: configData } = await supabase
           .from('configuracoes_horario')
@@ -583,6 +668,54 @@ export function useSlotAvailability(
           console.log('[Realtime] Mudança em pending_bookings:', payload.eventType, '(partial update)');
           // Partial update - não força reload completo
           loadSlots(false);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'configuracoes_horario_unidade'
+        },
+        (payload) => {
+          console.log('[Realtime] Mudança em configuracoes_horario_unidade:', payload.eventType);
+          loadSlots(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'configuracoes_horario_barbeiro'
+        },
+        (payload) => {
+          console.log('[Realtime] Mudança em configuracoes_horario_barbeiro:', payload.eventType);
+          loadSlots(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'horarios_excepcionais'
+        },
+        (payload) => {
+          console.log('[Realtime] Mudança em horarios_excepcionais:', payload.eventType);
+          loadSlots(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'horarios_excepcionais_barbeiro'
+        },
+        (payload) => {
+          console.log('[Realtime] Mudança em horarios_excepcionais_barbeiro:', payload.eventType);
+          loadSlots(true);
         }
       )
       .subscribe((status) => {

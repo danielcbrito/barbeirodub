@@ -4,33 +4,59 @@ export interface BarberCancellationFeeConfig {
   habilitado: boolean;
   tipo: "porcentagem" | "fixo";
   valor: number; // Porcentagem (ex: 20 = 20%) ou Valor Fixo em Reais (ex: 15 = R$ 15,00)
-  horas_antecedencia: number; // 0 = qualquer cancelamento; >0 = cancelamentos com menos de X horas
+  horas_antecedencia: number; // Sempre 2 horas (regra de sistema fixa)
+}
+
+export interface ClienteDebitoItem {
+  id: string;
+  agendamento_id?: string | null;
+  barbeiro_id: string;
+  barbeiro_nome?: string;
+  motivo: "cancelamento_tardio" | "falta" | string;
+  valor_taxa: number;
+  tipo_taxa: "porcentagem" | "fixo";
+  porcentagem_aplicada?: number | null;
+  valor_servico_original?: number | null;
+  status: "pendente" | "pago" | "dispensado" | "liberado_manual";
+  created_at: string;
+  dispensado_em?: string | null;
 }
 
 export interface ClienteDebitoCancelamento {
   id: string;
   cliente_id: string;
+  cliente_nome?: string;
+  cliente_telefone?: string;
+  cliente_avatar?: string | null;
   barbeiro_id: string;
   barbeiro_nome?: string;
   tenant_id?: string | null;
   agendamento_id?: string | null;
-  valor_taxa: number;
+  valor_taxa: number; // Para compatibilidade
+  total_pendente?: number;
   tipo_taxa: "porcentagem" | "fixo";
   porcentagem_aplicada?: number | null;
   valor_servico_original?: number | null;
   motivo?: string | null;
-  status: "pendente" | "pago" | "dispensado";
-  pix_charge_id?: string | null;
-  pix_payload?: string | null;
-  pix_qrcode?: string | null;
+  status: "pendente" | "pago" | "dispensado" | "liberado_manual";
+  itens?: ClienteDebitoItem[];
   created_at: string;
+  pix_payload?: string | null;
+}
+
+export interface AppointmentDebtBreakdown {
+  hasDebt: boolean;
+  debtAmount: number;
+  servicePrice: number;
+  totalToCollect: number;
+  debtReason?: string;
 }
 
 const DEFAULT_FEE_CONFIG: BarberCancellationFeeConfig = {
   habilitado: false,
   tipo: "porcentagem",
   valor: 20, // 20% padrão quando ativado
-  horas_antecedencia: 2, // Cancelamento gratuito até 2 horas antes do horário
+  horas_antecedencia: 2, // Cancelamento gratuito até 2 horas antes do horário (regra fixa do sistema)
 };
 
 const MEM_CACHE = new Map<string, { data: BarberCancellationFeeConfig; timestamp: number }>();
@@ -69,7 +95,7 @@ export async function fetchBarberCancellationFee(
           habilitado: Boolean(parsed.habilitado),
           tipo: parsed.tipo === "fixo" ? "fixo" : "porcentagem",
           valor: typeof parsed.valor === "number" ? parsed.valor : (parsed.tipo === "fixo" ? 15 : 20),
-          horas_antecedencia: typeof parsed.horas_antecedencia === "number" ? parsed.horas_antecedencia : 0,
+          horas_antecedencia: 2, // Estritamente fixado em 2 horas pelo sistema
         };
         found = true;
       }
@@ -81,7 +107,7 @@ export async function fetchBarberCancellationFee(
     try {
       const { data, error } = await (supabase as any)
         .from("barbeiro_taxa_cancelamento")
-        .select("habilitado, tipo, valor, horas_antecedencia")
+        .select("habilitado, tipo, valor")
         .eq("barbeiro_id", barbeiroId)
         .maybeSingle();
 
@@ -90,7 +116,7 @@ export async function fetchBarberCancellationFee(
           habilitado: Boolean(data.habilitado),
           tipo: data.tipo === "fixo" ? "fixo" : "porcentagem",
           valor: Number(data.valor) || 20,
-          horas_antecedencia: Number(data.horas_antecedencia) || 0,
+          horas_antecedencia: 2,
         };
         found = true;
       }
@@ -103,6 +129,8 @@ export async function fetchBarberCancellationFee(
 
 /**
  * Salva a configuração de taxa de cancelamento do barbeiro no Supabase.
+ * Armazena em informacoes_empresa com chave: `taxa_cancelamento_${barbeiroId}`
+ * e categoria: `configuracoes_gerais`.
  */
 export async function saveBarberCancellationFee({
   barbeiroId,
@@ -115,16 +143,30 @@ export async function saveBarberCancellationFee({
 }): Promise<BarberCancellationFeeConfig> {
   if (!barbeiroId) throw new Error("ID do barbeiro não fornecido");
 
+  // Garante regra de sistema: 2 horas
+  const normalizedConfig: BarberCancellationFeeConfig = {
+    habilitado: Boolean(config.habilitado),
+    tipo: config.tipo === "fixo" ? "fixo" : "porcentagem",
+    valor: Number(config.valor) || (config.tipo === "fixo" ? 15 : 20),
+    horas_antecedencia: 2,
+  };
+
   // Atualiza cache em memória imediatamente
-  MEM_CACHE.set(barbeiroId, { data: config, timestamp: Date.now() });
+  MEM_CACHE.set(barbeiroId, { data: normalizedConfig, timestamp: Date.now() });
 
   const chave = `taxa_cancelamento_${barbeiroId}`;
-  const valorJson = JSON.stringify(config);
+  // Estrutura solicitada no prompt
+  const valorObj = {
+    habilitado: normalizedConfig.habilitado,
+    tipo: normalizedConfig.tipo,
+    valor: normalizedConfig.valor,
+  };
+  const valorJson = JSON.stringify(valorObj);
 
   let saved = false;
   let lastErr: any = null;
 
-  // 1. Persistir em informacoes_empresa (funciona imediatamente)
+  // 1. Persistir em informacoes_empresa (categoria: configuracoes_gerais)
   try {
     const { data: existing } = await supabase
       .from("informacoes_empresa")
@@ -137,6 +179,7 @@ export async function saveBarberCancellationFee({
         .from("informacoes_empresa")
         .update({
           valor: valorJson,
+          categoria: "configuracoes_gerais",
           ativo: true,
           atualizado_em: new Date().toISOString(),
         } as any)
@@ -149,7 +192,7 @@ export async function saveBarberCancellationFee({
         .from("informacoes_empresa")
         .insert({
           chave,
-          categoria: "cancelamentos",
+          categoria: "configuracoes_gerais",
           valor: valorJson,
           tenant_id: tenantId || null,
           ativo: true,
@@ -169,10 +212,10 @@ export async function saveBarberCancellationFee({
       .upsert({
         barbeiro_id: barbeiroId,
         tenant_id: tenantId || null,
-        habilitado: config.habilitado,
-        tipo: config.tipo,
-        valor: config.valor,
-        horas_antecedencia: config.horas_antecedencia,
+        habilitado: normalizedConfig.habilitado,
+        tipo: normalizedConfig.tipo,
+        valor: normalizedConfig.valor,
+        horas_antecedencia: 2,
         updated_at: new Date().toISOString(),
       }, { onConflict: "barbeiro_id" });
   } catch {}
@@ -182,7 +225,7 @@ export async function saveBarberCancellationFee({
     throw new Error(lastErr.message || "Erro ao salvar taxa de cancelamento");
   }
 
-  return config;
+  return normalizedConfig;
 }
 
 /**
@@ -213,7 +256,7 @@ export function subscribeToBarberCancellationFee(
               habilitado: Boolean(parsed.habilitado),
               tipo: parsed.tipo === "fixo" ? "fixo" : "porcentagem",
               valor: typeof parsed.valor === "number" ? parsed.valor : 20,
-              horas_antecedencia: typeof parsed.horas_antecedencia === "number" ? parsed.horas_antecedencia : 0,
+              horas_antecedencia: 2,
             };
             MEM_CACHE.set(barbeiroId, { data: config, timestamp: Date.now() });
             onUpdate(config);
@@ -230,7 +273,6 @@ export function subscribeToBarberCancellationFee(
 
 /**
  * Verifica se um cliente possui débitos de cancelamento pendentes.
- * Se houver algum débito com status 'pendente', retorna o objeto para que o app seja travado.
  */
 export async function checkClientPendingCancellationDebt(
   clienteId: string
@@ -238,280 +280,40 @@ export async function checkClientPendingCancellationDebt(
   if (!clienteId) return null;
 
   try {
-    // 1. Consulta tabela cliente_debitos_cancelamento se existir
-    const { data, error } = await (supabase as any)
-      .from("cliente_debitos_cancelamento")
-      .select("*, barbeiros(apelido)")
-      .eq("cliente_id", clienteId)
-      .eq("status", "pendente")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!error && data) {
-      return {
-        id: data.id,
-        cliente_id: data.cliente_id,
-        barbeiro_id: data.barbeiro_id,
-        barbeiro_nome: data.barbeiros?.apelido || "Barbeiro",
-        tenant_id: data.tenant_id,
-        agendamento_id: data.agendamento_id,
-        valor_taxa: Number(data.valor_taxa),
-        tipo_taxa: data.tipo_taxa || "porcentagem",
-        porcentagem_aplicada: data.porcentagem_aplicada ? Number(data.porcentagem_aplicada) : null,
-        valor_servico_original: data.valor_servico_original ? Number(data.valor_servico_original) : null,
-        motivo: data.motivo,
-        status: data.status,
-        pix_charge_id: data.pix_charge_id,
-        pix_payload: data.pix_payload,
-        pix_qrcode: data.pix_qrcode,
-        created_at: data.created_at,
-      };
-    }
-  } catch {}
-
-  // 2. Consulta fallback em informacoes_empresa para debito_${clienteId}
-  try {
     const { data: fallbackData } = await supabase
       .from("informacoes_empresa")
-      .select("valor")
+      .select("id, chave, valor, tenant_id")
       .eq("chave", `debito_cancelamento_${clienteId}`)
       .maybeSingle();
 
     if (fallbackData?.valor) {
       const parsed = JSON.parse(fallbackData.valor);
-      if (parsed?.status === "pendente") {
-        return parsed as ClienteDebitoCancelamento;
+      const totalPendente = Number(parsed.total_pendente ?? parsed.valor_taxa ?? 0);
+      if (parsed?.status === "pendente" || totalPendente > 0) {
+        return {
+          id: parsed.id || fallbackData.id,
+          cliente_id: clienteId,
+          cliente_nome: parsed.cliente_nome,
+          cliente_telefone: parsed.cliente_telefone,
+          barbeiro_id: parsed.barbeiro_id || (parsed.itens?.[0]?.barbeiro_id ?? ""),
+          barbeiro_nome: parsed.barbeiro_nome || (parsed.itens?.[0]?.barbeiro_nome ?? "Barbeiro"),
+          tenant_id: fallbackData.tenant_id,
+          agendamento_id: parsed.agendamento_id || (parsed.itens?.[0]?.agendamento_id ?? null),
+          valor_taxa: totalPendente,
+          total_pendente: totalPendente,
+          tipo_taxa: parsed.tipo_taxa || "porcentagem",
+          porcentagem_aplicada: parsed.porcentagem_aplicada ? Number(parsed.porcentagem_aplicada) : null,
+          valor_servico_original: parsed.valor_servico_original ? Number(parsed.valor_servico_original) : null,
+          motivo: parsed.motivo || (parsed.itens?.[0]?.motivo ?? "Taxa de cancelamento/falta"),
+          status: "pendente",
+          itens: parsed.itens || [],
+          created_at: parsed.created_at || new Date().toISOString(),
+        };
       }
     }
   } catch {}
 
   return null;
-}
-
-/**
- * Registra um débito de cancelamento para o cliente quando um agendamento é cancelado.
- */
-export async function registerCancellationDebt({
-  clienteId,
-  clienteNome,
-  clienteTelefone,
-  barbeiroId,
-  barbeiroNome,
-  tenantId,
-  agendamentoId,
-  servicoNome,
-  valorServico,
-  dataHoraAgendamento,
-}: {
-  clienteId: string;
-  clienteNome?: string;
-  clienteTelefone?: string;
-  barbeiroId: string;
-  barbeiroNome?: string;
-  tenantId?: string | null;
-  agendamentoId?: string;
-  servicoNome?: string;
-  valorServico: number;
-  dataHoraAgendamento?: Date | string;
-}): Promise<ClienteDebitoCancelamento | null> {
-  if (!clienteId || !barbeiroId) return null;
-
-  // 1. Obtém as configurações de taxa do barbeiro
-  const config = await fetchBarberCancellationFee(barbeiroId, tenantId);
-  if (!config.habilitado) return null;
-
-  // 2. Regra do sistema: cancelamento gratuito até 2 horas antes do atendimento.
-  // Se cancelar com menos de 2 horas ou por não comparecimento, aplica a taxa.
-  const horasLimite = typeof config.horas_antecedencia === "number" && config.horas_antecedencia > 0
-    ? config.horas_antecedencia
-    : 2;
-
-  if (dataHoraAgendamento) {
-    const agendamentoDate = new Date(dataHoraAgendamento);
-    const agora = new Date();
-    const diffMs = agendamentoDate.getTime() - agora.getTime();
-    const diffHoras = diffMs / (1000 * 60 * 60);
-
-    // Se o cancelamento ocorreu com 2 horas ou mais de antecedência, é gratuito
-    if (diffHoras >= horasLimite) {
-      return null;
-    }
-  }
-
-  // 3. Calcula o valor da taxa
-  let valorTaxa = 0;
-  let porcentagemAplicada: number | null = null;
-
-  if (config.tipo === "porcentagem") {
-    porcentagemAplicada = config.valor;
-    valorTaxa = Math.round((valorServico * (config.valor / 100)) * 100) / 100;
-  } else {
-    valorTaxa = config.valor;
-  }
-
-  // Se o valor for 0 ou negativo, não gera débito
-  if (valorTaxa <= 0) return null;
-
-  const novoDebito: ClienteDebitoCancelamento = {
-    id: crypto.randomUUID(),
-    cliente_id: clienteId,
-    cliente_nome: clienteNome,
-    cliente_telefone: clienteTelefone,
-    barbeiro_id: barbeiroId,
-    barbeiro_nome: barbeiroNome,
-    tenant_id: tenantId || null,
-    agendamento_id: agendamentoId || null,
-    valor_taxa: valorTaxa,
-    tipo_taxa: config.tipo,
-    porcentagem_aplicada: porcentagemAplicada,
-    valor_servico_original: valorServico,
-    motivo: `Taxa de cancelamento (${config.tipo === "porcentagem" ? `${config.valor}%` : `R$ ${config.valor.toFixed(2)}`})`,
-    status: "pendente",
-    created_at: new Date().toISOString(),
-  };
-
-  // 4. Salva no banco de dados na tabela dedicada (se existir)
-  try {
-    await (supabase as any)
-      .from("cliente_debitos_cancelamento")
-      .insert({
-        id: novoDebito.id,
-        cliente_id: clienteId,
-        barbeiro_id: barbeiroId,
-        tenant_id: tenantId || null,
-        agendamento_id: agendamentoId || null,
-        valor_taxa: valorTaxa,
-        tipo_taxa: config.tipo,
-        porcentagem_aplicada: porcentagemAplicada,
-        valor_servico_original: valorServico,
-        motivo: novoDebito.motivo,
-        status: "pendente",
-      });
-  } catch {}
-
-  // 5. Salva na chave do cliente para bloqueio instantâneo do app
-  try {
-    const chave = `debito_cancelamento_${clienteId}`;
-    await supabase.from("informacoes_empresa").upsert({
-      chave,
-      categoria: "debitos_cliente",
-      valor: JSON.stringify(novoDebito),
-      tenant_id: tenantId || null,
-      ativo: true,
-    } as any, { onConflict: "tenant_id,chave" });
-  } catch {}
-
-  // 6. Indexa na lista de débitos pendentes do barbeiro
-  try {
-    const listKey = `lista_debitos_pendentes_${barbeiroId}`;
-    const { data: listRow } = await supabase
-      .from("informacoes_empresa")
-      .select("id, valor")
-      .eq("chave", listKey)
-      .maybeSingle();
-
-    let list: ClienteDebitoCancelamento[] = [];
-    if (listRow?.valor) {
-      try { list = JSON.parse(listRow.valor); } catch {}
-    }
-    // Remove qualquer duplicata e adiciona o novo no início
-    list = [novoDebito, ...list.filter((d) => d.id !== novoDebito.id && d.cliente_id !== novoDebito.cliente_id)];
-
-    if (listRow?.id) {
-      await supabase
-        .from("informacoes_empresa")
-        .update({
-          valor: JSON.stringify(list),
-          atualizado_em: new Date().toISOString(),
-        } as any)
-        .eq("id", listRow.id);
-    } else {
-      await supabase.from("informacoes_empresa").insert({
-        chave: listKey,
-        categoria: "debitos_barbeiro",
-        valor: JSON.stringify(list),
-        tenant_id: tenantId || null,
-        ativo: true,
-      } as any);
-    }
-  } catch {}
-
-  return novoDebito;
-}
-
-/**
- * Dá baixa no débito após o pagamento ser confirmado via Pix.
- */
-export async function markCancellationDebtAsPaid(
-  debitoId: string,
-  clienteId: string,
-  barbeiroId?: string
-): Promise<boolean> {
-  if (!debitoId && !clienteId) return false;
-
-  try {
-    await (supabase as any)
-      .from("cliente_debitos_cancelamento")
-      .update({
-        status: "pago",
-        pago_em: new Date().toISOString(),
-      })
-      .eq(debitoId ? "id" : "cliente_id", debitoId || clienteId);
-  } catch {}
-
-  try {
-    const chave = `debito_cancelamento_${clienteId}`;
-    const { data: existing } = await supabase
-      .from("informacoes_empresa")
-      .select("id, valor")
-      .eq("chave", chave)
-      .maybeSingle();
-
-    if (existing?.id) {
-      let parsed: any = {};
-      try { parsed = JSON.parse(existing.valor); } catch {}
-      parsed.status = "pago";
-      parsed.pago_em = new Date().toISOString();
-
-      await supabase
-        .from("informacoes_empresa")
-        .update({
-          valor: JSON.stringify(parsed),
-          ativo: false,
-          atualizado_em: new Date().toISOString(),
-        } as any)
-        .eq("id", existing.id);
-    }
-  } catch {}
-
-  // Remove da lista do barbeiro se especificado
-  if (barbeiroId) {
-    try {
-      const listKey = `lista_debitos_pendentes_${barbeiroId}`;
-      const { data: listRow } = await supabase
-        .from("informacoes_empresa")
-        .select("id, valor")
-        .eq("chave", listKey)
-        .maybeSingle();
-
-      if (listRow?.valor) {
-        try {
-          const list: ClienteDebitoCancelamento[] = JSON.parse(listRow.valor);
-          const filtered = list.filter((d) => d.id !== debitoId && d.cliente_id !== clienteId);
-          await supabase
-            .from("informacoes_empresa")
-            .update({
-              valor: JSON.stringify(filtered),
-              atualizado_em: new Date().toISOString(),
-            } as any)
-            .eq("id", listRow.id);
-        } catch {}
-      }
-    } catch {}
-  }
-
-  return true;
 }
 
 /**
@@ -524,26 +326,27 @@ export async function dispenseCancellationDebt({
   barbeiroId,
   tenantId,
 }: {
-  debitoId: string;
+  debitoId?: string;
   clienteId: string;
-  barbeiroId: string;
+  barbeiroId?: string;
   tenantId?: string | null;
 }): Promise<boolean> {
-  if (!debitoId && !clienteId) return false;
+  if (!clienteId) return false;
 
-  // 1. Atualizar tabela cliente_debitos_cancelamento se existir
+  // 1. Tentar chamar a RPC dedicada no banco
   try {
-    await (supabase as any)
-      .from("cliente_debitos_cancelamento")
-      .update({
-        status: "dispensado",
-        dispensado_em: new Date().toISOString(),
-      })
-      .eq(debitoId ? "id" : "cliente_id", debitoId || clienteId);
+    const { data, error } = await (supabase as any).rpc("dispensar_debito_cliente", {
+      p_cliente_id: clienteId,
+      p_item_id: debitoId && debitoId !== clienteId ? debitoId : null,
+      p_motivo: "liberado_manual",
+    });
+
+    if (!error && data?.success) {
+      return true;
+    }
   } catch {}
 
-  // 2. Atualizar informacoes_empresa debito_cancelamento_${clienteId}
-  // Marcando como 'liberado_manual' e ativo: false para desbloqueio em tempo real
+  // 2. Fallback direto em informacoes_empresa
   try {
     const chave = `debito_cancelamento_${clienteId}`;
     const { data: existing } = await supabase
@@ -559,7 +362,17 @@ export async function dispenseCancellationDebt({
       } catch {}
 
       parsed.status = "liberado_manual";
+      parsed.total_pendente = 0;
+      parsed.valor_taxa = 0;
       parsed.dispensado_em = new Date().toISOString();
+
+      if (Array.isArray(parsed.itens)) {
+        parsed.itens = parsed.itens.map((it: any) => ({
+          ...it,
+          status: "liberado_manual",
+          dispensado_em: new Date().toISOString(),
+        }));
+      }
 
       await supabase
         .from("informacoes_empresa")
@@ -570,30 +383,20 @@ export async function dispenseCancellationDebt({
         } as any)
         .eq("id", existing.id);
     }
-  } catch {}
+  } catch (err) {
+    console.error("[dispenseCancellationDebt] Erro ao atualizar informacoes_empresa:", err);
+    return false;
+  }
 
-  // 3. Atualizar a lista indexada do barbeiro
+  // 3. Fallback: atualizar tabela cliente_debitos_cancelamento se existir
   try {
-    const listKey = `lista_debitos_pendentes_${barbeiroId}`;
-    const { data: listRow } = await supabase
-      .from("informacoes_empresa")
-      .select("id, valor")
-      .eq("chave", listKey)
-      .maybeSingle();
-
-    if (listRow?.valor) {
-      try {
-        const list: ClienteDebitoCancelamento[] = JSON.parse(listRow.valor);
-        const filtered = list.filter((d) => d.id !== debitoId && d.cliente_id !== clienteId);
-        await supabase
-          .from("informacoes_empresa")
-          .update({
-            valor: JSON.stringify(filtered),
-            atualizado_em: new Date().toISOString(),
-          } as any)
-          .eq("id", listRow.id);
-      } catch {}
-    }
+    await (supabase as any)
+      .from("cliente_debitos_cancelamento")
+      .update({
+        status: "dispensado",
+        dispensado_em: new Date().toISOString(),
+      })
+      .eq("cliente_id", clienteId);
   } catch {}
 
   return true;
@@ -610,149 +413,215 @@ export async function fetchBarberPendingCancellationDebts(
 
   const mapById = new Map<string, ClienteDebitoCancelamento>();
 
-  // 1. Buscar da tabela cliente_debitos_cancelamento se existir
+  // 1. Tentar via RPC `get_barber_pending_debts`
   try {
-    const { data, error } = await (supabase as any)
-      .from("cliente_debitos_cancelamento")
-      .select("*, profiles:cliente_id(nome, telefone)")
-      .eq("barbeiro_id", barbeiroId)
-      .eq("status", "pendente")
-      .order("created_at", { ascending: false });
+    const { data: rpcData, error: rpcErr } = await (supabase as any).rpc("get_barber_pending_debts", {
+      p_barbeiro_id: barbeiroId,
+    });
 
-    if (!error && Array.isArray(data)) {
-      for (const item of data) {
-        const deb: ClienteDebitoCancelamento = {
-          id: item.id,
-          cliente_id: item.cliente_id,
-          cliente_nome: item.profiles?.nome || item.cliente_nome,
-          cliente_telefone: item.profiles?.telefone || item.cliente_telefone,
-          barbeiro_id: item.barbeiro_id,
-          tenant_id: item.tenant_id,
-          agendamento_id: item.agendamento_id,
-          valor_taxa: Number(item.valor_taxa) || 0,
-          tipo_taxa: item.tipo_taxa || "porcentagem",
-          porcentagem_aplicada: item.porcentagem_aplicada ? Number(item.porcentagem_aplicada) : null,
-          valor_servico_original: item.valor_servico_original ? Number(item.valor_servico_original) : null,
-          motivo: item.motivo,
-          status: item.status,
-          pix_charge_id: item.pix_charge_id,
-          pix_payload: item.pix_payload,
-          pix_qrcode: item.pix_qrcode,
-          created_at: item.created_at,
-        };
-        mapById.set(deb.id, deb);
-      }
-    }
-  } catch {}
-
-  // 2. Buscar da lista indexada em informacoes_empresa: lista_debitos_pendentes_${barbeiroId}
-  try {
-    const listKey = `lista_debitos_pendentes_${barbeiroId}`;
-    const { data: listRow } = await supabase
-      .from("informacoes_empresa")
-      .select("valor")
-      .eq("chave", listKey)
-      .maybeSingle();
-
-    if (listRow?.valor) {
-      const parsedList = JSON.parse(listRow.valor);
-      if (Array.isArray(parsedList)) {
-        for (const item of parsedList) {
-          if (item?.status === "pendente" && !mapById.has(item.id)) {
-            mapById.set(item.id, item);
-          }
+    if (!rpcErr && Array.isArray(rpcData)) {
+      for (const item of rpcData) {
+        if (item && item.cliente_id) {
+          const deb: ClienteDebitoCancelamento = {
+            id: item.itens?.[0]?.id || item.row_id || item.cliente_id,
+            cliente_id: item.cliente_id,
+            cliente_nome: item.cliente_nome,
+            cliente_telefone: item.cliente_telefone,
+            cliente_avatar: item.cliente_avatar,
+            barbeiro_id: barbeiroId,
+            tenant_id: item.tenant_id,
+            valor_taxa: Number(item.total_pendente) || 0,
+            total_pendente: Number(item.total_pendente) || 0,
+            tipo_taxa: item.itens?.[0]?.tipo_taxa || "porcentagem",
+            motivo: formatItemReason(item.itens?.[0]),
+            status: "pendente",
+            itens: item.itens || [],
+            created_at: item.itens?.[0]?.created_at || item.updated_at || new Date().toISOString(),
+          };
+          mapById.set(deb.cliente_id, deb);
         }
       }
     }
   } catch {}
 
-  // 3. Buscar débitos gerais em informacoes_empresa onde categoria = 'debitos_cliente' e ativo = true
-  try {
-    const { data: rows } = await supabase
-      .from("informacoes_empresa")
-      .select("valor")
-      .eq("categoria", "debitos_cliente")
-      .eq("ativo", true);
+  // 2. Fallback: buscar débitos em informacoes_empresa
+  if (mapById.size === 0) {
+    try {
+      const { data: rows } = await supabase
+        .from("informacoes_empresa")
+        .select("id, chave, valor, tenant_id")
+        .eq("categoria", "debitos_cliente");
 
-    if (Array.isArray(rows)) {
-      for (const row of rows) {
-        if (row.valor) {
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          if (!row.valor) continue;
           try {
             const parsed = JSON.parse(row.valor);
-            if (
-              parsed?.barbeiro_id === barbeiroId &&
-              parsed?.status === "pendente" &&
-              !mapById.has(parsed.id)
-            ) {
-              mapById.set(parsed.id, parsed);
+            const total = Number(parsed.total_pendente ?? parsed.valor_taxa ?? 0);
+            if (total <= 0 && parsed.status !== "pendente") continue;
+
+            // Checa se algum item pertence ao barbeiro
+            let hasBarberItem = false;
+            let matchingItens: ClienteDebitoItem[] = [];
+
+            if (Array.isArray(parsed.itens)) {
+              matchingItens = parsed.itens.filter(
+                (it: any) => it.status === "pendente" && (!barbeiroId || it.barbeiro_id === barbeiroId)
+              );
+              hasBarberItem = matchingItens.length > 0;
+            } else if (parsed.status === "pendente" && (!barbeiroId || parsed.barbeiro_id === barbeiroId)) {
+              hasBarberItem = true;
+            }
+
+            if (hasBarberItem) {
+              const cId = parsed.cliente_id || row.chave.replace("debito_cancelamento_", "");
+              const deb: ClienteDebitoCancelamento = {
+                id: parsed.id || row.id,
+                cliente_id: cId,
+                cliente_nome: parsed.cliente_nome,
+                cliente_telefone: parsed.cliente_telefone,
+                barbeiro_id: barbeiroId,
+                tenant_id: row.tenant_id,
+                valor_taxa: total,
+                total_pendente: total,
+                tipo_taxa: parsed.tipo_taxa || "porcentagem",
+                motivo: formatItemReason(matchingItens[0] || parsed),
+                status: "pendente",
+                itens: matchingItens.length > 0 ? matchingItens : parsed.itens,
+                created_at: parsed.created_at || new Date().toISOString(),
+              };
+              mapById.set(cId, deb);
             }
           } catch {}
         }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   const results = Array.from(mapById.values());
 
-  // 4. Se algum cliente estiver sem nome, busca no profiles para enriquecer a exibição
+  // Enriquecer nomes faltantes via profiles
   const missingNameUserIds = results
-    .filter((d) => !d.cliente_nome && d.cliente_id)
+    .filter((d) => (!d.cliente_nome || d.cliente_nome === "Cliente") && d.cliente_id)
     .map((d) => d.cliente_id);
 
   if (missingNameUserIds.length > 0) {
     try {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, nome, telefone")
+        .select("id, nome, telefone, avatar_url")
         .in("id", missingNameUserIds);
 
       if (Array.isArray(profiles)) {
         const profMap = new Map(profiles.map((p) => [p.id, p]));
         for (const res of results) {
-          if (!res.cliente_nome && res.cliente_id && profMap.has(res.cliente_id)) {
+          if (res.cliente_id && profMap.has(res.cliente_id)) {
             const p = profMap.get(res.cliente_id)!;
-            res.cliente_nome = p.nome;
-            res.cliente_telefone = p.telefone;
+            if (p.nome) res.cliente_nome = p.nome;
+            if (p.telefone) res.cliente_telefone = p.telefone;
+            if (p.avatar_url) res.cliente_avatar = p.avatar_url;
           }
         }
       }
     } catch {}
   }
 
-  // Ordenar decrescente por data de criação
+  // Ordenar decrescente por data
   results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return results;
 }
 
+/** Formata o motivo legível de um item de taxa */
+export function formatItemReason(item?: any): string {
+  if (!item) return "Taxa de cancelamento/falta pendente";
+  const motivoRaw = item.motivo || "";
+  const valor = Number(item.valor_taxa || 0);
+  const valorFmt = `R$ ${valor.toFixed(2).replace(".", ",")}`;
+
+  let dataStr = "";
+  if (item.created_at) {
+    try {
+      const d = new Date(item.created_at);
+      dataStr = ` em ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+    } catch {}
+  }
+
+  if (motivoRaw === "falta" || motivoRaw.toLowerCase().includes("falta") || motivoRaw.includes("no_show")) {
+    return `Falta${dataStr} - ${valorFmt}`;
+  }
+  if (motivoRaw === "cancelamento_tardio" || motivoRaw.toLowerCase().includes("cancel")) {
+    return `Cancelamento com menos de 2h${dataStr} - ${valorFmt}`;
+  }
+
+  return `${motivoRaw || "Taxa pendente"} - ${valorFmt}`;
+}
+
 /**
- * Assina atualizações em tempo real nos débitos do cliente (para desbloqueio instantâneo do app).
+ * Extrai o desmembramento de dívida pendente de um agendamento.
+ * Permite que o barbeiro visualize claramente:
+ * Serviço: R$ 30,00 | Taxa anterior: + R$ 20,00 | Total no balcão: R$ 50,00
+ */
+export function extractDebtFromAppointment(appointment?: {
+  preco?: number | null;
+  observacoes?: string | null;
+  servico?: { preco?: number | null } | null;
+}): AppointmentDebtBreakdown {
+  const totalPrice = Number(appointment?.preco || 0);
+  const obs = appointment?.observacoes || "";
+
+  // Procura padrão gerado pelo dubagenda: "Taxa pendente inclusa: R$ 20,00"
+  const match = obs.match(/Taxa\s+pendente\s+inclusa:\s*R\$\s*([\d,.]+)/i);
+  if (match && match[1]) {
+    const rawVal = match[1].replace(".", "").replace(",", ".");
+    const debtAmount = parseFloat(rawVal);
+    if (!isNaN(debtAmount) && debtAmount > 0) {
+      const servicePrice = Math.max(0, Math.round((totalPrice - debtAmount) * 100) / 100);
+      return {
+        hasDebt: true,
+        debtAmount,
+        servicePrice,
+        totalToCollect: totalPrice,
+        debtReason: `Taxa anterior somada: + R$ ${debtAmount.toFixed(2).replace(".", ",")}`,
+      };
+    }
+  }
+
+  // Se o serviço original tem preço conhecido menor que o preço cobrado
+  const servicoPreco = Number(appointment?.servico?.preco || 0);
+  if (servicoPreco > 0 && totalPrice > servicoPreco) {
+    const diff = Math.round((totalPrice - servicoPreco) * 100) / 100;
+    if (diff > 0 && obs.toLowerCase().includes("taxa")) {
+      return {
+        hasDebt: true,
+        debtAmount: diff,
+        servicePrice: servicoPreco,
+        totalToCollect: totalPrice,
+        debtReason: `Taxa anterior somada: + R$ ${diff.toFixed(2).replace(".", ",")}`,
+      };
+    }
+  }
+
+  return {
+    hasDebt: false,
+    debtAmount: 0,
+    servicePrice: totalPrice,
+    totalToCollect: totalPrice,
+  };
+}
+
+/**
+ * Assina alterações em tempo real nos débitos de um cliente específico.
+ * Utilizado por modais e telas para desbloquear a interface instantaneamente.
  */
 export function subscribeToClientCancellationDebts(
   clienteId: string,
-  onUpdate: (debt: ClienteDebitoCancelamento | null) => void
+  onUpdate: (debito: ClienteDebitoCancelamento | null) => void
 ): () => void {
   if (!clienteId) return () => {};
 
   const channel = supabase
-    .channel(`cliente-debitos-${clienteId}-${Date.now()}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "cliente_debitos_cancelamento",
-        filter: `cliente_id=eq.${clienteId}`,
-      },
-      async (payload) => {
-        const row = payload.new as any;
-        if (row && row.status === "pendente") {
-          onUpdate(row as ClienteDebitoCancelamento);
-        } else {
-          onUpdate(null);
-        }
-      }
-    )
+    .channel(`debito-cliente-${clienteId}-${Date.now()}`)
     .on(
       "postgres_changes",
       {
@@ -762,21 +631,39 @@ export function subscribeToClientCancellationDebts(
         filter: `chave=eq.debito_cancelamento_${clienteId}`,
       },
       (payload) => {
-        if (payload.eventType === "DELETE") {
+        const row = payload.new as any;
+        if (!row || !row.valor) {
           onUpdate(null);
           return;
         }
-        const row = payload.new as any;
-        if (row?.valor) {
-          try {
-            const parsed = JSON.parse(row.valor);
-            if (parsed.status === "pendente") {
-              onUpdate(parsed as ClienteDebitoCancelamento);
-              return;
-            }
-          } catch {}
+
+        try {
+          const parsed = JSON.parse(row.valor);
+          const total = Number(parsed.total_pendente ?? parsed.valor_taxa ?? 0);
+          const deb: ClienteDebitoCancelamento = {
+            id: parsed.id || row.id,
+            cliente_id: clienteId,
+            cliente_nome: parsed.cliente_nome,
+            cliente_telefone: parsed.cliente_telefone,
+            barbeiro_id: parsed.barbeiro_id || (parsed.itens?.[0]?.barbeiro_id ?? ""),
+            barbeiro_nome: parsed.barbeiro_nome || (parsed.itens?.[0]?.barbeiro_nome ?? "Barbeiro"),
+            tenant_id: row.tenant_id,
+            agendamento_id: parsed.agendamento_id || (parsed.itens?.[0]?.agendamento_id ?? null),
+            valor_taxa: total,
+            total_pendente: total,
+            tipo_taxa: parsed.tipo_taxa || "porcentagem",
+            porcentagem_aplicada: parsed.porcentagem_aplicada ? Number(parsed.porcentagem_aplicada) : null,
+            valor_servico_original: parsed.valor_servico_original ? Number(parsed.valor_servico_original) : null,
+            motivo: parsed.motivo || (parsed.itens?.[0]?.motivo ?? "Taxa pendente"),
+            status: parsed.status || (total > 0 ? "pendente" : "pago"),
+            itens: parsed.itens || [],
+            created_at: parsed.created_at || new Date().toISOString(),
+            pix_payload: parsed.pix_payload || null,
+          };
+          onUpdate(deb);
+        } catch {
+          onUpdate(null);
         }
-        onUpdate(null);
       }
     )
     .subscribe();
@@ -787,43 +674,67 @@ export function subscribeToClientCancellationDebts(
 }
 
 /**
- * Assina atualizações em tempo real na lista de débitos de um barbeiro.
+ * Marca o débito de cancelamento de um cliente como pago (ex: após pagamento via Pix no app).
  */
-export function subscribeToBarberPendingDebts(
-  barbeiroId: string,
-  onUpdate: () => void
-): () => void {
-  if (!barbeiroId) return () => {};
+export async function markCancellationDebtAsPaid(
+  debitoId: string,
+  clienteId: string
+): Promise<boolean> {
+  if (!clienteId) return false;
 
-  const channel = supabase
-    .channel(`barbeiro-debitos-${barbeiroId}-${Date.now()}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "cliente_debitos_cancelamento",
-        filter: `barbeiro_id=eq.${barbeiroId}`,
-      },
-      () => {
-        onUpdate();
-      }
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "informacoes_empresa",
-        filter: `chave=eq.lista_debitos_pendentes_${barbeiroId}`,
-      },
-      () => {
-        onUpdate();
-      }
-    )
-    .subscribe();
+  try {
+    const chave = `debito_cancelamento_${clienteId}`;
+    const { data: existing } = await supabase
+      .from("informacoes_empresa")
+      .select("id, valor")
+      .eq("chave", chave)
+      .maybeSingle();
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+    if (existing?.id) {
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(existing.valor);
+      } catch {}
+
+      parsed.status = "pago";
+      parsed.total_pendente = 0;
+      parsed.valor_taxa = 0;
+      parsed.pago_em = new Date().toISOString();
+
+      if (Array.isArray(parsed.itens)) {
+        parsed.itens = parsed.itens.map((it: any) => ({
+          ...it,
+          status: "pago",
+          pago_em: new Date().toISOString(),
+        }));
+      }
+
+      await supabase
+        .from("informacoes_empresa")
+        .update({
+          valor: JSON.stringify(parsed),
+          ativo: false,
+          atualizado_em: new Date().toISOString(),
+        } as any)
+        .eq("id", existing.id);
+    }
+
+    // Atualiza tabela dedicada se existir
+    try {
+      await (supabase as any)
+        .from("cliente_debitos_cancelamento")
+        .update({
+          status: "pago",
+          pago_em: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("cliente_id", clienteId);
+    } catch {}
+
+    return true;
+  } catch (err) {
+    console.error("[markCancellationDebtAsPaid] Erro ao marcar débito como pago:", err);
+    return false;
+  }
 }
+

@@ -74,19 +74,31 @@ export function useBusinessHours({
           };
         }
 
-        // 1b. Horário da barbearia (unidade) — só quando o barbeiro não tem config própria
+        // 1b. Horário da barbearia (unidade/tenant) — só quando o barbeiro não tem config própria
         const { data: barbRow } = await supabase
           .from("barbeiros")
           .select("tenant_id, unidade_id")
           .eq("id", barbeiroId)
           .maybeSingle();
 
-        if (barbRow?.unidade_id) {
-          const { data: unitCfg } = await (supabase as any).from("configuracoes_horario_unidade")
-            .select("aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos")
-            .eq("unidade_id", barbRow.unidade_id)
-            .eq("dia_semana", dayOfWeek)
-            .maybeSingle();
+        if (barbRow?.tenant_id) {
+          let unitCfg: any = null;
+          if (barbRow.unidade_id) {
+            const { data } = await (supabase as any).from("configuracoes_horario_unidade")
+              .select("aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos")
+              .eq("unidade_id", barbRow.unidade_id)
+              .eq("dia_semana", dayOfWeek)
+              .maybeSingle();
+            unitCfg = data;
+          }
+          if (!unitCfg) {
+            const { data } = await (supabase as any).from("configuracoes_horario_unidade")
+              .select("aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos")
+              .eq("tenant_id", barbRow.tenant_id)
+              .eq("dia_semana", dayOfWeek)
+              .maybeSingle();
+            unitCfg = data;
+          }
           if (unitCfg) {
             return {
               aberto: unitCfg.aberto ?? true,

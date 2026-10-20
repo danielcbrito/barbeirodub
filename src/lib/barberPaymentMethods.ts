@@ -32,26 +32,35 @@ export async function fetchBarberPaymentMethods(
   let result: BarberPaymentMethods = { ...DEFAULT_METHODS };
   let found = false;
 
-  // 2. Estratégia Principal: tabela dedicada `barbeiro_formas_pagamento`
+  // 2. Estratégia Principal: informacoes_empresa com a chave solicitada `opcoes_pagamento_${barbeiroId}`
   try {
     const { data, error } = await supabase
-      .from("barbeiro_formas_pagamento" as any)
-      .select("pix_habilitado, pagamento_barbearia_habilitado")
-      .eq("barbeiro_id", barbeiroId)
+      .from("informacoes_empresa")
+      .select("valor")
+      .eq("chave", `opcoes_pagamento_${barbeiroId}`)
       .maybeSingle();
 
-    if (!error && data) {
-      result = {
-        pix: typeof (data as any).pix_habilitado === "boolean" ? (data as any).pix_habilitado : true,
-        barbearia: typeof (data as any).pagamento_barbearia_habilitado === "boolean" ? (data as any).pagamento_barbearia_habilitado : true,
-      };
-      found = true;
+    if (!error && data?.valor) {
+      const parsed = JSON.parse(data.valor);
+      if (typeof parsed === "object" && parsed !== null) {
+        result = {
+          pix: typeof parsed.pix_habilitado === "boolean"
+            ? parsed.pix_habilitado
+            : typeof parsed.pix === "boolean"
+            ? parsed.pix
+            : true,
+          barbearia: typeof parsed.barbearia_habilitado === "boolean"
+            ? parsed.barbearia_habilitado
+            : typeof parsed.barbearia === "boolean"
+            ? parsed.barbearia
+            : true,
+        };
+        found = true;
+      }
     }
-  } catch (err) {
-    // Tabela pode ainda estar sendo provisionada
-  }
+  } catch {}
 
-  // 3. Estratégia de Fallback 1: `informacoes_empresa` com chave específica por barbeiro
+  // 3. Fallback 1: chave `formas_pagamento_${barbeiroId}`
   if (!found) {
     try {
       const { data, error } = await supabase
@@ -64,8 +73,16 @@ export async function fetchBarberPaymentMethods(
         const parsed = JSON.parse(data.valor);
         if (typeof parsed === "object" && parsed !== null) {
           result = {
-            pix: typeof parsed.pix === "boolean" ? parsed.pix : true,
-            barbearia: typeof parsed.barbearia === "boolean" ? parsed.barbearia : true,
+            pix: typeof parsed.pix_habilitado === "boolean"
+              ? parsed.pix_habilitado
+              : typeof parsed.pix === "boolean"
+              ? parsed.pix
+              : true,
+            barbearia: typeof parsed.barbearia_habilitado === "boolean"
+              ? parsed.barbearia_habilitado
+              : typeof parsed.barbearia === "boolean"
+              ? parsed.barbearia
+              : true,
           };
           found = true;
         }
@@ -73,7 +90,26 @@ export async function fetchBarberPaymentMethods(
     } catch {}
   }
 
-  // 4. Estratégia de Fallback 2: colunas na tabela `barbeiros`
+  // 4. Fallback 2: tabela dedicada `barbeiro_formas_pagamento`
+  if (!found) {
+    try {
+      const { data, error } = await supabase
+        .from("barbeiro_formas_pagamento" as any)
+        .select("pix_habilitado, pagamento_barbearia_habilitado")
+        .eq("barbeiro_id", barbeiroId)
+        .maybeSingle();
+
+      if (!error && data) {
+        result = {
+          pix: typeof (data as any).pix_habilitado === "boolean" ? (data as any).pix_habilitado : true,
+          barbearia: typeof (data as any).pagamento_barbearia_habilitado === "boolean" ? (data as any).pagamento_barbearia_habilitado : true,
+        };
+        found = true;
+      }
+    } catch {}
+  }
+
+  // 5. Fallback 3: colunas na tabela `barbeiros`
   if (!found) {
     try {
       const { data, error } = await supabase
@@ -124,12 +160,93 @@ export async function saveBarberPaymentMethods({
   // Atualiza cache em memória imediatamente (Optimistic)
   MEM_CACHE.set(barbeiroId, { data: newMethods, timestamp: Date.now() });
 
+  // Payload completo compatível com todas as consultas existentes
+  const valorObj = {
+    pix_habilitado: pix,
+    barbearia_habilitado: barbearia,
+    pix,
+    barbearia,
+  };
+  const valorJson = JSON.stringify(valorObj);
+
   let savedSuccessfully = false;
   let lastError: any = null;
 
-  // 1. Salvar na tabela dedicada `barbeiro_formas_pagamento`
+  // 1. Salvar em informacoes_empresa com a chave solicitada: `opcoes_pagamento_${barbeiroId}`
   try {
-    const { error } = await supabase
+    const chave1 = `opcoes_pagamento_${barbeiroId}`;
+    const { data: existing1 } = await supabase
+      .from("informacoes_empresa")
+      .select("id")
+      .eq("chave", chave1)
+      .maybeSingle();
+
+    if (existing1?.id) {
+      const { error: upErr1 } = await supabase
+        .from("informacoes_empresa")
+        .update({
+          valor: valorJson,
+          ativo: true,
+          categoria: "configuracoes_gerais",
+          atualizado_em: new Date().toISOString(),
+        } as any)
+        .eq("id", existing1.id);
+
+      if (!upErr1) savedSuccessfully = true;
+      else lastError = upErr1;
+    } else {
+      const { error: insErr1 } = await supabase
+        .from("informacoes_empresa")
+        .insert({
+          chave: chave1,
+          categoria: "configuracoes_gerais",
+          valor: valorJson,
+          tenant_id: tenantId || null,
+          ativo: true,
+        } as any);
+
+      if (!insErr1) savedSuccessfully = true;
+      else lastError = insErr1;
+    }
+  } catch (err) {
+    lastError = err;
+  }
+
+  // 2. Dual-write para `formas_pagamento_${barbeiroId}` (garante compatibilidade 100% com hooks que ainda usam essa chave)
+  try {
+    const chave2 = `formas_pagamento_${barbeiroId}`;
+    const { data: existing2 } = await supabase
+      .from("informacoes_empresa")
+      .select("id")
+      .eq("chave", chave2)
+      .maybeSingle();
+
+    if (existing2?.id) {
+      await supabase
+        .from("informacoes_empresa")
+        .update({
+          valor: valorJson,
+          ativo: true,
+          categoria: "configuracoes_gerais",
+          atualizado_em: new Date().toISOString(),
+        } as any)
+        .eq("id", existing2.id);
+    } else {
+      await supabase
+        .from("informacoes_empresa")
+        .insert({
+          chave: chave2,
+          categoria: "configuracoes_gerais",
+          valor: valorJson,
+          tenant_id: tenantId || null,
+          ativo: true,
+        } as any);
+    }
+  } catch {}
+
+  // 3. Salvar na tabela dedicada `barbeiro_formas_pagamento`
+  try {
+    const { error: bfpErr } = await supabase
       .from("barbeiro_formas_pagamento" as any)
       .upsert(
         {
@@ -142,58 +259,12 @@ export async function saveBarberPaymentMethods({
         { onConflict: "barbeiro_id" }
       );
 
-    if (!error) {
+    if (!bfpErr) {
       savedSuccessfully = true;
-    } else {
-      lastError = error;
     }
-  } catch (err) {
-    lastError = err;
-  }
+  } catch {}
 
-  // 2. Salvar também em `informacoes_empresa` com chave única por barbeiro (garante persistência multi-nível)
-  try {
-    const chave = `formas_pagamento_${barbeiroId}`;
-    const valorJson = JSON.stringify(newMethods);
-
-    // Tenta atualizar se já existir
-    const { data: existing } = await supabase
-      .from("informacoes_empresa")
-      .select("id")
-      .eq("chave", chave)
-      .maybeSingle();
-
-    if (existing?.id) {
-      const { error: upErr } = await supabase
-        .from("informacoes_empresa")
-        .update({
-          valor: valorJson,
-          ativo: true,
-          atualizado_em: new Date().toISOString(),
-        } as any)
-        .eq("id", existing.id);
-
-      if (!upErr) savedSuccessfully = true;
-      else if (!savedSuccessfully) lastError = upErr;
-    } else {
-      const { error: insErr } = await supabase
-        .from("informacoes_empresa")
-        .insert({
-          chave,
-          categoria: "pagamentos",
-          valor: valorJson,
-          tenant_id: tenantId || null,
-          ativo: true,
-        } as any);
-
-      if (!insErr) savedSuccessfully = true;
-      else if (!savedSuccessfully) lastError = insErr;
-    }
-  } catch (err) {
-    if (!savedSuccessfully) lastError = err;
-  }
-
-  // 3. Tentar atualizar colunas na tabela `barbeiros`
+  // 4. Atualizar colunas na tabela `barbeiros`
   try {
     const { error: bErr } = await supabase
       .from("barbeiros")
@@ -227,7 +298,71 @@ export function subscribeToBarberPaymentMethods(
   const channelName = `barber-pay-methods-${barbeiroId}-${Date.now()}`;
   const channel = supabase
     .channel(channelName)
-    // 1. Escuta alterações na tabela dedicada
+    // 1. Escuta alterações em `opcoes_pagamento_${barbeiroId}`
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "informacoes_empresa",
+        filter: `chave=eq.opcoes_pagamento_${barbeiroId}`,
+      },
+      (payload) => {
+        const row = payload.new as any;
+        if (row?.valor) {
+          try {
+            const parsed = JSON.parse(row.valor);
+            const methods: BarberPaymentMethods = {
+              pix: typeof parsed.pix_habilitado === "boolean"
+                ? parsed.pix_habilitado
+                : typeof parsed.pix === "boolean"
+                ? parsed.pix
+                : true,
+              barbearia: typeof parsed.barbearia_habilitado === "boolean"
+                ? parsed.barbearia_habilitado
+                : typeof parsed.barbearia === "boolean"
+                ? parsed.barbearia
+                : true,
+            };
+            MEM_CACHE.set(barbeiroId, { data: methods, timestamp: Date.now() });
+            onUpdate(methods);
+          } catch {}
+        }
+      }
+    )
+    // 2. Escuta alterações em `formas_pagamento_${barbeiroId}`
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "informacoes_empresa",
+        filter: `chave=eq.formas_pagamento_${barbeiroId}`,
+      },
+      (payload) => {
+        const row = payload.new as any;
+        if (row?.valor) {
+          try {
+            const parsed = JSON.parse(row.valor);
+            const methods: BarberPaymentMethods = {
+              pix: typeof parsed.pix_habilitado === "boolean"
+                ? parsed.pix_habilitado
+                : typeof parsed.pix === "boolean"
+                ? parsed.pix
+                : true,
+              barbearia: typeof parsed.barbearia_habilitado === "boolean"
+                ? parsed.barbearia_habilitado
+                : typeof parsed.barbearia === "boolean"
+                ? parsed.barbearia
+                : true,
+            };
+            MEM_CACHE.set(barbeiroId, { data: methods, timestamp: Date.now() });
+            onUpdate(methods);
+          } catch {}
+        }
+      }
+    )
+    // 3. Escuta alterações na tabela dedicada `barbeiro_formas_pagamento`
     .on(
       "postgres_changes",
       {
@@ -248,31 +383,7 @@ export function subscribeToBarberPaymentMethods(
         }
       }
     )
-    // 2. Escuta alterações na tabela de informações da empresa para a chave do barbeiro
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "informacoes_empresa",
-        filter: `chave=eq.formas_pagamento_${barbeiroId}`,
-      },
-      (payload) => {
-        const row = payload.new as any;
-        if (row?.valor) {
-          try {
-            const parsed = JSON.parse(row.valor);
-            const methods: BarberPaymentMethods = {
-              pix: typeof parsed.pix === "boolean" ? parsed.pix : true,
-              barbearia: typeof parsed.barbearia === "boolean" ? parsed.barbearia : true,
-            };
-            MEM_CACHE.set(barbeiroId, { data: methods, timestamp: Date.now() });
-            onUpdate(methods);
-          } catch {}
-        }
-      }
-    )
-    // 3. Escuta alterações na tabela de barbeiros
+    // 4. Escuta alterações na tabela de barbeiros
     .on(
       "postgres_changes",
       {

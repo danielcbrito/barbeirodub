@@ -48,6 +48,7 @@ import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { toast } from "sonner";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
+import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
 
 interface BarberAgendaProps {
   barberContext: BarberContext;
@@ -581,6 +582,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                 const duration = apt.duracao || apt.servico?.duracao_minutos || 30;
                 const rawHora = apt.hora || "00:00";
                 const horaFormatted = rawHora.slice(0, 5);
+                const debtInfo = extractDebtFromAppointment(apt);
 
                 const now = new Date();
                 const isViewingToday = isToday(selectedDate);
@@ -668,6 +670,11 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                         {apt.profile?.nome || "Cliente"}
                       </span>
                       {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
+                      {debtInfo.hasDebt && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 text-[10px] font-semibold tabular-nums shrink-0">
+                          + R$ {debtInfo.debtAmount.toFixed(2).replace(".", ",")} taxa
+                        </span>
+                      )}
                       {isNextUp && (
                         <span className="ml-auto text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
                           agora
@@ -690,14 +697,21 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                           {paymentBadge.label}
                         </span>
                       </div>
-                      <span className={cn(
-                        "text-[13px] font-medium tabular-nums",
-                        apt.is_free ? "text-muted-foreground/40 line-through" : "text-foreground"
-                      )}>
-                        {apt.is_free
-                          ? "Grátis"
-                          : `R$ ${typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco.toFixed(2).replace(".", ",") : "0,00"}`}
-                      </span>
+                      <div className="text-right">
+                        <span className={cn(
+                          "text-[13px] font-medium tabular-nums block",
+                          apt.is_free ? "text-muted-foreground/40 line-through" : "text-foreground"
+                        )}>
+                          {apt.is_free
+                            ? "Grátis"
+                            : `R$ ${typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco.toFixed(2).replace(".", ",") : "0,00"}`}
+                        </span>
+                        {debtInfo.hasDebt && (
+                          <span className="text-[9.5px] text-amber-600 dark:text-amber-400 font-medium block tabular-nums">
+                            Com taxa inclusa
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

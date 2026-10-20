@@ -67,8 +67,10 @@ import {
   checkClientPendingCancellationDebt,
   dispenseCancellationDebt,
   fetchBarberPendingCancellationDebts,
+  formatItemReason,
   type ClienteDebitoCancelamento,
 } from "@/lib/barberCancellationFee";
+import { BarberDebitosPendentesModal } from "./BarberDebitosPendentesModal";
 
 /* ─── Helper: WhatsApp SVG Icon ─── */
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -289,6 +291,7 @@ function ClientCancellationDebtScreen({
 }) {
   const queryClient = useQueryClient();
   const [releasing, setReleasing] = useState(false);
+  const [confirmReleaseOpen, setConfirmReleaseOpen] = useState(false);
 
   const { data: debt, isLoading } = useQuery({
     queryKey: ["client-pending-debt-screen", client.id],
@@ -310,12 +313,15 @@ function ClientCancellationDebtScreen({
       queryClient.invalidateQueries({ queryKey: ["client-pending-debt-screen", client.id] });
       queryClient.invalidateQueries({ queryKey: ["client-pending-debt", client.id] });
       queryClient.invalidateQueries({ queryKey: ["barber-pending-debts-list"] });
+      setConfirmReleaseOpen(false);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao liberar cliente");
     } finally {
       setReleasing(false);
     }
   };
+
+  const total = Number(debt?.total_pendente ?? debt?.valor_taxa ?? 0);
 
   return (
     <div className="pb-12 min-h-app bg-background text-foreground">
@@ -330,7 +336,7 @@ function ClientCancellationDebtScreen({
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             <span className="text-[12px] text-muted-foreground">Verificando débitos...</span>
           </div>
-        ) : debt ? (
+        ) : debt && total > 0 ? (
           <div className="space-y-4">
             {/* Card com status e valor */}
             <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-5 space-y-4 shadow-xs text-left">
@@ -344,9 +350,9 @@ function ClientCancellationDebtScreen({
               </div>
 
               <div>
-                <p className="text-[12px] text-muted-foreground">Valor da taxa de cancelamento</p>
+                <p className="text-[12px] text-muted-foreground">Total pendente a acertar</p>
                 <p className="text-[32px] font-extrabold text-foreground tracking-tight tabular-nums mt-0.5">
-                  R$ {debt.valor_taxa.toFixed(2).replace(".", ",")}
+                  R$ {total.toFixed(2).replace(".", ",")}
                 </p>
                 {debt.porcentagem_aplicada ? (
                   <p className="text-[11.5px] text-muted-foreground mt-0.5">
@@ -354,7 +360,7 @@ function ClientCancellationDebtScreen({
                   </p>
                 ) : (
                   <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                    Taxa fixa por cancelamento fora do prazo
+                    Taxa por cancelamento com menos de 2h ou falta (no-show)
                   </p>
                 )}
               </div>
@@ -371,7 +377,7 @@ function ClientCancellationDebtScreen({
                   <span className="font-semibold text-foreground">{debt.barbeiro_nome || "Barbearia"}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Cancelado em</span>
+                  <span className="text-muted-foreground">Data da ocorrência</span>
                   <span className="font-semibold text-foreground">
                     {format(new Date(debt.created_at), "dd/MM/yyyy 'às' HH:mm")}
                   </span>
@@ -379,20 +385,46 @@ function ClientCancellationDebtScreen({
               </div>
             </div>
 
+            {/* Histórico / discriminação dos itens de falta ou cancelamento */}
+            {debt.itens && debt.itens.length > 0 && (
+              <div className="rounded-2xl border border-border/30 bg-card p-4 space-y-2.5 text-left shadow-xs">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Motivo e detalhamento
+                </p>
+                <div className="divide-y divide-border/20">
+                  {debt.itens.map((it, idx) => (
+                    <div key={it.id || idx} className="py-2.5 flex items-center justify-between gap-3 text-[12.5px]">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground truncate">
+                          {formatItemReason(it)}
+                        </p>
+                        <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                          Status: <span className="capitalize">{it.status === "pendente" ? "Pendente" : it.status}</span>
+                        </p>
+                      </div>
+                      <span className="font-semibold tabular-nums text-foreground shrink-0">
+                        R$ {Number(it.valor_taxa || 0).toFixed(2).replace(".", ",")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Aviso explicativo */}
             <div className="p-3.5 rounded-xl bg-secondary/25 border border-border/30 text-left space-y-1">
               <p className="text-[12.5px] font-semibold text-foreground">
-                Regra de desbloqueio
+                Regra de desbloqueio do cliente
               </p>
               <p className="text-[11.5px] text-muted-foreground leading-relaxed">
-                O aplicativo deste cliente permanece bloqueado para novos agendamentos até que ele realize o pagamento via Pix no app dele, ou você dispense a taxa abaixo.
+                O aplicativo deste cliente permanece bloqueado para novos agendamentos até que ele realize o acerto via Pix no app dele, o valor seja somado em um agendamento presencial no balcão, ou você dispense a taxa abaixo.
               </p>
             </div>
 
             {/* Botão de Liberar */}
             <button
               type="button"
-              onClick={handleRelease}
+              onClick={() => setConfirmReleaseOpen(true)}
               disabled={releasing}
               className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-[13px] font-semibold flex items-center justify-center gap-2 shadow-xs transition-all disabled:opacity-50"
             >
@@ -401,7 +433,7 @@ function ClientCancellationDebtScreen({
               ) : (
                 <Unlock className="w-4 h-4" />
               )}
-              <span>Liberar cliente e remover taxa</span>
+              <span>Dispensar taxa (Liberar cliente)</span>
             </button>
           </div>
         ) : (
@@ -418,6 +450,47 @@ function ClientCancellationDebtScreen({
           </div>
         )}
       </div>
+
+      {/* AlertDialog de Confirmação para Dispensar Taxa */}
+      <AlertDialog open={confirmReleaseOpen} onOpenChange={setConfirmReleaseOpen}>
+        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background">
+          <AlertDialogHeader className="space-y-2 text-center sm:text-center">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400 mb-1">
+              <Unlock className="w-6 h-6 stroke-[1.8]" />
+            </div>
+            <AlertDialogTitle className="text-[17px] font-semibold tracking-tight text-foreground">
+              Dispensar taxa de {client.nome}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[12.5px] text-muted-foreground leading-relaxed">
+              A cobrança pendente de <strong className="text-foreground">R$ {total.toFixed(2).replace(".", ",")}</strong> será cancelada por cortesia e o aplicativo de <strong className="text-foreground">{client.nome}</strong> será desbloqueado imediatamente para novos agendamentos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="pt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmReleaseOpen(false)}
+              disabled={releasing}
+              className="flex-1 h-11 rounded-full bg-secondary border border-border/60 text-[13px] font-medium text-foreground hover:bg-secondary/80 transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleRelease}
+              disabled={releasing}
+              className="flex-1 h-11 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-semibold active:scale-[0.99] transition-all shadow-xs flex items-center justify-center gap-1.5"
+            >
+              {releasing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4" />
+              )}
+              <span>Confirmar</span>
+            </button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -549,6 +622,7 @@ export function BarberClientes({
   const [clientToConvert, setClientToConvert] = useState<BarberClient | null>(null);
   const [viewingAllVisitsClient, setViewingAllVisitsClient] = useState<BarberClient | null>(null);
   const [viewingDebtClient, setViewingDebtClient] = useState<BarberClient | null>(null);
+  const [debitosModalOpen, setDebitosModalOpen] = useState(false);
 
   /* Block dialog */
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
@@ -1670,6 +1744,30 @@ export function BarberClientes({
           <PendingPlanPayments barbeiroId={barberContext.barbeiroId} />
         )}
 
+        {/* ── Banner de Clientes com Taxas Pendentes ── */}
+        {barberDebtsList.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setDebitosModalOpen(true)}
+            className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-amber-500/[0.08] hover:bg-amber-500/[0.12] border border-amber-500/25 text-left transition-all active:scale-[0.99] shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <Banknote className="w-4 h-4 stroke-[2]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-semibold text-foreground leading-snug">
+                  {barberDebtsList.length} {barberDebtsList.length === 1 ? "cliente com taxa pendente" : "clientes com taxas pendentes"}
+                </p>
+                <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed truncate">
+                  Gerenciar débitos de cancelamento/falta e liberar clientes
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-amber-600/70 dark:text-amber-400/70 shrink-0" />
+          </button>
+        )}
+
         {/* ── Loading indicator ── */}
         {viewMode === "todos" && loadingAllClients && (
           <div className="flex items-center justify-center py-16">
@@ -1881,6 +1979,14 @@ export function BarberClientes({
           </div>
         )}
       </AnimatePresence>
+
+      <BarberDebitosPendentesModal
+        open={debitosModalOpen}
+        onOpenChange={setDebitosModalOpen}
+        barbeiroId={barberContext.barbeiroId}
+        tenantId={barberTenantId || barberContext.tenantId}
+        onDebtUpdated={invalidateClients}
+      />
     </div>
   );
 }
