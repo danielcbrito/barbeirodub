@@ -612,16 +612,16 @@ const mapWooviChargeToTransaction = (
 
   const blocked = !charge.released_at;
 
-  return [
+  const result: WooviTransaction[] = [
     {
       id: `c-${charge.id}`,
       type: "deposit",
-      value_centavos: netValueCentavos,
+      value_centavos: bruto,
       gross_centavos: bruto,
       fee_centavos: feeCentavos,
       status: blocked ? "Aguardando finalização do corte" : "Disponível",
       created_at,
-      description: blocked ? `Pix recebido · ${serviceName} (em espera)` : `Pagamento recebido (Pix) · ${serviceName}`,
+      description: "Pix recebido",
       blocked,
       receiptData: {
         id: `c-${charge.id}`,
@@ -643,6 +643,40 @@ const mapWooviChargeToTransaction = (
       },
     },
   ];
+
+  if (feeCentavos > 0) {
+    result.push({
+      id: `fee-${charge.id}`,
+      type: "withdraw",
+      value_centavos: feeCentavos,
+      gross_centavos: feeCentavos,
+      fee_centavos: 0,
+      status: blocked ? "Em espera" : "Concluído",
+      created_at,
+      description: "Taxa bancária Pix",
+      blocked,
+      receiptData: {
+        id: `fee-${charge.id}`,
+        endToEndId,
+        valueCentavos: feeCentavos,
+        grossCentavos: feeCentavos,
+        feeCentavos: 0,
+        createdAt: created_at,
+        pixKey,
+        pixKeyType,
+        recipientName: "WOOVI IP S.A.",
+        bankName: "Woovi IP S.A.",
+        originName: barberName || "Barbearia DUB",
+        originBank: barberBank,
+        originTaxId: "43.376.103/0001-09",
+        status: blocked ? "Em espera" : "Concluído",
+        type: "withdraw",
+        description: "Tarifa operacional bancária Pix (Woovi)",
+      },
+    });
+  }
+
+  return result;
 };
 
 type StoreApiAction = "woovi_get_balance" | "woovi_history" | "woovi_withdraw";
@@ -689,6 +723,7 @@ type WalletCacheEntry = {
 const walletCache = new Map<string, WalletCacheEntry>();
 
 const LOCAL_STORAGE_WALLET_KEY = (id: string) => `barbeiro_carteira_cache_${id}`;
+const LOCAL_STORAGE_TX_KEY = (id: string) => `barbeiro_carteira_tx_${id}`;
 
 const readLocalWalletCache = (id: string): WalletCacheEntry | null => {
   if (typeof window === "undefined") return null;
@@ -703,6 +738,25 @@ const writeLocalWalletCache = (id: string, entry: WalletCacheEntry) => {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(LOCAL_STORAGE_WALLET_KEY(id), JSON.stringify(entry));
+  } catch {}
+};
+
+const readLocalTransactions = (id: string): WooviTransaction[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_TX_KEY(id));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
+const writeLocalTransactions = (id: string, list: WooviTransaction[]) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LOCAL_STORAGE_TX_KEY(id), JSON.stringify(list));
   } catch {}
 };
 
@@ -846,7 +900,10 @@ export function CarteiraPage({
   const [savingPixKey, setSavingPixKey] = useState(false);
 
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [transactions, setTransactions] = useState<WooviTransaction[]>([]);
+  const [transactions, setTransactions] = useState<WooviTransaction[]>(() => {
+    const local = readLocalTransactions(barbeiroId);
+    return local.length > 0 ? local : (cached?.transactions ?? []);
+  });
   const [extratoOpen, setExtratoOpen] = useState(false);
   const [extratoFilter, setExtratoFilter] = useState<"all" | "deposit" | "withdraw">("all");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -1125,7 +1182,7 @@ export function CarteiraPage({
           fee_centavos: 0,
           status: displayStatus,
           created_at: s.created_at,
-          description: foiEstornado ? "Saque via Pix · Valor estornado" : "Saque via Pix",
+          description: foiEstornado ? "Saque Pix (estornado)" : "Saque Pix",
           receiptData: {
             id: `s-${s.id}`,
             endToEndId,
@@ -1144,7 +1201,7 @@ export function CarteiraPage({
             type: "withdraw" as const,
             description: foiEstornado
               ? "Saque não liquidado pela instituição bancária — valor estornado"
-              : "Saque via Pix",
+              : "Transferência Pix (Saque)",
           },
         };
       });
@@ -1156,40 +1213,80 @@ export function CarteiraPage({
 
       const mappedAgendamentos: WooviTransaction[] = (pixAgendamentos ?? [])
         .filter((apt: any) => !chargeAptIds.has(apt.id))
-        .map((apt: any) => {
+        .flatMap((apt: any) => {
           const aptCents = Math.round(Number(apt.preco_final ?? apt.preco ?? 0) * 100);
           const aptDate = apt.created_at || (apt.data ? `${apt.data}T${apt.hora || "12:00:00"}` : new Date().toISOString());
           const serviceName = apt.servicos?.nome || "Corte de Cabelo";
-          const clientName = (apt.user_id ? clientNameMap.get(apt.user_id) : null) || "Gabriel Santos Oliveira";
+          const clientName = (apt.user_id ? clientNameMap.get(apt.user_id) : null) || "Cliente";
           const aptCleanId = String(apt.id).replace(/\D/g, "").slice(-4).padStart(4, "8");
           const endToEndId = `E1823612020261018${aptCleanId}s98231012a4`;
           const isCompleted = apt.status === "completed" || apt.status === "concluido";
 
-          return {
-            id: `apt-${apt.id}`,
-            type: "deposit" as const,
-            value_centavos: aptCents,
-            status: isCompleted ? "Disponível" : "Aguardando finalização do corte",
-            created_at: aptDate,
-            description: isCompleted ? `Pagamento recebido (Pix) · ${serviceName}` : `Pix recebido · ${serviceName} (em espera)`,
-            blocked: !isCompleted,
-            receiptData: {
+          const items: WooviTransaction[] = [
+            {
               id: `apt-${apt.id}`,
-              endToEndId,
-              valueCentavos: aptCents,
-              createdAt: aptDate,
-              pixKey: barberKey,
-              pixKeyType: barberKeyType,
-              recipientName: barberDisplayName,
-              bankName: "Conta vinculada à chave Pix",
-              originName: clientName,
-              originBank: "Instituição do Pagador (via Pix)",
-              originTaxId: "•••.492.810-••",
-              status: isCompleted ? "Concluído" : "Em espera",
               type: "deposit" as const,
-              description: `Serviço: ${serviceName}`,
+              value_centavos: aptCents,
+              gross_centavos: aptCents,
+              fee_centavos: 40,
+              status: isCompleted ? "Disponível" : "Aguardando finalização do corte",
+              created_at: aptDate,
+              description: "Pix recebido",
+              blocked: !isCompleted,
+              receiptData: {
+                id: `apt-${apt.id}`,
+                endToEndId,
+                valueCentavos: Math.max(0, aptCents - 40),
+                grossCentavos: aptCents,
+                feeCentavos: 40,
+                createdAt: aptDate,
+                pixKey: barberKey,
+                pixKeyType: barberKeyType,
+                recipientName: barberDisplayName,
+                bankName: "Conta vinculada à chave Pix",
+                originName: clientName,
+                originBank: "Instituição do Pagador (via Pix)",
+                originTaxId: "•••.492.810-••",
+                status: isCompleted ? "Concluído" : "Em espera",
+                type: "deposit" as const,
+                description: `Serviço: ${serviceName}`,
+              },
             },
-          };
+          ];
+
+          if (isCompleted && aptCents > 40) {
+            items.push({
+              id: `fee-apt-${apt.id}`,
+              type: "withdraw" as const,
+              value_centavos: 40,
+              gross_centavos: 40,
+              fee_centavos: 0,
+              status: "Concluído",
+              created_at: aptDate,
+              description: "Taxa bancária Pix",
+              blocked: false,
+              receiptData: {
+                id: `fee-apt-${apt.id}`,
+                endToEndId,
+                valueCentavos: 40,
+                grossCentavos: 40,
+                feeCentavos: 0,
+                createdAt: aptDate,
+                pixKey: barberKey,
+                pixKeyType: barberKeyType,
+                recipientName: "WOOVI IP S.A.",
+                bankName: "Woovi IP S.A.",
+                originName: barberDisplayName,
+                originBank: barberBank,
+                originTaxId: "43.376.103/0001-09",
+                status: "Concluído",
+                type: "withdraw" as const,
+                description: "Tarifa operacional bancária Pix (Woovi)",
+              },
+            });
+          }
+
+          return items;
         });
 
       let localTransactions = [...mappedCharges, ...mappedSaques, ...mappedAgendamentos].sort((a, b) =>
@@ -1208,14 +1305,18 @@ export function CarteiraPage({
             id: "demo-dep-1",
             type: "deposit",
             value_centavos: 4500,
+            gross_centavos: 4500,
+            fee_centavos: 40,
             status: "Disponível",
             created_at: past1,
-            description: "Pagamento recebido (Pix) · Corte Degradê",
+            description: "Pix recebido",
             blocked: false,
             receiptData: {
               id: "demo-dep-1",
               endToEndId: "E18236120202610189842s98231012a4",
-              valueCentavos: 4500,
+              valueCentavos: 4460,
+              grossCentavos: 4500,
+              feeCentavos: 40,
               createdAt: past1,
               pixKey: barberKey || "•••.384.566-••",
               pixKeyType: barberKeyType,
@@ -1230,17 +1331,50 @@ export function CarteiraPage({
             },
           },
           {
+            id: "demo-fee-1",
+            type: "withdraw",
+            value_centavos: 40,
+            gross_centavos: 40,
+            fee_centavos: 0,
+            status: "Concluído",
+            created_at: past1,
+            description: "Taxa bancária Pix",
+            blocked: false,
+            receiptData: {
+              id: "demo-fee-1",
+              endToEndId: "E18236120202610189842s98231012a4",
+              valueCentavos: 40,
+              grossCentavos: 40,
+              feeCentavos: 0,
+              createdAt: past1,
+              pixKey: barberKey || "•••.384.566-••",
+              pixKeyType: barberKeyType,
+              recipientName: "WOOVI IP S.A.",
+              bankName: "Woovi IP S.A.",
+              originName: barberDisplayName,
+              originBank: "Nu Pagamentos S.A. (Nubank)",
+              originTaxId: "43.376.103/0001-09",
+              status: "Concluído",
+              type: "withdraw",
+              description: "Tarifa bancária Pix (Woovi)",
+            },
+          },
+          {
             id: "demo-wth-1",
             type: "withdraw",
             value_centavos: 12000,
+            gross_centavos: 12000,
+            fee_centavos: 0,
             status: "concluido",
             created_at: past2,
-            description: "Saque via Pix",
+            description: "Saque Pix",
             blocked: false,
             receiptData: {
               id: "demo-wth-1",
               endToEndId: "E18236120202610183145s19417021d2",
               valueCentavos: 12000,
+              grossCentavos: 12000,
+              feeCentavos: 0,
               createdAt: past2,
               pixKey: barberKey || "•••.384.566-••",
               pixKeyType: barberKeyType,
@@ -1300,7 +1434,7 @@ export function CarteiraPage({
           source?: string;
           configured?: boolean;
           error?: { status?: number; message?: string };
-        }>({ action: "woovi_get_balance" });
+        }>({ action: "woovi_get_balance", barbeiro_id: barbeiroId });
 
         if (!res.success || !res.data) {
           setBankStatus("disconnected");
@@ -1368,6 +1502,7 @@ export function CarteiraPage({
       try {
         const edgeRes = await invokeStoreApi<{ transactions: WooviTransaction[] }>({
           action: "woovi_history",
+          barbeiro_id: barbeiroId,
         });
         if (edgeRes.success && edgeRes.data?.transactions?.length) {
           edgeTransactions = edgeRes.data.transactions;
@@ -1378,16 +1513,20 @@ export function CarteiraPage({
 
       if (edgeTransactions && edgeTransactions.length > 0) {
         setTransactions(edgeTransactions);
+        writeLocalTransactions(barbeiroId, edgeTransactions);
       } else {
         const walletRes = await loadLocalWalletData();
         setTransactions(walletRes.transactions);
+        if (walletRes.transactions.length > 0) {
+          writeLocalTransactions(barbeiroId, walletRes.transactions);
+        }
       }
     } catch (fallbackErr) {
       console.error("[woovi] histórico local:", fallbackErr);
     } finally {
       setHistoryLoading(false);
     }
-  }, [loadLocalWalletData]);
+  }, [barbeiroId, loadLocalWalletData]);
 
   const openReceiptForTransaction = (t: WooviTransaction) => {
     try {
@@ -1503,7 +1642,10 @@ export function CarteiraPage({
         ]);
 
         if (!alive) return;
-        setTransactions(walletRes.transactions);
+        if (walletRes.transactions.length > 0) {
+          setTransactions(walletRes.transactions);
+          writeLocalTransactions(barbeiroId, walletRes.transactions);
+        }
 
         let avatar: string | null = null;
         const uid = authRes?.data?.user?.id;
@@ -1531,8 +1673,8 @@ export function CarteiraPage({
         walletCache.set(barbeiroId, newEntry);
         writeLocalWalletCache(barbeiroId, newEntry);
 
-        // Sincroniza saldo diretamente com a subconta no banco Woovi
-        await syncProviderBalance();
+        // Sincroniza saldo e extrato diretamente com a subconta no banco Woovi
+        await Promise.all([syncProviderBalance(), loadHistory()]);
       } catch (err) {
         console.error("[carteira] erro ao sincronizar carteira:", err);
       } finally {
@@ -1543,7 +1685,7 @@ export function CarteiraPage({
     return () => {
       alive = false;
     };
-  }, [barbeiroId, barbeiroNome, loadBarber, loadLocalWalletData, loadPinStatus, syncProviderBalance]);
+  }, [barbeiroId, barbeiroNome, loadBarber, loadHistory, loadLocalWalletData, loadPinStatus, syncProviderBalance]);
 
   useEffect(() => {
     const entry = walletCache.get(barbeiroId) || readLocalWalletCache(barbeiroId);
@@ -1900,6 +2042,7 @@ export function CarteiraPage({
         end_to_end_id?: string;
       }>({
         action: "woovi_withdraw",
+        barbeiro_id: barbeiroId,
         value_centavos: cents,
         ...(pinToSend ? { pin: pinToSend } : {}),
       });
@@ -1917,6 +2060,7 @@ export function CarteiraPage({
               end_to_end_id?: string;
             }>({
               action: "woovi_withdraw",
+              barbeiro_id: barbeiroId,
               value_centavos: cents,
             });
             if (retryResp.success) {
@@ -2377,11 +2521,11 @@ export function CarteiraPage({
                 </div>
               </div>
 
-              {/* 4. TRANSAÇÕES RECENTES (SOLTAS na página, sem quadrado/container externo) */}
+              {/* 4. EXTRATO (SOLTO na página, sem quadrado/container externo) */}
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-[14px] font-semibold tracking-tight text-foreground">
-                    Transações recentes
+                    Extrato
                   </h2>
                   {transactions.length > 0 && (
                     <button
@@ -2393,14 +2537,14 @@ export function CarteiraPage({
                   )}
                 </div>
 
-                {historyLoading ? (
+                {historyLoading && transactions.length === 0 ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                   </div>
                 ) : transactions.length === 0 ? (
                   <div className="py-6 text-center">
                     <p className="text-[13px] text-muted-foreground">
-                      Nenhuma transação recente.
+                      Nenhuma movimentação no extrato.
                     </p>
                   </div>
                 ) : (
@@ -2424,18 +2568,12 @@ export function CarteiraPage({
                             )}
                             <div className="min-w-0">
                               <p className="text-[13.5px] font-medium text-foreground truncate group-hover:text-foreground">
-                                {t.description ?? (isIn ? "Recebimento Pix" : "Saque via Pix")}
+                                {t.description ?? (isIn ? "Pix recebido" : "Saque Pix")}
                               </p>
                               <p className="text-[11.5px] text-muted-foreground">
                                 {formatTransactionDate(t.created_at)}
-                                {isIn && t.gross_centavos && t.gross_centavos !== t.value_centavos ? (
-                                  <> · Bruto {fmtBRL(t.gross_centavos)} (taxa Pix -{fmtBRL(t.fee_centavos ?? 40)})</>
-                                ) : null}
-                                {!isIn && t.receiptData?.bankName ? (
-                                  <> · {formatBankInstitution(t.receiptData.bankName, t.receiptData.endToEndId)}</>
-                                ) : null}
                                 {isBlocked && " · Em espera"}
-                                {t.status === "Estornado" && " · Estornado (não liquidado)"}
+                                {t.status === "Estornado" && " · Estornado"}
                               </p>
                             </div>
                           </div>
@@ -3105,18 +3243,12 @@ export function CarteiraPage({
                           )}
                           <div className="min-w-0">
                             <p className="text-[13.5px] font-medium text-foreground truncate group-hover:text-foreground">
-                              {t.description ?? (isIn ? "Recebimento Pix" : "Saque via Pix")}
+                              {t.description ?? (isIn ? "Pix recebido" : "Saque Pix")}
                             </p>
                             <p className="text-[11.5px] text-muted-foreground">
                               {formatTransactionDate(t.created_at)}
-                              {isIn && t.gross_centavos && t.gross_centavos !== t.value_centavos ? (
-                                <> · Bruto {fmtBRL(t.gross_centavos)} (taxa Pix -{fmtBRL(t.fee_centavos ?? 40)})</>
-                              ) : null}
-                              {!isIn && t.receiptData?.bankName ? (
-                                <> · {formatBankInstitution(t.receiptData.bankName, t.receiptData.endToEndId)}</>
-                              ) : null}
                               {isBlocked && " · Em espera"}
-                              {t.status === "Estornado" && " · Estornado (não liquidado)"}
+                              {t.status === "Estornado" && " · Estornado"}
                             </p>
                           </div>
                         </div>

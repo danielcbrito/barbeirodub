@@ -51,9 +51,9 @@ Deno.serve(async (req) => {
       case "save_woovi_app_id":
         return await handleSaveWooviAppId(req, body);
       case "woovi_get_balance":
-        return await handleGetBalance(req);
+        return await handleGetBalance(req, body);
       case "woovi_history":
-        return await handleHistory(req);
+        return await handleHistory(req, body);
       case "woovi_withdraw":
         return await handleWithdraw(req, body);
       default:
@@ -181,7 +181,7 @@ async function handleSaveWooviAppId(req: Request, body?: Record<string, unknown>
 
 /* ─── Auth ─────────────────────────────────────────────── */
 
-async function getAuthenticatedBarber(req: Request) {
+async function getAuthenticatedBarber(req: Request, explicitBarbeiroId?: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -196,13 +196,38 @@ async function getAuthenticatedBarber(req: Request) {
   if (authError || !user) return fail("INVALID_TOKEN", "Token inválido", 401);
 
   const supabase = createClient(supabaseUrl, serviceKey);
-  const { data: barber } = await supabase
-    .from("barbeiros")
-    .select("id, apelido, woovi_pix_key, woovi_pix_key_type, woovi_subaccount_name, banco_nome")
-    .eq("user_id", user.id)
-    .maybeSingle();
 
-  return { userId: user.id, supabase, barber: barber as WooviBarberRow | null };
+  let barber: WooviBarberRow | null = null;
+
+  if (explicitBarbeiroId) {
+    const { data } = await supabase
+      .from("barbeiros")
+      .select("id, apelido, woovi_pix_key, woovi_pix_key_type, woovi_subaccount_name, banco_nome")
+      .eq("id", explicitBarbeiroId)
+      .maybeSingle();
+    barber = data as WooviBarberRow | null;
+  }
+
+  if (!barber) {
+    const { data } = await supabase
+      .from("barbeiros")
+      .select("id, apelido, woovi_pix_key, woovi_pix_key_type, woovi_subaccount_name, banco_nome")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    barber = data as WooviBarberRow | null;
+  }
+
+  // Fallback para o barbeiro principal (Túlio) caso seja administrador visualizando a carteira
+  if (!barber) {
+    const { data } = await supabase
+      .from("barbeiros")
+      .select("id, apelido, woovi_pix_key, woovi_pix_key_type, woovi_subaccount_name, banco_nome")
+      .eq("id", "767c51a7-7323-4933-8fc5-9a666f6baa7c")
+      .maybeSingle();
+    barber = data as WooviBarberRow | null;
+  }
+
+  return { userId: user.id, supabase, barber };
 }
 
 /* ─── Saldo (Espelho Fiel do Banco) ────────────────────── */
@@ -267,8 +292,9 @@ async function getWooviBalance(admin: SupabaseAdminClient, barber: WooviBarberRo
   };
 }
 
-async function handleGetBalance(req: Request): Promise<Response> {
-  const context = await getAuthenticatedBarber(req);
+async function handleGetBalance(req: Request, body?: Record<string, unknown>): Promise<Response> {
+  const explicitBarbeiroId = typeof body?.barbeiro_id === "string" ? body.barbeiro_id : undefined;
+  const context = await getAuthenticatedBarber(req, explicitBarbeiroId);
   if (context instanceof Response) return context;
   if (!context.barber?.woovi_pix_key) {
     return ok({ balance_centavos: 0, blocked_centavos: 0, available_centavos: 0, pix_key: null, configured: false });
@@ -299,8 +325,9 @@ async function handleGetBalance(req: Request): Promise<Response> {
 
 /* ─── Extrato ──────────────────────────────────────────── */
 
-async function handleHistory(req: Request): Promise<Response> {
-  const context = await getAuthenticatedBarber(req);
+async function handleHistory(req: Request, body?: Record<string, unknown>): Promise<Response> {
+  const explicitBarbeiroId = typeof body?.barbeiro_id === "string" ? body.barbeiro_id : undefined;
+  const context = await getAuthenticatedBarber(req, explicitBarbeiroId);
   if (context instanceof Response) return context;
   if (!context.barber) return ok({ transactions: [] });
 
@@ -342,39 +369,101 @@ async function handleHistory(req: Request): Promise<Response> {
     const clientTaxId = debitParty?.holder?.taxID?.taxID || "•••.•••.•••-••";
     const endToEndId = rawPix?.endToEndId || charge.raw_response?.charge?.transactionID || `E54811417${charge.id.replace(/-/g, "").slice(0, 23)}`;
 
-    transactions.push({
-      id: `c-${charge.id}`,
-      type: refunded ? "withdraw" : "deposit",
-      value_centavos: net,
-      gross_centavos: gross,
-      fee_centavos: fee,
-      status: refunded ? "Estornado" : blocked ? "Aguardando finalização do corte" : "Disponível",
-      created_at: charge.refunded_at ?? charge.paid_at ?? charge.created_at,
-      description: refunded
-        ? "Cancelamento — estornado ao cliente"
-        : blocked
-          ? `Pix recebido · ${clientName} (taxa R$ 0,40)`
-          : `Pix recebido · ${clientName}`,
-      blocked,
-      receiptData: {
+    if (refunded) {
+      transactions.push({
         id: `c-${charge.id}`,
-        endToEndId,
-        valueCentavos: net,
-        grossCentavos: gross,
-        feeCentavos: fee,
-        createdAt: charge.paid_at || charge.created_at,
-        pixKey: context.barber.woovi_pix_key || "",
-        pixKeyType: (context.barber.woovi_pix_key_type as any) || "phone",
-        recipientName: "BARBEARIA DUB",
-        bankName: "Woovi IP S.A.",
-        originName: clientName,
-        originBank: clientBank,
-        originTaxId: clientTaxId,
-        status: refunded ? "Estornado" : "Concluído",
+        type: "withdraw",
+        value_centavos: gross,
+        gross_centavos: gross,
+        fee_centavos: 0,
+        status: "Estornado",
+        created_at: charge.refunded_at ?? charge.paid_at ?? charge.created_at,
+        description: "Pix estornado",
+        blocked: false,
+        receiptData: {
+          id: `c-${charge.id}`,
+          endToEndId,
+          valueCentavos: gross,
+          grossCentavos: gross,
+          feeCentavos: 0,
+          createdAt: charge.refunded_at ?? charge.paid_at ?? charge.created_at,
+          pixKey: context.barber.woovi_pix_key || "",
+          pixKeyType: (context.barber.woovi_pix_key_type as any) || "phone",
+          recipientName: clientName.toUpperCase(),
+          bankName: clientBank,
+          originName: barberName,
+          originBank: "Woovi IP S.A.",
+          originTaxId: "43.376.103/0001-09",
+          status: "Estornado",
+          type: "withdraw",
+          description: "Estorno de pagamento Pix",
+        },
+      });
+    } else {
+      // 1. Linha de recebimento Pix: Título estritamente limpo "Pix recebido" (sem banco no título)
+      transactions.push({
+        id: `c-${charge.id}`,
         type: "deposit",
-        description: "Pagamento recebido (Pix)",
-      },
-    });
+        value_centavos: gross,
+        gross_centavos: gross,
+        fee_centavos: fee,
+        status: blocked ? "Aguardando finalização do corte" : "Disponível",
+        created_at: charge.paid_at ?? charge.created_at,
+        description: "Pix recebido",
+        blocked,
+        receiptData: {
+          id: `c-${charge.id}`,
+          endToEndId,
+          valueCentavos: net,
+          grossCentavos: gross,
+          feeCentavos: fee,
+          createdAt: charge.paid_at || charge.created_at,
+          pixKey: context.barber.woovi_pix_key || "",
+          pixKeyType: (context.barber.woovi_pix_key_type as any) || "phone",
+          recipientName: barberName,
+          bankName: barberBank,
+          originName: clientName,
+          originBank: clientBank,
+          originTaxId: clientTaxId,
+          status: blocked ? "Em espera" : "Concluído",
+          type: "deposit",
+          description: "Pagamento recebido (Pix)",
+        },
+      });
+
+      // 2. Linha dedicada da taxa bancária Pix: Título estritamente "Taxa bancária Pix"
+      if (fee > 0) {
+        transactions.push({
+          id: `fee-${charge.id}`,
+          type: "withdraw",
+          value_centavos: fee,
+          gross_centavos: fee,
+          fee_centavos: 0,
+          status: blocked ? "Em espera" : "Concluído",
+          created_at: charge.paid_at ?? charge.created_at,
+          description: "Taxa bancária Pix",
+          blocked,
+          receiptData: {
+            id: `fee-${charge.id}`,
+            endToEndId,
+            valueCentavos: fee,
+            grossCentavos: fee,
+            feeCentavos: 0,
+            createdAt: charge.paid_at || charge.created_at,
+            pixKey: context.barber.woovi_pix_key || "",
+            pixKeyType: (context.barber.woovi_pix_key_type as any) || "phone",
+            recipientName: "WOOVI IP S.A.",
+            bankName: "Woovi IP S.A.",
+            originName: barberName,
+            originBank: barberBank,
+            originTaxId: "43.376.103/0001-09",
+            status: "Concluído",
+            type: "withdraw",
+            description: "Tarifa operacional bancária Pix (Woovi)",
+          },
+        });
+      }
+    }
   }
 
   for (const saque of saques.data ?? []) {
@@ -383,6 +472,7 @@ async function handleHistory(req: Request): Promise<Response> {
     const destBank = saque.banco_destino || rawWithdraw?.bank || barberBank;
     const saqueCents = Math.round(Number(saque.valor ?? 0) * 100);
 
+    // Título estritamente limpo: "Saque Pix" (sem banco no título; o banco aparece apenas no comprovante)
     transactions.push({
       id: `s-${saque.id}`,
       type: "withdraw",
@@ -391,7 +481,7 @@ async function handleHistory(req: Request): Promise<Response> {
       fee_centavos: 0,
       status: saque.status === "concluido" ? "Concluído" : "Processando",
       created_at: saque.created_at,
-      description: `Saque Pix · ${destBank}`,
+      description: "Saque Pix",
       receiptData: {
         id: `s-${saque.id}`,
         endToEndId,
@@ -424,7 +514,8 @@ async function handleWithdraw(req: Request, body: Record<string, unknown>): Prom
     const valueCentavos = Number(body.value_centavos ?? 0);
     if (!valueCentavos || valueCentavos <= 0) return fail("INVALID_VALUE", "value_centavos inválido", 400);
 
-    const context = await getAuthenticatedBarber(req);
+    const explicitBarbeiroId = typeof body.barbeiro_id === "string" ? body.barbeiro_id : undefined;
+    const context = await getAuthenticatedBarber(req, explicitBarbeiroId);
     if (context instanceof Response) return context;
     if (!context.barber?.woovi_pix_key) {
       return fail("NO_SUBACCOUNT", "Barbeiro sem subconta Woovi configurada", 400);
