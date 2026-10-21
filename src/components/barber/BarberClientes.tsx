@@ -555,8 +555,21 @@ export function BarberClientes({
   const queryMode = searchParams.get("mode") as ViewMode | null;
   const canAccessTenantClients = !!barberContext.isTenantAdmin && !!barberContext.tenantId;
   const resolvedForcedViewMode = forceViewMode || queryMode || undefined;
-  const showViewModeToggle = canAccessTenantClients && !forceViewMode && !queryMode;
-  const [viewMode, setViewMode] = useState<ViewMode>(resolvedForcedViewMode ?? "meus");
+  const showViewModeToggle = canAccessTenantClients && !forceViewMode && !queryMode && !!barberContext.barbeiroId;
+  const defaultView: ViewMode = canAccessTenantClients ? "todos" : "meus";
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    canAccessTenantClients ? (resolvedForcedViewMode ?? defaultView) : "meus"
+  );
+
+  useEffect(() => {
+    if (canAccessTenantClients) {
+      if (resolvedForcedViewMode) {
+        setViewMode(resolvedForcedViewMode);
+      }
+    } else {
+      setViewMode("meus");
+    }
+  }, [resolvedForcedViewMode, canAccessTenantClients]);
 
   /* ── Unit selector for "Todos" mode ── */
   const [units, setUnits] = useState<TenantUnit[]>([]);

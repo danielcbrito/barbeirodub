@@ -277,6 +277,16 @@ const Admin = () => {
           .maybeSingle();
         tenantId = tm?.tenant_id || null;
       }
+      if (!tenantId) {
+        const { data: ownedTenant } = await supabase
+          .from("tenants")
+          .select("id")
+          .eq("owner_user_id", session.user.id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        tenantId = ownedTenant?.id || null;
+      }
       const ctx: AdminContext = {
         barbeiroId: ownBarber?.id || null,
         apelido: ownBarber?.apelido || null,
@@ -427,8 +437,47 @@ const Admin = () => {
                   <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/admin" />} />
                   <Route path="confirmacoes-pendentes" element={<AdminConfirmacoesPendentes adminContext={adminContext} />} />
                 <Route path="barbeiros" element={<AdminBarbeiros />} />
-                <Route path="clientes" element={<AdminClientes />} />
-                <Route path="meus-clientes" element={adminContext?.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: adminContext.tenantId || null, isTenantAdmin: false, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: false }} basePath="/admin" forceViewMode="meus" /> : null} />
+                <Route
+                  path="clientes"
+                  element={
+                    adminContext ? (
+                      <BarberClientes
+                        barberContext={{
+                          barbeiroId: adminContext.barbeiroId || "",
+                          apelido: adminContext.apelido || "Admin",
+                          userId: adminContext.userId,
+                          tenantId: adminContext.tenantId || null,
+                          isTenantAdmin: true,
+                          deletedAt: null,
+                          graceDaysLeft: 0,
+                          canManageTenantWideClientBlock: true,
+                        }}
+                        basePath="/admin"
+                      />
+                    ) : null
+                  }
+                />
+                <Route
+                  path="meus-clientes"
+                  element={
+                    adminContext?.barbeiroId ? (
+                      <BarberClientes
+                        barberContext={{
+                          barbeiroId: adminContext.barbeiroId,
+                          apelido: adminContext.apelido || "",
+                          userId: adminContext.userId,
+                          tenantId: adminContext.tenantId || null,
+                          isTenantAdmin: true,
+                          deletedAt: null,
+                          graceDaysLeft: 0,
+                          canManageTenantWideClientBlock: true,
+                        }}
+                        basePath="/admin"
+                        forceViewMode="meus"
+                      />
+                    ) : null
+                  }
+                />
                 <Route path="config-barbearia" element={
                   adminContext ? (
                     <BarberConfigBarbearia
@@ -530,8 +579,47 @@ const Admin = () => {
                   <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/admin" />} />
                   <Route path="confirmacoes-pendentes" element={<AdminConfirmacoesPendentes adminContext={adminContext} />} />
                   <Route path="barbeiros" element={<AdminBarbeiros />} />
-                  <Route path="clientes" element={<AdminClientes />} />
-                  <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: adminContext.tenantId || null, isTenantAdmin: false, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: false }} basePath="/admin" forceViewMode="meus" /> : null} />
+                  <Route
+                    path="clientes"
+                    element={
+                      adminContext ? (
+                        <BarberClientes
+                          barberContext={{
+                            barbeiroId: adminContext.barbeiroId || "",
+                            apelido: adminContext.apelido || "Admin",
+                            userId: adminContext.userId,
+                            tenantId: adminContext.tenantId || null,
+                            isTenantAdmin: true,
+                            deletedAt: null,
+                            graceDaysLeft: 0,
+                            canManageTenantWideClientBlock: true,
+                          }}
+                          basePath="/admin"
+                        />
+                      ) : null
+                    }
+                  />
+                  <Route
+                    path="meus-clientes"
+                    element={
+                      adminContext.barbeiroId ? (
+                        <BarberClientes
+                          barberContext={{
+                            barbeiroId: adminContext.barbeiroId,
+                            apelido: adminContext.apelido || "",
+                            userId: adminContext.userId,
+                            tenantId: adminContext.tenantId || null,
+                            isTenantAdmin: true,
+                            deletedAt: null,
+                            graceDaysLeft: 0,
+                            canManageTenantWideClientBlock: true,
+                          }}
+                          basePath="/admin"
+                          forceViewMode="meus"
+                        />
+                      ) : null
+                    }
+                  />
                   <Route path="avaliacoes" element={<AdminAvaliacoes />} />
                   <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId} userName={adminContext?.apelido || "Admin"} />} />
                   <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} basePath="/admin/perfil" />} />
@@ -566,7 +654,6 @@ const Admin = () => {
                       Sua conta de administrador não está vinculada a um barbeiro, então não há carteira disponível.
                     </div>
                   )} />
-                  <Route path="meus-clientes" element={adminContext?.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: null, isTenantAdmin: false, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: false }} basePath="/admin" forceViewMode="meus" /> : null} />
                   <Route path="config-barbearia" element={
                     adminContext ? (
                       <BarberConfigBarbearia

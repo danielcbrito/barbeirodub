@@ -352,19 +352,21 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
         /* silencioso — emails são opcionais */
       }
 
-      /* ── 8. Montar lista final, filtrando barbeiros ── */
-      const clientsData: BarberClient[] = (profiles || [])
-        .filter((profile) => !barberUserIds.includes(profile.id))
-        .map((profile) => {
-          const stats = clientMap.get(profile.id);
-          const userPoints = pontos?.find((p) => p.user_id === profile.id);
+      /* ── 8. Montar lista final, mapeando todos os IDs de clientes ── */
+      const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+      const clientsData: BarberClient[] = userIds
+        .filter((uid) => !barberUserIds.includes(uid))
+        .map((uid) => {
+          const profile = profileMap.get(uid);
+          const stats = clientMap.get(uid);
+          const userPoints = pontos?.find((p) => p.user_id === uid);
           const userCredits =
             creditos
-              ?.filter((c) => c.user_id === profile.id)
+              ?.filter((c) => c.user_id === uid)
               .reduce((sum, c) => sum + (c.valor || 0), 0) || 0;
-          const userData = usersMap[profile.id];
+          const userData = usersMap[uid];
 
-          const details = blockDetailsMap[profile.id] || [];
+          const details = blockDetailsMap[uid] || [];
           const isBlocked = details.some(
             (d) =>
               d.scope === "tenant" ||
@@ -373,19 +375,19 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
           );
 
           return {
-            id: profile.id,
-            nome: profile.nome || "Sem nome",
-            telefone: profile.telefone || null,
+            id: uid,
+            nome: profile?.nome || "Cliente",
+            telefone: profile?.telefone || null,
             email: userData?.email || null,
             total_agendamentos: stats?.count || 0,
             agendamentos_mes: stats?.monthCount || 0,
             ultimo_agendamento: stats?.lastDate || null,
             pontos: userPoints?.pontos || 0,
-            created_at: tenantRegistrationMap[profile.id] || stats?.firstCreatedAt || profile.created_at,
+            created_at: tenantRegistrationMap[uid] || stats?.firstCreatedAt || profile?.created_at || new Date().toISOString(),
             creditos: userCredits,
             blocked: isBlocked,
             blockDetails: details,
-            activePlan: activePlanMap[profile.id] || null,
+            activePlan: activePlanMap[uid] || null,
           };
         });
 
@@ -497,21 +499,23 @@ export async function fetchTenantClientes(
 
   if (allClientIds.length === 0) return [];
 
-  // LOTE 3 (PARALELO): Profiles, Pontos e Assinaturas
-  const [profilesRes, pontosRes, assinaturasRes] = await Promise.all([
+  // LOTE 3 (PARALELO): Profiles, Pontos, Créditos, Assinaturas e Emails
+  const [profilesRes, pontosRes, creditosRes, assinaturasRes, usersMapRes] = await Promise.all([
     supabase.from("profiles").select("id, nome, telefone, created_at").in("id", allClientIds),
     supabase.from("pontos").select("user_id, pontos").in("user_id", allClientIds),
+    supabase.from("creditos").select("user_id, valor, usado").in("user_id", allClientIds).eq("usado", false),
     supabase
       .from("assinaturas")
       .select("id, user_id, status, payment_method, cash_payment_confirmed, barbeiro_id, created_at, updated_at, next_billing_date, ciclo_inicio, ciclo_fim, usos_ciclo_atual, plano:planos(nome, preco_mensal, limite_agendamentos_mes, tenant_id)")
       .in("user_id", allClientIds)
       .in("status", ["active", "pending_cash", "pending_renewal", "suspended"])
       .order("created_at", { ascending: false }),
+    invokeAuthenticatedFunction("manage-clients", { body: { action: "list" } }).catch(() => ({ data: { users: {} } })),
   ]);
 
   const profiles = profilesRes.data || [];
-  const userIds = profiles.map((p) => p.id);
-  if (userIds.length === 0) return [];
+  const profileMap = new Map(profiles.map((p) => [p.id, p]));
+  const usersMap: Record<string, { email?: string }> = (usersMapRes as any)?.data?.users || {};
 
   // LOTE 4: Usos de plano (se houver assinaturas)
   const tenantAssinaturas = (assinaturasRes.data || []).filter(
@@ -583,9 +587,15 @@ export async function fetchTenantClientes(
     pontosMap.set(pt.user_id, pt.pontos || 0);
   }
 
-  const result: BarberClient[] = profiles.map((p) => {
-    const stats = clientStats.get(p.id);
-    const details = blockMap[p.id] || [];
+  const creditosMap = new Map<string, number>();
+  for (const cr of creditosRes.data || []) {
+    creditosMap.set(cr.user_id, (creditosMap.get(cr.user_id) || 0) + (cr.valor || 0));
+  }
+
+  const result: BarberClient[] = allClientIds.map((uid) => {
+    const p = profileMap.get(uid);
+    const stats = clientStats.get(uid);
+    const details = blockMap[uid] || [];
     const isBlocked = details.some(
       (d) =>
         d.scope === "tenant" ||
@@ -593,19 +603,19 @@ export async function fetchTenantClientes(
         (d.scope === "barber" && currentBarbeiroId && d.barbeiro_id === currentBarbeiroId)
     );
     return {
-      id: p.id,
-      nome: p.nome || "Sem nome",
-      telefone: p.telefone || null,
-      email: null,
+      id: uid,
+      nome: p?.nome || "Cliente",
+      telefone: p?.telefone || null,
+      email: usersMap[uid]?.email || null,
       total_agendamentos: stats?.count || 0,
       agendamentos_mes: stats?.monthCount || 0,
       ultimo_agendamento: stats?.lastDate || null,
-      pontos: pontosMap.get(p.id) || 0,
-      created_at: tenantRegistrationMap[p.id] || p.created_at,
-      creditos: 0,
+      pontos: pontosMap.get(uid) || 0,
+      created_at: tenantRegistrationMap[uid] || p?.created_at || new Date().toISOString(),
+      creditos: creditosMap.get(uid) || 0,
       blocked: isBlocked,
       blockDetails: details,
-      activePlan: planMap[p.id] || null,
+      activePlan: planMap[uid] || null,
     };
   });
 
