@@ -1224,12 +1224,11 @@ export default function AdminHorarios({
               const uId = resolvedUnidadeId;
 
               const configsToSave = nextConfigs.filter(c => allDaysToUpdate.includes(c.dia_semana));
+              const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
 
               if (bId) {
-                const promises = configsToSave.map(c =>
-                  saveBarberScheduleMutation.mutateAsync({
-                    barbeiroId: bId,
-                    dia_semana: c.dia_semana,
+                const promises = configsToSave.map(async (c) => {
+                  const payload = {
                     aberto: c.aberto,
                     hora_abertura: c.hora_abertura || DEFAULT_OPEN_TIME,
                     hora_fechamento: c.hora_fechamento || DEFAULT_CLOSE_TIME,
@@ -1237,8 +1236,22 @@ export default function AdminHorarios({
                     hora_almoco_fim: sanitize(c.hora_almoco_fim),
                     delay_entre_servicos: c.delay_entre_servicos,
                     slot_interval_minutes: c.slot_interval_minutes,
-                  })
-                );
+                  };
+                  const upd = await (supabase as any)
+                    .from('configuracoes_horario_barbeiro')
+                    .update(payload)
+                    .eq('barbeiro_id', bId)
+                    .eq('dia_semana', c.dia_semana)
+                    .select();
+                  if (upd.error) throw upd.error;
+                  if (!upd.data || upd.data.length === 0) {
+                    const ins = await (supabase as any)
+                      .from('configuracoes_horario_barbeiro')
+                      .insert({ ...payload, barbeiro_id: bId, dia_semana: c.dia_semana })
+                      .select();
+                    if (ins.error) throw ins.error;
+                  }
+                });
                 await Promise.all(promises);
               } else {
                 if (!tId) throw new Error('Não foi possível identificar a barbearia');

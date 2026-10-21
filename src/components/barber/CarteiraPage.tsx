@@ -737,6 +737,7 @@ type WalletCacheEntry = {
   transactions: WooviTransaction[];
   avatarUrl: string | null;
   hasPin: boolean;
+  timestamp?: number;
 };
 const walletCache = new Map<string, WalletCacheEntry>();
 
@@ -778,7 +779,7 @@ const writeLocalTransactions = (id: string, list: WooviTransaction[]) => {
   } catch {}
 };
 
-function withTimeout<T>(promise: Promise<T>, ms = 3000, fallback: T): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T> | Promise<T>, ms = 3000, fallback: T): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
@@ -1099,8 +1100,7 @@ export function CarteiraPage({
             .in("status", VISIBLE_WOOVI_STATUSES)
             .order("created_at", { ascending: false })
             .limit(80)
-            .then((r) => r)
-            .catch((err) => {
+            .then((r) => r, (err) => {
               console.warn("[carteira] erro woovi_charges:", err);
               return { data: null, error: err };
             }),
@@ -1114,8 +1114,7 @@ export function CarteiraPage({
             .eq("barbeiro_id", barbeiroId)
             .order("created_at", { ascending: false })
             .limit(40)
-            .then((r) => r)
-            .catch((err) => {
+            .then((r) => r, (err) => {
               console.warn("[carteira] erro saques:", err);
               return { data: null, error: err };
             }),
@@ -1130,8 +1129,7 @@ export function CarteiraPage({
             .eq("payment_method", "pix")
             .order("created_at", { ascending: false })
             .limit(40)
-            .then((r) => r)
-            .catch((err) => {
+            .then((r) => r, (err) => {
               console.warn("[carteira] erro agendamentos pix:", err);
               return { data: null, error: err };
             }),
@@ -1145,8 +1143,7 @@ export function CarteiraPage({
             .eq("barbeiro_id", barbeiroId)
             .order("created_at", { ascending: false })
             .limit(50)
-            .then((r) => r)
-            .catch((err) => {
+            .then((r) => r, (err) => {
               console.warn("[carteira] erro transacoes_financeiras:", err);
               return { data: null, error: err };
             }),
@@ -1545,6 +1542,8 @@ export function CarteiraPage({
         const res = await invokeStoreApi<{
           balance_centavos?: number;
           blocked_centavos?: number;
+          available_centavos?: number;
+          bank_connected?: boolean;
           source?: string;
           configured?: boolean;
           error?: { status?: number; message?: string };

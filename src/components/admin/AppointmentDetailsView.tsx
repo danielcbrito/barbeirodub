@@ -18,6 +18,7 @@ import {
   Scissors,
   History,
   Star,
+  AlertCircle,
   CheckCircle2,
   Check,
   XCircle,
