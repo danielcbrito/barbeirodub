@@ -82,6 +82,51 @@ export function getSubscriptionRelevanceScore(sub: any): number {
   return statusScore * 1e12 + Math.max(billingTime, updatedTime, createdTime);
 }
 
+/** Validador rigoroso de UUID para evitar erro 22P02 no PostgREST */
+export const isValidUuid = (id: any): id is string =>
+  typeof id === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
+
+/** Divide listas em lotes seguros para evitar URLs excessivamente longas no PostgREST */
+export function chunkArray<T>(arr: T[], size = 50): T[][] {
+  if (!arr || arr.length === 0) return [];
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Resolve o melhor nome e telefone do cliente, combinando os dados da tabela
+ * profiles com metadados do auth (Google OAuth, cadastro por email, etc).
+ */
+export function resolveClientNameAndPhone(
+  profile: { nome?: string | null; telefone?: string | null } | undefined | null,
+  userData: { email?: string; phone?: string; nome?: string | null } | undefined | null
+): { nome: string; telefone: string | null } {
+  const rawProfileNome = profile?.nome?.trim();
+  const rawMetaNome = userData?.nome?.trim();
+  const isGenericProfile = !rawProfileNome || rawProfileNome.toLowerCase() === "cliente";
+  const isEmailProfile = !!rawProfileNome && rawProfileNome.includes("@");
+
+  let nome = "Cliente";
+  if (!isGenericProfile && !isEmailProfile) {
+    nome = rawProfileNome!;
+  } else if (rawMetaNome && rawMetaNome.toLowerCase() !== "cliente" && !rawMetaNome.includes("@")) {
+    nome = rawMetaNome;
+  } else if (!isGenericProfile) {
+    nome = rawProfileNome!;
+  } else if (rawMetaNome) {
+    nome = rawMetaNome;
+  } else if (userData?.email) {
+    nome = userData.email.split("@")[0];
+  }
+
+  const telefone = profile?.telefone?.trim() || userData?.phone?.trim() || null;
+  return { nome, telefone };
+}
+
 /**
  * Hook de clientes do barbeiro — consolida agendamentos, perfis,
  * pontos, créditos e status de bloqueio em uma lista unificada.
@@ -214,7 +259,7 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
           ...subUserIds,
           ...manualClientIds,
         ]),
-      ].filter((id) => !barberUserIds.includes(id));
+      ].filter((id): id is string => isValidUuid(id) && !barberUserIds.includes(id));
 
       if (combinedUserIds.length === 0) {
         return { clients: [], tenantId, loyaltyEnabled };
@@ -227,6 +272,7 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
         { count: number; monthCount: number; lastDate: string | null; firstCreatedAt: string | null }
       >();
       for (const ag of agendamentos || []) {
+        if (!ag.user_id || !isValidUuid(ag.user_id)) continue;
         const isThisMonth = typeof ag.data === "string" && ag.data.startsWith(monthPrefix);
         const existing = clientMap.get(ag.user_id);
         if (!existing) {
@@ -244,28 +290,38 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
         }
       }
       for (const extraId of [...subUserIds, ...manualClientIds]) {
-        if (!clientMap.has(extraId)) {
+        if (isValidUuid(extraId) && !clientMap.has(extraId)) {
           clientMap.set(extraId, { count: 0, monthCount: 0, lastDate: null, firstCreatedAt: null });
         }
       }
 
       const userIds = combinedUserIds;
 
-      /* ── 6. Batch fetch perfis, pontos, créditos e assinaturas ativas ── */
-      const [{ data: profiles }, { data: pontos }, { data: creditos }, { data: assinaturas }] =
+      /* ── 6. Batch fetch perfis, pontos, créditos e assinaturas em lotes seguros ── */
+      const userBatches = chunkArray(userIds, 50);
+      const [profilesResList, pontosResList, creditosResList, assinaturasResList] =
         await Promise.all([
-          supabase.from("profiles").select("id, nome, telefone, created_at").in("id", userIds),
-          supabase.from("pontos").select("user_id, pontos").in("user_id", userIds),
-          supabase.from("creditos").select("user_id, valor, usado").in("user_id", userIds).eq("usado", false),
-          supabase
-            .from("assinaturas")
-            .select(
-              "id, user_id, status, payment_method, cash_payment_confirmed, barbeiro_id, created_at, updated_at, next_billing_date, ciclo_inicio, ciclo_fim, usos_ciclo_atual, plano:planos(nome, preco_mensal, limite_agendamentos_mes, tenant_id)"
+          Promise.all(userBatches.map((b) => supabase.from("profiles").select("id, nome, telefone, created_at").in("id", b))),
+          Promise.all(userBatches.map((b) => supabase.from("pontos").select("user_id, pontos").in("user_id", b))),
+          Promise.all(userBatches.map((b) => supabase.from("creditos").select("user_id, valor, usado").in("user_id", b).eq("usado", false))),
+          Promise.all(
+            userBatches.map((b) =>
+              supabase
+                .from("assinaturas")
+                .select(
+                  "id, user_id, status, payment_method, cash_payment_confirmed, barbeiro_id, created_at, updated_at, next_billing_date, ciclo_inicio, ciclo_fim, usos_ciclo_atual, plano:planos(nome, preco_mensal, limite_agendamentos_mes, tenant_id)"
+                )
+                .in("user_id", b)
+                .in("status", ["active", "pending_cash", "pending_renewal", "suspended"])
+                .order("created_at", { ascending: false })
             )
-            .in("user_id", userIds)
-            .in("status", ["active", "pending_cash", "pending_renewal", "suspended"])
-            .order("created_at", { ascending: false }),
+          ),
         ]);
+
+      const profiles = profilesResList.flatMap((r) => r.data || []);
+      const pontos = pontosResList.flatMap((r) => r.data || []);
+      const creditos = creditosResList.flatMap((r) => r.data || []);
+      const assinaturas = assinaturasResList.flatMap((r) => r.data || []);
 
       /* ── 6b. Filtrar assinaturas pelo tenant do barbeiro e contar usos ── */
       const tenantAssinaturas = (assinaturas || []).filter((a: any) => {
@@ -341,21 +397,21 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
         };
       }
 
-      /* ── 7. Emails via edge function ── */
-      let usersMap: Record<string, { email?: string }> = {};
+      /* ── 7. Emails e metadados de autenticação via edge function ── */
+      let usersMap: Record<string, { email?: string; phone?: string; nome?: string | null }> = {};
       try {
         const response = await invokeAuthenticatedFunction("manage-clients", {
           body: { action: "list" },
         });
         if (response.data?.users) usersMap = response.data.users;
       } catch {
-        /* silencioso — emails são opcionais */
+        /* silencioso — metadados auth são opcionais */
       }
 
       /* ── 8. Montar lista final, mapeando todos os IDs de clientes ── */
       const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
       const clientsData: BarberClient[] = userIds
-        .filter((uid) => !barberUserIds.includes(uid))
+        .filter((uid) => isValidUuid(uid) && !barberUserIds.includes(uid))
         .map((uid) => {
           const profile = profileMap.get(uid);
           const stats = clientMap.get(uid);
@@ -374,10 +430,12 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
               (d.scope === "barber" && d.barbeiro_id === barbeiroId)
           );
 
+          const { nome, telefone } = resolveClientNameAndPhone(profile, userData);
+
           return {
             id: uid,
-            nome: profile?.nome || "Cliente",
-            telefone: profile?.telefone || null,
+            nome,
+            telefone,
             email: userData?.email || null,
             total_agendamentos: stats?.count || 0,
             agendamentos_mes: stats?.monthCount || 0,
@@ -494,31 +552,42 @@ export async function fetchTenantClientes(
   const subClientIds = (tenantSubsRes || []).map((s: any) => s.user_id);
 
   const allClientIds = [...new Set([...agClientIds, ...manualClientIds, ...subClientIds])].filter(
-    (id) => !barberUserIds.has(id)
+    (id): id is string => isValidUuid(id) && !barberUserIds.has(id)
   );
 
   if (allClientIds.length === 0) return [];
 
-  // LOTE 3 (PARALELO): Profiles, Pontos, Créditos, Assinaturas e Emails
-  const [profilesRes, pontosRes, creditosRes, assinaturasRes, usersMapRes] = await Promise.all([
-    supabase.from("profiles").select("id, nome, telefone, created_at").in("id", allClientIds),
-    supabase.from("pontos").select("user_id, pontos").in("user_id", allClientIds),
-    supabase.from("creditos").select("user_id, valor, usado").in("user_id", allClientIds).eq("usado", false),
-    supabase
-      .from("assinaturas")
-      .select("id, user_id, status, payment_method, cash_payment_confirmed, barbeiro_id, created_at, updated_at, next_billing_date, ciclo_inicio, ciclo_fim, usos_ciclo_atual, plano:planos(nome, preco_mensal, limite_agendamentos_mes, tenant_id)")
-      .in("user_id", allClientIds)
-      .in("status", ["active", "pending_cash", "pending_renewal", "suspended"])
-      .order("created_at", { ascending: false }),
+  // LOTE 3 (PARALELO): Profiles, Pontos, Créditos, Assinaturas e Emails em lotes seguros
+  const clientBatches = chunkArray(allClientIds, 50);
+  const [profilesResList, pontosResList, creditosResList, assinaturasResList, usersMapRes] = await Promise.all([
+    Promise.all(clientBatches.map((b) => supabase.from("profiles").select("id, nome, telefone, created_at").in("id", b))),
+    Promise.all(clientBatches.map((b) => supabase.from("pontos").select("user_id, pontos").in("user_id", b))),
+    Promise.all(clientBatches.map((b) => supabase.from("creditos").select("user_id, valor, usado").in("user_id", b).eq("usado", false))),
+    Promise.all(
+      clientBatches.map((b) =>
+        supabase
+          .from("assinaturas")
+          .select(
+            "id, user_id, status, payment_method, cash_payment_confirmed, barbeiro_id, created_at, updated_at, next_billing_date, ciclo_inicio, ciclo_fim, usos_ciclo_atual, plano:planos(nome, preco_mensal, limite_agendamentos_mes, tenant_id)"
+          )
+          .in("user_id", b)
+          .in("status", ["active", "pending_cash", "pending_renewal", "suspended"])
+          .order("created_at", { ascending: false })
+      )
+    ),
     invokeAuthenticatedFunction("manage-clients", { body: { action: "list" } }).catch(() => ({ data: { users: {} } })),
   ]);
 
-  const profiles = profilesRes.data || [];
+  const profiles = profilesResList.flatMap((r) => r.data || []);
   const profileMap = new Map(profiles.map((p) => [p.id, p]));
-  const usersMap: Record<string, { email?: string }> = (usersMapRes as any)?.data?.users || {};
+  const usersMap: Record<string, { email?: string; phone?: string; nome?: string | null }> =
+    (usersMapRes as any)?.data?.users || {};
+  const pontosList = pontosResList.flatMap((r) => r.data || []);
+  const creditosList = creditosResList.flatMap((r) => r.data || []);
+  const allAssinaturas = assinaturasResList.flatMap((r) => r.data || []);
 
   // LOTE 4: Usos de plano (se houver assinaturas)
-  const tenantAssinaturas = (assinaturasRes.data || []).filter(
+  const tenantAssinaturas = allAssinaturas.filter(
     (a: any) => a.plano && a.plano.tenant_id === tenantId
   );
   const assinaturaIds = tenantAssinaturas.map((a: any) => a.id);
@@ -571,6 +640,7 @@ export async function fetchTenantClientes(
   const monthPrefix = new Date().toISOString().slice(0, 7);
   const clientStats = new Map<string, { count: number; monthCount: number; lastDate: string | null }>();
   for (const ag of agendamentos || []) {
+    if (!ag.user_id || !isValidUuid(ag.user_id)) continue;
     const isThisMonth = typeof ag.data === "string" && ag.data.startsWith(monthPrefix);
     const existing = clientStats.get(ag.user_id);
     if (!existing) {
@@ -583,12 +653,12 @@ export async function fetchTenantClientes(
   }
 
   const pontosMap = new Map<string, number>();
-  for (const pt of pontosRes.data || []) {
+  for (const pt of pontosList) {
     pontosMap.set(pt.user_id, pt.pontos || 0);
   }
 
   const creditosMap = new Map<string, number>();
-  for (const cr of creditosRes.data || []) {
+  for (const cr of creditosList) {
     creditosMap.set(cr.user_id, (creditosMap.get(cr.user_id) || 0) + (cr.valor || 0));
   }
 
@@ -602,11 +672,14 @@ export async function fetchTenantClientes(
         d.scope === "unit" ||
         (d.scope === "barber" && currentBarbeiroId && d.barbeiro_id === currentBarbeiroId)
     );
+    const userData = usersMap[uid];
+    const { nome, telefone } = resolveClientNameAndPhone(p, userData);
+
     return {
       id: uid,
-      nome: p?.nome || "Cliente",
-      telefone: p?.telefone || null,
-      email: usersMap[uid]?.email || null,
+      nome,
+      telefone,
+      email: userData?.email || null,
       total_agendamentos: stats?.count || 0,
       agendamentos_mes: stats?.monthCount || 0,
       ultimo_agendamento: stats?.lastDate || null,

@@ -140,11 +140,17 @@ serve(async (req) => {
 
         if (listError) throw listError;
 
-        const batch = (listData?.users || []).map((u) => ({
-          id: u.id,
-          email: u.email,
-          phone: u.phone,
-        }));
+        const batch = (listData?.users || []).map((u) => {
+          const meta = u.user_metadata || {};
+          const metaNome = meta.nome || meta.name || meta.full_name || null;
+          const metaPhone = u.phone || meta.telefone || meta.phone || null;
+          return {
+            id: u.id,
+            email: u.email,
+            phone: metaPhone,
+            nome: metaNome,
+          };
+        });
 
         allUsers = allUsers.concat(batch);
 
@@ -154,9 +160,9 @@ serve(async (req) => {
       }
 
       const usersMap = allUsers.reduce((acc, u) => {
-        acc[u.id] = { email: u.email, phone: u.phone };
+        acc[u.id] = { email: u.email, phone: u.phone, nome: u.nome };
         return acc;
-      }, {} as Record<string, { email?: string; phone?: string }>);
+      }, {} as Record<string, { email?: string; phone?: string; nome?: string | null }>);
 
       return new Response(
         JSON.stringify({ users: usersMap }),
