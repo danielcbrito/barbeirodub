@@ -2137,11 +2137,14 @@ export function CarteiraPage({
       barberRef.current = nextBarber;
 
       // 4. Salva no cache local para que a transição seja instantânea e permanente
+      const prevEntry = walletCache.get(barbeiroId) || readLocalWalletCache(barbeiroId);
       writeLocalWalletCache(barbeiroId, {
         barber: nextBarber,
-        balanceCentavos: 0,
-        blockedCentavos: 0,
-        transactions: [],
+        balanceCentavos: prevEntry?.balanceCentavos ?? 0,
+        blockedCentavos: prevEntry?.blockedCentavos ?? 0,
+        transactions: prevEntry?.transactions ?? [],
+        avatarUrl: prevEntry?.avatarUrl ?? null,
+        hasPin: prevEntry?.hasPin ?? false,
         timestamp: Date.now(),
       });
 
