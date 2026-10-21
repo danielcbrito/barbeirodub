@@ -566,7 +566,7 @@ export function formatItemReason(item?: any): string {
 export function extractDebtFromAppointment(appointment?: {
   preco?: number | null;
   observacoes?: string | null;
-  servico?: { preco?: number | null } | null;
+  servico?: { preco?: number | null; nome?: string; duracao_minutos?: number } | null;
 }): AppointmentDebtBreakdown {
   const totalPrice = Number(appointment?.preco || 0);
   const obs = appointment?.observacoes || "";
