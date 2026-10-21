@@ -11,6 +11,7 @@ import VacationMode from '@/components/admin/VacationMode';
 import HorariosExcepcionais from '@/components/admin/HorariosExcepcionais';
 import BarberVacationMode from '@/components/barber/BarberVacationMode';
 import { useSaveSlotInterval } from '@/hooks/useHorariosMutations';
+import { useTenantBarbersCount } from '@/hooks/useTenantBarbersCount';
 
 
 interface HorarioConfig {
@@ -42,6 +43,7 @@ interface AdminHorariosProps {
   autoSaveOnDayExit?: boolean;
   onViewModeChange?: (mode: 'list' | 'day' | 'advanced') => void;
   companyMode?: boolean;
+  unifiedMode?: boolean;
   tenantId?: string;
   unidadeId?: string;
   /** Esconde a seta de voltar no cabeçalho da tela do dia. */
@@ -140,6 +142,7 @@ export default function AdminHorarios({
   autoSaveOnDayExit,
   onViewModeChange,
   companyMode,
+  unifiedMode,
   tenantId,
   unidadeId,
   dayHideBackArrow,
@@ -160,6 +163,17 @@ export default function AdminHorarios({
   const [tenantSlot, setTenantSlot] = useState<number | null>(null);
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(tenantId ?? null);
   const [resolvedUnidadeId, setResolvedUnidadeId] = useState<string | null>(unidadeId ?? null);
+
+  const effectiveTenantId = tenantId || resolvedTenantId;
+  const { count: barbersCount, isSingleBarber, singleBarbeiroId } = useTenantBarbersCount(effectiveTenantId);
+
+  // Modo unificado: Quando a barbearia tem apenas 1 barbeiro (ou unifiedMode é forçado),
+  // as configurações de horário são unificadas (atualizam o barbeiro e a barbearia no backend).
+  // Quando há 2 ou mais barbeiros, as opções são separadas e independentes.
+  const isUnified = unifiedMode !== undefined
+    ? unifiedMode
+    : (isSingleBarber && barbersCount > 0);
+  const targetBarbeiroId = barbeiroId || (isUnified ? singleBarbeiroId : undefined);
 
   useEffect(() => {
     if (tenantId) setResolvedTenantId(tenantId);
@@ -317,7 +331,7 @@ export default function AdminHorarios({
   }, [resetToListSignal]);
 
   useEffect(() => {
-    if (selectedDay !== null) {
+    if (selectedDay !== null || applyToWeek !== null) {
       onViewModeChange?.('day');
       return;
     }
@@ -328,23 +342,29 @@ export default function AdminHorarios({
     }
 
     onViewModeChange?.('list');
-  }, [selectedDay, activeSubScreen, onViewModeChange]);
+  }, [selectedDay, applyToWeek, activeSubScreen, onViewModeChange]);
 
   const loadConfigs = async () => {
     try {
       let data: any[] | null = null;
       let error: any = null;
 
-      if (barbeiroId && !companyMode) {
-        // Horário individual do barbeiro
+      const effectiveBId = targetBarbeiroId || barbeiroId;
+
+      if (effectiveBId && (!companyMode || isUnified)) {
+        // Horário individual do barbeiro (ou unificado)
         const res = await supabase
           .from('configuracoes_horario_barbeiro')
           .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
-          .eq('barbeiro_id', barbeiroId)
+          .eq('barbeiro_id', effectiveBId)
           .order('dia_semana');
-        data = res.data;
-        error = res.error;
-      } else {
+        if (res.data && res.data.length > 0) {
+          data = res.data;
+          error = res.error;
+        }
+      }
+
+      if (!data || data.length === 0) {
         // Horário da barbearia (unidade / tenant)
         const { tId, uId } = await resolveTenantAndUnit();
         let res: any = null;
@@ -423,7 +443,7 @@ export default function AdminHorarios({
    * evitando que eventuais divergências em outros dias bloqueiem a edição do dia atual.
    */
   const validateAgainstCompanyHours = (targetDiaSemana?: number): string | null => {
-    if (forceOnboardingDefaultHours) return null;
+    if (forceOnboardingDefaultHours || isUnified) return null;
     if (!barbeiroId || companyMode || companyHoursCache.length === 0) return null;
 
     const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -480,9 +500,86 @@ export default function AdminHorarios({
     setSaving(true);
     try {
       const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
+      const bId = targetBarbeiroId || barbeiroId;
+      const { tId, uId } = await resolveTenantAndUnit();
 
-      if (barbeiroId && !companyMode) {
-        // ── Salvar horário PESSOAL do barbeiro (apenas este dia) ──
+      if (isUnified) {
+        // ── MODO UNIFICADO (1 Barbeiro): Atualiza SIMULTANEAMENTE barbeiro e barbearia ──
+        if (bId) {
+          const barberPayload = {
+            aberto: config.aberto,
+            hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+            hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+            hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+            hora_almoco_fim: sanitize(config.hora_almoco_fim),
+            delay_entre_servicos: config.delay_entre_servicos,
+            ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
+          };
+
+          const upd = await (supabase as any)
+            .from('configuracoes_horario_barbeiro')
+            .update(barberPayload)
+            .eq('barbeiro_id', bId)
+            .eq('dia_semana', config.dia_semana)
+            .select();
+
+          if (upd.error) throw upd.error;
+          if (!upd.data || upd.data.length === 0) {
+            const ins = await (supabase as any)
+              .from('configuracoes_horario_barbeiro')
+              .insert({ ...barberPayload, barbeiro_id: bId, dia_semana: config.dia_semana })
+              .select();
+            if (ins.error) throw ins.error;
+          }
+        }
+
+        if (tId) {
+          const unitPayload = {
+            aberto: config.aberto,
+            hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+            hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+            hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+            hora_almoco_fim: sanitize(config.hora_almoco_fim),
+            delay_entre_servicos: config.delay_entre_servicos,
+            slot_interval_minutes: config.slot_interval_minutes,
+            updated_at: new Date().toISOString(),
+          };
+
+          let upd = null;
+          if (uId) {
+            upd = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .update(unitPayload)
+              .eq('unidade_id', uId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+          } else {
+            upd = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .update(unitPayload)
+              .eq('tenant_id', tId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+          }
+
+          if (upd?.error) throw upd.error;
+          if (!upd?.data || upd.data.length === 0) {
+            const ins = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .insert({
+                tenant_id: tId,
+                unidade_id: uId || null,
+                dia_semana: config.dia_semana,
+                ...unitPayload,
+              })
+              .select();
+            if (ins.error) throw ins.error;
+          }
+        }
+
+        if (!hideSaveButton) toast.success('Horário salvo com sucesso!');
+      } else if (barbeiroId && !companyMode) {
+        // ── MODO SEPARADO: Salva exclusivamente horário do barbeiro ──
         const payload = {
           aberto: config.aberto,
           hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
@@ -501,7 +598,6 @@ export default function AdminHorarios({
           .select();
 
         if (upd.error) throw upd.error;
-
         if (!upd.data || upd.data.length === 0) {
           const ins = await (supabase as any)
             .from('configuracoes_horario_barbeiro')
@@ -512,7 +608,7 @@ export default function AdminHorarios({
 
         if (!hideSaveButton) toast.success('Seu horário pessoal foi salvo com sucesso!');
       } else {
-        // ── Salvar horário da BARBEARIA (apenas este dia) ──
+        // ── MODO SEPARADO: Salva exclusivamente horário da barbearia ──
         const { tId, uId } = await resolveTenantAndUnit();
         if (!tId) throw new Error('Não foi possível identificar a barbearia');
 
@@ -523,6 +619,7 @@ export default function AdminHorarios({
           hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
           hora_almoco_fim: sanitize(config.hora_almoco_fim),
           delay_entre_servicos: config.delay_entre_servicos,
+          slot_interval_minutes: config.slot_interval_minutes,
           updated_at: new Date().toISOString(),
         };
 
@@ -544,7 +641,6 @@ export default function AdminHorarios({
         }
 
         if (upd?.error) throw upd.error;
-
         if (!upd?.data || upd.data.length === 0) {
           const ins = await (supabase as any)
             .from('configuracoes_horario_unidade')
@@ -559,7 +655,7 @@ export default function AdminHorarios({
         }
 
         if (!hideSaveButton) {
-          toast.success('Horário da barbearia atualizado com sucesso!');
+          toast.success('Horário da barbearia atualizado com sucesso! Os horários pessoais de cada barbeiro permanecem intactos.');
         }
       }
 
@@ -572,19 +668,95 @@ export default function AdminHorarios({
       return true;
     } catch (error: any) {
       console.error('Erro ao salvar dia:', error);
-      toast.error(error?.message || 'Erro ao salvar configurações');
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const saveConfigs = async (): Promise<boolean> => {
+      toast.error(error?.message || 'Erro ao salvar configuraç  const saveConfigs = async (): Promise<boolean> => {
     setSaving(true);
     try {
       const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
+      const bId = targetBarbeiroId || barbeiroId;
+      const { tId, uId } = await resolveTenantAndUnit();
 
-      if (barbeiroId && !companyMode) {
+      if (isUnified) {
+        // ── MODO UNIFICADO (1 Barbeiro): Atualiza SIMULTANEAMENTE barbeiro e barbearia ──
+        if (bId) {
+          const promises = configs.map(async (config) => {
+            const payload = {
+              aberto: config.aberto,
+              hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+              hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+              hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+              hora_almoco_fim: sanitize(config.hora_almoco_fim),
+              delay_entre_servicos: config.delay_entre_servicos,
+              ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
+            };
+
+            const upd = await (supabase as any)
+              .from('configuracoes_horario_barbeiro')
+              .update(payload)
+              .eq('barbeiro_id', bId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+
+            if (upd.error) throw upd.error;
+            if (!upd.data || upd.data.length === 0) {
+              const ins = await (supabase as any)
+                .from('configuracoes_horario_barbeiro')
+                .insert({ ...payload, barbeiro_id: bId, dia_semana: config.dia_semana })
+                .select();
+              if (ins.error) throw ins.error;
+            }
+          });
+          await Promise.all(promises);
+        }
+
+        if (tId) {
+          for (const config of configs) {
+            const payload = {
+              aberto: config.aberto,
+              hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+              hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+              hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+              hora_almoco_fim: sanitize(config.hora_almoco_fim),
+              delay_entre_servicos: config.delay_entre_servicos,
+              slot_interval_minutes: config.slot_interval_minutes,
+              updated_at: new Date().toISOString(),
+            };
+
+            let upd = null;
+            if (uId) {
+              upd = await (supabase as any)
+                .from('configuracoes_horario_unidade')
+                .update(payload)
+                .eq('unidade_id', uId)
+                .eq('dia_semana', config.dia_semana)
+                .select();
+            } else {
+              upd = await (supabase as any)
+                .from('configuracoes_horario_unidade')
+                .update(payload)
+                .eq('tenant_id', tId)
+                .eq('dia_semana', config.dia_semana)
+                .select();
+            }
+
+            if (upd?.error) throw upd.error;
+
+            if (!upd?.data || upd.data.length === 0) {
+              const ins = await (supabase as any)
+                .from('configuracoes_horario_unidade')
+                .insert({
+                  tenant_id: tId,
+                  unidade_id: uId || null,
+                  dia_semana: config.dia_semana,
+                  ...payload,
+                })
+                .select();
+              if (ins.error) throw ins.error;
+            }
+          }
+        }
+
+        if (!hideSaveButton) toast.success('Horário salvo com sucesso!');
+      } else if (barbeiroId && !companyMode) {
         // ── Salvar horário PESSOAL do barbeiro (apenas este barbeiro) ──
         const promises = configs.map(async (config) => {
           const payload = {
@@ -736,11 +908,14 @@ export default function AdminHorarios({
       setSaving(true);
       try {
         const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
+        const bId = targetBarbeiroId || barbeiroId;
+        const { tId, uId } = await resolveTenantAndUnit();
+        const configsToSave = nextConfigs.filter(c => applyToWeek.selectedDays.includes(c.dia_semana));
 
-        if (barbeiroId && !companyMode) {
-          const promises = nextConfigs
-            .filter(c => applyToWeek.selectedDays.includes(c.dia_semana))
-            .map(async (config) => {
+        if (isUnified) {
+          // ── MODO UNIFICADO (1 Barbeiro): Salva a semana inteira no barbeiro e na barbearia ──
+          if (bId) {
+            const promises = configsToSave.map(async (config) => {
               const payload = {
                 aberto: config.aberto,
                 hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
@@ -753,24 +928,91 @@ export default function AdminHorarios({
               const upd = await (supabase as any)
                 .from('configuracoes_horario_barbeiro')
                 .update(payload)
-                .eq('barbeiro_id', barbeiroId)
+                .eq('barbeiro_id', bId)
                 .eq('dia_semana', config.dia_semana)
                 .select();
               if (upd.error) throw upd.error;
               if (!upd.data || upd.data.length === 0) {
                 const ins = await (supabase as any)
                   .from('configuracoes_horario_barbeiro')
-                  .insert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana })
+                  .insert({ ...payload, barbeiro_id: bId, dia_semana: config.dia_semana })
                   .select();
                 if (ins.error) throw ins.error;
               }
             });
+            await Promise.all(promises);
+          }
+
+          if (tId) {
+            for (const config of configsToSave) {
+              const payload = {
+                aberto: config.aberto,
+                hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+                hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+                hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+                hora_almoco_fim: sanitize(config.hora_almoco_fim),
+                delay_entre_servicos: config.delay_entre_servicos,
+                slot_interval_minutes: config.slot_interval_minutes,
+                updated_at: new Date().toISOString(),
+              };
+
+              let upd = null;
+              if (uId) {
+                upd = await (supabase as any)
+                  .from('configuracoes_horario_unidade')
+                  .update(payload)
+                  .eq('unidade_id', uId)
+                  .eq('dia_semana', config.dia_semana)
+                  .select();
+              } else {
+                upd = await (supabase as any)
+                  .from('configuracoes_horario_unidade')
+                  .update(payload)
+                  .eq('tenant_id', tId)
+                  .eq('dia_semana', config.dia_semana)
+                  .select();
+              }
+
+              if (upd?.error) throw upd.error;
+
+              if (!upd?.data || upd.data.length === 0) {
+                const ins = await (supabase as any)
+                  .from('configuracoes_horario_unidade')
+                  .insert({ tenant_id: tId, unidade_id: uId || null, dia_semana: config.dia_semana, ...payload })
+                  .select();
+                if (ins.error) throw ins.error;
+              }
+            }
+          }
+        } else if (barbeiroId && !companyMode) {
+          const promises = configsToSave.map(async (config) => {
+            const payload = {
+              aberto: config.aberto,
+              hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+              hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+              hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+              hora_almoco_fim: sanitize(config.hora_almoco_fim),
+              delay_entre_servicos: config.delay_entre_servicos,
+              ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
+            };
+            const upd = await (supabase as any)
+              .from('configuracoes_horario_barbeiro')
+              .update(payload)
+              .eq('barbeiro_id', barbeiroId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+            if (upd.error) throw upd.error;
+            if (!upd.data || upd.data.length === 0) {
+              const ins = await (supabase as any)
+                .from('configuracoes_horario_barbeiro')
+                .insert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana })
+                .select();
+              if (ins.error) throw ins.error;
+            }
+          });
           await Promise.all(promises);
         } else {
-          const { tId, uId } = await resolveTenantAndUnit();
           if (!tId) throw new Error('Não foi possível identificar a barbearia');
-
-          const configsToSave = nextConfigs.filter(c => applyToWeek.selectedDays.includes(c.dia_semana));
 
           for (const config of configsToSave) {
             const payload = {
@@ -800,6 +1042,7 @@ export default function AdminHorarios({
                 .eq('dia_semana', config.dia_semana)
                 .select();
             }
+
             if (upd?.error) throw upd.error;
 
             if (!upd?.data || upd.data.length === 0) {
@@ -924,9 +1167,12 @@ export default function AdminHorarios({
               });
 
               const effectiveTId = tenantId || resolvedTenantId;
+              const bId = isUnified ? targetBarbeiroId : (barbeiroId && !companyMode ? barbeiroId : undefined);
+              const tId = isUnified ? effectiveTId : (companyMode || !barbeiroId ? effectiveTId : undefined);
+
               await saveSlotMutation.mutateAsync({
-                barbeiroId: (barbeiroId && !companyMode) ? barbeiroId : undefined,
-                tenantId: effectiveTId || undefined,
+                barbeiroId: bId || undefined,
+                tenantId: (tId || effectiveTId) || undefined,
                 unidadeId: resolvedUnidadeId || undefined,
                 minutos,
                 dia_semana: selectedConfig.dia_semana,
@@ -974,7 +1220,12 @@ export default function AdminHorarios({
     <div className="space-y-6 max-w-lg">
       {!hideTitle && <h2 className="text-2xl font-bold text-foreground">Horário de Funcionamento</h2>}
       <p className="text-sm text-muted-foreground/60 leading-relaxed font-light">
-        Configure os dias e horários em que a barbearia estará disponível para agendamentos. Toque em um dia para ajustar os detalhes.
+        {isUnified
+          ? 'Configure os horários da sua barbearia. Como você é o único barbeiro, estas definições valem tanto para a barbearia quanto para seu atendimento pessoal.'
+          : (companyMode
+              ? 'Configure os dias e horários em que a barbearia estará aberta. Toque em um dia para ajustar os detalhes.'
+              : 'Configure seus horários de atendimento pessoal. Toque em um dia para ajustar os detalhes.')
+        }
       </p>
 
       {/* ── Banner: Configuração da Semana Inteira ── */}

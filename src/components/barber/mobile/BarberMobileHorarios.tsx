@@ -270,6 +270,7 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
             existingDaySummaries={existingDaySummaries}
             title="Configurar semana inteira"
             description="Selecione todos os dias da semana para aplicar o mesmo horário ou desmarque os dias específicos para mantê-los inalterados."
+            hideBackArrow={true}
           />
         </motion.div>
       </ScreenShell>

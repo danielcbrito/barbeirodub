@@ -55,6 +55,7 @@ import { useStatusBarColor } from "@/hooks/useStatusBarColor";
 import { resolveOldestOwnedTenant } from "@/lib/tenantOwnership";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
 
 /**
  * Hub de Configurações da Barbearia — exclusivo do Administrador / Dono.
@@ -129,6 +130,13 @@ export function BarberConfigBarbearia({
   const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(DEFAULT_COMPANY_LOGO);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(barberContext.tenantId || null);
+  const effectiveTenantId = barberContext.tenantId || resolvedTenantId;
+  const { count: barbersCount, hasMultiple: hasMultipleBarbers, isSingleBarber, singleBarbeiroId } = useTenantBarbersCount(effectiveTenantId);
+  const [scheduleViewMode, setScheduleViewMode] = useState<'list' | 'day' | 'advanced'>('list');
+
+  useEffect(() => {
+    setScheduleViewMode('list');
+  }, [activeScreen]);
 
   const [resolvedBarbeiroId, setResolvedBarbeiroId] = useState<string>(barberContext.barbeiroId || "");
 
@@ -517,9 +525,14 @@ export function BarberConfigBarbearia({
         id: "horarios",
         icon: CalendarClock,
         label: "Horário de funcionamento",
-        description: "Expediente da barbearia ou seus horários pessoais",
+        description: hasMultipleBarbers
+          ? "Expediente da barbearia ou seus horários pessoais"
+          : "Expediente da barbearia e seus horários de atendimento",
         keywords: ["horario", "funcionamento", "expediente", "dias", "abertura", "fechamento", "hora", "atendimento", "agenda"],
-        onClick: () => setActiveScreen("horarios"),
+        onClick: () => {
+          setScheduleViewMode('list');
+          setActiveScreen("horarios");
+        },
       },
       {
         id: "barbeiros",
@@ -939,7 +952,30 @@ export function BarberConfigBarbearia({
             />
           </div>
         );
-      case "horarios":
+      case "horarios": {
+        if (!hasMultipleBarbers) {
+          // Apenas um barbeiro: exibe uma ÚNICA configuração de horário unificada!
+          // Atualiza tanto o horário pessoal do barbeiro quanto o da barbearia no backend.
+          return (
+            <div className="pb-10 min-h-app bg-background">
+              {scheduleViewMode === 'list' && (
+                <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
+              )}
+              <div className="px-4 pt-3 max-w-md mx-auto">
+                <AdminHorarios
+                  hideTitle
+                  unifiedMode={true}
+                  barbeiroId={barberContext.barbeiroId || singleBarbeiroId || undefined}
+                  tenantId={tenantId}
+                  unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
+                  onViewModeChange={setScheduleViewMode}
+                />
+              </div>
+            </div>
+          );
+        }
+
+        // Dois ou mais barbeiros: exibe as duas opções separadamente
         return (
           <div className="pb-10 min-h-app bg-background">
             <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
@@ -950,7 +986,10 @@ export function BarberConfigBarbearia({
               <div className="divide-y divide-border/25">
                 <button
                   type="button"
-                  onClick={() => setActiveScreen("horarios-barbearia")}
+                  onClick={() => {
+                    setScheduleViewMode('list');
+                    setActiveScreen("horarios-barbearia");
+                  }}
                   className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
                 >
                   <div className="min-w-0 pr-3">
@@ -966,7 +1005,10 @@ export function BarberConfigBarbearia({
 
                 <button
                   type="button"
-                  onClick={() => setActiveScreen("horarios-pessoal")}
+                  onClick={() => {
+                    setScheduleViewMode('list');
+                    setActiveScreen("horarios-pessoal");
+                  }}
                   className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
                 >
                   <div className="min-w-0 pr-3">
@@ -983,24 +1025,43 @@ export function BarberConfigBarbearia({
             </div>
           </div>
         );
+      }
       case "horarios-barbearia":
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Horário da Barbearia" onBack={() => setActiveScreen("horarios")} />
+            {scheduleViewMode === 'list' && (
+              <ScheduleHeader title="Horário da Barbearia" onBack={() => setActiveScreen("horarios")} />
+            )}
             <div className="px-4 pt-3 max-w-md mx-auto">
-              <AdminHorarios hideTitle companyMode tenantId={tenantId} unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined} />
+              <AdminHorarios
+                hideTitle
+                companyMode
+                unifiedMode={false}
+                tenantId={tenantId}
+                unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
+                onViewModeChange={setScheduleViewMode}
+              />
             </div>
           </div>
         );
       case "horarios-pessoal":
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader
-              title={isTenantAdmin ? "Seu Horário Pessoal" : "Horário de Funcionamento"}
-              onBack={() => setActiveScreen(isTenantAdmin ? "horarios" : "hub")}
-            />
+            {scheduleViewMode === 'list' && (
+              <ScheduleHeader
+                title={isTenantAdmin ? "Seu Horário Pessoal" : "Horário de Funcionamento"}
+                onBack={() => setActiveScreen(isTenantAdmin ? (hasMultipleBarbers ? "horarios" : "hub") : "hub")}
+              />
+            )}
             <div className="px-4 pt-3 max-w-md mx-auto">
-              <AdminHorarios hideTitle barbeiroId={barberContext.barbeiroId} tenantId={tenantId} unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined} />
+              <AdminHorarios
+                hideTitle
+                unifiedMode={!hasMultipleBarbers}
+                barbeiroId={barberContext.barbeiroId || singleBarbeiroId || undefined}
+                tenantId={tenantId}
+                unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
+                onViewModeChange={setScheduleViewMode}
+              />
             </div>
           </div>
         );

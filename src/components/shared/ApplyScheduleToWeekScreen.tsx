@@ -37,6 +37,7 @@ interface Props {
   existingDaySummaries?: Record<number, string>;
   title?: string;
   description?: string;
+  hideBackArrow?: boolean;
 }
 
 export function ApplyScheduleToWeekScreen({
@@ -55,6 +56,7 @@ export function ApplyScheduleToWeekScreen({
   existingDaySummaries,
   title = "Aplicar aos dias da semana",
   description = "Selecione os dias em que deseja aplicar esta configuração de horários. Os dias não marcados permanecerão inalterados.",
+  hideBackArrow = false,
 }: Props) {
   const resumo = `${horaAbertura} - ${horaFechamento}`;
   const almocoResumo = horaAlmocoInicio && horaAlmocoFim
@@ -120,7 +122,7 @@ export function ApplyScheduleToWeekScreen({
       className="flex min-h-[calc(100dvh-156px)] flex-col pb-24"
     >
       <div className="flex items-center gap-2 pt-1.5 min-h-[48px]">
-        {onBack && (
+        {onBack && !hideBackArrow && (
           <button
             type="button"
             onClick={onBack}
