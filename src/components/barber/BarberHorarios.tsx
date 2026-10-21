@@ -390,6 +390,7 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
               hora_almoco_inicio: selectedConfig.hora_almoco_inicio,
               hora_almoco_fim: selectedConfig.hora_almoco_fim,
               slot_interval_minutes: selectedConfig.slot_interval_minutes,
+            }}
             onBack={async () => {
               if (hasChanges) {
                 await saveConfigs(selectedConfig.dia_semana);
