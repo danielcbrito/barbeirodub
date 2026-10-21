@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
-import { ChevronRight, Loader2, CalendarDays, Sparkles } from 'lucide-react';
+import { ChevronRight, Loader2, CalendarDays, Sparkles, Palmtree, CalendarClock, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
@@ -112,15 +112,40 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
 
   const saving = saveHorariosMutation.isPending;
 
+  const ensureAllSevenDays = useCallback((rows: HorarioConfig[]): HorarioConfig[] => {
+    const defaults: HorarioConfig[] = Array.from({ length: 7 }, (_, i) => ({
+      id: `default-${i}`,
+      dia_semana: i,
+      aberto: true,
+      hora_abertura: '09:00',
+      hora_fechamento: '18:00',
+      hora_almoco_inicio: null,
+      hora_almoco_fim: null,
+      delay_entre_servicos: 0,
+      slot_interval_minutes: null,
+    }));
+    const byDay = new Map<number, HorarioConfig>();
+    (rows || []).forEach((c) => {
+      if (c && typeof c.dia_semana === 'number') byDay.set(c.dia_semana, c);
+    });
+    return defaults.map((def) => {
+      const existing = byDay.get(def.dia_semana);
+      if (!existing) return def;
+      return { ...def, ...existing, dia_semana: def.dia_semana };
+    });
+  }, []);
+
   /* Configs efetivos: se há edição local, usa local; senão, usa query */
-  const configs = localConfigs ?? queryConfigs;
+  const configs = useMemo(() => {
+    return ensureAllSevenDays(localConfigs ?? queryConfigs);
+  }, [localConfigs, queryConfigs, ensureAllSevenDays]);
 
   /* Quando os dados do query carregam, sincronizar referência original */
   const syncOriginal = useCallback(() => {
     if (queryConfigs.length > 0 && !originalRef.current) {
-      originalRef.current = JSON.stringify(queryConfigs);
+      originalRef.current = JSON.stringify(ensureAllSevenDays(queryConfigs));
     }
-  }, [queryConfigs]);
+  }, [queryConfigs, ensureAllSevenDays]);
   syncOriginal();
 
   const existingDaySummaries = useMemo(() => {
@@ -134,11 +159,11 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
   }, [configs]);
 
   const checkChanges = (newConfigs: HorarioConfig[]) => {
-    setHasChanges(JSON.stringify(newConfigs) !== (originalRef.current || JSON.stringify(queryConfigs)));
+    setHasChanges(JSON.stringify(newConfigs) !== (originalRef.current || JSON.stringify(configs)));
   };
 
   const updateConfig = (diaSemana: number, field: string, value: any) => {
-    const base = localConfigs ?? [...queryConfigs];
+    const base = localConfigs ?? configs;
     const next = base.map(config =>
       config.dia_semana === diaSemana ? { ...config, [field]: value } : config
     );
@@ -190,7 +215,7 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
   };
 
   const saveConfigs = async (targetDiaSemana?: number): Promise<boolean> => {
-    const current = localConfigs ?? queryConfigs;
+    const current = localConfigs ?? configs;
 
     // Validar limites da barbearia (específico do dia ou todos)
     const validationError = validateAgainstCompanyHours(current, targetDiaSemana);
@@ -235,7 +260,7 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
   const handleApplyToOtherDays = async (sourceConfig: DayConfig, selectedDaysList: number[]) => {
     if (selectedDaysList.length === 0) return;
 
-    const base = localConfigs ?? [...queryConfigs];
+    const base = localConfigs ?? configs;
     const updated = base.map(cfg => {
       if (selectedDaysList.includes(cfg.dia_semana)) {
         return {
@@ -365,8 +390,12 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
               hora_almoco_inicio: selectedConfig.hora_almoco_inicio,
               hora_almoco_fim: selectedConfig.hora_almoco_fim,
               slot_interval_minutes: selectedConfig.slot_interval_minutes,
+            onBack={async () => {
+              if (hasChanges) {
+                await saveConfigs(selectedConfig.dia_semana);
+              }
+              setSelectedDay(null);
             }}
-            onBack={() => setSelectedDay(null)}
             onUpdate={(field, value) => updateConfig(selectedConfig.dia_semana, field, value)}
             onSave={() => saveConfigs(selectedConfig.dia_semana)}
             saving={saving}
@@ -393,7 +422,10 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
                 aplicarTodosDias,
               });
             }}
-            onApplyToOtherDays={(srcCfg, targetDays) => handleApplyToOtherDays(srcCfg, targetDays)}
+            onApplyToOtherDays={async (srcCfg, targetDays) => {
+              await handleApplyToOtherDays(srcCfg, targetDays);
+              setSelectedDay(null);
+            }}
             existingDaySummaries={existingDaySummaries}
           />
         </AnimatePresence>
@@ -403,10 +435,23 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
 
   if (activeSubScreen === 'ferias') {
     return (
-      <div className="max-w-lg space-y-6 animate-fade-in">
-        <button onClick={() => setActiveSubScreen(null)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          ← Voltar aos Horários
-        </button>
+      <div className="w-full max-w-lg space-y-4 animate-fade-in">
+        <div className="flex items-center gap-2 min-h-[56px] py-1">
+          <button
+            type="button"
+            onClick={() => setActiveSubScreen(null)}
+            aria-label="Voltar"
+            className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all shrink-0 text-foreground flex items-center justify-center border border-border/30"
+          >
+            <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[20px] font-semibold text-foreground tracking-tight leading-none truncate">
+              Modo Férias
+            </h2>
+          </div>
+        </div>
+        <div className="h-px bg-border/20 mb-2" />
         <BarberVacationMode barbeiroId={barberContext.barbeiroId} />
       </div>
     );
@@ -414,10 +459,23 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
 
   if (activeSubScreen === 'excecoes') {
     return (
-      <div className="max-w-lg space-y-6 animate-fade-in">
-        <button onClick={() => setActiveSubScreen(null)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          ← Voltar aos Horários
-        </button>
+      <div className="w-full max-w-lg space-y-4 animate-fade-in">
+        <div className="flex items-center gap-2 min-h-[56px] py-1">
+          <button
+            type="button"
+            onClick={() => setActiveSubScreen(null)}
+            aria-label="Voltar"
+            className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all shrink-0 text-foreground flex items-center justify-center border border-border/30"
+          >
+            <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[20px] font-semibold text-foreground tracking-tight leading-none truncate">
+              Exceções de Horário
+            </h2>
+          </div>
+        </div>
+        <div className="h-px bg-border/20 mb-2" />
         <BarberHorariosExcepcionais barbeiroId={barberContext.barbeiroId} />
       </div>
     );
@@ -431,36 +489,6 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
         <p className="text-xs text-muted-foreground mt-0.5">
           Configure seus horários de atendimento semanal
         </p>
-      </div>
-
-      {/* ── Banner: Configurar semana inteira (Ação rápida) ── */}
-      <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 flex items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
-            <CalendarDays className="w-5 h-5 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">
-              Configurar semana inteira
-            </p>
-            <p className="text-[11.5px] text-muted-foreground/80 leading-snug">
-              Aplique horários e intervalos a todos os dias da semana em uma ação única
-            </p>
-          </div>
-        </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            const firstOpen = configs.find(c => c.aberto) || configs[1] || configs[0];
-            setWeeklyConfigState({
-              sourceDay: firstOpen?.dia_semana ?? 1,
-              selectedDays: [0, 1, 2, 3, 4, 5, 6],
-            });
-          }}
-          className="shrink-0 h-9 px-3.5 rounded-xl text-xs font-semibold shadow-xs"
-        >
-          Configurar
-        </Button>
       </div>
 
       <div className="divide-y divide-border/10">
@@ -496,34 +524,45 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
       </div>
 
       {/* ── Configurações Avançadas ── */}
-      <div>
-        <span className="text-[11px] text-muted-foreground/50 font-light uppercase tracking-wider">
+      <div className="space-y-3 pt-2">
+        <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
           Configurações avançadas
         </span>
-        <div className="h-px bg-border/15 mt-2" />
 
-        <button onClick={() => setActiveSubScreen('ferias')} className="flex items-center justify-between py-4 w-full text-left hover:bg-muted/5 active:bg-muted/10 transition-colors">
-          <span className="text-sm font-semibold text-foreground">Modo Férias</span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground/30" />
-        </button>
+        <div className="rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm divide-y divide-border/20 overflow-hidden shadow-xs">
+          <button
+            type="button"
+            onClick={() => setActiveSubScreen('ferias')}
+            className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/10 active:bg-muted/15 transition-all group"
+          >
+            <div className="min-w-0 pr-3">
+              <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                Modo Férias
+              </p>
+              <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                Pausa seus agendamentos no período selecionado
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+          </button>
 
-        <div className="h-px bg-border/10" />
-
-        <button onClick={() => setActiveSubScreen('excecoes')} className="flex items-center justify-between py-4 w-full text-left hover:bg-muted/5 active:bg-muted/10 transition-colors">
-          <span className="text-sm font-semibold text-foreground">Exceções de Horário</span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground/30" />
-        </button>
-
-        <div className="h-px bg-border/15" />
-      </div>
-
-      {hasChanges && (
-        <div className="pt-4">
-          <Button onClick={saveConfigs} disabled={saving} className="w-full h-[48px] rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm shadow-sm transition-colors">
-            {saving ? (<><Loader2 className="h-4 w-4 animate-spin mr-2" />Salvando...</>) : 'Salvar'}
-          </Button>
+          <button
+            type="button"
+            onClick={() => setActiveSubScreen('excecoes')}
+            className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/10 active:bg-muted/15 transition-all group"
+          >
+            <div className="min-w-0 pr-3">
+              <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                Exceções de Horário
+              </p>
+              <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                Feriados, folgas e datas com horários especiais personalizados
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -148,7 +148,7 @@ function WheelColumn({ items, selected, onSelect }: WheelColumnProps) {
         <ChevronUp className="w-5 h-5" />
       </button>
 
-      <div className="relative" style={{ height: ITEM_HEIGHT * VISIBLE_ITEMS, width: '100%', minWidth: 160 }}>
+      <div className="relative w-full" style={{ height: ITEM_HEIGHT * VISIBLE_ITEMS, minWidth: 110, maxWidth: 140 }}>
         {/* Highlight da seleção — borda forte e marcante */}
         <div
           className="absolute left-1 right-1 rounded-xl border-2 border-foreground/30 pointer-events-none z-10 shadow-sm"

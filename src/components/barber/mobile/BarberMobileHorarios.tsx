@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSaveBarberSchedule } from '@/hooks/useBarberMutations';
-import { ChevronRight, Clock, CalendarDays } from 'lucide-react';
+import { ChevronRight, Clock, CalendarDays, Palmtree, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -293,7 +293,12 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
             hora_almoco_fim: selectedConfig.hora_almoco_fim,
             slot_interval_minutes: selectedConfig.slot_interval_minutes,
           }}
-          onBack={() => setSelectedDay(null)}
+          onBack={async () => {
+            if (hasChanges) {
+              await saveConfigs();
+            }
+            setSelectedDay(null);
+          }}
           onUpdate={(field, value) => updateConfig(selectedConfig.dia_semana, field, value)}
           onSave={saveConfigs}
           saving={saving}
@@ -322,7 +327,10 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
             });
             await loadConfigs();
           }}
-          onApplyToOtherDays={(srcCfg, targetDays) => handleApplyToOtherDays(srcCfg, targetDays)}
+          onApplyToOtherDays={async (srcCfg, targetDays) => {
+            await handleApplyToOtherDays(srcCfg, targetDays);
+            setSelectedDay(null);
+          }}
           existingDaySummaries={existingDaySummaries}
         />
       </AnimatePresence>
@@ -365,7 +373,7 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
   return (
     <ScreenShell
       header={<ScheduleHeader title="Horário de funcionamento" backTo={basePath} />}
-      bottomReserve={hasChanges ? 96 : 0}
+      bottomReserve={0}
     >
       <div className="w-full max-w-lg mx-auto pt-2 pb-6 space-y-4 px-1 sm:px-0">
         {/* Aviso de que a configuração é exclusivamente do barbeiro */}
@@ -381,36 +389,6 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
               Esta configuração define exclusivamente a sua disponibilidade na agenda pessoal e não altera os horários de outros profissionais.
             </p>
           </div>
-        </div>
-
-        {/* Banner: Configurar semana inteira (Ação rápida) */}
-        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3.5 flex items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
-              <CalendarDays className="w-4 h-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[13px] font-semibold text-foreground">
-                Configurar semana inteira
-              </p>
-              <p className="text-[11px] text-muted-foreground/80 leading-snug">
-                Aplique horários e intervalos a todos os dias com 1 toque
-              </p>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              const firstOpen = configs.find(c => c.aberto) || configs[1] || configs[0];
-              setWeeklyConfigState({
-                sourceDay: firstOpen?.dia_semana ?? 1,
-                selectedDays: [0, 1, 2, 3, 4, 5, 6],
-              });
-            }}
-            className="shrink-0 h-8 px-3 rounded-xl text-xs font-semibold shadow-xs"
-          >
-            Configurar
-          </Button>
         </div>
 
         <div className="divide-y divide-border/10">
@@ -446,33 +424,46 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
         </div>
 
         {/* ── Configurações Avançadas ── */}
-        <div>
-          <span className="text-[11px] text-muted-foreground/50 font-light uppercase tracking-wider">
+        <div className="space-y-3 pt-2">
+          <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
             Configurações avançadas
           </span>
-          <div className="h-px bg-border/15 mt-2" />
 
-          <button onClick={() => setActiveSubScreen('ferias')} className="flex items-center justify-between py-4 w-full text-left active:bg-muted/10 transition-colors">
-            <span className="text-sm font-semibold text-foreground">Modo Férias</span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground/30" />
-          </button>
+          <div className="rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm divide-y divide-border/20 overflow-hidden shadow-xs">
+            <button
+              type="button"
+              onClick={() => setActiveSubScreen('ferias')}
+              className="w-full flex items-center justify-between p-4 text-left active:bg-muted/15 transition-all group"
+            >
+              <div className="min-w-0 pr-3">
+                <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                  Modo Férias
+                </p>
+                <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                  Pausa seus agendamentos no período selecionado
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+            </button>
 
-          <div className="h-px bg-border/10" />
-
-          <button onClick={() => setActiveSubScreen('excecoes')} className="flex items-center justify-between py-4 w-full text-left active:bg-muted/10 transition-colors">
-            <span className="text-sm font-semibold text-foreground">Exceções de Horário</span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground/30" />
-          </button>
-
-          <div className="h-px bg-border/15" />
+            <button
+              type="button"
+              onClick={() => setActiveSubScreen('excecoes')}
+              className="w-full flex items-center justify-between p-4 text-left active:bg-muted/15 transition-all group"
+            >
+              <div className="min-w-0 pr-3">
+                <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                  Exceções de Horário
+                </p>
+                <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                  Feriados, folgas e datas com horários especiais personalizados
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+            </button>
+          </div>
         </div>
       </div>
-
-      <StickyFooter show={hasChanges} aboveBottomNav>
-        <PrimaryCta onClick={saveConfigs} loading={saving}>
-          {saving ? 'Salvando…' : 'Salvar alterações'}
-        </PrimaryCta>
-      </StickyFooter>
     </ScreenShell>
   );
 }

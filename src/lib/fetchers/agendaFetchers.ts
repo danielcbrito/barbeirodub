@@ -86,7 +86,7 @@ async function fetchAgendaDiaFallback(
     )
     .eq("barbeiro_id", barbeiroId)
     .eq("data", dateStr)
-    .in("status", ["pending", "confirmed", "completed", "no_show"])
+    .in("status", ["pending", "confirmed", "completed", "no_show", "cancelled_by_user", "cancelled_by_admin", "cancelled"])
     .order("hora", { ascending: true });
 
   if (error) throw error;

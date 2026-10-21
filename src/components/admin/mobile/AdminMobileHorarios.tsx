@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ChevronRight, Clock, CalendarDays } from 'lucide-react';
+import { ChevronRight, Clock, CalendarDays, Palmtree, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -178,6 +178,26 @@ export function AdminMobileHorarios({
       slot_interval_minutes: null,
     }));
 
+  const ensureAllSevenDays = (rows: any[] | null | undefined): HorarioConfig[] => {
+    const defaults = defaultUnitConfigs();
+    const byDay = new Map<number, any>();
+    (rows || []).forEach((row) => {
+      if (row && typeof row.dia_semana === 'number') {
+        byDay.set(row.dia_semana, row);
+      }
+    });
+
+    return defaults.map((fallback) => {
+      const existing = byDay.get(fallback.dia_semana);
+      if (!existing) return fallback;
+      return {
+        ...fallback,
+        ...existing,
+        dia_semana: fallback.dia_semana,
+      };
+    });
+  };
+
   const loadConfigs = async () => {
     try {
       let data: any[] | null = null;
@@ -267,11 +287,10 @@ export function AdminMobileHorarios({
       }
 
       if (error) throw error;
-      if (data && data.length > 0) {
-        setConfigs(data as HorarioConfig[]);
-        originalRef.current = JSON.stringify(data);
-        setHasChanges(false);
-      }
+      const normalized = ensureAllSevenDays(data);
+      setConfigs(normalized);
+      originalRef.current = JSON.stringify(normalized);
+      setHasChanges(false);
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
       toast.error('Erro ao carregar configurações de horário');
@@ -833,7 +852,12 @@ export function AdminMobileHorarios({
         <DayScheduleScreen
           key={selectedDay}
           config={selectedConfig}
-          onBack={() => setSelectedDay(null)}
+          onBack={async () => {
+            if (hasChanges) {
+              await saveConfigs();
+            }
+            setSelectedDay(null);
+          }}
           onUpdate={(field, value) => updateConfig(selectedConfig.dia_semana, field, value)}
           onSave={saveConfigs}
           saving={saving}
@@ -869,11 +893,22 @@ export function AdminMobileHorarios({
             });
             await loadConfigs();
           }}
-          onApplyToOtherDays={(srcCfg, targetDays) => {
-            setWeeklyConfigState({
-              sourceDay: srcCfg.dia_semana,
-              selectedDays: targetDays,
-            });
+          onApplyToOtherDays={async (srcCfg, targetDays) => {
+            await handleApplyToOtherDays(
+              {
+                id: '',
+                dia_semana: srcCfg.dia_semana,
+                aberto: srcCfg.aberto ?? true,
+                hora_abertura: srcCfg.hora_abertura || '09:00',
+                hora_fechamento: srcCfg.hora_fechamento || '20:00',
+                hora_almoco_inicio: srcCfg.hora_almoco_inicio ?? null,
+                hora_almoco_fim: srcCfg.hora_almoco_fim ?? null,
+                delay_entre_servicos: 0,
+                slot_interval_minutes: srcCfg.slot_interval_minutes ?? tenantSlot ?? 15,
+              },
+              targetDays
+            );
+            setSelectedDay(null);
           }}
           existingDaySummaries={existingDaySummaries}
         />
@@ -920,7 +955,7 @@ export function AdminMobileHorarios({
   return (
     <ScreenShell
       header={<ScheduleHeader title="Horário de funcionamento" backTo={basePath} />}
-      bottomReserve={hasChanges ? 96 : 0}
+      bottomReserve={0}
     >
       <div className="w-full max-w-lg mx-auto pt-2 pb-6 space-y-4 px-1 sm:px-0">
         {/* Aviso de escopo de horários */}
@@ -953,35 +988,6 @@ export function AdminMobileHorarios({
         </p>
 
 
-        {/* Banner: Configuração da Semana Inteira */}
-        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border/40 shadow-xs gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <CalendarDays className="w-4 h-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[13px] font-semibold text-foreground">
-                Configurar semana inteira
-              </p>
-              <p className="text-[11px] text-muted-foreground/80 leading-snug">
-                Aplique horários e intervalos a todos os dias em uma ação única
-              </p>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              const firstOpen = configs.find(c => c.aberto) || configs[1] || configs[0];
-              setWeeklyConfigState({
-                sourceDay: firstOpen?.dia_semana ?? 1,
-                selectedDays: [0, 1, 2, 3, 4, 5, 6],
-              });
-            }}
-            className="shrink-0 h-8 px-3 rounded-xl text-xs font-semibold shadow-xs"
-          >
-            Configurar
-          </Button>
-        </div>
 
         {/* Lista de dias */}
         <div className="divide-y divide-border/10">
@@ -1018,51 +1024,47 @@ export function AdminMobileHorarios({
 
         {/* ── Configurações Avançadas ── */}
         {!hideAdvanced && (
-          <div>
-            <span className="text-[11px] text-muted-foreground/50 font-light uppercase tracking-wider">
+          <div className="space-y-3 pt-2">
+            <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
               Configurações avançadas
             </span>
-            <div className="h-px bg-border/15 mt-2" />
 
-            <button
-              onClick={() => setActiveSubScreen('ferias')}
-              className="flex items-center justify-between py-4 w-full text-left active:bg-muted/10 transition-colors"
-            >
-              <div className="min-w-0 pr-3">
-                <p className="text-sm font-semibold text-foreground">Modo Férias</p>
-                <p className="text-[11px] font-light text-muted-foreground/70 mt-0.5">
-                  {companyMode ? 'Pausa toda a barbearia no período' : 'Pausa seus agendamentos no período'}
-                </p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
-            </button>
+            <div className="rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm divide-y divide-border/20 overflow-hidden shadow-xs">
+              <button
+                type="button"
+                onClick={() => setActiveSubScreen('ferias')}
+                className="w-full flex items-center justify-between p-4 text-left active:bg-muted/15 transition-all group"
+              >
+                <div className="min-w-0 pr-3">
+                  <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                    Modo Férias
+                  </p>
+                  <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                    {companyMode ? 'Pausa os agendamentos de toda a barbearia no período' : 'Pausa seus agendamentos no período selecionado'}
+                  </p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+              </button>
 
-            <div className="h-px bg-border/10" />
-
-            <button
-              onClick={() => setActiveSubScreen('excecoes')}
-              className="flex items-center justify-between py-4 w-full text-left active:bg-muted/10 transition-colors"
-            >
-              <div className="min-w-0 pr-3">
-                <p className="text-sm font-semibold text-foreground">Exceções de Horário</p>
-                <p className="text-[11px] font-light text-muted-foreground/70 mt-0.5">
-                  {companyMode ? 'Feriados e datas especiais para toda a barbearia' : 'Feriados e datas especiais para você'}
-                </p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
-            </button>
-
-
-            <div className="h-px bg-border/15" />
+              <button
+                type="button"
+                onClick={() => setActiveSubScreen('excecoes')}
+                className="w-full flex items-center justify-between p-4 text-left active:bg-muted/15 transition-all group"
+              >
+                <div className="min-w-0 pr-3">
+                  <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                    Exceções de Horário
+                  </p>
+                  <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                    {companyMode ? 'Feriados, datas comemorativas e horários especiais para toda a barbearia' : 'Feriados, folgas e horários especiais personalizados'}
+                  </p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+              </button>
+            </div>
           </div>
         )}
       </div>
-
-      <StickyFooter show={hasChanges} aboveBottomNav>
-        <PrimaryCta onClick={saveConfigs} loading={saving}>
-          {saving ? 'Salvando…' : 'Salvar alterações'}
-        </PrimaryCta>
-      </StickyFooter>
     </ScreenShell>
   );
 }

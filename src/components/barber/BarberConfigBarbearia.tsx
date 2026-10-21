@@ -957,11 +957,11 @@ export function BarberConfigBarbearia({
           // Apenas um barbeiro: exibe uma ÚNICA configuração de horário unificada!
           // Atualiza tanto o horário pessoal do barbeiro quanto o da barbearia no backend.
           return (
-            <div className="pb-10 min-h-app bg-background">
+            <div className="pb-10 min-h-app bg-background flex flex-col flex-1">
               {scheduleViewMode === 'list' && (
                 <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
               )}
-              <div className="px-4 pt-3 max-w-md mx-auto">
+              <div className="px-4 pt-3 max-w-md mx-auto w-full flex-1 flex flex-col">
                 <AdminHorarios
                   hideTitle
                   unifiedMode={true}
@@ -969,6 +969,7 @@ export function BarberConfigBarbearia({
                   tenantId={tenantId}
                   unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
                   onViewModeChange={setScheduleViewMode}
+                  dayFloatingBottomButton={true}
                 />
               </div>
             </div>
@@ -1028,11 +1029,11 @@ export function BarberConfigBarbearia({
       }
       case "horarios-barbearia":
         return (
-          <div className="pb-10 min-h-app bg-background">
+          <div className="pb-10 min-h-app bg-background flex flex-col flex-1">
             {scheduleViewMode === 'list' && (
               <ScheduleHeader title="Horário da Barbearia" onBack={() => setActiveScreen("horarios")} />
             )}
-            <div className="px-4 pt-3 max-w-md mx-auto">
+            <div className="px-4 pt-3 max-w-md mx-auto w-full flex-1 flex flex-col">
               <AdminHorarios
                 hideTitle
                 companyMode
@@ -1040,20 +1041,21 @@ export function BarberConfigBarbearia({
                 tenantId={tenantId}
                 unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
                 onViewModeChange={setScheduleViewMode}
+                dayFloatingBottomButton={true}
               />
             </div>
           </div>
         );
       case "horarios-pessoal":
         return (
-          <div className="pb-10 min-h-app bg-background">
+          <div className="pb-10 min-h-app bg-background flex flex-col flex-1">
             {scheduleViewMode === 'list' && (
               <ScheduleHeader
                 title={isTenantAdmin ? "Seu Horário Pessoal" : "Horário de Funcionamento"}
                 onBack={() => setActiveScreen(isTenantAdmin ? (hasMultipleBarbers ? "horarios" : "hub") : "hub")}
               />
             )}
-            <div className="px-4 pt-3 max-w-md mx-auto">
+            <div className="px-4 pt-3 max-w-md mx-auto w-full flex-1 flex flex-col">
               <AdminHorarios
                 hideTitle
                 unifiedMode={!hasMultipleBarbers}
@@ -1061,6 +1063,7 @@ export function BarberConfigBarbearia({
                 tenantId={tenantId}
                 unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
                 onViewModeChange={setScheduleViewMode}
+                dayFloatingBottomButton={true}
               />
             </div>
           </div>

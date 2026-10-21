@@ -37,7 +37,11 @@ import { toast } from "sonner";
 import { MobileManualBookingModal } from "./MobileManualBookingModal";
 import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
-import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
+import {
+  extractDebtFromAppointment,
+  getCancellationFeeBadge,
+  useAppointmentCancellationFees,
+} from "@/lib/barberCancellationFee";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
@@ -364,6 +368,12 @@ export function AdminMobileAgenda({
     const names = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
     return names[date.getDay()];
   };
+
+  const appointmentIds = useMemo(
+    () => (appointments || []).map((a) => a?.id).filter(Boolean) as string[],
+    [appointments]
+  );
+  const feeMap = useAppointmentCancellationFees(appointmentIds);
 
   const commitAppointments = useCallback((nextAppointments: MobileAppointment[], dateKey?: string) => {
     setAppointments(nextAppointments);
@@ -1033,6 +1043,7 @@ export function AdminMobileAgenda({
                 : '0,00';
 
               const debtInfo = extractDebtFromAppointment(apt);
+              const feeBadge = getCancellationFeeBadge(apt, feeMap);
 
               return (
                 <div
@@ -1094,7 +1105,7 @@ export function AdminMobileAgenda({
                   <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
                     {/* Linha Superior: Nome do Cliente + Preço / Plano */}
                     <div className="flex items-center justify-between gap-2 overflow-hidden w-full">
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden flex-wrap">
                         <span className={cn(
                           "text-[15px] tracking-tight truncate block",
                           isMuted ? "text-muted-foreground/75 font-normal" : "text-foreground font-semibold"
@@ -1106,11 +1117,15 @@ export function AdminMobileAgenda({
                             (Não veio)
                           </span>
                         )}
-                        {debtInfo.hasDebt && (
+                        {feeBadge ? (
+                          <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide shrink-0", feeBadge.cls)}>
+                            {feeBadge.label}
+                          </span>
+                        ) : debtInfo.hasDebt ? (
                           <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 text-[10px] font-semibold tabular-nums shrink-0">
                             + R$ {debtInfo.debtAmount.toFixed(2).replace(".", ",")}
                           </span>
-                        )}
+                        ) : null}
                         {isWhatsAppAppointment(apt.observacoes) && (
                           <span className={cn(isMuted && "opacity-60")}>
                             <WhatsAppBadge />

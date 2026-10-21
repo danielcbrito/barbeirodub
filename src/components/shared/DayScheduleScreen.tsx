@@ -1,30 +1,18 @@
-import { Loader2, ChevronRight, Copy } from 'lucide-react';
+import { Loader2, ChevronRight, ChevronLeft, X } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { TimeWheelPicker } from './TimeWheelPicker';
 import { LunchBreakScreen } from './LunchBreakScreen';
 import { SlotIntervalScreen } from './SlotIntervalScreen';
-import { ApplyScheduleToWeekScreen } from './ApplyScheduleToWeekScreen';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 const DIAS_SEMANA = [
   'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
   'Quinta-feira', 'Sexta-feira', 'Sábado'
 ];
-
-function CurvedBackArrow({ className }: { className?: string }) {
-  return (
-    <svg
-      width="26" height="26" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M9 14L4 9l5-5" />
-      <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-    </svg>
-  );
-}
 
 export interface DayConfig {
   dia_semana: number;
@@ -58,7 +46,7 @@ interface DayScheduleScreenProps {
   savingSlotInterval?: boolean;
   /** Permite copiar e aplicar o horário deste dia a outros dias da semana */
   onApplyToOtherDays?: (sourceConfig: DayConfig, selectedDays: number[]) => Promise<void> | void;
-  /** Resumos existentes dos outros dias para exibição na tela de aplicação */
+  /** Resumos existentes dos outros dias para exibição na gaveta de aplicação */
   existingDaySummaries?: Record<number, string>;
 }
 
@@ -76,15 +64,16 @@ const getDaySignature = (config: DayConfig) => JSON.stringify({
 export function DayScheduleScreen({
   config, onBack, onUpdate, onSave, saving, hasChanges,
   hideBackArrow = false, saveLabel = 'OK', hideSaveWhenUnchanged = false,
-  floatingBottomButton = false, onboardingFlow = false,
+  floatingBottomButton = true, onboardingFlow = false,
   onOnboardingDayComplete,
   tenantSlotInterval, onSaveSlotInterval, savingSlotInterval = false,
   onApplyToOtherDays, existingDaySummaries,
 }: DayScheduleScreenProps) {
   const [showLunchScreen, setShowLunchScreen] = useState(false);
   const [showSlotScreen, setShowSlotScreen] = useState(false);
-  const [showApplyWeekScreen, setShowApplyWeekScreen] = useState(false);
-  const [appliedDays, setAppliedDays] = useState<number[]>(
+  const [showApplyDrawer, setShowApplyDrawer] = useState(false);
+  const [drawerSaving, setDrawerSaving] = useState(false);
+  const [drawerSelectedDays, setDrawerSelectedDays] = useState<number[]>(
     [0, 1, 2, 3, 4, 5, 6].filter(d => d !== config.dia_semana)
   );
   const initialDaySignatureRef = useRef(getDaySignature(config));
@@ -93,8 +82,8 @@ export function DayScheduleScreen({
     initialDaySignatureRef.current = getDaySignature(config);
     setShowLunchScreen(false);
     setShowSlotScreen(false);
-    setShowApplyWeekScreen(false);
-    setAppliedDays([0, 1, 2, 3, 4, 5, 6].filter(d => d !== config.dia_semana));
+    setShowApplyDrawer(false);
+    setDrawerSelectedDays([0, 1, 2, 3, 4, 5, 6].filter(d => d !== config.dia_semana));
   }, [config.dia_semana]);
 
   const localHasChanges = useMemo(
@@ -115,9 +104,47 @@ export function DayScheduleScreen({
       setShowLunchScreen(true);
       return;
     }
+
+    // Se temos suporte a aplicar para os outros dias e o dia está aberto, abre a gaveta
+    if (onApplyToOtherDays && config.aberto) {
+      setShowApplyDrawer(true);
+      return;
+    }
+
+    // Caso contrário, salva diretamente e volta
     const result = await onSave();
     if (result === false) return;
     onBack();
+  };
+
+  const handleSaveOnlyCurrentDay = async () => {
+    setShowApplyDrawer(false);
+    const result = await onSave();
+    if (result === false) return;
+    onBack();
+  };
+
+  const handleConfirmApplyToDays = async () => {
+    if (!onApplyToOtherDays) {
+      await handleSaveOnlyCurrentDay();
+      return;
+    }
+
+    if (drawerSelectedDays.length === 0) {
+      await handleSaveOnlyCurrentDay();
+      return;
+    }
+
+    setDrawerSaving(true);
+    try {
+      await onApplyToOtherDays(config, drawerSelectedDays);
+      setShowApplyDrawer(false);
+      onBack();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDrawerSaving(false);
+    }
   };
 
   // Chamado pelo LunchBreakScreen ao confirmar.
@@ -189,79 +216,43 @@ export function DayScheduleScreen({
     );
   }
 
-  if (showApplyWeekScreen && onApplyToOtherDays) {
-    return (
-      <AnimatePresence mode="wait">
-        <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-5 pt-3">
-          <ApplyScheduleToWeekScreen
-            key="apply-week"
-            horaAbertura={config.hora_abertura || '09:00'}
-            horaFechamento={config.hora_fechamento || '18:00'}
-            horaAlmocoInicio={config.hora_almoco_inicio}
-            horaAlmocoFim={config.hora_almoco_fim}
-            slotIntervalMinutes={config.slot_interval_minutes ?? tenantSlotInterval ?? 15}
-            selectedDays={appliedDays}
-            onToggleDay={(dia) => {
-              setAppliedDays(prev =>
-                prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia].sort()
-              );
-            }}
-            onSetSelectedDays={setAppliedDays}
-            onBack={() => setShowApplyWeekScreen(false)}
-            onSave={async () => {
-              await onApplyToOtherDays(config, appliedDays);
-              setShowApplyWeekScreen(false);
-            }}
-            saving={saving}
-            floatingBottomButton={floatingBottomButton}
-            existingDaySummaries={existingDaySummaries}
-            title="Copiar para outros dias"
-            description="Selecione os dias da semana para os quais deseja copiar este mesmo horário e intervalos."
-          />
-        </div>
-      </AnimatePresence>
-    );
-  }
-
   return (
-    <div
-      className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-5"
-      style={{ paddingTop: "calc(env(safe-area-inset-top) + 14px)" }}
-    >
-      <div className="flex items-center gap-1.5 min-h-[52px]">
+    <div className="w-full max-w-lg mx-auto flex-1 flex flex-col min-h-full pb-28">
+      {/* ── Header: Seta alinhada à esquerda + Título do dia + Switch Aberto/Fechado ── */}
+      <div className="flex items-center gap-2 min-h-[56px] py-1 border-b border-border/15 mb-3">
         {!hideBackArrow && (
           <button
+            type="button"
             onClick={onBack}
-            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all -ml-1 shrink-0"
             aria-label="Voltar"
+            className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all shrink-0 text-foreground flex items-center justify-center border border-border/30"
           >
-            <CurvedBackArrow className="text-foreground" />
+            <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
           </button>
         )}
 
-        <h2 className={`text-[20px] font-semibold text-foreground tracking-tight flex-1 truncate ${hideBackArrow ? 'pl-0.5' : ''}`}>
-          {DIAS_SEMANA[config.dia_semana]}
-        </h2>
-
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[20px] font-semibold text-foreground tracking-tight truncate leading-none">
+            {DIAS_SEMANA[config.dia_semana]}
+          </h2>
+        </div>
 
         {config.aberto !== null && config.aberto !== undefined && (
-          <div className="flex flex-col items-center shrink-0 mt-4">
-
-
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={cn(
+              "text-xs font-medium",
+              config.aberto ? "text-emerald-500" : "text-muted-foreground/60"
+            )}>
+              {config.aberto ? 'Aberto' : 'Fechado'}
+            </span>
             <Switch
               checked={!!config.aberto}
               onCheckedChange={(checked) => handleUpdate('aberto', checked)}
-              className="scale-[0.85] data-[state=checked]:bg-emerald-500"
+              className="data-[state=checked]:bg-emerald-500"
             />
-            <span className="text-[8px] text-muted-foreground font-light mt-1">
-              {config.aberto ? 'Aberto' : 'Fechado'}
-            </span>
           </div>
         )}
       </div>
-
-      <div className="h-px bg-border/25 mt-3" />
-
 
       {config.aberto === null || config.aberto === undefined ? (
         <div className="flex-1 flex flex-col items-center justify-center py-16 px-4">
@@ -292,26 +283,17 @@ export function DayScheduleScreen({
           </div>
         </div>
       ) : config.aberto ? (
-        <div className="flex-1 flex flex-col mt-3">
-          <p className="text-[11px] text-muted-foreground/50 leading-relaxed font-light mb-3">
-            {onboardingFlow
-              ? 'Defina o seu horário de trabalho. Depois toque em Continuar para configurar o horário de almoço.'
-              : 'Defina o seu horário de trabalho aqui. Se mexer no horário, confirme no botão abaixo para salvar e voltar para a semana.'}
-          </p>
-
-
-          <div className="h-px bg-border/20" />
-
-          <div className="flex items-center justify-center gap-0 py-2">
-            <div className="flex-1">
+        <div className="flex-1 flex flex-col space-y-6 pt-4">
+          {/* Carrosséis centralizados no centro da tela */}
+          <div className="flex items-center justify-center gap-5 sm:gap-6 py-4 w-full">
+            <div className="w-[130px] shrink-0 flex justify-center">
               <TimeWheelPicker
                 value={config.hora_abertura || (onboardingFlow ? '00:00' : '09:00')}
                 onChange={(v) => handleUpdate('hora_abertura', v)}
                 minuteStep={5}
               />
             </div>
-            <span className="text-sm text-muted-foreground/40 mx-1 select-none self-center mt-6">-</span>
-            <div className="flex-1">
+            <div className="w-[130px] shrink-0 flex justify-center">
               <TimeWheelPicker
                 value={config.hora_fechamento || (onboardingFlow ? '00:00' : '20:00')}
                 onChange={(v) => handleUpdate('hora_fechamento', v)}
@@ -320,84 +302,71 @@ export function DayScheduleScreen({
             </div>
           </div>
 
-          <div className="h-px bg-border/20" />
-
-          {/* Fora do onboarding: acesso rápido ao intervalo direto daqui */}
+          {/* ── Intervalos e Pausas (Minimalista e sem ícones nas laterais) ── */}
           {!onboardingFlow && (
-            <div className="mt-3">
-              <span className="text-[11px] text-muted-foreground/50 font-light uppercase tracking-wider">
-                Intervalos
+            <div className="space-y-2 pt-2">
+              <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider px-1">
+                Intervalos e Pausas
               </span>
-              <div className="h-px bg-border/15 mt-2" />
 
-              <button
-                onClick={() => {
-                  if (!config.hora_almoco_inicio) handleUpdate('hora_almoco_inicio', '12:00');
-                  if (!config.hora_almoco_fim) handleUpdate('hora_almoco_fim', '13:00');
-                  setShowLunchScreen(true);
-                }}
-                className="flex items-center gap-3 py-3.5 w-full text-left active:bg-muted/5 transition-colors"
-              >
-                {hasLunch ? (
-                  <>
-                    <span className="text-[13px] text-foreground font-medium">Horário de Almoço</span>
-                    <span className="text-[13px] text-muted-foreground/50 ml-auto">{lunchResumo}</span>
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/25 flex-shrink-0" />
-                  </>
-                ) : (
-                  <>
-                    <span className="text-base text-muted-foreground/40">+</span>
-                    <span className="text-[13px] text-foreground font-medium">Adicionar intervalo</span>
-                  </>
-                )}
-              </button>
-              <div className="h-px bg-border/15" />
+              <div className="rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm divide-y divide-border/20 overflow-hidden shadow-xs">
+                {/* Horário de Almoço */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!config.hora_almoco_inicio) handleUpdate('hora_almoco_inicio', '12:00');
+                    if (!config.hora_almoco_fim) handleUpdate('hora_almoco_fim', '13:00');
+                    setShowLunchScreen(true);
+                  }}
+                  className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/10 active:bg-muted/15 transition-all group"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                      Horário de Almoço
+                    </p>
+                    <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-tight">
+                      {hasLunch ? 'Pausa programada no expediente' : 'Nenhum intervalo configurado'}
+                    </p>
+                  </div>
 
-              {onSaveSlotInterval && (
-                <>
-                  <button
-                    onClick={() => setShowSlotScreen(true)}
-                    className="flex items-center gap-3 py-3.5 w-full text-left active:bg-muted/5 transition-colors"
-                  >
-                    <span className="text-[13px] text-foreground font-medium">Intervalo de horários</span>
-                    <span className="text-[13px] text-muted-foreground/50 ml-auto">
-                      {(config.slot_interval_minutes ?? tenantSlotInterval ?? 15)} min
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={cn(
+                      "text-xs font-medium px-2.5 py-1 rounded-full tabular-nums border",
+                      hasLunch
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                        : "bg-muted/50 text-muted-foreground/70 border-border/40"
+                    )}>
+                      {lunchResumo}
                     </span>
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/25 flex-shrink-0" />
-                  </button>
-                  <div className="h-px bg-border/15" />
-                </>
-              )}
+                    <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
+                  </div>
+                </button>
 
-              {onApplyToOtherDays && (
-                <div className="mt-4 pt-2">
-                  <span className="text-[11px] text-muted-foreground/50 font-light uppercase tracking-wider">
-                    Semana
-                  </span>
-                  <div className="h-px bg-border/15 mt-2 mb-2.5" />
+                {/* Intervalo entre horários */}
+                {onSaveSlotInterval && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setAppliedDays([0, 1, 2, 3, 4, 5, 6].filter(d => d !== config.dia_semana));
-                      setShowApplyWeekScreen(true);
-                    }}
-                    className="flex items-center gap-3 py-3 px-3.5 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 active:scale-[0.99] transition-all w-full text-left"
+                    onClick={() => setShowSlotScreen(true)}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/10 active:bg-muted/15 transition-all group"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-foreground/10 flex items-center justify-center shrink-0">
-                      <Copy className="h-4 w-4 text-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold text-foreground">
-                        Copiar horário para outros dias
+                    <div className="min-w-0 pr-3">
+                      <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                        Intervalo entre horários
                       </p>
-                      <p className="text-[11px] text-muted-foreground/70 truncate">
-                        Aplica este horário e intervalos para outros dias
+                      <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-tight">
+                        Duração de cada bloco de agendamento
                       </p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0" />
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-secondary text-foreground tabular-nums border border-border/40">
+                        {(config.slot_interval_minutes ?? tenantSlotInterval ?? 15)} min
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
+                    </div>
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -409,17 +378,15 @@ export function DayScheduleScreen({
         </div>
       )}
 
+      {/* Botão de confirmação/salvar na parte inferior */}
       {shouldShowConfirmButton && (
         <div
-          className={floatingBottomButton
-            ? "fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md px-6 pt-5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90"
-            : "sticky bottom-0 z-30 mt-auto w-full pt-5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
-          }
+          className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-lg px-4 pt-3 pb-[calc(18px+env(safe-area-inset-bottom))] bg-background/95 backdrop-blur-md border-t border-border/20 shadow-lg"
         >
           <Button
             onClick={handlePrimary}
             disabled={config.aberto === null || config.aberto === undefined || saving}
-            className="w-full h-[48px] rounded-xl bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full h-[52px] rounded-2xl bg-foreground hover:bg-foreground/90 text-background font-semibold text-base shadow-sm active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {saving ? (
               <>
@@ -432,6 +399,147 @@ export function DayScheduleScreen({
           </Button>
         </div>
       )}
+
+      {/* ── Gaveta (Bottom Sheet Drawer): Aplicar a outros dias da semana ── */}
+      <AnimatePresence>
+        {showApplyDrawer && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleSaveOnlyCurrentDay}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+            />
+
+            {/* Painel da gaveta */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              className="relative z-50 w-full max-w-lg rounded-t-[28px] border-t border-border/40 bg-card p-5 pb-[calc(20px+env(safe-area-inset-bottom))] shadow-2xl space-y-4 max-h-[85vh] flex flex-col"
+            >
+              {/* Alça superior */}
+              <div className="w-10 h-1.5 rounded-full bg-muted-foreground/20 mx-auto shrink-0" />
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-[17px] font-semibold text-foreground tracking-tight">
+                    Aplicar a outros dias?
+                  </h3>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">
+                    Deseja replicar este horário para outros dias da semana?
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveOnlyCurrentDay}
+                  className="w-8 h-8 rounded-full bg-secondary/80 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Fechar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Ações rápidas */}
+              <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+                <span>Dias selecionados</span>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDrawerSelectedDays([0, 1, 2, 3, 4, 5, 6].filter(d => d !== config.dia_semana))}
+                    className="hover:text-foreground font-medium transition-colors"
+                  >
+                    Selecionar todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDrawerSelectedDays([])}
+                    className="hover:text-foreground font-medium transition-colors"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista dos dias com checkboxes */}
+              <div className="overflow-y-auto space-y-1.5 flex-1 pr-1 max-h-[40vh]">
+                {DIAS_SEMANA.map((diaNome, diaIdx) => {
+                  if (diaIdx === config.dia_semana) return null;
+                  const isSelected = drawerSelectedDays.includes(diaIdx);
+                  const currentSummary = existingDaySummaries?.[diaIdx];
+
+                  return (
+                    <button
+                      key={diaIdx}
+                      type="button"
+                      onClick={() => {
+                        setDrawerSelectedDays(prev =>
+                          prev.includes(diaIdx) ? prev.filter(d => d !== diaIdx) : [...prev, diaIdx].sort()
+                        );
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all",
+                        isSelected
+                          ? "bg-secondary/70 border-foreground/30 text-foreground"
+                          : "bg-card/40 border-border/20 text-muted-foreground hover:bg-muted/10"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => {}}
+                          className="pointer-events-none"
+                        />
+                        <span className="text-[13.5px] font-medium text-foreground">
+                          {diaNome}
+                        </span>
+                      </div>
+                      {currentSummary && (
+                        <span className="text-xs text-muted-foreground/60 tabular-nums">
+                          {currentSummary}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Botões do rodapé da gaveta */}
+              <div className="space-y-2 pt-2">
+                <Button
+                  onClick={handleConfirmApplyToDays}
+                  disabled={drawerSaving || saving}
+                  className="w-full h-[48px] rounded-xl bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm transition-colors"
+                >
+                  {drawerSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Aplicando...
+                    </>
+                  ) : (
+                    drawerSelectedDays.length > 0
+                      ? `Aplicar a ${drawerSelectedDays.length} ${drawerSelectedDays.length === 1 ? 'dia' : 'dias'}`
+                      : 'Salvar apenas este dia'
+                  )}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleSaveOnlyCurrentDay}
+                  disabled={drawerSaving || saving}
+                  className="w-full h-[40px] rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Salvar apenas para {DIAS_SEMANA[config.dia_semana]}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

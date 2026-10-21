@@ -128,83 +128,186 @@ Deno.serve(async (req) => {
       return json({ success: false, error: 'missing_fields' }, 400);
     }
 
-
-    const { data: tokens, error } = await supabase
+    // Busca tokens de todos os dispositivos do barbeiro em barber_fcm_tokens
+    const { data: fcmTokens, error: fcmError } = await supabase
       .from('barber_fcm_tokens')
       .select('id, token')
       .eq('barbeiro_id', input.barber_id);
 
-    if (error) return json({ success: false, error: error.message }, 500);
-    if (!tokens || tokens.length === 0) {
-      return json({ success: true, data: { sent: 0, removed: 0, reason: 'no_tokens' } });
-    }
+    if (fcmError) console.warn('[send-push] erro ao buscar barber_fcm_tokens', fcmError);
 
-    const accessToken = await getAccessToken();
-    const sa = getServiceAccount();
-    const fcmUrl = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
+    // Busca também em push_subscriptions vinculados ao barbeiro ou seu user_id
+    const { data: barberRow } = await supabase
+      .from('barbeiros')
+      .select('user_id')
+      .eq('id', input.barber_id)
+      .maybeSingle();
+
+    const { data: pushSubs } = await supabase
+      .from('push_subscriptions')
+      .select('id, endpoint, subscription_json')
+      .or(`barbeiro_id.eq.${input.barber_id}${barberRow?.user_id ? `,user_id.eq.${barberRow.user_id}` : ''}`);
+
+    // Agrupa todos os tokens FCM únicos
+    const tokenMap = new Map<string, string>(); // token -> id
+    (fcmTokens ?? []).forEach((t) => {
+      if (t.token) tokenMap.set(t.token, t.id);
+    });
+
+    (pushSubs ?? []).forEach((s) => {
+      const fcmTokenFromSub = (s.subscription_json as any)?.token || (s.subscription_json as any)?.fcmToken;
+      if (fcmTokenFromSub && !tokenMap.has(fcmTokenFromSub)) {
+        tokenMap.set(fcmTokenFromSub, s.id);
+      }
+    });
 
     let sent = 0;
     const toRemove: string[] = [];
 
-    await Promise.all(
-      tokens.map(async (t) => {
-        const payload = {
-          message: {
-            token: t.token,
-            notification: { title: input.title, body: input.body },
-            webpush: {
-              notification: {
-                title: input.title,
-                body: input.body,
-                icon: '/favicon.ico',
-                badge: '/favicon.ico',
-                requireInteraction: false,
+    if (tokenMap.size > 0) {
+      const accessToken = await getAccessToken();
+      const sa = getServiceAccount();
+      const fcmUrl = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
+
+      await Promise.all(
+        Array.from(tokenMap.entries()).map(async ([tokenStr, tokenId]) => {
+          const payload = {
+            message: {
+              token: tokenStr,
+              notification: { title: input.title, body: input.body },
+              webpush: {
+                notification: {
+                  title: input.title,
+                  body: input.body,
+                  icon: '/app-icon.png',
+                  badge: '/app-icon.png',
+                  requireInteraction: false,
+                },
+                fcm_options: { link: input.data?.url ?? '/barbeiro' },
               },
-              fcm_options: { link: input.data?.url ?? '/barbeiro' },
+              data: input.data
+                ? Object.fromEntries(
+                    Object.entries(input.data).map(([k, v]) => [k, String(v)]),
+                  )
+                : {},
             },
-            data: input.data
-              ? Object.fromEntries(
-                  Object.entries(input.data).map(([k, v]) => [k, String(v)]),
-                )
-              : {},
-          },
-        };
+          };
 
-        const res = await fetch(fcmUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
+          const res = await fetch(fcmUrl, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
 
-        if (res.ok) {
-          sent += 1;
-          await supabase
-            .from('barber_fcm_tokens')
-            .update({ last_seen_at: new Date().toISOString() })
-            .eq('id', t.id);
-          return;
-        }
+          if (res.ok) {
+            sent += 1;
+            await supabase
+              .from('barber_fcm_tokens')
+              .update({ last_seen_at: new Date().toISOString() })
+              .eq('id', tokenId);
+            return;
+          }
 
-        const errBody = await res.text();
-        const isInvalid =
-          res.status === 404 ||
-          res.status === 400 ||
-          /UNREGISTERED|INVALID_ARGUMENT|registration-token-not-registered/i.test(errBody);
-        if (isInvalid) {
-          toRemove.push(t.id);
-        }
-        console.warn('FCM send failed', { status: res.status, errBody });
-      }),
-    );
+          const errBody = await res.text();
+          const isInvalid =
+            res.status === 404 ||
+            res.status === 400 ||
+            /UNREGISTERED|INVALID_ARGUMENT|registration-token-not-registered/i.test(errBody);
+          if (isInvalid) {
+            toRemove.push(tokenId);
+          }
+          console.warn('FCM send failed', { status: res.status, errBody });
+        }),
+      );
 
-    if (toRemove.length > 0) {
-      await supabase.from('barber_fcm_tokens').delete().in('id', toRemove);
+      if (toRemove.length > 0) {
+        await supabase.from('barber_fcm_tokens').delete().in('id', toRemove);
+      }
     }
 
-    return json({ success: true, data: { sent, removed: toRemove.length } });
+    // =========================================================================
+    // FALLBACK WHATSAPP VIA EVOLUTION API: se push não for suportado ou não houver dispositivos
+    // =========================================================================
+    let whatsappFallbackSent = false;
+    if (sent === 0) {
+      const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
+      const EVOLUTION_API_TOKEN = Deno.env.get('EVOLUTION_API_TOKEN');
+
+      if (EVOLUTION_API_URL && EVOLUTION_API_TOKEN) {
+        try {
+          // Busca telefone do barbeiro
+          const { data: priv } = await supabase
+            .from('barbeiros_private')
+            .select('telefone')
+            .eq('barbeiro_id', input.barber_id)
+            .maybeSingle();
+
+          const { data: inst } = await supabase
+            .from('whatsapp_instances')
+            .select('instance_name, status, phone_number')
+            .eq('barbeiro_id', input.barber_id)
+            .maybeSingle();
+
+          const rawPhone = priv?.telefone || inst?.phone_number;
+          if (rawPhone) {
+            const digits = String(rawPhone).replace(/\D/g, '');
+            const normalizedPhone = digits.length >= 10 && digits.length <= 11 ? `55${digits}` : digits;
+
+            // Busca instância conectada
+            let instanceName = inst?.status === 'connected' ? inst?.instance_name : null;
+            if (!instanceName) {
+              const { data: anyConnected } = await supabase
+                .from('whatsapp_instances')
+                .select('instance_name')
+                .eq('status', 'connected')
+                .limit(1)
+                .maybeSingle();
+              instanceName = anyConnected?.instance_name;
+            }
+
+            if (instanceName && normalizedPhone.length >= 12) {
+              const textMessage = `🔔 *${input.title}*\n${input.body}`;
+              const evoRes = await fetch(
+                `${EVOLUTION_API_URL}/message/sendText/${encodeURIComponent(instanceName)}`,
+                {
+                  method: 'POST',
+                  headers: {
+                    apikey: EVOLUTION_API_TOKEN,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    number: normalizedPhone,
+                    text: textMessage,
+                  }),
+                },
+              );
+
+              if (evoRes.ok) {
+                whatsappFallbackSent = true;
+                console.log(`[push-fallback] WhatsApp enviado com sucesso para ${normalizedPhone.slice(0, 4)}****`);
+              } else {
+                console.warn('[push-fallback] Falha ao enviar WhatsApp na Evolution:', evoRes.status, await evoRes.text());
+              }
+            }
+          }
+        } catch (evoErr) {
+          console.warn('[push-fallback] Erro no fallback WhatsApp:', evoErr);
+        }
+      }
+    }
+
+    return json({
+      success: true,
+      data: {
+        sent,
+        removed: toRemove.length,
+        devices_targeted: tokenMap.size,
+        whatsapp_fallback: whatsappFallbackSent,
+      },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('send-push-notification error', msg);

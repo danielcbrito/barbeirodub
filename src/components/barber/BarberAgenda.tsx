@@ -48,7 +48,11 @@ import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { toast } from "sonner";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
-import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
+import {
+  extractDebtFromAppointment,
+  getCancellationFeeBadge,
+  useAppointmentCancellationFees,
+} from "@/lib/barberCancellationFee";
 
 interface BarberAgendaProps {
   barberContext: BarberContext;
@@ -70,6 +74,18 @@ const getStatusColorConfig = (status: string, barbeiroConfirmou: boolean | null)
       dot: "bg-zinc-400 dark:bg-zinc-500",
       statusBadge: "text-muted-foreground",
       statusLabel: "Não veio",
+    };
+  }
+  if (
+    status === "cancelled_by_user" ||
+    status === "cancelled_by_admin" ||
+    status === "cancelado" ||
+    status === "cancelled"
+  ) {
+    return {
+      dot: "bg-[#FF3B30] dark:bg-[#FF453A]",
+      statusBadge: "text-muted-foreground",
+      statusLabel: "Cancelado",
     };
   }
   if (status === "confirmed" || barbeiroConfirmou) {
@@ -329,6 +345,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     return true;
   });
 
+  const appointmentIds = useMemo(
+    () => filteredAppointments.map((a) => a?.id).filter(Boolean) as string[],
+    [filteredAppointments]
+  );
+  const feeMap = useAppointmentCancellationFees(appointmentIds);
+
   const dayPendingAppointments = useMemo(() => {
     if (!appointments || appointments.length === 0) return [];
     return appointments.filter(
@@ -583,6 +605,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                 const rawHora = apt.hora || "00:00";
                 const horaFormatted = rawHora.slice(0, 5);
                 const debtInfo = extractDebtFromAppointment(apt);
+                const feeBadge = getCancellationFeeBadge(apt, feeMap);
 
                 const now = new Date();
                 const isViewingToday = isToday(selectedDate);
@@ -592,15 +615,24 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                   return ((h || 0) * 60 + (m || 0)) + duration;
                 })();
                 const nowMinutes = now.getHours() * 60 + now.getMinutes();
-                const isCompleted = apt.status === "completed" || apt.status === "no_show";
+                const isCancelled =
+                  apt.status === "cancelled_by_user" ||
+                  apt.status === "cancelled_by_admin" ||
+                  apt.status === "cancelled" ||
+                  apt.status === "cancelado";
+                const isCompleted = apt.status === "completed" || apt.status === "no_show" || isCancelled;
                 const isPastTime = isViewingToday && aptEndMinutes <= nowMinutes;
                 const isDone = isCompleted || isPastTime;
                 const isNextUp = isViewingToday && !isDone && rawHora >= currentTimeStr
                   && apt.status !== "completed" && apt.status !== "no_show"
+                  && !isCancelled
                   && idx === filteredAppointments.findIndex(a =>
                     (a?.hora || "") >= currentTimeStr
                     && a?.status !== "completed"
                     && a?.status !== "no_show"
+                    && a?.status !== "cancelled_by_user"
+                    && a?.status !== "cancelled_by_admin"
+                    && a?.status !== "cancelled"
                   );
 
                 return (
@@ -664,17 +696,21 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                     </div>
 
                     {/* Cliente */}
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
                       <User className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
                       <span className="text-[13px] text-muted-foreground truncate">
                         {apt.profile?.nome || "Cliente"}
                       </span>
                       {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
-                      {debtInfo.hasDebt && (
+                      {feeBadge ? (
+                        <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide shrink-0", feeBadge.cls)}>
+                          {feeBadge.label}
+                        </span>
+                      ) : debtInfo.hasDebt ? (
                         <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 text-[10px] font-semibold tabular-nums shrink-0">
                           + R$ {debtInfo.debtAmount.toFixed(2).replace(".", ",")} taxa
                         </span>
-                      )}
+                      ) : null}
                       {isNextUp && (
                         <span className="ml-auto text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
                           agora

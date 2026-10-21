@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface BarberCancellationFeeConfig {
@@ -737,4 +738,185 @@ export async function markCancellationDebtAsPaid(
     return false;
   }
 }
+
+export interface CancellationFeeBadgeInfo {
+  status: "pendente" | "pago";
+  label: string;
+  cls: string;
+}
+
+/**
+ * Determina o status da taxa de cancelamento de um agendamento para exibição na agenda:
+ * - "Taxa pendente" (âmbar)
+ * - "Taxa recebida ✓" (esmeralda)
+ */
+export function getCancellationFeeBadge(
+  apt: {
+    id?: string;
+    status?: string | null;
+    observacoes?: string | null;
+    fee_status?: "pendente" | "pago" | null;
+  },
+  feeMap?: Map<string, "pendente" | "pago">
+): CancellationFeeBadgeInfo | null {
+  // 1. Prioridade: feeMap consultado em tempo real por agendamento_id
+  const mapped = apt.id && feeMap ? feeMap.get(apt.id) : null;
+  const status = mapped || apt.fee_status;
+
+  if (status === "pago") {
+    return {
+      status: "pago",
+      label: "Taxa recebida ✓",
+      cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30",
+    };
+  }
+
+  if (status === "pendente") {
+    return {
+      status: "pendente",
+      label: "Taxa pendente",
+      cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30",
+    };
+  }
+
+  // 2. Análise por observações do agendamento
+  const obs = (apt.observacoes || "").toLowerCase();
+  if (
+    obs.includes("taxa recebida") ||
+    obs.includes("taxa paga") ||
+    obs.includes("taxa de cancelamento paga")
+  ) {
+    return {
+      status: "pago",
+      label: "Taxa recebida ✓",
+      cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30",
+    };
+  }
+
+  if (
+    obs.includes("taxa pendente") ||
+    obs.includes("taxa de cancelamento pendente") ||
+    obs.includes("taxa_cancelamento")
+  ) {
+    return {
+      status: "pendente",
+      label: "Taxa pendente",
+      cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30",
+    };
+  }
+
+  // 3. Checa se o agendamento foi cancelado e possui débito detectado
+  const st = (apt.status || "").toLowerCase();
+  const isCancelled =
+    st === "cancelled_by_user" ||
+    st === "cancelled_by_admin" ||
+    st === "cancelled" ||
+    st === "no_show";
+
+  if (isCancelled) {
+    const debt = extractDebtFromAppointment(apt);
+    if (debt.hasDebt) {
+      return {
+        status: "pendente",
+        label: "Taxa pendente",
+        cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30",
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Hook para consultar dinamicamente o status de taxas de cancelamento
+ * para os agendamentos exibidos na agenda.
+ */
+export function useAppointmentCancellationFees(appointmentIds: string[]) {
+  const [feeMap, setFeeMap] = useState<Map<string, "pendente" | "pago">>(new Map());
+
+  const idsKey = (appointmentIds || []).filter(Boolean).sort().join(",");
+
+  useEffect(() => {
+    if (!idsKey) {
+      setFeeMap(new Map());
+      return;
+    }
+
+    const ids = idsKey.split(",");
+    let isMounted = true;
+
+    async function loadFees() {
+      try {
+        const newMap = new Map<string, "pendente" | "pago">();
+
+        // 1. Consulta woovi_charges vinculadas aos agendamentos
+        const { data: charges } = await supabase
+          .from("woovi_charges")
+          .select("agendamento_id, status, metadata, correlation_id")
+          .in("agendamento_id", ids);
+
+        (charges || []).forEach((c: any) => {
+          if (!c.agendamento_id) return;
+          const isFee =
+            c.metadata?.purpose === "cancellation_debt" ||
+            c.metadata?.categoria === "taxa_cancelamento" ||
+            String(c.correlation_id || "").startsWith("debt-") ||
+            String(c.correlation_id || "").startsWith("taxa-");
+
+          if (isFee) {
+            const isPaid = c.status === "COMPLETED";
+            newMap.set(c.agendamento_id, isPaid ? "pago" : "pendente");
+          }
+        });
+
+        // 2. Consulta itens de débitos em informacoes_empresa
+        const { data: debitos } = await supabase
+          .from("informacoes_empresa")
+          .select("valor")
+          .eq("categoria", "debitos_cliente")
+          .limit(100);
+
+        (debitos || []).forEach((row: any) => {
+          if (!row.valor) return;
+          try {
+            const parsed = JSON.parse(row.valor);
+            if (Array.isArray(parsed.itens)) {
+              parsed.itens.forEach((it: any) => {
+                if (it.agendamento_id && ids.includes(it.agendamento_id)) {
+                  const current = newMap.get(it.agendamento_id);
+                  if (it.status === "pago") {
+                    newMap.set(it.agendamento_id, "pago");
+                  } else if (it.status === "pendente" && current !== "pago") {
+                    newMap.set(it.agendamento_id, "pendente");
+                  }
+                }
+              });
+            } else if (parsed.agendamento_id && ids.includes(parsed.agendamento_id)) {
+              if (parsed.status === "pago") {
+                newMap.set(parsed.agendamento_id, "pago");
+              } else if (parsed.status === "pendente") {
+                newMap.set(parsed.agendamento_id, "pendente");
+              }
+            }
+          } catch {}
+        });
+
+        if (isMounted) {
+          setFeeMap(newMap);
+        }
+      } catch (err) {
+        console.warn("[useAppointmentCancellationFees] erro ao carregar taxas:", err);
+      }
+    }
+
+    loadFees();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [idsKey]);
+
+  return feeMap;
+}
+
 
