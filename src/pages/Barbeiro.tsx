@@ -882,7 +882,7 @@ const Barbeiro = () => {
                     <Route path="seguranca/*" element={<BarberSeguranca />} />
                     <Route path="perfil" element={<BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} />} />
                     <Route path="carteira" element={<CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" />} />
-                    <Route path="configuracoes-perfil" element={<BarberSettingsPage />} />
+                    <Route path="configuracoes-perfil" element={<Navigate to="/barbeiro/config-barbearia" replace />} />
                     <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} hideAgent={!barberContext.isTenantAdmin} />} />
                     <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                     <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />

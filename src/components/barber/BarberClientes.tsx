@@ -1633,7 +1633,7 @@ export function BarberClientes({
       {!hideHeader && (
         <ScheduleHeader
           title="Clientes"
-          onBack={onBack ? onBack : () => navigate(`${basePath}/configuracoes-perfil`)}
+          onBack={onBack ? onBack : () => navigate(`${basePath}/config-barbearia`)}
           right={
             <span className="text-[12px] text-muted-foreground/70 font-medium tabular-nums">
               {filteredClients.length} {filteredClients.length === 1 ? "cliente" : "clientes"}

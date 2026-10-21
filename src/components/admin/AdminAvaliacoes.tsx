@@ -176,7 +176,7 @@ export function AdminAvaliacoes({
         <div className="sticky top-0 z-30 bg-background">
           <div className="flex items-center gap-2 px-4 h-16">
             <button
-              onClick={() => (onBack ? onBack() : navigate(`${basePath}/configuracoes-perfil`))}
+              onClick={() => (onBack ? onBack() : navigate(`${basePath}/config-barbearia`))}
               className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
               aria-label="Voltar"
             >

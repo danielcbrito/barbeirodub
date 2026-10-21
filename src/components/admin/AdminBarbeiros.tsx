@@ -720,7 +720,7 @@ export function AdminBarbeiros({
       {!hideHeader && (
         <ScheduleHeader
           title="Barbeiros & Equipe"
-          onBack={onBack ? onBack : () => navigate(`${basePath}/configuracoes-perfil`)}
+          onBack={onBack ? onBack : () => navigate(`${basePath}/config-barbearia`)}
           right={
             <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
               {activeBarbeiros.length} {activeBarbeiros.length === 1 ? "ativo" : "ativos"}

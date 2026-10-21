@@ -529,7 +529,7 @@ const Admin = () => {
                   )
                 } />
                 <Route path="meus-planos" element={<AdminMeusPlanos basePath="/admin" />} />
-                <Route path="configuracoes-perfil" element={<ProfileSettingsPage />} />
+                <Route path="configuracoes-perfil" element={<Navigate to="/admin/config-barbearia" replace />} />
                 <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
                 <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath="/admin" tenantId={adminContext?.tenantId} />} />
                 <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath="/admin" tenantNome={adminContext?.apelido} />} />

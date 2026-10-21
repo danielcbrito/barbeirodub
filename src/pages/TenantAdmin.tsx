@@ -590,7 +590,7 @@ const TenantAdmin = () => {
                   <Route path="seguranca" element={<AdminSeguranca basePath={BASE} />} />
                   <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath={BASE} tenantId={tenantId} />} />
                   <Route path="perfil" element={<AdminMobileProfile basePath={BASE} isTenant />} />
-                  <Route path="configuracoes-perfil" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
+                  <Route path="configuracoes-perfil" element={<Navigate to={`${BASE}/config-barbearia`} replace />} />
                   <Route path="config-barbearia" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
                   <Route path="assinatura" element={<TenantSubscriptionPage subscription={subscription} basePath={BASE} tenantId={tenantId} />} />
                   <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath={BASE} tenantNome={tenantNome} barberName={adminContext?.apelido} />} />
@@ -681,7 +681,7 @@ const TenantAdmin = () => {
                 <Route path="disparo" element={<AdminDisparo tenantId={tenantId || undefined} basePath={BASE} barbeiroId={adminContext?.barbeiroId || undefined} canSelectAllClients />} />
                 <Route path="seguranca" element={<AdminSeguranca basePath={BASE} />} />
                 <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath={BASE} tenantId={tenantId} />} />
-                <Route path="configuracoes-perfil" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
+                <Route path="configuracoes-perfil" element={<Navigate to={`${BASE}/config-barbearia`} replace />} />
                 <Route path="config-barbearia" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
                 <Route path="assinatura" element={<TenantSubscriptionPage subscription={subscription} basePath={BASE} tenantId={tenantId} />} />
                 <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath={BASE} tenantNome={tenantNome} barberName={adminContext?.apelido} />} />
