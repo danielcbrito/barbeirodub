@@ -668,7 +668,14 @@ export default function AdminHorarios({
       return true;
     } catch (error: any) {
       console.error('Erro ao salvar dia:', error);
-      toast.error(error?.message || 'Erro ao salvar configuraç  const saveConfigs = async (): Promise<boolean> => {
+      toast.error(error?.message || 'Erro ao salvar configurações do dia');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveConfigs = async (): Promise<boolean> => {
     setSaving(true);
     try {
       const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
