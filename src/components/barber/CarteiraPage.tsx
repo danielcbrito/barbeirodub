@@ -1706,48 +1706,55 @@ export function CarteiraPage({
   useEffect(() => {
     if (!barbeiroId) return;
 
-    const channel = supabase
-      .channel(`carteira-realtime-${barbeiroId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "woovi_charges",
-          filter: `barbeiro_id=eq.${barbeiroId}`,
-        },
-        () => {
-          loadBalance();
-          loadHistory();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "saques",
-          filter: `barbeiro_id=eq.${barbeiroId}`,
-        },
-        () => {
-          loadBalance();
-          loadHistory();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "agendamentos",
-          filter: `barbeiro_id=eq.${barbeiroId}`,
-        },
-        () => {
-          loadBalance();
-          loadHistory();
-        }
-      )
-      .subscribe();
+    const channelName = `carteira-realtime-${barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
+    let channel: any = null;
+
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "woovi_charges",
+            filter: `barbeiro_id=eq.${barbeiroId}`,
+          },
+          () => {
+            loadBalance();
+            loadHistory();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "saques",
+            filter: `barbeiro_id=eq.${barbeiroId}`,
+          },
+          () => {
+            loadBalance();
+            loadHistory();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "agendamentos",
+            filter: `barbeiro_id=eq.${barbeiroId}`,
+          },
+          () => {
+            loadBalance();
+            loadHistory();
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Erro ao registrar canal realtime da carteira:", err);
+    }
 
     // Auto-polling resiliente a cada 10 segundos quando a janela estiver visível
     const interval = setInterval(() => {
@@ -1771,7 +1778,11 @@ export function CarteiraPage({
     window.addEventListener("focus", onFocus);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);

@@ -235,27 +235,38 @@ const Barbeiro = () => {
 
     checkApproval();
 
-    const ch = supabase
-      .channel(`barber-approval-${barberContext.barbeiroId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "barbeiros",
-          filter: `id=eq.${barberContext.barbeiroId}`,
-        },
-        (payload: any) => {
-          if (payload.new && payload.new.ativo !== undefined) {
-            setIsBarberApproved(payload.new.ativo !== false);
+    const channelName = `barber-approval-${barberContext.barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
+    let ch: any = null;
+
+    try {
+      ch = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "barbeiros",
+            filter: `id=eq.${barberContext.barbeiroId}`,
+          },
+          (payload: any) => {
+            if (payload.new && payload.new.ativo !== undefined) {
+              setIsBarberApproved(payload.new.ativo !== false);
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Erro ao registrar canal de aprovação do barbeiro:", err);
+    }
 
     return () => {
       mounted = false;
-      supabase.removeChannel(ch);
+      if (ch) {
+        try {
+          supabase.removeChannel(ch);
+        } catch {}
+      }
     };
   }, [barberContext]);
 

@@ -58,22 +58,33 @@ export function ProfilePortfolioCarousel({
 
     if (!barbeiroId) return;
 
-    const channel = supabase
-      .channel(`portfolio-carousel-${barbeiroId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "portfolio_images",
-          filter: `barbeiro_id=eq.${barbeiroId}`,
-        },
-        () => loadImages()
-      )
-      .subscribe();
+    const channelName = `portfolio-carousel-${barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
+    let channel: any = null;
+
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "portfolio_images",
+            filter: `barbeiro_id=eq.${barbeiroId}`,
+          },
+          () => loadImages()
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Erro ao registrar canal de portfolio:", err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [barbeiroId]);
 

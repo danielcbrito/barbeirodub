@@ -36,25 +36,38 @@ export function useTenantBarbersCount(tenantId: string | null | undefined) {
   useEffect(() => {
     if (!tenantId) return;
 
-    const channel = supabase
-      .channel(`rt-barbers-count-${tenantId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'barbeiros',
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['tenant-barbers-count', tenantId] });
-          queryClient.invalidateQueries({ queryKey: ['admin', 'barbeiros', tenantId] });
-        }
-      )
-      .subscribe();
+    const channelName = `rt-barbers-count-${tenantId}-${Math.random().toString(36).slice(2, 9)}`;
+    let channel: any = null;
+
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'barbeiros',
+            filter: `tenant_id=eq.${tenantId}`,
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ['tenant-barbers-count', tenantId] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'barbeiros', tenantId] });
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Erro ao registrar canal realtime de contagem de barbeiros:", err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (err) {
+          console.warn("Erro ao remover canal realtime de contagem de barbeiros:", err);
+        }
+      }
     };
   }, [tenantId, queryClient]);
 

@@ -89,23 +89,34 @@ export function ProfileInstagramBanner({ barbeiroId, basePath = "/barbeiro" }: P
 
     loadConn();
 
-    const channel = supabase
-      .channel(`ig-conn-${barbeiroId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "instagram_connections",
-          filter: `barbeiro_id=eq.${barbeiroId}`,
-        },
-        () => loadConn()
-      )
-      .subscribe();
+    const channelName = `ig-conn-${barbeiroId}-${Math.random().toString(36).slice(2, 9)}`;
+    let channel: any = null;
+
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "instagram_connections",
+            filter: `barbeiro_id=eq.${barbeiroId}`,
+          },
+          () => loadConn()
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Erro ao registrar canal do instagram:", err);
+    }
 
     return () => {
       mounted = false;
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [barbeiroId]);
 
