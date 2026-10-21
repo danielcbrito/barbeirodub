@@ -42,6 +42,8 @@ interface LunchBreakScreenProps {
   onboardingFlow?: boolean;
 }
 
+import { toast } from 'sonner';
+
 export function LunchBreakScreen({
   diaSemana,
   inicioValue,
@@ -58,6 +60,20 @@ export function LunchBreakScreen({
   onToggleLunch,
   onboardingFlow = false,
 }: LunchBreakScreenProps) {
+  const handleConfirm = () => {
+    if (hasLunch) {
+      const [h1, m1] = (inicioValue || "12:00").split(':').map(Number);
+      const [h2, m2] = (fimValue || "13:00").split(':').map(Number);
+      const min1 = (h1 || 0) * 60 + (m1 || 0);
+      const min2 = (h2 || 0) * 60 + (m2 || 0);
+
+      if (min1 >= min2) {
+        toast.error("O horário de início do almoço deve ser anterior ao de término.");
+        return;
+      }
+    }
+    onSave();
+  };
   return (
     <div
       className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-5"
@@ -148,7 +164,7 @@ export function LunchBreakScreen({
         }
       >
         <Button
-          onClick={onSave}
+          onClick={handleConfirm}
           disabled={saving}
           className="w-full h-[48px] rounded-xl bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >

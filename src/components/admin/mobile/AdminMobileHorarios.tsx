@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ChevronRight, Clock } from 'lucide-react';
+import { ChevronRight, Clock, CalendarDays } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { DayScheduleScreen } from '@/components/shared/DayScheduleScreen';
+import { ApplyScheduleToWeekScreen } from '@/components/shared/ApplyScheduleToWeekScreen';
 import VacationMode from '@/components/admin/VacationMode';
 import HorariosExcepcionais from '@/components/admin/HorariosExcepcionais';
 import BarberVacationMode from '@/components/barber/BarberVacationMode';
@@ -60,9 +62,20 @@ export function AdminMobileHorarios({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [weeklyConfigState, setWeeklyConfigState] = useState<{ sourceDay: number; selectedDays: number[] } | null>(null);
   const [activeSubScreen, setActiveSubScreen] = useState<'ferias' | 'excecoes' | null>(null);
   const saveSlotMutation = useSaveSlotInterval();
   const [tenantSlot, setTenantSlot] = useState<number | null>(null);
+
+  const existingDaySummaries = useMemo(() => {
+    const map: Record<number, string> = {};
+    configs.forEach((c) => {
+      map[c.dia_semana] = c.aberto
+        ? `${(c.hora_abertura || '09:00').slice(0, 5)} - ${(c.hora_fechamento || '20:00').slice(0, 5)}`
+        : 'Fechado';
+    });
+    return map;
+  }, [configs]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -363,11 +376,202 @@ export function AdminMobileHorarios({
     }
   };
 
+  const handleApplyToOtherDays = async (sourceConfig: HorarioConfig, selectedDaysList: number[]) => {
+    if (selectedDaysList.length === 0) return;
+
+    const nextConfigs = configs.map(cfg => {
+      if (selectedDaysList.includes(cfg.dia_semana)) {
+        return {
+          ...cfg,
+          aberto: true,
+          hora_abertura: sourceConfig.hora_abertura || '09:00',
+          hora_fechamento: sourceConfig.hora_fechamento || '20:00',
+          hora_almoco_inicio: sourceConfig.hora_almoco_inicio,
+          hora_almoco_fim: sourceConfig.hora_almoco_fim,
+          slot_interval_minutes: sourceConfig.slot_interval_minutes ?? tenantSlot ?? 15,
+        };
+      }
+      return cfg; // Preserva intactos os dias não selecionados
+    });
+
+    setConfigs(nextConfigs);
+    checkChanges(nextConfigs);
+    setSaving(true);
+
+    try {
+      const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
+
+      if (usePerBarber && barbeiroId) {
+        const promises = nextConfigs
+          .filter(c => selectedDaysList.includes(c.dia_semana))
+          .map(async (config) => {
+            const payload = {
+              aberto: config.aberto,
+              hora_abertura: config.hora_abertura || '09:00',
+              hora_fechamento: config.hora_fechamento || '20:00',
+              hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+              hora_almoco_fim: sanitize(config.hora_almoco_fim),
+              delay_entre_servicos: config.delay_entre_servicos,
+              ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
+            };
+            const upd = await (supabase as any)
+              .from('configuracoes_horario_barbeiro')
+              .update(payload)
+              .eq('barbeiro_id', barbeiroId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+            if (upd.error) throw upd.error;
+            if (!upd.data || upd.data.length === 0) {
+              const ins = await (supabase as any)
+                .from('configuracoes_horario_barbeiro')
+                .insert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana })
+                .select();
+              if (ins.error) throw ins.error;
+            }
+          });
+        await Promise.all(promises);
+      } else {
+        const tId = await resolveTenantId();
+        if (!tId) throw new Error('Não foi possível identificar a barbearia');
+        const defaultUId = await resolveDefaultUnitId(tId);
+        const targetUnitIds = unitIds.length > 0 ? unitIds : (defaultUId ? [defaultUId] : []);
+        const configsToSave = nextConfigs.filter(c => selectedDaysList.includes(c.dia_semana));
+
+        if (targetUnitIds.length > 0) {
+          for (const uId of targetUnitIds) {
+            for (const config of configsToSave) {
+              const payload = {
+                aberto: config.aberto,
+                hora_abertura: config.hora_abertura || '09:00',
+                hora_fechamento: config.hora_fechamento || '20:00',
+                hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+                hora_almoco_fim: sanitize(config.hora_almoco_fim),
+                delay_entre_servicos: config.delay_entre_servicos,
+                updated_at: new Date().toISOString(),
+              };
+              const upd = await (supabase as any)
+                .from('configuracoes_horario_unidade')
+                .update(payload)
+                .eq('unidade_id', uId)
+                .eq('dia_semana', config.dia_semana)
+                .select();
+              if (upd.error) throw upd.error;
+              if (!upd.data || upd.data.length === 0) {
+                const ins = await (supabase as any)
+                  .from('configuracoes_horario_unidade')
+                  .insert({ tenant_id: tId, unidade_id: uId, dia_semana: config.dia_semana, ...payload })
+                  .select();
+                if (ins.error) throw ins.error;
+              }
+            }
+          }
+        } else {
+          for (const config of configsToSave) {
+            const payload = {
+              aberto: config.aberto,
+              hora_abertura: config.hora_abertura || '09:00',
+              hora_fechamento: config.hora_fechamento || '20:00',
+              hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+              hora_almoco_fim: sanitize(config.hora_almoco_fim),
+              delay_entre_servicos: config.delay_entre_servicos,
+              updated_at: new Date().toISOString(),
+            };
+            const upd = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .update(payload)
+              .eq('tenant_id', tId)
+              .eq('dia_semana', config.dia_semana)
+              .select();
+            if (upd.error) throw upd.error;
+            if (!upd.data || upd.data.length === 0) {
+              const ins = await (supabase as any)
+                .from('configuracoes_horario_unidade')
+                .insert({ tenant_id: tId, dia_semana: config.dia_semana, ...payload })
+                .select();
+              if (ins.error) throw ins.error;
+            }
+          }
+        }
+      }
+
+      originalRef.current = JSON.stringify(nextConfigs);
+      setHasChanges(false);
+      toast.success(
+        selectedDaysList.length === 7
+          ? 'Horários aplicados a toda a semana com sucesso!'
+          : `Horários aplicados a ${selectedDaysList.length} dias selecionados!`
+      );
+      setWeeklyConfigState(null);
+    } catch (err: any) {
+      console.error('Erro ao aplicar horários:', err);
+      toast.error(err?.message || 'Erro ao aplicar horários');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
       </div>
+    );
+  }
+
+  // ── Sub-tela: Aplicar / Configurar semana inteira ──
+  if (weeklyConfigState) {
+    const source = configs.find(c => c.dia_semana === weeklyConfigState.sourceDay) || configs[1] || configs[0];
+
+    return (
+      <ScreenShell header={<ScheduleHeader title="Semana inteira" onBack={() => setWeeklyConfigState(null)} />}>
+        <motion.div
+          initial={{ x: '100%', opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: '100%', opacity: 0 }}
+          transition={{ type: 'tween', duration: 0.22, ease: 'easeOut' }}
+          className="pt-2 pb-6 px-1"
+        >
+          <ApplyScheduleToWeekScreen
+            horaAbertura={(source?.hora_abertura || '09:00').slice(0, 5)}
+            horaFechamento={(source?.hora_fechamento || '20:00').slice(0, 5)}
+            horaAlmocoInicio={source?.hora_almoco_inicio ? source.hora_almoco_inicio.slice(0, 5) : null}
+            horaAlmocoFim={source?.hora_almoco_fim ? source.hora_almoco_fim.slice(0, 5) : null}
+            slotIntervalMinutes={source?.slot_interval_minutes ?? tenantSlot ?? 15}
+            selectedDays={weeklyConfigState.selectedDays}
+            onToggleDay={(dia) => {
+              setWeeklyConfigState(prev => {
+                if (!prev) return prev;
+                const next = prev.selectedDays.includes(dia)
+                  ? prev.selectedDays.filter(d => d !== dia)
+                  : [...prev.selectedDays, dia].sort();
+                return { ...prev, selectedDays: next };
+              });
+            }}
+            onSetSelectedDays={(days) => {
+              setWeeklyConfigState(prev => (prev ? { ...prev, selectedDays: days } : prev));
+            }}
+            onBack={() => setWeeklyConfigState(null)}
+            onSave={async () => {
+              await handleApplyToOtherDays(
+                {
+                  id: source?.id || '',
+                  dia_semana: source?.dia_semana ?? 1,
+                  aberto: true,
+                  hora_abertura: source?.hora_abertura || '09:00',
+                  hora_fechamento: source?.hora_fechamento || '20:00',
+                  hora_almoco_inicio: source?.hora_almoco_inicio ?? null,
+                  hora_almoco_fim: source?.hora_almoco_fim ?? null,
+                  delay_entre_servicos: source?.delay_entre_servicos ?? 0,
+                  slot_interval_minutes: source?.slot_interval_minutes ?? tenantSlot ?? 15,
+                },
+                weeklyConfigState.selectedDays
+              );
+            }}
+            saving={saving}
+            existingDaySummaries={existingDaySummaries}
+          />
+        </motion.div>
+      </ScreenShell>
     );
   }
 
@@ -387,15 +591,39 @@ export function AdminMobileHorarios({
           hasChanges={hasChanges}
           tenantSlotInterval={tenantSlot}
           savingSlotInterval={saveSlotMutation.isPending}
-          onSaveSlotInterval={usePerBarber && barbeiroId ? async (minutos, aplicarTodosDias) => {
+          onSaveSlotInterval={async (minutos, aplicarTodosDias) => {
+            setConfigs(prev => {
+              const next = prev.map(cfg => {
+                if (aplicarTodosDias || cfg.dia_semana === selectedConfig.dia_semana) {
+                  return { ...cfg, slot_interval_minutes: minutos };
+                }
+                return cfg;
+              });
+              checkChanges(next);
+              return next;
+            });
+
+            const tId = await resolveTenantId();
+            const defaultUId = tId ? await resolveDefaultUnitId(tId) : null;
+            const effectiveUId = unitIds[0] || defaultUId || undefined;
+
             await saveSlotMutation.mutateAsync({
-              barbeiroId,
+              barbeiroId: usePerBarber && barbeiroId ? barbeiroId : undefined,
+              tenantId: tId || undefined,
+              unidadeId: effectiveUId,
               minutos,
               dia_semana: selectedConfig.dia_semana,
               aplicarTodosDias,
             });
             await loadConfigs();
-          } : undefined}
+          }}
+          onApplyToOtherDays={(srcCfg, targetDays) => {
+            setWeeklyConfigState({
+              sourceDay: srcCfg.dia_semana,
+              selectedDays: targetDays,
+            });
+          }}
+          existingDaySummaries={existingDaySummaries}
         />
       </AnimatePresence>
     );
@@ -466,6 +694,36 @@ export function AdminMobileHorarios({
             : 'Configure os dias e horários em que você estará disponível para agendamentos. Toque em um dia para ajustar os detalhes.'}
         </p>
 
+
+        {/* Banner: Configuração da Semana Inteira */}
+        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border/40 shadow-xs gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <CalendarDays className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-foreground">
+                Configurar semana inteira
+              </p>
+              <p className="text-[11px] text-muted-foreground/80 leading-snug">
+                Aplique horários e intervalos a todos os dias em uma ação única
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              const firstOpen = configs.find(c => c.aberto) || configs[1] || configs[0];
+              setWeeklyConfigState({
+                sourceDay: firstOpen?.dia_semana ?? 1,
+                selectedDays: [0, 1, 2, 3, 4, 5, 6],
+              });
+            }}
+            className="shrink-0 h-8 px-3 rounded-xl text-xs font-semibold shadow-xs"
+          >
+            Configurar
+          </Button>
+        </div>
 
         {/* Lista de dias */}
         <div className="divide-y divide-border/10">

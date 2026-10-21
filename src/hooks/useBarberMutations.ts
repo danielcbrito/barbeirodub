@@ -514,12 +514,13 @@ interface SaveScheduleParams {
   barbeiroId: string;
   configs: Array<{
     dia_semana: number;
-    aberto: boolean;
-    hora_abertura: string;
-    hora_fechamento: string;
+    aberto: boolean | null;
+    hora_abertura: string | null;
+    hora_fechamento: string | null;
     hora_almoco_inicio: string | null;
     hora_almoco_fim: string | null;
-    delay_entre_servicos: number;
+    delay_entre_servicos?: number | null;
+    slot_interval_minutes?: number | null;
   }>;
 }
 
@@ -528,32 +529,69 @@ export function useSaveBarberSchedule() {
 
   return useMutation<void, Error, SaveScheduleParams>({
     mutationFn: async ({ barbeiroId, configs }) => {
-      const sanitize = (val: string | null) => (val === "" || val === null ? null : val);
+      const sanitize = (val: string | null | undefined) => (val === "" || val === null || val === undefined ? null : val);
       for (const config of configs) {
+        const payload: Record<string, any> = {
+          aberto: config.aberto ?? true,
+          hora_abertura: config.hora_abertura || "09:00",
+          hora_fechamento: config.hora_fechamento || "18:00",
+          hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+          hora_almoco_fim: sanitize(config.hora_almoco_fim),
+          delay_entre_servicos: config.delay_entre_servicos ?? 10,
+        };
+
+        if (config.slot_interval_minutes !== undefined) {
+          payload.slot_interval_minutes = config.slot_interval_minutes;
+        }
+
         const { data, error } = await supabase
           .from("configuracoes_horario_barbeiro")
-          .update({
-            aberto: config.aberto,
-            hora_abertura: config.hora_abertura || "09:00",
-            hora_fechamento: config.hora_fechamento || "18:00",
-            hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
-            hora_almoco_fim: sanitize(config.hora_almoco_fim),
-            delay_entre_servicos: config.delay_entre_servicos,
-          })
+          .update(payload)
           .eq("barbeiro_id", barbeiroId)
           .eq("dia_semana", config.dia_semana)
           .select();
         if (error) throw error;
         if (!data || data.length === 0) {
-          throw new Error(`Falha ao salvar dia ${config.dia_semana}: nenhuma linha atualizada`);
+          const ins = await supabase
+            .from("configuracoes_horario_barbeiro")
+            .insert({
+              barbeiro_id: barbeiroId,
+              dia_semana: config.dia_semana,
+              ...payload,
+            })
+            .select();
+          if (ins.error) throw ins.error;
         }
       }
     },
 
-    onSuccess: (_data, { barbeiroId }) => {
+    onSuccess: (_data, { barbeiroId, configs }) => {
+      // Atualizar cache de imediato
+      queryClient.setQueryData(
+        QUERY_KEYS.barbeiro.horarioConfig(barbeiroId),
+        (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((existing) => {
+            const updated = configs.find((c) => c.dia_semana === existing.dia_semana);
+            if (!updated) return existing;
+            return {
+              ...existing,
+              ...updated,
+              slot_interval_minutes:
+                updated.slot_interval_minutes !== undefined
+                  ? updated.slot_interval_minutes
+                  : existing.slot_interval_minutes,
+            };
+          });
+        }
+      );
+
       toast.success("Configurações salvas com sucesso!");
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.barbeiro.horarioConfig(barbeiroId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.barbeiro.horarios(barbeiroId),
       });
     },
 

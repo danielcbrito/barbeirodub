@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSaveBarberSchedule } from '@/hooks/useBarberMutations';
-import { ChevronRight, Clock } from 'lucide-react';
+import { ChevronRight, Clock, CalendarDays } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { DayScheduleScreen } from '@/components/shared/DayScheduleScreen';
+import { DayScheduleScreen, type DayConfig } from '@/components/shared/DayScheduleScreen';
+import { ApplyScheduleToWeekScreen } from '@/components/shared/ApplyScheduleToWeekScreen';
 import { BarberContext } from '@/pages/Barbeiro';
 import BarberVacationMode from '@/components/barber/BarberVacationMode';
 import BarberHorariosExcepcionais from '@/components/barber/BarberHorariosExcepcionais';
@@ -40,6 +42,10 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
   const [loading, setLoading] = useState(true);
   
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [weeklyConfigState, setWeeklyConfigState] = useState<{
+    sourceDay: number;
+    selectedDays: number[];
+  } | null>(null);
   const [activeSubScreen, setActiveSubScreen] = useState<'ferias' | 'excecoes' | null>(null);
   const saveSlotMutation = useSaveSlotInterval();
   const [tenantSlot, setTenantSlot] = useState<number | null>(null);
@@ -104,6 +110,16 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
       });
   }, [barberContext.tenantId]);
 
+  const existingDaySummaries = useMemo(() => {
+    const map: Record<number, string> = {};
+    configs.forEach((c) => {
+      map[c.dia_semana] = c.aberto
+        ? `${c.hora_abertura?.slice(0, 5) || '09:00'} - ${c.hora_fechamento?.slice(0, 5) || '18:00'}`
+        : 'Fechado';
+    });
+    return map;
+  }, [configs]);
+
   const checkChanges = (newConfigs: HorarioConfig[]) => {
     setHasChanges(JSON.stringify(newConfigs) !== originalRef.current);
   };
@@ -120,13 +136,76 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
 
   const saveScheduleMutation = useSaveBarberSchedule();
 
-  const saveConfigs = () => {
-    saveScheduleMutation.mutate(
-      { barbeiroId: barberContext.barbeiroId, configs },
-      {
-        onSuccess: () => loadConfigs(),
+  const saveConfigs = async (): Promise<boolean> => {
+    try {
+      await saveScheduleMutation.mutateAsync({
+        barbeiroId: barberContext.barbeiroId,
+        configs: configs.map(c => ({
+          dia_semana: c.dia_semana,
+          aberto: c.aberto,
+          hora_abertura: c.hora_abertura,
+          hora_fechamento: c.hora_fechamento,
+          hora_almoco_inicio: c.hora_almoco_inicio,
+          hora_almoco_fim: c.hora_almoco_fim,
+          delay_entre_servicos: c.delay_entre_servicos,
+          slot_interval_minutes: c.slot_interval_minutes,
+        })),
+      });
+      originalRef.current = JSON.stringify(configs);
+      setHasChanges(false);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleApplyToOtherDays = async (sourceConfig: DayConfig, selectedDaysList: number[]) => {
+    if (selectedDaysList.length === 0) return;
+
+    const nextConfigs = configs.map(cfg => {
+      if (selectedDaysList.includes(cfg.dia_semana)) {
+        return {
+          ...cfg,
+          aberto: true,
+          hora_abertura: sourceConfig.hora_abertura || '09:00',
+          hora_fechamento: sourceConfig.hora_fechamento || '18:00',
+          hora_almoco_inicio: sourceConfig.hora_almoco_inicio,
+          hora_almoco_fim: sourceConfig.hora_almoco_fim,
+          slot_interval_minutes: sourceConfig.slot_interval_minutes ?? tenantSlot ?? 15,
+        };
       }
-    );
+      return cfg;
+    });
+
+    setConfigs(nextConfigs);
+    checkChanges(nextConfigs);
+
+    try {
+      await saveScheduleMutation.mutateAsync({
+        barbeiroId: barberContext.barbeiroId,
+        configs: nextConfigs
+          .filter(c => selectedDaysList.includes(c.dia_semana))
+          .map(c => ({
+            dia_semana: c.dia_semana,
+            aberto: c.aberto,
+            hora_abertura: c.hora_abertura,
+            hora_fechamento: c.hora_fechamento,
+            hora_almoco_inicio: c.hora_almoco_inicio,
+            hora_almoco_fim: c.hora_almoco_fim,
+            delay_entre_servicos: c.delay_entre_servicos,
+            slot_interval_minutes: c.slot_interval_minutes,
+          })),
+      });
+      originalRef.current = JSON.stringify(nextConfigs);
+      setHasChanges(false);
+      toast.success(
+        selectedDaysList.length === 7
+          ? 'Horários aplicados a toda a semana com sucesso!'
+          : `Horários aplicados a ${selectedDaysList.length} dias selecionados!`
+      );
+    } catch (err: any) {
+      console.error('Erro ao aplicar horários:', err);
+    }
   };
 
   const saving = saveScheduleMutation.isPending;
@@ -136,6 +215,64 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
       </div>
+    );
+  }
+
+  // ── Sub-tela: Aplicar / Configurar semana inteira ──
+  if (weeklyConfigState) {
+    const source = configs.find(c => c.dia_semana === weeklyConfigState.sourceDay) || configs[1] || configs[0];
+
+    return (
+      <ScreenShell header={<ScheduleHeader title="Semana inteira" onBack={() => setWeeklyConfigState(null)} />}>
+        <motion.div
+          initial={{ x: '100%', opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: '100%', opacity: 0 }}
+          transition={{ type: 'tween', duration: 0.22, ease: 'easeOut' }}
+          className="pt-2 pb-6 px-1"
+        >
+          <ApplyScheduleToWeekScreen
+            horaAbertura={(source?.hora_abertura || '09:00').slice(0, 5)}
+            horaFechamento={(source?.hora_fechamento || '18:00').slice(0, 5)}
+            horaAlmocoInicio={source?.hora_almoco_inicio ? source.hora_almoco_inicio.slice(0, 5) : null}
+            horaAlmocoFim={source?.hora_almoco_fim ? source.hora_almoco_fim.slice(0, 5) : null}
+            slotIntervalMinutes={source?.slot_interval_minutes ?? tenantSlot ?? 15}
+            selectedDays={weeklyConfigState.selectedDays}
+            onToggleDay={(dia) => {
+              setWeeklyConfigState(prev => {
+                if (!prev) return prev;
+                const next = prev.selectedDays.includes(dia)
+                  ? prev.selectedDays.filter(d => d !== dia)
+                  : [...prev.selectedDays, dia].sort();
+                return { ...prev, selectedDays: next };
+              });
+            }}
+            onSetSelectedDays={(days) => {
+              setWeeklyConfigState(prev => (prev ? { ...prev, selectedDays: days } : prev));
+            }}
+            onBack={() => setWeeklyConfigState(null)}
+            onSave={async () => {
+              await handleApplyToOtherDays(
+                {
+                  dia_semana: source.dia_semana,
+                  aberto: true,
+                  hora_abertura: source.hora_abertura,
+                  hora_fechamento: source.hora_fechamento,
+                  hora_almoco_inicio: source.hora_almoco_inicio,
+                  hora_almoco_fim: source.hora_almoco_fim,
+                  slot_interval_minutes: source.slot_interval_minutes ?? tenantSlot ?? 15,
+                },
+                weeklyConfigState.selectedDays
+              );
+              setWeeklyConfigState(null);
+            }}
+            saving={saving}
+            existingDaySummaries={existingDaySummaries}
+            title="Configurar semana inteira"
+            description="Selecione todos os dias da semana para aplicar o mesmo horário ou desmarque os dias específicos para mantê-los inalterados."
+          />
+        </motion.div>
+      </ScreenShell>
     );
   }
 
@@ -163,6 +300,19 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
           tenantSlotInterval={tenantSlot}
           savingSlotInterval={saveSlotMutation.isPending}
           onSaveSlotInterval={async (minutos, aplicarTodosDias) => {
+            // 1. Atualizar estado local imediatamente
+            setConfigs(prev => {
+              const next = prev.map(cfg => {
+                if (aplicarTodosDias || cfg.dia_semana === selectedConfig.dia_semana) {
+                  return { ...cfg, slot_interval_minutes: minutos };
+                }
+                return cfg;
+              });
+              checkChanges(next);
+              return next;
+            });
+
+            // 2. Persistir no banco
             await saveSlotMutation.mutateAsync({
               barbeiroId: barberContext.barbeiroId,
               minutos,
@@ -171,6 +321,8 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
             });
             await loadConfigs();
           }}
+          onApplyToOtherDays={(srcCfg, targetDays) => handleApplyToOtherDays(srcCfg, targetDays)}
+          existingDaySummaries={existingDaySummaries}
         />
       </AnimatePresence>
     );
@@ -230,9 +382,35 @@ export function BarberMobileHorarios({ barberContext, basePath = "/barbeiro" }: 
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground/60 leading-relaxed font-light">
-          Configure os dias e horários em que você estará disponível para agendamentos. Toque em um dia para ajustar os detalhes.
-        </p>
+        {/* Banner: Configurar semana inteira (Ação rápida) */}
+        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3.5 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+              <CalendarDays className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-foreground">
+                Configurar semana inteira
+              </p>
+              <p className="text-[11px] text-muted-foreground/80 leading-snug">
+                Aplique horários e intervalos a todos os dias com 1 toque
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              const firstOpen = configs.find(c => c.aberto) || configs[1] || configs[0];
+              setWeeklyConfigState({
+                sourceDay: firstOpen?.dia_semana ?? 1,
+                selectedDays: [0, 1, 2, 3, 4, 5, 6],
+              });
+            }}
+            className="shrink-0 h-8 px-3 rounded-xl text-xs font-semibold shadow-xs"
+          >
+            Configurar
+          </Button>
+        </div>
 
         <div className="divide-y divide-border/10">
           {configs.map((config) => {

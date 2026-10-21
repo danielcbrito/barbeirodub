@@ -47,10 +47,9 @@ export function SlotIntervalScreen({
   const [aplicarTodos, setAplicarTodos] = useState(false);
 
   const parsedCustom = parseInt(customValue, 10);
-  const customValid = !isNaN(parsedCustom) && parsedCustom >= 1 && parsedCustom <= 240;
+  const customValid = !isNaN(parsedCustom) && parsedCustom >= 1 && parsedCustom <= 120;
   const finalValue = custom ? (customValid ? parsedCustom : NaN) : selected;
-  const hasChanges = (!isNaN(finalValue) && finalValue !== currentValue) || aplicarTodos;
-
+  const isValid = !isNaN(finalValue) && finalValue >= 1 && finalValue <= 120;
 
   return (
     <div
@@ -81,8 +80,6 @@ export function SlotIntervalScreen({
       <p className="text-[11px] text-muted-foreground/50 leading-relaxed font-light mt-3 mb-4">
         De quanto em quanto tempo os horários aparecem para o cliente. Escolha uma opção abaixo e confirme.
       </p>
-
-
 
       {/* Lista de opções (rádio) */}
       <div className="mb-6">
@@ -128,7 +125,7 @@ export function SlotIntervalScreen({
                 type="number"
                 inputMode="numeric"
                 min={1}
-                max={240}
+                max={120}
                 autoFocus
                 value={customValue}
                 onChange={(e) => setCustomValue(e.target.value)}
@@ -142,7 +139,6 @@ export function SlotIntervalScreen({
         </button>
         <div className="h-px bg-border/15" />
       </div>
-
 
       <div className="h-px bg-border/20" />
 
@@ -178,8 +174,7 @@ export function SlotIntervalScreen({
       >
         <Button
           onClick={() => onConfirm(finalValue, aplicarTodos)}
-          disabled={saving || !hasChanges || isNaN(finalValue)}
-
+          disabled={saving || !isValid}
           className="w-full h-[48px] rounded-xl bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {saving ? (

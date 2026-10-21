@@ -1,9 +1,10 @@
-import { Loader2, ChevronRight } from 'lucide-react';
+import { Loader2, ChevronRight, Copy } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { TimeWheelPicker } from './TimeWheelPicker';
 import { LunchBreakScreen } from './LunchBreakScreen';
 import { SlotIntervalScreen } from './SlotIntervalScreen';
+import { ApplyScheduleToWeekScreen } from './ApplyScheduleToWeekScreen';
 import { AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -55,6 +56,10 @@ interface DayScheduleScreenProps {
   /** Salva o intervalo (dia ou semana toda). Se ausente, o item não aparece. */
   onSaveSlotInterval?: (minutos: number, aplicarTodosDias: boolean) => Promise<void> | void;
   savingSlotInterval?: boolean;
+  /** Permite copiar e aplicar o horário deste dia a outros dias da semana */
+  onApplyToOtherDays?: (sourceConfig: DayConfig, selectedDays: number[]) => Promise<void> | void;
+  /** Resumos existentes dos outros dias para exibição na tela de aplicação */
+  existingDaySummaries?: Record<number, string>;
 }
 
 const normalizeTime = (value: string | null | undefined) => value ? value.slice(0, 5) : null;
@@ -74,15 +79,22 @@ export function DayScheduleScreen({
   floatingBottomButton = false, onboardingFlow = false,
   onOnboardingDayComplete,
   tenantSlotInterval, onSaveSlotInterval, savingSlotInterval = false,
+  onApplyToOtherDays, existingDaySummaries,
 }: DayScheduleScreenProps) {
   const [showLunchScreen, setShowLunchScreen] = useState(false);
   const [showSlotScreen, setShowSlotScreen] = useState(false);
+  const [showApplyWeekScreen, setShowApplyWeekScreen] = useState(false);
+  const [appliedDays, setAppliedDays] = useState<number[]>(
+    [0, 1, 2, 3, 4, 5, 6].filter(d => d !== config.dia_semana)
+  );
   const initialDaySignatureRef = useRef(getDaySignature(config));
 
   useEffect(() => {
     initialDaySignatureRef.current = getDaySignature(config);
     setShowLunchScreen(false);
     setShowSlotScreen(false);
+    setShowApplyWeekScreen(false);
+    setAppliedDays([0, 1, 2, 3, 4, 5, 6].filter(d => d !== config.dia_semana));
   }, [config.dia_semana]);
 
   const localHasChanges = useMemo(
@@ -105,7 +117,6 @@ export function DayScheduleScreen({
     }
     const result = await onSave();
     if (result === false) return;
-    if (result === true) return;
     onBack();
   };
 
@@ -168,11 +179,46 @@ export function DayScheduleScreen({
           saving={savingSlotInterval}
           onBack={() => setShowSlotScreen(false)}
           onConfirm={async (minutos, aplicarTodos) => {
+            handleUpdate('slot_interval_minutes', minutos);
             await onSaveSlotInterval(minutos, aplicarTodos);
             setShowSlotScreen(false);
           }}
           floatingBottomButton={floatingBottomButton}
         />
+      </AnimatePresence>
+    );
+  }
+
+  if (showApplyWeekScreen && onApplyToOtherDays) {
+    return (
+      <AnimatePresence mode="wait">
+        <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-5 pt-3">
+          <ApplyScheduleToWeekScreen
+            key="apply-week"
+            horaAbertura={config.hora_abertura || '09:00'}
+            horaFechamento={config.hora_fechamento || '18:00'}
+            horaAlmocoInicio={config.hora_almoco_inicio}
+            horaAlmocoFim={config.hora_almoco_fim}
+            slotIntervalMinutes={config.slot_interval_minutes ?? tenantSlotInterval ?? 15}
+            selectedDays={appliedDays}
+            onToggleDay={(dia) => {
+              setAppliedDays(prev =>
+                prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia].sort()
+              );
+            }}
+            onSetSelectedDays={setAppliedDays}
+            onBack={() => setShowApplyWeekScreen(false)}
+            onSave={async () => {
+              await onApplyToOtherDays(config, appliedDays);
+              setShowApplyWeekScreen(false);
+            }}
+            saving={saving}
+            floatingBottomButton={floatingBottomButton}
+            existingDaySummaries={existingDaySummaries}
+            title="Copiar para outros dias"
+            description="Selecione os dias da semana para os quais deseja copiar este mesmo horário e intervalos."
+          />
+        </div>
       </AnimatePresence>
     );
   }
@@ -321,6 +367,36 @@ export function DayScheduleScreen({
                   </button>
                   <div className="h-px bg-border/15" />
                 </>
+              )}
+
+              {onApplyToOtherDays && (
+                <div className="mt-4 pt-2">
+                  <span className="text-[11px] text-muted-foreground/50 font-light uppercase tracking-wider">
+                    Semana
+                  </span>
+                  <div className="h-px bg-border/15 mt-2 mb-2.5" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppliedDays([0, 1, 2, 3, 4, 5, 6].filter(d => d !== config.dia_semana));
+                      setShowApplyWeekScreen(true);
+                    }}
+                    className="flex items-center gap-3 py-3 px-3.5 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 active:scale-[0.99] transition-all w-full text-left"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-foreground/10 flex items-center justify-center shrink-0">
+                      <Copy className="h-4 w-4 text-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-foreground">
+                        Copiar horário para outros dias
+                      </p>
+                      <p className="text-[11px] text-muted-foreground/70 truncate">
+                        Aplica este horário e intervalos para outros dias
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0" />
+                  </button>
+                </div>
               )}
             </div>
           )}

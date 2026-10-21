@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
@@ -239,6 +239,16 @@ export default function AdminHorarios({
   const originalRef = useRef<string>('');
   const [companyHoursCache, setCompanyHoursCache] = useState<Array<{dia_semana: number; aberto: boolean; hora_abertura: string; hora_fechamento: string}>>([]);
   const [applyToWeek, setApplyToWeek] = useState<{ sourceDay: number; selectedDays: number[] } | null>(null);
+
+  const existingDaySummaries = useMemo(() => {
+    const map: Record<number, string> = {};
+    configs.forEach((c) => {
+      map[c.dia_semana] = c.aberto
+        ? `${(c.hora_abertura || DEFAULT_OPEN_TIME).slice(0, 5)} - ${(c.hora_fechamento || DEFAULT_CLOSE_TIME).slice(0, 5)}`
+        : 'Fechado';
+    });
+    return map;
+  }, [configs]);
 
   // Carregar horários da barbearia (unidade/tenant) para validação (quando barbeiro pessoal)
   useEffect(() => {
@@ -714,9 +724,10 @@ export default function AdminHorarios({
             hora_fechamento: source.hora_fechamento,
             hora_almoco_inicio: source.hora_almoco_inicio,
             hora_almoco_fim: source.hora_almoco_fim,
+            slot_interval_minutes: source.slot_interval_minutes ?? tenantSlot ?? 15,
           };
         }
-        return { ...cfg, aberto: false };
+        return cfg; // Preserva intactos os dias não selecionados!
       });
       setConfigs(nextConfigs);
       checkChanges(nextConfigs);
@@ -727,37 +738,41 @@ export default function AdminHorarios({
         const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
 
         if (barbeiroId && !companyMode) {
-          const promises = nextConfigs.map(async (config) => {
-            const payload = {
-              aberto: config.aberto,
-              hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
-              hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
-              hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
-              hora_almoco_fim: sanitize(config.hora_almoco_fim),
-              delay_entre_servicos: config.delay_entre_servicos,
-              ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
-            };
-            const upd = await (supabase as any)
-              .from('configuracoes_horario_barbeiro')
-              .update(payload)
-              .eq('barbeiro_id', barbeiroId)
-              .eq('dia_semana', config.dia_semana)
-              .select();
-            if (upd.error) throw upd.error;
-            if (!upd.data || upd.data.length === 0) {
-              const ins = await (supabase as any)
+          const promises = nextConfigs
+            .filter(c => applyToWeek.selectedDays.includes(c.dia_semana))
+            .map(async (config) => {
+              const payload = {
+                aberto: config.aberto,
+                hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+                hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+                hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+                hora_almoco_fim: sanitize(config.hora_almoco_fim),
+                delay_entre_servicos: config.delay_entre_servicos,
+                ...(config.slot_interval_minutes !== undefined ? { slot_interval_minutes: config.slot_interval_minutes } : {}),
+              };
+              const upd = await (supabase as any)
                 .from('configuracoes_horario_barbeiro')
-                .insert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana })
+                .update(payload)
+                .eq('barbeiro_id', barbeiroId)
+                .eq('dia_semana', config.dia_semana)
                 .select();
-              if (ins.error) throw ins.error;
-            }
-          });
+              if (upd.error) throw upd.error;
+              if (!upd.data || upd.data.length === 0) {
+                const ins = await (supabase as any)
+                  .from('configuracoes_horario_barbeiro')
+                  .insert({ ...payload, barbeiro_id: barbeiroId, dia_semana: config.dia_semana })
+                  .select();
+                if (ins.error) throw ins.error;
+              }
+            });
           await Promise.all(promises);
         } else {
           const { tId, uId } = await resolveTenantAndUnit();
           if (!tId) throw new Error('Não foi possível identificar a barbearia');
 
-          for (const config of nextConfigs) {
+          const configsToSave = nextConfigs.filter(c => applyToWeek.selectedDays.includes(c.dia_semana));
+
+          for (const config of configsToSave) {
             const payload = {
               aberto: config.aberto,
               hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
@@ -765,6 +780,7 @@ export default function AdminHorarios({
               hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
               hora_almoco_fim: sanitize(config.hora_almoco_fim),
               delay_entre_servicos: config.delay_entre_servicos,
+              slot_interval_minutes: config.slot_interval_minutes,
               updated_at: new Date().toISOString(),
             };
 
@@ -806,6 +822,11 @@ export default function AdminHorarios({
         setHasChanges(false);
         setApplyToWeek(null);
         setSelectedDay(null);
+        toast.success(
+          applyToWeek.selectedDays.length === 7
+            ? 'Horários aplicados a toda a semana com sucesso!'
+            : `Horários aplicados a ${applyToWeek.selectedDays.length} dias selecionados!`
+        );
       } catch (err: any) {
         console.error(err);
         toast.error(err?.message || 'Erro ao salvar horários');
@@ -822,11 +843,15 @@ export default function AdminHorarios({
             horaFechamento={(source.hora_fechamento || DEFAULT_CLOSE_TIME).slice(0, 5)}
             horaAlmocoInicio={source.hora_almoco_inicio ? source.hora_almoco_inicio.slice(0, 5) : null}
             horaAlmocoFim={source.hora_almoco_fim ? source.hora_almoco_fim.slice(0, 5) : null}
+            slotIntervalMinutes={source.slot_interval_minutes ?? tenantSlot ?? 15}
             selectedDays={applyToWeek.selectedDays}
             onToggleDay={handleToggleDay}
+            onSetSelectedDays={(days) => setApplyToWeek(prev => (prev ? { ...prev, selectedDays: days } : prev))}
             onSave={handleApplyAndSave}
+            onBack={() => setApplyToWeek(null)}
             saving={saving}
             floatingBottomButton={dayFloatingBottomButton}
+            existingDaySummaries={existingDaySummaries}
           />
         </AnimatePresence>
       </div>
@@ -886,15 +911,36 @@ export default function AdminHorarios({
             onOnboardingDayComplete={dayOnboardingFlow ? handleOnboardingDayComplete : undefined}
             tenantSlotInterval={tenantSlot}
             savingSlotInterval={saveSlotMutation.isPending}
-            onSaveSlotInterval={barbeiroId && !companyMode ? async (minutos, aplicarTodosDias) => {
+            onSaveSlotInterval={async (minutos, aplicarTodosDias) => {
+              setConfigs(prev => {
+                const next = prev.map(cfg => {
+                  if (aplicarTodosDias || cfg.dia_semana === selectedConfig.dia_semana) {
+                    return { ...cfg, slot_interval_minutes: minutos };
+                  }
+                  return cfg;
+                });
+                checkChanges(next);
+                return next;
+              });
+
+              const effectiveTId = tenantId || resolvedTenantId;
               await saveSlotMutation.mutateAsync({
-                barbeiroId,
+                barbeiroId: (barbeiroId && !companyMode) ? barbeiroId : undefined,
+                tenantId: effectiveTId || undefined,
+                unidadeId: resolvedUnidadeId || undefined,
                 minutos,
                 dia_semana: selectedConfig.dia_semana,
                 aplicarTodosDias,
               });
               await loadConfigs();
-            } : undefined}
+            }}
+            onApplyToOtherDays={(srcCfg, targetDays) => {
+              setApplyToWeek({
+                sourceDay: srcCfg.dia_semana,
+                selectedDays: targetDays,
+              });
+            }}
+            existingDaySummaries={existingDaySummaries}
           />
         </AnimatePresence>
       </div>
@@ -930,6 +976,36 @@ export default function AdminHorarios({
       <p className="text-sm text-muted-foreground/60 leading-relaxed font-light">
         Configure os dias e horários em que a barbearia estará disponível para agendamentos. Toque em um dia para ajustar os detalhes.
       </p>
+
+      {/* ── Banner: Configuração da Semana Inteira ── */}
+      <div className="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border/40 shadow-xs gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <CalendarDays className="w-5 h-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">
+              Configurar semana inteira
+            </p>
+            <p className="text-[11.5px] text-muted-foreground/80 leading-snug">
+              Aplique horários e intervalos a todos os dias da semana em uma ação única
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => {
+            const firstOpen = configs.find(c => c.aberto) || configs[1] || configs[0];
+            setApplyToWeek({
+              sourceDay: firstOpen?.dia_semana ?? 1,
+              selectedDays: [0, 1, 2, 3, 4, 5, 6],
+            });
+          }}
+          className="shrink-0 h-9 px-3.5 rounded-xl text-xs font-semibold shadow-xs"
+        >
+          Configurar
+        </Button>
+      </div>
 
       <div className="space-y-1">
         {configs.map((config) => {
