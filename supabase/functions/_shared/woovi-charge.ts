@@ -31,9 +31,14 @@ export async function createWooviCharge(admin: SupabaseClient<any>, input: Charg
     response = await wooviFetch<ChargeResponse>(`/api/v1/charge/${encodeURIComponent(input.correlationID)}`);
   } catch (error) {
     if (!(error instanceof WooviError) || error.status !== 404) throw error;
+    // Taxa bancária fixa cobrada pela Woovi em cada Pix (R$ 0,50).
+    // Descontada do split da subconta do barbeiro para que cada profissional
+    // pague a taxa do seu próprio Pix recebido e mantenha o caixa equilibrado.
+    const feeCentavos = 50;
+    const splitValue = Math.max(0, cents - feeCentavos);
     response = await wooviFetch<ChargeResponse>('/api/v1/charge', { method: 'POST', body: {
       correlationID: input.correlationID, value: cents, comment: input.comment,
-      splits: [{ splitType: 'SPLIT_SUB_ACCOUNT', pixKey: barber.woovi_pix_key, value: cents }],
+      splits: [{ splitType: 'SPLIT_SUB_ACCOUNT', pixKey: barber.woovi_pix_key, value: splitValue }],
     } });
   }
   const charge = response.charge;

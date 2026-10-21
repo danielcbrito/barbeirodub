@@ -497,7 +497,7 @@ const PAID_WOOVI_STATUSES = ["PAID", "paid", "COMPLETED", "ACTIVE_PAID"];
 const REFUNDED_WOOVI_STATUSES = ["REFUNDED", "refunded"];
 const VISIBLE_WOOVI_STATUSES = [...PAID_WOOVI_STATUSES, ...REFUNDED_WOOVI_STATUSES];
 
-const PIX_FEE_CENTAVOS = 40;
+const PIX_FEE_CENTAVOS = 50;
 const netCentavos = (value: unknown) => Math.max(0, Number(value ?? 0) - PIX_FEE_CENTAVOS);
 
 interface LocalWooviCharge {
@@ -645,6 +645,7 @@ const mapWooviChargeToTransaction = (
   ];
 
   if (feeCentavos > 0) {
+    const feeDate = new Date(new Date(created_at).getTime() + 1000).toISOString();
     result.push({
       id: `fee-${charge.id}`,
       type: "withdraw",
@@ -652,7 +653,7 @@ const mapWooviChargeToTransaction = (
       gross_centavos: feeCentavos,
       fee_centavos: 0,
       status: blocked ? "Em espera" : "Concluído",
-      created_at,
+      created_at: feeDate,
       description: "Taxa bancária Pix",
       blocked,
       receiptData: {
@@ -661,7 +662,7 @@ const mapWooviChargeToTransaction = (
         valueCentavos: feeCentavos,
         grossCentavos: feeCentavos,
         feeCentavos: 0,
-        createdAt: created_at,
+        createdAt: feeDate,
         pixKey,
         pixKeyType,
         recipientName: "WOOVI IP S.A.",
@@ -810,22 +811,24 @@ export function CarteiraPage({
         const raw = localStorage.getItem(`barbeiro_carteira_bal_${barbeiroId}`);
         if (raw) {
           const val = Number(raw);
-          if (!isNaN(val) && val >= 0) return val;
+          if (!isNaN(val) && val >= 0 && val !== 15190 && val !== 14470) return val;
         }
       } catch {}
     }
-    if (cached?.balanceCentavos && ![77180, 77100].includes(cached.balanceCentavos)) {
+    if (cached?.balanceCentavos && ![77180, 77100, 16190, 15190, 14470].includes(cached.balanceCentavos)) {
       return cached.balanceCentavos;
-    }
-    if (barbeiroId === "767c51a7-7323-4933-8fc5-9a666f6baa7c") {
-      return 16190;
     }
     return 0;
   };
 
   const [balanceCentavos, setBalanceCentavos] = useState<number>(getInitialBalance);
   const [blockedCentavos, setBlockedCentavos] = useState<number>(cached?.blockedCentavos ?? 0);
-  const availableCentavos = Math.max(0, balanceCentavos - blockedCentavos);
+  const [withdrawableLimitCentavos, setWithdrawableLimitCentavos] = useState<number | null>(null);
+
+  const rawAvailable = Math.max(0, balanceCentavos - blockedCentavos);
+  const availableCentavos = withdrawableLimitCentavos !== null
+    ? Math.min(rawAvailable, withdrawableLimitCentavos)
+    : rawAvailable;
   const [showBalance, setShowBalance] = useState(true);
 
   // Estado da conexão em tempo real com o banco (Woovi / OpenPix)
@@ -1228,7 +1231,7 @@ export function CarteiraPage({
               type: "deposit" as const,
               value_centavos: aptCents,
               gross_centavos: aptCents,
-              fee_centavos: 40,
+              fee_centavos: 50,
               status: isCompleted ? "Disponível" : "Aguardando finalização do corte",
               created_at: aptDate,
               description: "Pix recebido",
@@ -1236,9 +1239,9 @@ export function CarteiraPage({
               receiptData: {
                 id: `apt-${apt.id}`,
                 endToEndId,
-                valueCentavos: Math.max(0, aptCents - 40),
+                valueCentavos: Math.max(0, aptCents - 50),
                 grossCentavos: aptCents,
-                feeCentavos: 40,
+                feeCentavos: 50,
                 createdAt: aptDate,
                 pixKey: barberKey,
                 pixKeyType: barberKeyType,
@@ -1254,24 +1257,25 @@ export function CarteiraPage({
             },
           ];
 
-          if (isCompleted && aptCents > 40) {
+          if (isCompleted && aptCents > 50) {
+            const feeDate = new Date(new Date(aptDate).getTime() + 1000).toISOString();
             items.push({
               id: `fee-apt-${apt.id}`,
               type: "withdraw" as const,
-              value_centavos: 40,
-              gross_centavos: 40,
+              value_centavos: 50,
+              gross_centavos: 50,
               fee_centavos: 0,
               status: "Concluído",
-              created_at: aptDate,
+              created_at: feeDate,
               description: "Taxa bancária Pix",
               blocked: false,
               receiptData: {
                 id: `fee-apt-${apt.id}`,
                 endToEndId,
-                valueCentavos: 40,
-                grossCentavos: 40,
+                valueCentavos: 50,
+                grossCentavos: 50,
                 feeCentavos: 0,
-                createdAt: aptDate,
+                createdAt: feeDate,
                 pixKey: barberKey,
                 pixKeyType: barberKeyType,
                 recipientName: "WOOVI IP S.A.",
@@ -1395,13 +1399,10 @@ export function CarteiraPage({
       const sacado = (saques ?? []).reduce((sum: number, s: any) => {
         const st = String(s.status ?? "").toLowerCase();
         const naoDebita =
-          isTulio ||
           st === "falhou" ||
           st === "cancelado" ||
           st === "estornado" ||
-          st === "recusado" ||
-          st === "processando" ||
-          st === "pendente";
+          st === "recusado";
 
         return naoDebita ? sum : sum + Math.round(Number(s.valor ?? 0) * 100);
       }, 0);
@@ -1450,11 +1451,14 @@ export function CarteiraPage({
         }
 
         // Se a resposta veio com sucesso diretamente da subconta Woovi, espelha fielmente em tempo real
-        if (res.data.source === "woovi" && typeof res.data.balance_centavos === "number") {
+        if (typeof res.data.balance_centavos === "number") {
           const balance = Math.max(0, Number(res.data.balance_centavos ?? 0));
           const blocked = Math.min(Math.max(0, Number(res.data.blocked_centavos ?? 0)), balance);
           setBalanceCentavos(balance);
           setBlockedCentavos(blocked);
+          if (typeof res.data.available_centavos === "number") {
+            setWithdrawableLimitCentavos(res.data.available_centavos);
+          }
           setBankStatus("connected");
           setBankErrorMessage("");
 
@@ -1474,7 +1478,7 @@ export function CarteiraPage({
           return true;
         }
 
-        if (res.data.source === "disconnected") {
+        if (res.data.source === "disconnected" || res.data.bank_connected === false) {
           setBankStatus("disconnected");
           setBankErrorMessage(res.data.error?.message || "Credencial Woovi inválida ou expirada");
           return false;
@@ -1611,8 +1615,8 @@ export function CarteiraPage({
       setBarber(cachedEntry.barber);
       barberRef.current = cachedEntry.barber;
       setAutoEnabled(Boolean(cachedEntry.barber?.woovi_auto_withdraw_enabled));
-      // Não carrega valores 771 fixos antigos
-      if (![77180, 77100].includes(cachedEntry.balanceCentavos)) {
+      // Não carrega valores 771, 15190 ou 14470 fixos antigos
+      if (![77180, 77100, 15190, 14470].includes(cachedEntry.balanceCentavos)) {
         setBalanceCentavos(cachedEntry.balanceCentavos);
         setBlockedCentavos(cachedEntry.blockedCentavos);
       }
@@ -1664,7 +1668,7 @@ export function CarteiraPage({
 
         const newEntry: WalletCacheEntry = {
           barber: barberData || barberRef.current,
-          balanceCentavos: cachedEntry?.balanceCentavos && ![77180, 77100].includes(cachedEntry.balanceCentavos) ? cachedEntry.balanceCentavos : 0,
+          balanceCentavos: cachedEntry?.balanceCentavos && ![77180, 77100, 16190].includes(cachedEntry.balanceCentavos) ? cachedEntry.balanceCentavos : 0,
           blockedCentavos: cachedEntry?.blockedCentavos ?? 0,
           transactions: walletRes.transactions,
           avatarUrl: avatar || cachedEntry?.avatarUrl || null,
@@ -2123,6 +2127,8 @@ export function CarteiraPage({
       }
     } catch (err) {
       toast.error((err as Error).message || "Erro ao sacar");
+      // Atualiza saldo real imediatamente para corrigir caso o usuário tenha tentado sacar mais do que o saldo do banco
+      syncProviderBalance(true).catch(() => {});
     } finally {
       setWithdrawing(false);
     }
@@ -2676,20 +2682,27 @@ export function CarteiraPage({
             </div>
 
             {/* Atalho de saldo disponível */}
-            <div className="mt-4 flex items-center gap-2">
-              <span className="text-[12px] text-muted-foreground">
-                Saldo disponível: {fmtBRL(availableCentavos)}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  const maxStr = (availableCentavos / 100).toFixed(2).replace(".", ",");
-                  setWithdrawValue(maxStr);
-                }}
-                className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 hover:opacity-80 underline transition-opacity"
-              >
-                Sacar tudo
-              </button>
+            <div className="mt-4 flex flex-col items-center gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-muted-foreground">
+                  Saldo disponível: {fmtBRL(availableCentavos)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const maxStr = (availableCentavos / 100).toFixed(2).replace(".", ",");
+                    setWithdrawValue(maxStr);
+                  }}
+                  className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 hover:opacity-80 underline transition-opacity cursor-pointer"
+                >
+                  Sacar tudo
+                </button>
+              </div>
+              {rawAvailable > availableCentavos && (
+                <span className="text-[11px] text-amber-600/90 dark:text-amber-400/90 text-center font-medium max-w-xs">
+                  Limite em caixa na conta da barbearia: {fmtBRL(availableCentavos)} (o restante de {fmtBRL(rawAvailable - availableCentavos)} será liberado com os próximos recebimentos)
+                </span>
+              )}
             </div>
           </div>
 

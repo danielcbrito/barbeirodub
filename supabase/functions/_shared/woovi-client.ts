@@ -76,9 +76,17 @@ export async function wooviFetch<T = unknown>(path: string, init: WooviFetchInit
   }
 
   if (!res.ok) {
-    const msg = (parsed && typeof parsed === 'object' && 'message' in (parsed as Record<string, unknown>))
-      ? String((parsed as Record<string, unknown>).message)
-      : `Woovi HTTP ${res.status}`;
+    let msg = `Woovi HTTP ${res.status}`;
+    if (parsed && typeof parsed === 'object') {
+      const p = parsed as Record<string, unknown>;
+      if (typeof p.error === 'string' && p.error.trim()) {
+        msg = p.error.trim();
+      } else if (typeof p.message === 'string' && p.message.trim()) {
+        msg = p.message.trim();
+      } else if (Array.isArray(p.errors) && p.errors[0]?.message) {
+        msg = String(p.errors[0].message);
+      }
+    }
     throw new WooviError(res.status, parsed, msg);
   }
 
