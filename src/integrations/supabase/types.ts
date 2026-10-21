@@ -2399,6 +2399,50 @@ export type Database = {
           },
         ]
       }
+      discount_coupons: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          nome: string | null
+          percent: number
+          starts_at: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          nome?: string | null
+          percent: number
+          starts_at?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          nome?: string | null
+          percent?: number
+          starts_at?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discount_coupons_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       disparos_programados: {
         Row: {
           contatos_ids: string[]
