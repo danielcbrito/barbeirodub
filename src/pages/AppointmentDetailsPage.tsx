@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppointmentDetailsView } from "@/components/admin/AppointmentDetailsView";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { supabase } from "@/integrations/supabase/client";
+import { saveAgendaSelectedDate } from "@/lib/agendaDatePersistence";
 import type { TimelineAppointment } from "@/hooks/useBarberAgenda";
 
 interface AppointmentDetailsPageLocationState {
@@ -50,6 +51,14 @@ export default function AppointmentDetailsPage({ basePath }: AppointmentDetailsP
     initialData: state.appointment,
   });
 
+  // Persiste a data imediatamente na sessão para caso o usuário use o botão voltar nativo do navegador
+  useEffect(() => {
+    const targetDate = appointment?.data || state.appointment?.data;
+    if (targetDate) {
+      saveAgendaSelectedDate(targetDate);
+    }
+  }, [appointment?.data, state.appointment?.data]);
+
   useEffect(() => {
     if (appointment === null && !state.appointment) {
       navigate(`${basePath}/agenda`, { replace: true });
@@ -57,7 +66,14 @@ export default function AppointmentDetailsPage({ basePath }: AppointmentDetailsP
   }, [appointment, state.appointment, basePath, navigate]);
 
   const handleClose = () => {
-    navigate(`${basePath}/agenda`, { replace: false });
+    const targetDate = appointment?.data || state.appointment?.data;
+    if (targetDate) {
+      saveAgendaSelectedDate(targetDate);
+    }
+    navigate(`${basePath}/agenda`, {
+      replace: false,
+      state: targetDate ? { selectedDate: targetDate } : undefined,
+    });
   };
 
   const handleUpdate = () => {

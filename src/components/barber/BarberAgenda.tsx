@@ -38,6 +38,7 @@ import { AdminMobileAgenda } from "@/components/admin/mobile/AdminMobileAgenda";
 import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
 import { ConfirmAttendanceModal } from "@/components/admin/ConfirmAttendanceModal";
 import { MobileManualBookingModal } from "@/components/admin/mobile/MobileManualBookingModal";
+import { getStoredAgendaDate, saveAgendaSelectedDate } from "@/lib/agendaDatePersistence";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBarberAgenda, type TimelineAppointment } from "@/hooks/useBarberAgenda";
 import { useQueryClient } from "@tanstack/react-query";
@@ -125,16 +126,26 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  });
+  const location = useLocation();
+  const initialDate = useMemo(() => getStoredAgendaDate(location.state?.selectedDate), [location.state?.selectedDate]);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => initialDate);
+
+  useEffect(() => {
+    if (location.state?.selectedDate) {
+      const parsed = getStoredAgendaDate(location.state.selectedDate);
+      setSelectedDate(parsed);
+    }
+  }, [location.state?.selectedDate]);
+
+  useEffect(() => {
+    saveAgendaSelectedDate(selectedDate);
+  }, [selectedDate]);
+
   const [confirmModalAppointment, setConfirmModalAppointment] = useState<TimelineAppointment | null>(null);
   const [manualBookingModalOpen, setManualBookingModalOpen] = useState(false);
   const [selectedEmptySlot, setSelectedEmptySlot] = useState({ date: "", time: "" });
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const location = useLocation();
   const overdueState = useOverdueAppointments(barberContext.barbeiroId, { enabled: !isMobile });
   const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(() => Boolean(location.state?.openOverdueModal));
   const hasAutoPromptedOverdueRef = useRef(false);
@@ -399,9 +410,10 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     return (
       <>
         <AdminMobileAgenda
-          onAppointmentClick={(apt) =>
-            navigate(`/barbeiro/agendamento/${apt.id}`, { state: { appointment: apt as any } })
-          }
+          onAppointmentClick={(apt) => {
+            saveAgendaSelectedDate(apt.data || selectedDate);
+            navigate(`/barbeiro/agendamento/${apt.id}`, { state: { appointment: apt as any } });
+          }}
           barbeiroId={barberContext.barbeiroId}
           tenantId={barberContext.tenantId}
         />
@@ -638,7 +650,10 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                 return (
                   <div
                     key={apt.id}
-                    onClick={() => navigate(`/barbeiro/agendamento/${apt.id}`, { state: { appointment: apt } })}
+                    onClick={() => {
+                      saveAgendaSelectedDate(apt.data || selectedDate);
+                      navigate(`/barbeiro/agendamento/${apt.id}`, { state: { appointment: apt } });
+                    }}
                     onMouseEnter={() => {
                       if (!apt.user_id) return;
                       queryClient.prefetchQuery({

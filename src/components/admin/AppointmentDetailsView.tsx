@@ -10,6 +10,8 @@ import {
   AlertDialogDescription,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogCancel,
+  AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { AdminRescheduleModal } from "./AdminRescheduleModal";
 import { 
@@ -48,8 +50,11 @@ import { Button } from "@/components/ui/button";
 import { ClientPlanConversionScreen } from "@/components/shared/ClientPlanConversionScreen";
 import type { TimelineAppointment } from "@/hooks/useBarberAgenda";
 import { isWhatsAppAppointment } from "@/lib/walkInName";
-import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
-import { extractDebtFromAppointment, dispenseCancellationDebt } from "@/lib/barberCancellationFee";
+import {
+  extractDebtFromAppointment,
+  dispenseCancellationDebt,
+  fetchBarberCancellationFee,
+} from "@/lib/barberCancellationFee";
 
 function CurvedBackArrow({ className }: { className?: string }) {
   return (
@@ -109,8 +114,24 @@ export function AppointmentDetailsView({
   const [paymentJustConfirmed, setPaymentJustConfirmed] = useState(false);
   const [confirmFinalizeOpen, setConfirmFinalizeOpen] = useState(false);
   const [confirmNoShowOpen, setConfirmNoShowOpen] = useState(false);
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentBarberId, setCurrentBarberId] = useState<string | null>(null);
+
+  // Garante que o body nunca permaneça congelado com pointer-events: none ao fechar modais
+  useEffect(() => {
+    const cleanPointerEvents = () => {
+      if (typeof document !== "undefined" && document.body.style.pointerEvents === "none") {
+        document.body.style.pointerEvents = "auto";
+      }
+    };
+    cleanPointerEvents();
+    const interval = setInterval(cleanPointerEvents, 400);
+    return () => {
+      clearInterval(interval);
+      cleanPointerEvents();
+    };
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -260,6 +281,19 @@ export function AppointmentDetailsView({
     staleTime: STALE_TIMES.CLIENTES,
     enabled: !!appointment?.user_id,
   });
+
+  /* ── Configuração de taxa de cancelamento do barbeiro ── */
+  const { data: cancellationFeeConfig } = useQuery({
+    queryKey: ["barber-cancellation-fee", resolvedBarbeiroId],
+    queryFn: async () => {
+      if (!resolvedBarbeiroId) return null;
+      return await fetchBarberCancellationFee(resolvedBarbeiroId);
+    },
+    enabled: !!resolvedBarbeiroId,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const isCancellationFeeEnabled = Boolean(cancellationFeeConfig?.habilitado);
 
   // Ref para proteção contra unmount
   const mountedRef = useRef(true);
@@ -483,29 +517,35 @@ export function AppointmentDetailsView({
     setConfirmFinalizeOpen(false);
     setLoading(true);
     try {
-      let subQuery = supabase
-        .from("assinaturas")
-        .select("id, plano_id, status, payment_method, barbeiro_id, cash_payment_confirmed")
-        .eq("user_id", appointment.user_id)
-        .eq("payment_method", "cash");
+      if (appointment.user_id) {
+        let subQuery = supabase
+          .from("assinaturas")
+          .select("id, plano_id, status, payment_method, barbeiro_id, cash_payment_confirmed")
+          .eq("user_id", appointment.user_id)
+          .eq("payment_method", "cash");
 
-      if (resolvedBarbeiroId) {
-        subQuery = subQuery.eq("barbeiro_id", resolvedBarbeiroId);
-      }
+        if (resolvedBarbeiroId) {
+          subQuery = subQuery.eq("barbeiro_id", resolvedBarbeiroId);
+        }
 
-      const { data: sub } = await subQuery
-        .or("status.in.(pending_cash,suspended),and(status.eq.active,cash_payment_confirmed.eq.false)")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        const { data: sub } = await subQuery
+          .or("status.in.(pending_cash,suspended),and(status.eq.active,cash_payment_confirmed.eq.false)")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (sub) {
-        await confirmarPlanoMutation.mutateAsync({
-          assinaturaId: sub.id,
-          userId: appointment.user_id,
-          planoNome: planInfo.planName || "assinatura",
-        });
-        setPaymentJustConfirmed(true);
+        if (sub) {
+          try {
+            await confirmarPlanoMutation.mutateAsync({
+              assinaturaId: sub.id,
+              userId: appointment.user_id,
+              planoNome: planInfo.planName || "assinatura",
+            });
+            setPaymentJustConfirmed(true);
+          } catch (confirmErr) {
+            console.warn("[AppointmentDetailsView] Confirmação de plano não-bloqueante:", confirmErr);
+          }
+        }
       }
     } catch (err) {
       console.error("Erro ao confirmar pagamento do plano:", err);
@@ -523,6 +563,7 @@ export function AppointmentDetailsView({
 
   const handleCancel = () => {
     if (!appointment) return;
+    setConfirmCancelOpen(false);
     cancelMutation.mutate(
       {
         appointmentId: appointment.id,
@@ -541,6 +582,7 @@ export function AppointmentDetailsView({
 
   const handleNoShow = () => {
     if (!appointment) return;
+    setConfirmNoShowOpen(false);
     noShowMutation.mutate(
       {
         appointmentId: appointment.id,
@@ -1010,7 +1052,7 @@ export function AppointmentDetailsView({
               <div className="flex gap-2.5">
                 {canCancel && (
                   <button 
-                    onClick={handleCancel} 
+                    onClick={() => setConfirmCancelOpen(true)} 
                     disabled={isActing}
                     className={cn(
                       "flex-1 h-10 rounded-xl text-[12px] font-medium flex items-center justify-center gap-1.5",
@@ -1027,7 +1069,7 @@ export function AppointmentDetailsView({
 
                 {canNoShow && (
                   <button 
-                    onClick={handleNoShow} 
+                    onClick={() => setConfirmNoShowOpen(true)} 
                     disabled={isActing}
                     className={cn(
                       "flex-1 h-10 rounded-xl text-[12px] font-medium flex items-center justify-center gap-1.5",
@@ -1106,7 +1148,7 @@ export function AppointmentDetailsView({
             <div className="flex gap-2.5">
               {canCancel && (
                 <button 
-                  onClick={handleCancel} 
+                  onClick={() => setConfirmCancelOpen(true)} 
                   disabled={isActing}
                   className={cn(
                     "flex-1 h-10 rounded-xl text-[12px] font-medium flex items-center justify-center gap-1.5",
@@ -1224,7 +1266,7 @@ export function AppointmentDetailsView({
       </AnimatePresence>
       {/* ═══ DIALOG CONFIRMAÇÃO PAGAMENTO PLANO NO FINALIZAR ═══ */}
       <AlertDialog open={confirmFinalizeOpen} onOpenChange={setConfirmFinalizeOpen}>
-        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background">
+        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background z-[100]">
           <AlertDialogHeader className="space-y-2 text-center sm:text-center">
             <div className="w-12 h-12 rounded-full bg-foreground/5 border border-border/60 flex items-center justify-center mx-auto text-foreground mb-1">
               <Banknote className="w-6 h-6 stroke-[1.8]" />
@@ -1233,41 +1275,43 @@ export function AppointmentDetailsView({
               O cliente realizou o pagamento?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[13px] text-muted-foreground leading-relaxed">
-              Há uma cobrança pendente de <span className="font-semibold text-foreground">R$ {planInfo.precoMensal.toFixed(2).replace('.', ',')}</span> referente ao plano <span className="font-semibold text-foreground">{planInfo.planName}</span>.
+              Há uma cobrança pendente de <span className="font-semibold text-foreground">R$ {planInfo.precoMensal.toFixed(2).replace('.', ',')}</span> referente ao plano <span className="font-semibold text-foreground">{planInfo.planName || "Mensal"}</span>.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="pt-4 space-y-2.5">
             <button
+              type="button"
               onClick={handleFinalizeWithPaid}
               disabled={isActing}
-              className="w-full h-11 rounded-full bg-foreground text-background text-[13px] font-semibold hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs flex items-center justify-center gap-2"
+              className="w-full h-11 rounded-full bg-foreground text-background text-[13px] font-semibold hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <Check className="w-4 h-4" />
               Sim, cliente pagou
             </button>
 
             <button
+              type="button"
               onClick={handleFinalizeWithoutPaid}
               disabled={isActing}
-              className="w-full h-11 rounded-full bg-card border border-border/80 text-foreground text-[13px] font-medium hover:bg-secondary/40 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+              className="w-full h-11 rounded-full bg-card border border-border/80 text-foreground text-[13px] font-medium hover:bg-secondary/40 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               Não pagou (Cobrar depois)
             </button>
 
-            <button
+            <AlertDialogCancel
               onClick={() => setConfirmFinalizeOpen(false)}
-              disabled={isActing}
-              className="w-full h-9 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+              className="w-full h-9 border-0 bg-transparent text-[12px] text-muted-foreground hover:text-foreground transition-colors mt-0 shadow-none hover:bg-transparent"
             >
               Voltar
-            </button>
+            </AlertDialogCancel>
           </div>
         </AlertDialogContent>
       </AlertDialog>
+
       {/* ═══ DIALOG CONFIRMAÇÃO DE FALTA (NO-SHOW) ═══ */}
       <AlertDialog open={confirmNoShowOpen} onOpenChange={setConfirmNoShowOpen}>
-        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background">
+        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background z-[100]">
           <AlertDialogHeader className="space-y-2 text-center sm:text-center">
             <div className="w-12 h-12 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center mx-auto text-destructive mb-1">
               <UserX className="w-6 h-6 stroke-[1.8]" />
@@ -1277,33 +1321,69 @@ export function AppointmentDetailsView({
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[12.5px] text-muted-foreground leading-relaxed">
               O agendamento de <strong className="text-foreground">{appointment?.profile?.nome || "Cliente"}</strong> será marcado como <strong className="text-foreground">Falta</strong>.
-              <br /><br />
-              {isPrepaid ? (
-                <span>O cliente já realizou pagamento antecipado (Pix). O valor correspondente à taxa de cancelamento/falta será retido.</span>
+              {isCancellationFeeEnabled ? (
+                <>
+                  <br /><br />
+                  {isPrepaid ? (
+                    <span>O cliente já realizou pagamento antecipado (Pix). O valor correspondente à taxa de cancelamento/falta será retido.</span>
+                  ) : (
+                    <span>Como o agendamento é com pagamento presencial na barbearia, a taxa configurada será registrada como pendência na conta do cliente e somada no próximo agendamento dele.</span>
+                  )}
+                </>
               ) : (
-                <span>Como o agendamento é com pagamento presencial na barbearia, a taxa configurada será registrada como pendência na conta do cliente e somada no próximo agendamento dele.</span>
+                <span> O horário será liberado na agenda.</span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="pt-4 flex gap-2">
-            <button
-              type="button"
+            <AlertDialogCancel
               onClick={() => setConfirmNoShowOpen(false)}
-              className="flex-1 h-11 rounded-full bg-secondary border border-border/60 text-[13px] font-medium text-foreground hover:bg-secondary/80 transition-all"
+              className="flex-1 h-11 rounded-full bg-secondary border border-border/60 text-[13px] font-medium text-foreground hover:bg-secondary/80 transition-all mt-0"
             >
               Voltar
-            </button>
+            </AlertDialogCancel>
             <button
               type="button"
-              onClick={() => {
-                setConfirmNoShowOpen(false);
-                handleNoShow();
-              }}
+              onClick={handleNoShow}
               disabled={isActing}
-              className="flex-1 h-11 rounded-full bg-destructive text-destructive-foreground text-[13px] font-semibold hover:opacity-90 active:scale-[0.99] transition-all shadow-xs"
+              className="flex-1 h-11 rounded-full bg-destructive text-destructive-foreground text-[13px] font-semibold hover:opacity-90 active:scale-[0.99] transition-all shadow-xs disabled:opacity-50"
             >
               Sim, registrar falta
+            </button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ═══ DIALOG CONFIRMAÇÃO DE CANCELAMENTO ═══ */}
+      <AlertDialog open={confirmCancelOpen} onOpenChange={setConfirmCancelOpen}>
+        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background z-[100]">
+          <AlertDialogHeader className="space-y-2 text-center sm:text-center">
+            <div className="w-12 h-12 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center mx-auto text-destructive mb-1">
+              <XCircle className="w-6 h-6 stroke-[1.8]" />
+            </div>
+            <AlertDialogTitle className="text-[17px] font-semibold tracking-tight text-foreground">
+              Cancelar agendamento?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[12.5px] text-muted-foreground leading-relaxed">
+              Tem certeza que deseja cancelar o agendamento de <strong className="text-foreground">{appointment?.profile?.nome || "Cliente"}</strong>? O horário será liberado na agenda.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="pt-4 flex gap-2">
+            <AlertDialogCancel
+              onClick={() => setConfirmCancelOpen(false)}
+              className="flex-1 h-11 rounded-full bg-secondary border border-border/60 text-[13px] font-medium text-foreground hover:bg-secondary/80 transition-all mt-0"
+            >
+              Voltar
+            </AlertDialogCancel>
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={isActing}
+              className="flex-1 h-11 rounded-full bg-destructive text-destructive-foreground text-[13px] font-semibold hover:opacity-90 active:scale-[0.99] transition-all shadow-xs disabled:opacity-50"
+            >
+              Sim, cancelar
             </button>
           </div>
         </AlertDialogContent>

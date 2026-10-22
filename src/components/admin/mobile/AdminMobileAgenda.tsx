@@ -46,6 +46,7 @@ import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
+import { getStoredAgendaDate, saveAgendaSelectedDate } from "@/lib/agendaDatePersistence";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -180,25 +181,42 @@ export function AdminMobileAgenda({
   const getDateKey = (date: Date) => format(date, 'yyyy-MM-dd');
   const syncKey = (dateStr: string) => `admin-agenda:${barbeiroId || tenantId || "all"}:${dateStr}`;
 
+  const location = useLocation();
   const today = useMemo(() => getLocalToday(), []);
 
+  // Data inicial persistida via location.state (retorno de detalhes) ou sessionStorage
+  const initialDate = useMemo(() => getStoredAgendaDate(location.state?.selectedDate), [location.state?.selectedDate]);
+
   // Mês selecionado no carrossel e data selecionada
-  const [selectedMonth, setSelectedMonth] = useState<Date>(() => startOfMonth(getLocalToday()));
-  const [selectedDate, setSelectedDate] = useState<Date>(() => getLocalToday());
+  const [selectedMonth, setSelectedMonth] = useState<Date>(() => startOfMonth(initialDate));
+  const [selectedDate, setSelectedDate] = useState<Date>(() => initialDate);
+
+  // Sincroniza quando location.state trouxer uma data explícita (ex: ao fechar tela de agendamento)
+  useEffect(() => {
+    if (location.state?.selectedDate) {
+      const parsed = getStoredAgendaDate(location.state.selectedDate);
+      setSelectedDate(parsed);
+      setSelectedMonth(startOfMonth(parsed));
+    }
+  }, [location.state?.selectedDate]);
+
+  // Persiste na sessão sempre que o barbeiro mudar a data selecionada
+  useEffect(() => {
+    saveAgendaSelectedDate(selectedDate);
+  }, [selectedDate]);
 
   // Modal de seleção rápida de mês/ano
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(() => selectedMonth.getFullYear());
 
   const [appointments, setAppointments] = useState<MobileAppointment[]>(
-    () => readSyncCache<MobileAppointment[]>(syncKey(getDateKey(getLocalToday())))?.data || []
+    () => readSyncCache<MobileAppointment[]>(syncKey(getDateKey(initialDate)))?.data || []
   );
-  const [appointmentsDateKey, setAppointmentsDateKey] = useState(() => getDateKey(getLocalToday()));
+  const [appointmentsDateKey, setAppointmentsDateKey] = useState(() => getDateKey(initialDate));
   const [loading, setLoading] = useState(
-    () => !readSyncCache<MobileAppointment[]>(syncKey(getDateKey(getLocalToday())))
+    () => !readSyncCache<MobileAppointment[]>(syncKey(getDateKey(initialDate)))
   );
   const [refreshing, setRefreshing] = useState(false);
-  const location = useLocation();
   const [manualBookingOpen, setManualBookingOpen] = useState(() => Boolean(location.state?.openManualBooking));
   const [selectedSlotTime, setSelectedSlotTime] = useState("09:00");
   const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(() => Boolean(location.state?.openOverdueModal));
@@ -727,13 +745,27 @@ export function AdminMobileAgenda({
     };
   }, [selectedDate, selectedMonth, loadAppointments, barbeiroId]);
 
-  // Centraliza o carrossel no dia selecionado
+  // Centraliza o carrossel no dia selecionado com suporte resiliente a montagem e troca de mês
   useEffect(() => {
-    const timer = setTimeout(() => {
-      scrollToDay(selectedDate, isInitialScrollDone.current ? "smooth" : "auto");
-      isInitialScrollDone.current = true;
-    }, 60);
-    return () => clearTimeout(timer);
+    let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+    const attemptScroll = (attemptsLeft: number) => {
+      if (cancelled) return;
+      const container = carouselRef.current;
+      const dayKey = format(selectedDate, "yyyy-MM-dd");
+      const el = container?.querySelector(`[data-date="${dayKey}"]`);
+      if (el) {
+        scrollToDay(selectedDate, isInitialScrollDone.current ? "smooth" : "auto");
+        isInitialScrollDone.current = true;
+      } else if (attemptsLeft > 0) {
+        timer = setTimeout(() => attemptScroll(attemptsLeft - 1), 50);
+      }
+    };
+    timer = setTimeout(() => attemptScroll(5), 50);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [selectedDate, selectedMonth, scrollToDay]);
 
   // Troca de mês pelos botões de seta
@@ -1048,7 +1080,10 @@ export function AdminMobileAgenda({
               return (
                 <div
                   key={apt.id}
-                  onClick={() => onAppointmentClick?.(apt)}
+                  onClick={() => {
+                    saveAgendaSelectedDate(selectedDate);
+                    onAppointmentClick?.(apt);
+                  }}
                   style={{ opacity: isMuted ? 0.45 : 1 }}
                   className={cn(
                     "w-full rounded-2xl border transition-all duration-200 cursor-pointer p-3 sm:p-3.5 flex items-center gap-3 backdrop-blur-xl backdrop-saturate-[180%]",

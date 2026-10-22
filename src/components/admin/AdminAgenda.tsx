@@ -38,6 +38,7 @@ import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { AdminContext } from "@/pages/Admin";
+import { getStoredAgendaDate, saveAgendaSelectedDate } from "@/lib/agendaDatePersistence";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AdminMobileAgenda } from "./mobile/AdminMobileAgenda";
 import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
@@ -159,13 +160,23 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   }, [location.state, isMobile, overdueState.count, overdueState.isLoading]);
 
 
-  const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  });
+  const initialDate = useMemo(() => getStoredAgendaDate(location.state?.selectedDate), [location.state?.selectedDate]);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => initialDate);
+
+  useEffect(() => {
+    if (location.state?.selectedDate) {
+      const parsed = getStoredAgendaDate(location.state.selectedDate);
+      setSelectedDate(parsed);
+    }
+  }, [location.state?.selectedDate]);
+
+  useEffect(() => {
+    saveAgendaSelectedDate(selectedDate);
+  }, [selectedDate]);
+
   const syncKey = (dateStr: string) =>
     `admin-agenda-desktop:${effectiveBarbeiroId || tenantId || "all"}:${dateStr}`;
-  const initialKey = format(new Date(), "yyyy-MM-dd");
+  const initialKey = format(initialDate, "yyyy-MM-dd");
   const [appointments, setAppointments] = useState<TimelineAppointment[]>(
     () => readSyncCache<TimelineAppointment[]>(syncKey(initialKey))?.data || []
   );
@@ -552,9 +563,10 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   if (isMobile) {
     return (
       <AdminMobileAgenda
-        onAppointmentClick={(apt) =>
-          navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt as any } })
-        }
+        onAppointmentClick={(apt) => {
+          saveAgendaSelectedDate(apt.data || selectedDate);
+          navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt as any } });
+        }}
         barbeiroId={effectiveBarbeiroId}
         tenantId={tenantId}
       />
@@ -778,7 +790,10 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                 return (
                   <div
                     key={apt.id}
-                    onClick={() => navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt } })}
+                    onClick={() => {
+                      saveAgendaSelectedDate(apt.data || selectedDate);
+                      navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt } });
+                    }}
                     style={{ opacity: isCompleted ? 0.48 : 1 }}
                     className={cn(
                       "rounded-2xl border-l-[3px] p-4 border transition-all cursor-pointer backdrop-blur-xl backdrop-saturate-[180%]",
