@@ -1,10 +1,12 @@
 # Payment provider cleanup
 
 ## Report and performance consistency
-- [ ] Diagnose home/report revenue differences using live data and active callers.
-- [ ] Unify revenue and period comparisons for all barber/admin profiles.
-- [ ] Replace partial performance scoring with measurable multi-factor evaluation and explicit missing-data states.
-- [ ] Test shared rules and document findings and verification limits.
+- [x] Diagnose home/report revenue differences using live data and active callers.
+- [x] Unify revenue and period comparisons for all barber/admin profiles.
+- [x] Replace partial performance scoring with measurable multi-factor evaluation and explicit missing-data states.
+- [x] Test shared rules and document findings and verification limits (19 tests passed; build OK).
+- [ ] Verify home → report parity inside a real authenticated account — external unmanaged Supabase session unavailable.
+- [ ] Add score inputs for price affordability, actual capacity and app usage — requires market benchmarks and agreed event instrumentation; absent inputs explicitly marked, not invented.
 
 - [x] Audit repository frontend, functions and public database function references.
 - [x] Remove operational Asaas API calls from repository; preserve financial history and existing Woovi/Efí flows.
