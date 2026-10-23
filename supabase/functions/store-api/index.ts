@@ -457,7 +457,14 @@ async function handleWooviGetBalance(req: Request, body?: Record<string, unknown
       return ok({ balance_centavos: 0, blocked_centavos: 0, available_centavos: 0, pix_key: null, configured: false });
     }
 
-    return ok(await getLocalWooviBalance(context.supabase, context.barber));
+    try {
+      const real = await getWooviAvailableBalance(context.supabase, context.barber);
+      if (!Number.isFinite(real.balance_centavos)) throw new Error("Saldo Woovi inválido");
+      return ok({ ...real, blocked_centavos: Math.min(real.blocked_centavos, real.balance_centavos), source: "woovi_subaccount" });
+    } catch (wooviError) {
+      console.error("[store-api:woovi_get_balance] Woovi indisponível, usando cálculo local:", wooviError);
+      return ok(await getLocalWooviBalance(context.supabase, context.barber));
+    }
   } catch (error) {
     console.error("[store-api:woovi_get_balance] Saldo local indisponível:", error);
     return ok({
