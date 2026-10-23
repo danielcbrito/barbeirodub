@@ -51,15 +51,27 @@ export async function requestFcmToken(): Promise<string | null> {
 
   if (!('serviceWorker' in navigator)) return null;
 
-  // Registra (ou recupera) o SW dedicado
+  // Registra (ou recupera) o SW dedicado no escopo raiz (necessário p/ iOS PWA).
+  // Não usamos navigator.serviceWorker.ready: ele só resolve quando um SW controla
+  // a página e travava para sempre, impedindo o registro do aparelho.
   const swReg = await navigator.serviceWorker
-    .register('/firebase-messaging-sw.js', { scope: '/firebase-cloud-messaging-push-scope' })
+    .register('/firebase-messaging-sw.js', { scope: '/' })
     .catch((e) => {
       console.warn('[FCM] erro ao registrar service worker', e);
       return null;
     });
   if (!swReg) return null;
-  await navigator.serviceWorker.ready;
+  if (!swReg.active) {
+    const sw = swReg.installing || swReg.waiting;
+    if (sw) {
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, 10000);
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'activated') { clearTimeout(t); resolve(); }
+        });
+      });
+    }
+  }
 
   try {
     const token = await getToken(messaging, {
