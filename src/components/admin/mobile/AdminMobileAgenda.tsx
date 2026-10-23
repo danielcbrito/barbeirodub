@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { MobileManualBookingModal } from "./MobileManualBookingModal";
-import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment } from "@/lib/walkInName";
+import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import {
   extractDebtFromAppointment,
@@ -65,6 +65,7 @@ interface MobileAppointment {
   status: string;
   preco: number;
   observacoes: string | null;
+  cliente_nome?: string | null;
   barbeiro_confirmou: boolean | null;
   is_free: boolean | null;
   payment_method: string | null;
@@ -72,6 +73,7 @@ interface MobileAppointment {
   user_id: string;
   servico_id: string;
   barbeiro_id?: string | null;
+  barbeiro_apelido?: string | null;
   duracao: number;
   profile: { nome: string; telefone?: string } | null;
   servico: { nome: string; duracao_minutos: number } | null;
@@ -505,11 +507,16 @@ export function AdminMobileAgenda({
           appointmentsWithDetails = raw
             .filter((apt) => Boolean(apt) && apt.status !== "excluido")
             .map((apt) => {
-              const walkInName = extractWalkInName(apt.observacoes);
-              const whatsAppName = extractWhatsAppName(apt.observacoes);
-              const displayName = whatsAppName || walkInName || apt.profile?.nome || null;
+              const displayName = resolveClienteDisplayName(
+                apt.observacoes,
+                apt.profile?.nome,
+                "Cliente",
+                apt.cliente_nome,
+                apt.barbeiro_apelido
+              );
               return {
                 ...apt,
+                cliente_nome: apt.cliente_nome || null,
                 hora: apt.hora || "00:00",
                 preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
                 duracao: apt.duracao || apt.servico?.duracao_minutos || 30,
@@ -528,7 +535,7 @@ export function AdminMobileAgenda({
       if (!appointmentsWithDetails) {
         let query = supabase
           .from("agendamentos")
-          .select("id, data, hora, duracao, status, preco, observacoes, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao, created_at")
+          .select("id, data, hora, duracao, status, preco, observacoes, cliente_nome, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao, created_at")
           .eq("data", dateStr)
           .neq("status", "excluido")
           .order("hora", { ascending: true });
@@ -565,14 +572,18 @@ export function AdminMobileAgenda({
           appointmentsWithDetails = rawAppointments
             .filter(Boolean)
             .map((apt) => {
-              const walkInName = extractWalkInName(apt.observacoes);
-              const whatsAppName = extractWhatsAppName(apt.observacoes);
-              const displayName = whatsAppName || walkInName || null;
+              const displayName = resolveClienteDisplayName(
+                apt.observacoes,
+                profilesMap.get(apt.user_id)?.nome,
+                "Cliente",
+                (apt as any).cliente_nome
+              );
               const profile = displayName
                 ? { nome: displayName, telefone: profilesMap.get(apt.user_id)?.telefone ?? undefined }
                 : profilesMap.get(apt.user_id) || null;
               return {
                 ...apt,
+                cliente_nome: (apt as any).cliente_nome || null,
                 hora: apt.hora || "00:00",
                 preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
                 duracao: apt.duracao || servicosMap.get(apt.servico_id)?.duracao_minutos || 30,
@@ -1043,7 +1054,13 @@ export function AdminMobileAgenda({
               // Card fica atenuado/transparente se concluído, cancelado, faltou ou horário já decorrido
               const isMuted = isCompleted || isCancelled || isNoShow || isPastTime;
 
-              const clientName = apt.profile?.nome || "Cliente";
+              const clientName = resolveClienteDisplayName(
+                apt.observacoes,
+                apt.profile?.nome,
+                "Cliente",
+                apt.cliente_nome,
+                apt.barbeiro_apelido
+              );
               const serviceName = (() => {
                 if (apt.observacoes?.startsWith("Serviços:")) {
                   return apt.observacoes.split(".")[0].replace("Serviços: ", "");

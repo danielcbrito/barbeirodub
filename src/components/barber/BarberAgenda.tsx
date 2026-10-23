@@ -43,7 +43,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useBarberAgenda, type TimelineAppointment } from "@/hooks/useBarberAgenda";
 import { useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
-import { isWhatsAppAppointment } from "@/lib/walkInName";
+import { isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { toast } from "sonner";
@@ -714,7 +714,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                     <div className="flex items-center gap-2 mb-3 flex-wrap">
                       <User className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
                       <span className="text-[13px] text-muted-foreground truncate">
-                        {apt.profile?.nome || "Cliente"}
+                        {resolveClienteDisplayName(apt.observacoes, apt.profile?.nome, "Cliente", apt.cliente_nome)}
                       </span>
                       {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       {feeBadge ? (

@@ -21,7 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { STALE_TIMES } from "@/lib/queryConstants";
-import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment } from "@/lib/walkInName";
+import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 
 interface TimelineAppointment {
@@ -31,6 +31,7 @@ interface TimelineAppointment {
   status: string;
   preco: number;
   observacoes: string | null;
+  cliente_nome?: string | null;
   barbeiro_confirmou: boolean | null;
   is_free: boolean | null;
   payment_method: string | null;
@@ -99,7 +100,7 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
 
     let appointmentsQuery = supabase
       .from("agendamentos")
-      .select("id, data, hora, duracao, status, preco, observacoes, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao")
+      .select("id, data, hora, duracao, status, preco, observacoes, cliente_nome, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao")
       .eq("data", dateStr)
       .in("status", ["pending", "confirmed", "completed"])
       .order("hora", { ascending: true });
@@ -194,10 +195,10 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
           }
         }
 
-        // Encaixe walk-in ou WhatsApp: nome real do cliente vai em observacoes
+        // Encaixe walk-in ou WhatsApp: nome real do cliente vai em observacoes / cliente_nome
         const walkInName = extractWalkInName(apt.observacoes);
         const whatsAppName = extractWhatsAppName(apt.observacoes);
-        const displayName = whatsAppName || walkInName || null;
+        const displayName = (apt as any).cliente_nome || whatsAppName || walkInName || null;
         const profileData = profileRes.data || null;
         const finalProfile = displayName
           ? { ...(profileData || {}), nome: displayName }
@@ -472,7 +473,7 @@ export function MobileDayTimeline({ selectedDate, onSlotClick, onAppointmentClic
                               <div className="flex items-center gap-2">
                                 <User className="w-3 h-3 text-foreground/60 flex-shrink-0" />
                                 <span className="text-xs text-foreground/80 truncate">
-                                  {appointmentStart.profile?.nome || "Cliente"}
+                                  {resolveClienteDisplayName(appointmentStart.observacoes, appointmentStart.profile?.nome, "Cliente", (appointmentStart as any).cliente_nome)}
                                 </span>
                                 {isWhatsAppAppointment(appointmentStart.observacoes) && <WhatsAppBadge />}
                               </div>

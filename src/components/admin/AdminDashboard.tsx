@@ -305,7 +305,7 @@ export function AdminDashboard({
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
       let todayQuery = supabase
         .from("agendamentos")
-        .select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
+        .select("id, hora, status, observacoes, cliente_nome, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
         .eq("data", todayStr)
         .not("status", "in", '("cancelled_by_admin","cancelled_by_user")')
         .order("hora", { ascending: true });
@@ -344,7 +344,8 @@ export function AdminDashboard({
           const realClientName = resolveClienteDisplayName(
             upcoming.observacoes,
             (upcoming.profiles as any)?.nome,
-            "Cliente"
+            "Cliente",
+            upcoming.cliente_nome
           );
           const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
           const uStartMin = (uh || 0) * 60 + (um || 0);

@@ -350,13 +350,14 @@ export function ProfileSettingsPage({
             <div className="rounded-2xl border border-destructive/15 bg-card overflow-hidden mt-2">
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left hover:bg-destructive/5 active:bg-destructive/10 transition-all"
+                className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left hover:bg-destructive/5 active:bg-destructive/10 transition-all cursor-pointer"
               >
                 <Trash2 className="w-5 h-5 text-destructive/70 shrink-0" strokeWidth={1.8} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-semibold text-destructive/80 leading-tight">Excluir barbearia</p>
-                  <p className="text-[11px] text-muted-foreground/40 mt-0.5">Remove todos os dados permanentemente</p>
+                  <p className="text-[11px] text-muted-foreground/40 mt-0.5">Solicitar exclusão definitiva com nossa equipe</p>
                 </div>
+                <ChevronRight className="w-4 h-4 text-destructive/40 shrink-0" />
               </button>
             </div>
           </div>
@@ -468,7 +469,7 @@ export function ProfileSettingsPage({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-            onClick={() => !deleting && setShowDeleteConfirm(false)}
+            onClick={() => setShowDeleteConfirm(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -476,73 +477,58 @@ export function ProfileSettingsPage({
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={{ type: "spring", duration: 0.35 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm bg-card border border-destructive/20 rounded-2xl p-6 space-y-5 shadow-2xl"
+              className="w-full max-w-sm bg-card border border-border/80 dark:border-white/[0.1] rounded-2xl p-6 space-y-4 shadow-2xl"
             >
               <div className="flex justify-center">
                 <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <AlertTriangle className="w-7 h-7 text-destructive" strokeWidth={1.8} />
+                  <Trash2 className="w-7 h-7 text-destructive" strokeWidth={1.8} />
                 </div>
               </div>
 
-              <div className="text-center space-y-2">
-                <h3 className="text-[16px] font-semibold text-foreground">Excluir barbearia permanentemente?</h3>
+              <div className="text-center space-y-1.5">
+                <h3 className="text-[16px] font-semibold text-foreground">Solicitar exclusão da barbearia</h3>
                 <p className="text-[12px] text-muted-foreground leading-relaxed">
-                  Esta ação é <strong className="text-destructive">irreversível</strong>. Todos os dados serão apagados:
+                  Para segurança dos seus dados, quitação de saldos e encerramento de assinaturas, a exclusão permanente deve ser solicitada à nossa equipe de suporte.
                 </p>
               </div>
 
-              <div className="space-y-1.5 text-[11px] text-muted-foreground/60">
-                {[
-                  "Barbeiros e dados pessoais",
-                  "Agendamentos e avaliações",
-                  "Serviços, planos e promoções",
-                  "Carteira digital e financeiro",
-                  "Vínculo com a carteira (conta bancária não é encerrada)",
-                  "WhatsApp (Evolution API)",
-                  "Templates de mensagens",
-                ].map((text) => (
-                  <div key={text} className="flex items-start gap-2">
-                    <span className="text-destructive mt-0.5">•</span>
-                    <span>{text}</span>
-                  </div>
-                ))}
+              <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3.5 space-y-1.5 text-[11.5px] text-muted-foreground">
+                <p className="font-medium text-foreground">
+                  Nossa equipe auxiliará em:
+                </p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>Encerramento de repasses e saldos</li>
+                  <li>Cancelamento de assinaturas ativas</li>
+                  <li>Desativação segura do domínio e dados</li>
+                </ul>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[11px] font-medium text-muted-foreground">
-                  Digite <strong className="text-foreground">EXCLUIR</strong> para confirmar
-                </label>
-                <input
-                  type="text"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value.toUpperCase())}
-                  placeholder="EXCLUIR"
-                  disabled={deleting}
-                  className="w-full h-10 px-3 rounded-xl bg-background border border-border/30 text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-destructive/30 focus:border-destructive/40 transition-all"
-                />
-              </div>
-
-              <div className="flex gap-3">
+              <div className="space-y-2 pt-1">
                 <button
-                  onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }}
-                  disabled={deleting}
-                  className="flex-1 h-10 rounded-xl bg-secondary border border-border/30 text-[13px] font-medium text-foreground hover:bg-secondary/80 transition-colors"
+                  type="button"
+                  onClick={() => {
+                    const unitName = currentUnit?.nome || "";
+                    const msg = unitName
+                      ? `Olá! Preciso de suporte no app DUB para solicitar a exclusão permanente da barbearia (${unitName}) 🙏`
+                      : "Olá! Preciso de suporte no app DUB 🙏";
+                    window.open(
+                      `https://wa.me/5511963390043?text=${encodeURIComponent(msg)}`,
+                      "_blank",
+                      "noopener,noreferrer"
+                    );
+                    setShowDeleteConfirm(false);
+                  }}
+                  className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-semibold text-[13px] transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 cursor-pointer"
                 >
-                  Cancelar
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Falar com suporte no WhatsApp</span>
                 </button>
                 <button
-                  onClick={handleDeleteAccount}
-                  disabled={deleteConfirmText !== "EXCLUIR" || deleting}
-                  className="flex-1 h-10 rounded-xl bg-destructive text-destructive-foreground text-[13px] font-medium disabled:opacity-40 hover:bg-destructive/90 transition-colors flex items-center justify-center gap-2"
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="w-full h-10 rounded-xl bg-secondary border border-border/30 text-[13px] font-medium text-foreground hover:bg-secondary/80 transition-colors cursor-pointer"
                 >
-                  {deleting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Excluindo...
-                    </>
-                  ) : (
-                    "Excluir tudo"
-                  )}
+                  Voltar
                 </button>
               </div>
             </motion.div>

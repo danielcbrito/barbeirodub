@@ -17,16 +17,30 @@ import {
   Scissors,
   ArrowRight,
   Plus,
-  Minus
+  Minus,
+  Crown,
+  Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { isBarberOrSystemName } from "@/lib/walkInName";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+export interface ClientPlanInfo {
+  assinaturaId: string;
+  planoNome: string;
+  limite: number;
+  usados: number;
+  restantes: number;
+  status: string;
+  precoMensal: number;
+}
 
 interface MobileManualBookingModalProps {
   open: boolean;
@@ -95,11 +109,15 @@ export function MobileManualBookingModal({
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   
+  const queryClient = useQueryClient();
+  
   // Form state
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [fallbackBarbeiroId, setFallbackBarbeiroId] = useState<string | null>(barbeiroId || initialStoredBarbeiroId);
   const [selectedTime, setSelectedTime] = useState(initialTime);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [clientPlansMap, setClientPlansMap] = useState<Record<string, ClientPlanInfo>>({});
+  const [selectedClientPlan, setSelectedClientPlan] = useState<ClientPlanInfo | null>(null);
   const [manualClientName, setManualClientName] = useState("");
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -147,6 +165,7 @@ export function MobileManualBookingModal({
   const resetForm = () => {
     setStep(1);
     setSelectedClient(null);
+    setSelectedClientPlan(null);
     setSelectedBarber(null);
     setFallbackBarbeiroId(barbeiroId || initialStoredBarbeiroId);
     setManualClientName("");
@@ -248,9 +267,36 @@ export function MobileManualBookingModal({
         servicesQuery = servicesQuery.is("tenant_id", null);
       }
 
-      const [servicesRes, clientsRes] = await Promise.all([
+      // Buscar IDs de barbeiros para excluir da lista de clientes
+      const { data: staffBarbers } = await supabase
+        .from("barbeiros")
+        .select("user_id")
+        .not("user_id", "is", null);
+
+      const staffUserIds = new Set(
+        (staffBarbers || []).map((b) => b.user_id).filter(Boolean)
+      );
+      if (session?.user?.id) staffUserIds.add(session.user.id);
+
+      const [servicesRes, clientsRes, subsRes] = await Promise.all([
         servicesQuery.order("nome"),
-        supabase.from("profiles").select("id, nome, telefone").order("nome")
+        supabase.from("profiles").select("id, nome, telefone").order("nome"),
+        supabase
+          .from("assinaturas")
+          .select(`
+            id,
+            user_id,
+            status,
+            usos_ciclo_atual,
+            plano:planos(
+              id,
+              nome,
+              limite_agendamentos_mes,
+              preco_mensal
+            )
+          `)
+          .in("status", ["active", "pending_cash"])
+          .order("created_at", { ascending: false })
       ]);
 
       if (servicesRes.error) {
@@ -265,8 +311,30 @@ export function MobileManualBookingModal({
       }
 
       const loadedServices = servicesRes.data || [];
+      const loadedClients = (clientsRes.data || []).filter((c) => !staffUserIds.has(c.id));
       setServices(loadedServices);
-      setClients(clientsRes.data || []);
+      setClients(loadedClients);
+
+      // Mapear planos dos clientes
+      const plansMap: Record<string, ClientPlanInfo> = {};
+      if (subsRes.data) {
+        for (const sub of subsRes.data as any[]) {
+          if (!sub.user_id || plansMap[sub.user_id]) continue;
+          const limite = sub.status === "pending_cash" ? 1 : (sub.plano?.limite_agendamentos_mes || 4);
+          const usados = Math.max(0, sub.usos_ciclo_atual || 0);
+          const restantes = Math.max(0, limite - usados);
+          plansMap[sub.user_id] = {
+            assinaturaId: sub.id,
+            planoNome: sub.plano?.nome || "Plano",
+            limite,
+            usados,
+            restantes,
+            status: sub.status,
+            precoMensal: Number(sub.plano?.preco_mensal || 0),
+          };
+        }
+      }
+      setClientPlansMap(plansMap);
 
       // Fallback: se nenhum serviço encontrado, tentar globais
       if (loadedServices.length === 0 && effectiveTenantId) {
@@ -304,6 +372,67 @@ export function MobileManualBookingModal({
     } catch (error) {
       console.error("[MobileEncaixe] Error loading data:", error);
       toast.error("Erro ao carregar dados do encaixe");
+    }
+  };
+
+  const fetchClientPlanFresh = async (userId: string) => {
+    try {
+      const { data: subData } = await supabase
+        .from("assinaturas")
+        .select(`
+          id,
+          user_id,
+          status,
+          usos_ciclo_atual,
+          plano:planos(
+            id,
+            nome,
+            limite_agendamentos_mes,
+            preco_mensal
+          )
+        `)
+        .eq("user_id", userId)
+        .in("status", ["active", "pending_cash"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subData) {
+        const limite = subData.status === "pending_cash" ? 1 : ((subData.plano as any)?.limite_agendamentos_mes || 4);
+        const usados = Math.max(0, subData.usos_ciclo_atual || 0);
+        const restantes = Math.max(0, limite - usados);
+        const planInfo: ClientPlanInfo = {
+          assinaturaId: subData.id,
+          planoNome: (subData.plano as any)?.nome || "Plano",
+          limite,
+          usados,
+          restantes,
+          status: subData.status,
+          precoMensal: Number((subData.plano as any)?.preco_mensal || 0),
+        };
+        setSelectedClientPlan(planInfo);
+        setClientPlansMap((prev) => ({ ...prev, [userId]: planInfo }));
+      } else {
+        setSelectedClientPlan(null);
+      }
+    } catch (err) {
+      console.error("[MobileEncaixe] Erro ao sincronizar plano do cliente:", err);
+    }
+  };
+
+  const handleSelectClient = (client: Client) => {
+    setSelectedClient(client);
+    setSearchQuery("");
+    setManualClientName("");
+    setIsSearchScreenOpen(false);
+
+    if (client.id) {
+      if (clientPlansMap[client.id]) {
+        setSelectedClientPlan(clientPlansMap[client.id]);
+      }
+      fetchClientPlanFresh(client.id);
+    } else {
+      setSelectedClientPlan(null);
     }
   };
 
@@ -533,24 +662,33 @@ export function MobileManualBookingModal({
       const qty = Math.max(1, quantity);
       const [bh, bm] = selectedTime.split(":").map(Number);
       const baseMinutes = bh * 60 + bm;
+      const clientDisplayName = selectedClient?.nome || manualClientName.trim() || null;
+      const isClientPlanActive = Boolean(selectedClient && selectedClientPlan && selectedClientPlan.restantes > 0);
+
       const rows = Array.from({ length: qty }, (_, i) => {
         const slot = baseMinutes + finalDuration * i;
         const sH = Math.floor(slot / 60).toString().padStart(2, "0");
         const sM = (slot % 60).toString().padStart(2, "0");
+        const cutCoversPlan = isClientPlanActive && i < (selectedClientPlan?.restantes || 0);
+
         return {
           user_id: clientId!,
+          cliente_nome: clientDisplayName,
           servico_id: selectedService.id,
           data: date,
           hora: `${sH}:${sM}:00`,
           duracao: finalDuration,
-          preco: selectedService.preco,
+          preco: cutCoversPlan ? 0 : selectedService.preco,
           status: "confirmed" as const,
           barbeiro_confirmou: true,
           cliente_confirmou: true,
-          observacoes: appointmentObservations || null,
+          observacoes: cutCoversPlan
+            ? (appointmentObservations ? `⭐ Encaixe via plano: ${selectedClientPlan?.planoNome}\n${appointmentObservations}` : `⭐ Encaixe via plano: ${selectedClientPlan?.planoNome}`)
+            : (appointmentObservations || null),
           tipo_agendamento: "encaixe_manual",
           criado_por: "barbeiro",
-          payment_method: "cash",
+          payment_method: cutCoversPlan ? "plano" : "cash",
+          is_free: cutCoversPlan,
           barbeiro_id: effectiveBarbeiroId,
         };
       });
@@ -561,13 +699,25 @@ export function MobileManualBookingModal({
 
       if (appointmentError) throw appointmentError;
 
-      toast.success(qty > 1 ? `✅ ${qty} encaixes criados!` : "✅ Encaixe criado com sucesso!");
+      // Invalida consultas relacionadas a planos e agenda
+      queryClient.invalidateQueries({ queryKey: ["barber-clientes"] });
+      queryClient.invalidateQueries({ queryKey: ["assinatura-status"] });
+      queryClient.invalidateQueries({ queryKey: ["client-active-subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["agenda"] });
+      queryClient.invalidateQueries({ queryKey: ["timeline"] });
+
+      toast.success(
+        isClientPlanActive 
+          ? (qty > 1 ? `✅ ${qty} encaixes registrados no plano!` : `✅ Encaixe registrado no plano! (1 corte debitado)`)
+          : (qty > 1 ? `✅ ${qty} encaixes criados!` : "✅ Encaixe criado com sucesso!")
+      );
       onSuccess();
       onOpenChange(false);
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Erro ao criar encaixe:", error);
-      setValidationError(error instanceof Error ? error.message : "Erro ao criar encaixe");
-      toast.error("Erro ao criar encaixe");
+      const msg = error?.message || (error instanceof Error ? error.message : "Erro ao criar encaixe");
+      setValidationError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
@@ -581,9 +731,18 @@ export function MobileManualBookingModal({
       )
     : [];
 
+  const isManualNameBarberName = Boolean(
+    manualClientName.trim() &&
+    (
+      isBarberOrSystemName(manualClientName.trim(), selectedBarber?.apelido) ||
+      (selectedBarber?.apelido && manualClientName.trim().toLowerCase() === selectedBarber.apelido.trim().toLowerCase())
+    )
+  );
+
+  const isUsingPlan = Boolean(selectedClient && selectedClientPlan && selectedClientPlan.restantes > 0);
   const canProceedStep1 = selectedService !== null && !!resolvedBarbeiroId;
   const canProceedStep2 = selectedTime !== "";
-  const canProceedStep3 = selectedClient || manualClientName.trim();
+  const canProceedStep3 = (Boolean(selectedClient) || Boolean(manualClientName.trim())) && !isManualNameBarberName;
 
   if (!open) return null;
 
@@ -860,28 +1019,89 @@ export function MobileManualBookingModal({
                 </div>
 
                 {selectedClient ? (
-                  <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-11 h-11 rounded-full bg-secondary flex items-center justify-center text-foreground font-bold text-base shrink-0">
-                        {selectedClient.nome ? selectedClient.nome.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-11 h-11 rounded-full bg-secondary flex items-center justify-center text-foreground font-bold text-base shrink-0">
+                          {selectedClient.nome ? selectedClient.nome.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-foreground text-[15px] truncate">{selectedClient.nome}</p>
+                          {selectedClient.telefone && (
+                            <p className="text-[12px] text-muted-foreground truncate mt-0.5">{selectedClient.telefone}</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-foreground text-[15px] truncate">{selectedClient.nome}</p>
-                        {selectedClient.telefone && (
-                          <p className="text-[12px] text-muted-foreground truncate mt-0.5">{selectedClient.telefone}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedClient(null);
+                          setSelectedClientPlan(null);
+                          setSearchQuery("");
+                        }}
+                        className="h-9 px-4 rounded-full bg-secondary hover:bg-secondary/80 text-foreground text-xs font-bold transition-colors shrink-0 shadow-sm active:scale-95"
+                      >
+                        Trocar
+                      </button>
+                    </div>
+
+                    {/* Card de Informação do Plano do Cliente */}
+                    {selectedClientPlan ? (
+                      <div className={cn(
+                        "p-3.5 rounded-2xl border shadow-sm space-y-2.5 transition-all",
+                        selectedClientPlan.restantes > 0
+                          ? "bg-amber-500/[0.08] border-amber-500/30"
+                          : "bg-muted/40 border-border/60"
+                      )}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={cn(
+                              "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
+                              selectedClientPlan.restantes > 0
+                                ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                                : "bg-muted text-muted-foreground"
+                            )}>
+                              <Crown className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Plano do Cliente</p>
+                              <p className="text-[14px] font-bold text-foreground truncate">{selectedClientPlan.planoNome}</p>
+                            </div>
+                          </div>
+                          <Badge className={cn(
+                            "text-[11px] font-bold px-2.5 py-0.5 shrink-0",
+                            selectedClientPlan.restantes > 0
+                              ? "bg-amber-500 hover:bg-amber-500 text-white"
+                              : "bg-muted text-muted-foreground"
+                          )}>
+                            {selectedClientPlan.restantes}/{selectedClientPlan.limite} disponíveis
+                          </Badge>
+                        </div>
+
+                        {selectedClientPlan.restantes > 0 ? (
+                          <div className="text-[12px] text-foreground/85 bg-background/80 rounded-xl p-2.5 border border-amber-500/20 flex items-start gap-2">
+                            <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                            <p className="leading-snug">
+                              Este encaixe será <strong>descontado do plano</strong>. Ao confirmar, o saldo passará de{" "}
+                              <span className="font-semibold text-amber-600 dark:text-amber-400">{selectedClientPlan.restantes}/{selectedClientPlan.limite}</span> para{" "}
+                              <span className="font-semibold text-amber-600 dark:text-amber-400">{Math.max(0, selectedClientPlan.restantes - 1)}/{selectedClientPlan.limite}</span> cortes disponíveis.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="text-[12px] text-muted-foreground bg-background/80 rounded-xl p-2.5 border border-border/40 flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                            <p className="leading-snug">
+                              O cliente já utilizou os <strong>{selectedClientPlan.limite} cortes</strong> do ciclo deste plano. Este atendimento será <strong>cobrado normalmente</strong>.
+                            </p>
+                          </div>
                         )}
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedClient(null);
-                        setSearchQuery("");
-                      }}
-                      className="h-9 px-4 rounded-full bg-secondary hover:bg-secondary/80 text-foreground text-xs font-bold transition-colors shrink-0 shadow-sm active:scale-95"
-                    >
-                      Trocar
-                    </button>
+                    ) : (
+                      <div className="px-3.5 py-2.5 rounded-xl bg-card border border-border/40 flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Cliente sem plano ativo</span>
+                        <span className="text-[11px] font-medium text-muted-foreground/70">Cobrança normal</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -908,16 +1128,43 @@ export function MobileManualBookingModal({
                     </div>
 
                     {/* Input do cliente avulso mais largo e confortável */}
-                    <input
-                      type="text"
-                      placeholder="Nome do cliente avulso (walk-in)..."
-                      value={manualClientName}
-                      onChange={(e) => {
-                        setManualClientName(e.target.value);
-                        setSelectedClient(null);
-                      }}
-                      className="w-full h-[54px] px-5 rounded-full bg-card border border-border/80 text-foreground placeholder:text-muted-foreground/60 text-[14px] focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/40 shadow-sm transition-all"
-                    />
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Nome do cliente (ex: Carlos, Lucas)..."
+                        value={manualClientName}
+                        onChange={(e) => {
+                          setManualClientName(e.target.value);
+                          setSelectedClient(null);
+                        }}
+                        className={cn(
+                          "w-full h-[54px] px-5 rounded-full bg-card border text-foreground placeholder:text-muted-foreground/60 text-[14px] focus:outline-none focus:ring-2 shadow-sm transition-all",
+                          isManualNameBarberName
+                            ? "border-destructive focus:ring-destructive/20"
+                            : "border-border/80 focus:ring-foreground/20 focus:border-foreground/40"
+                        )}
+                      />
+                      {isManualNameBarberName && (
+                        <p className="text-[12px] text-destructive px-3 font-medium flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Por favor, informe o nome do cliente (e não o nome do barbeiro).</span>
+                        </p>
+                      )}
+                      {!manualClientName && (
+                        <div className="flex justify-center pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualClientName("Cliente avulso");
+                              setSelectedClient(null);
+                            }}
+                            className="text-[12px] text-muted-foreground/80 hover:text-foreground underline underline-offset-4 active:scale-95 transition-all cursor-pointer"
+                          >
+                            Não sabe o nome? Usar &quot;Cliente avulso&quot;
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </motion.div>
@@ -955,18 +1202,52 @@ export function MobileManualBookingModal({
                       <span className="text-[12px] font-semibold uppercase tracking-wider">Serviço</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="text-[15px] font-bold text-foreground truncate">
-                        {selectedService?.nome}
-                        {quantity > 1 && <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-foreground">×{quantity}</span>}
-                      </p>
-                      <span className="text-[15px] font-bold text-foreground tabular-nums">
-                        R$ {((selectedService?.preco || 0) * quantity).toFixed(2).replace('.', ',')}
-                      </span>
+                      <div>
+                        <p className="text-[15px] font-bold text-foreground truncate">
+                          {selectedService?.nome}
+                          {quantity > 1 && <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-foreground">×{quantity}</span>}
+                        </p>
+                        {isUsingPlan && (
+                          <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
+                            <Crown className="w-3.5 h-3.5 text-amber-500" /> Coberto pelo plano ({selectedClientPlan?.planoNome})
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        {isUsingPlan ? (
+                          <>
+                            <span className="text-[12px] line-through text-muted-foreground mr-1.5 tabular-nums">
+                              R$ {((selectedService?.preco || 0) * quantity).toFixed(2).replace('.', ',')}
+                            </span>
+                            <span className="text-[15px] font-bold text-emerald-600 dark:text-emerald-400">
+                              Grátis
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[15px] font-bold text-foreground tabular-nums">
+                            R$ {((selectedService?.preco || 0) * quantity).toFixed(2).replace('.', ',')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="text-[12px] text-muted-foreground">
                       {(selectedService?.duracao_minutos || 0) * quantity} minutos de duração
                     </p>
                   </div>
+
+                  {isUsingPlan && (
+                    <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-2.5">
+                      <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="text-[12px] text-foreground/90 leading-tight">
+                        <p className="font-semibold text-amber-600 dark:text-amber-400">
+                          1 corte será debitado do plano
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">
+                          Saldo passará de <strong>{selectedClientPlan?.restantes}/{selectedClientPlan?.limite}</strong> para <strong>{Math.max(0, (selectedClientPlan?.restantes || 1) - 1)}/{selectedClientPlan?.limite}</strong> cortes disponíveis.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="p-4 rounded-2xl bg-card border border-border/60 shadow-sm space-y-1">
                     <div className="flex items-center gap-2.5 text-muted-foreground mb-1">
@@ -1097,34 +1378,54 @@ export function MobileManualBookingModal({
                       Clientes Cadastrados ({clients.length})
                     </p>
                     <div className="divide-y divide-border/20">
-                      {clients.map((client) => (
-                        <button
-                          key={client.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedClient(client);
-                            setSearchQuery("");
-                            setManualClientName("");
-                            setIsSearchScreenOpen(false);
-                          }}
-                          className="w-full py-3 px-2 flex items-center justify-between hover:bg-secondary/30 active:bg-secondary/50 rounded-lg transition-colors text-left group"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <User className="w-4 h-4 text-muted-foreground/70 group-hover:text-foreground shrink-0 transition-colors" />
-                            <div className="min-w-0">
-                              <p className="text-[14px] font-normal text-foreground truncate">
-                                {client.nome}
-                              </p>
-                              {client.telefone && (
-                                <p className="text-[12px] text-muted-foreground/50 truncate tabular-nums">
-                                  {client.telefone}
+                      {clients.map((client) => {
+                        const plan = clientPlansMap[client.id];
+                        return (
+                          <button
+                            key={client.id}
+                            type="button"
+                            onClick={() => handleSelectClient(client)}
+                            className="w-full py-3 px-2 flex items-center justify-between hover:bg-secondary/30 active:bg-secondary/50 rounded-lg transition-colors text-left group"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="relative shrink-0">
+                                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-foreground font-semibold text-xs">
+                                  {client.nome ? client.nome.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
+                                </div>
+                                {plan && plan.restantes > 0 && (
+                                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-500 flex items-center justify-center text-[8px] text-white font-bold shadow-xs">
+                                    ★
+                                  </span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[14px] font-normal text-foreground truncate">
+                                  {client.nome}
                                 </p>
-                              )}
+                                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                  {client.telefone && (
+                                    <span className="text-[12px] text-muted-foreground/60 truncate tabular-nums">
+                                      {client.telefone}
+                                    </span>
+                                  )}
+                                  {plan && (
+                                    <span className={cn(
+                                      "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md",
+                                      plan.restantes > 0
+                                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                                        : "bg-muted text-muted-foreground border border-border/50"
+                                    )}>
+                                      <Crown className="w-2.5 h-2.5 text-amber-500" />
+                                      <span>{plan.planoNome} • {plan.restantes}/{plan.limite}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
-                        </button>
-                      ))}
+                            <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : filteredClients.length > 0 ? (
@@ -1133,34 +1434,54 @@ export function MobileManualBookingModal({
                       Resultados ({filteredClients.length})
                     </p>
                     <div className="divide-y divide-border/20">
-                      {filteredClients.map((client) => (
-                        <button
-                          key={client.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedClient(client);
-                            setSearchQuery("");
-                            setManualClientName("");
-                            setIsSearchScreenOpen(false);
-                          }}
-                          className="w-full py-3 px-2 flex items-center justify-between hover:bg-secondary/30 active:bg-secondary/50 rounded-lg transition-colors text-left group"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <User className="w-4 h-4 text-muted-foreground/70 group-hover:text-foreground shrink-0 transition-colors" />
-                            <div className="min-w-0">
-                              <p className="text-[14px] font-normal text-foreground truncate">
-                                {client.nome}
-                              </p>
-                              {client.telefone && (
-                                <p className="text-[12px] text-muted-foreground/50 truncate tabular-nums">
-                                  {client.telefone}
+                      {filteredClients.map((client) => {
+                        const plan = clientPlansMap[client.id];
+                        return (
+                          <button
+                            key={client.id}
+                            type="button"
+                            onClick={() => handleSelectClient(client)}
+                            className="w-full py-3 px-2 flex items-center justify-between hover:bg-secondary/30 active:bg-secondary/50 rounded-lg transition-colors text-left group"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="relative shrink-0">
+                                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-foreground font-semibold text-xs">
+                                  {client.nome ? client.nome.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
+                                </div>
+                                {plan && plan.restantes > 0 && (
+                                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-500 flex items-center justify-center text-[8px] text-white font-bold shadow-xs">
+                                    ★
+                                  </span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[14px] font-normal text-foreground truncate">
+                                  {client.nome}
                                 </p>
-                              )}
+                                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                  {client.telefone && (
+                                    <span className="text-[12px] text-muted-foreground/60 truncate tabular-nums">
+                                      {client.telefone}
+                                    </span>
+                                  )}
+                                  {plan && (
+                                    <span className={cn(
+                                      "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md",
+                                      plan.restantes > 0
+                                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                                        : "bg-muted text-muted-foreground border border-border/50"
+                                    )}>
+                                      <Crown className="w-2.5 h-2.5 text-amber-500" />
+                                      <span>{plan.planoNome} • {plan.restantes}/{plan.limite}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
-                        </button>
-                      ))}
+                            <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (

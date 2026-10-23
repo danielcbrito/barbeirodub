@@ -7,12 +7,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useManualBooking } from "@/hooks/useAdminMutations";
 import { toast } from "sonner";
-import { Loader2, AlertCircle, Search, User, Clock, DollarSign, Calendar, Check, ChevronRight, ChevronLeft, Plus, Minus } from "lucide-react";
+import { Loader2, AlertCircle, Search, User, Clock, DollarSign, Calendar, Check, ChevronRight, ChevronLeft, Plus, Minus, Crown, Sparkles } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { cn } from "@/lib/utils";
+import { isBarberOrSystemName } from "@/lib/walkInName";
+
+export interface ClientPlanInfo {
+  assinaturaId: string;
+  planoNome: string;
+  limite: number;
+  usados: number;
+  restantes: number;
+  status: string;
+  precoMensal: number;
+}
 
 interface ManualBookingModalProps {
   open: boolean;
@@ -74,6 +85,8 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [fallbackBarbeiroId, setFallbackBarbeiroId] = useState<string | null>(barbeiroId || initialStoredBarbeiroId);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [clientPlansMap, setClientPlansMap] = useState<Record<string, ClientPlanInfo>>({});
+  const [selectedClientPlan, setSelectedClientPlan] = useState<ClientPlanInfo | null>(null);
   const [manualClientName, setManualClientName] = useState("");
   const [selectedService, setSelectedService] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -114,6 +127,7 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
   const resetForm = () => {
     setStep(1);
     setSelectedClient(null);
+    setSelectedClientPlan(null);
     setSelectedBarber(null);
     setFallbackBarbeiroId(barbeiroId || initialStoredBarbeiroId);
     setManualClientName("");
@@ -221,16 +235,127 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
 
   const loadClients = async () => {
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, nome, telefone, cpf")
-        .order("nome");
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id;
 
-      if (error) throw error;
-      setClients(data || []);
+      // Buscar IDs de barbeiros para excluir da lista de clientes
+      const { data: staffBarbers } = await supabase
+        .from("barbeiros")
+        .select("user_id")
+        .not("user_id", "is", null);
+
+      const staffUserIds = new Set(
+        (staffBarbers || []).map((b) => b.user_id).filter(Boolean)
+      );
+      if (currentUserId) staffUserIds.add(currentUserId);
+
+      const [profilesRes, subsRes] = await Promise.all([
+        supabase.from("profiles").select("id, nome, telefone, cpf").order("nome"),
+        supabase
+          .from("assinaturas")
+          .select(`
+            id,
+            user_id,
+            status,
+            usos_ciclo_atual,
+            plano:planos(
+              id,
+              nome,
+              limite_agendamentos_mes,
+              preco_mensal
+            )
+          `)
+          .in("status", ["active", "pending_cash"])
+          .order("created_at", { ascending: false })
+      ]);
+
+      if (profilesRes.error) throw profilesRes.error;
+      const validClients = (profilesRes.data || []).filter((c) => !staffUserIds.has(c.id));
+      setClients(validClients);
+
+      // Mapear planos dos clientes
+      const plansMap: Record<string, ClientPlanInfo> = {};
+      if (subsRes.data) {
+        for (const sub of subsRes.data as any[]) {
+          if (!sub.user_id || plansMap[sub.user_id]) continue;
+          const limite = sub.status === "pending_cash" ? 1 : (sub.plano?.limite_agendamentos_mes || 4);
+          const usados = Math.max(0, sub.usos_ciclo_atual || 0);
+          const restantes = Math.max(0, limite - usados);
+          plansMap[sub.user_id] = {
+            assinaturaId: sub.id,
+            planoNome: sub.plano?.nome || "Plano",
+            limite,
+            usados,
+            restantes,
+            status: sub.status,
+            precoMensal: Number(sub.plano?.preco_mensal || 0),
+          };
+        }
+      }
+      setClientPlansMap(plansMap);
     } catch (error) {
       console.error("Error loading clients:", error);
       toast.error("Erro ao carregar clientes");
+    }
+  };
+
+  const fetchClientPlanFresh = async (userId: string) => {
+    try {
+      const { data: subData } = await supabase
+        .from("assinaturas")
+        .select(`
+          id,
+          user_id,
+          status,
+          usos_ciclo_atual,
+          plano:planos(
+            id,
+            nome,
+            limite_agendamentos_mes,
+            preco_mensal
+          )
+        `)
+        .eq("user_id", userId)
+        .in("status", ["active", "pending_cash"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subData) {
+        const limite = subData.status === "pending_cash" ? 1 : ((subData.plano as any)?.limite_agendamentos_mes || 4);
+        const usados = Math.max(0, subData.usos_ciclo_atual || 0);
+        const restantes = Math.max(0, limite - usados);
+        const planInfo: ClientPlanInfo = {
+          assinaturaId: subData.id,
+          planoNome: (subData.plano as any)?.nome || "Plano",
+          limite,
+          usados,
+          restantes,
+          status: subData.status,
+          precoMensal: Number((subData.plano as any)?.preco_mensal || 0),
+        };
+        setSelectedClientPlan(planInfo);
+        setClientPlansMap((prev) => ({ ...prev, [userId]: planInfo }));
+      } else {
+        setSelectedClientPlan(null);
+      }
+    } catch (err) {
+      console.error("[ManualBooking] Erro ao sincronizar plano do cliente:", err);
+    }
+  };
+
+  const handleSelectClient = (client: Client) => {
+    setSelectedClient(client);
+    setSearchQuery("");
+    setManualClientName("");
+
+    if (client.id) {
+      if (clientPlansMap[client.id]) {
+        setSelectedClientPlan(clientPlansMap[client.id]);
+      }
+      fetchClientPlanFresh(client.id);
+    } else {
+      setSelectedClientPlan(null);
     }
   };
 
@@ -395,6 +520,10 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
 
       // Se cliente digitado manualmente (walk-in), usar o barbeiro logado como referência
       if (!selectedClient && manualClientName.trim()) {
+        const barberName = selectedBarber?.apelido;
+        if (isBarberOrSystemName(manualClientName.trim(), barberName)) {
+          throw new Error("Por favor, informe o nome do cliente (e não o nome do barbeiro).");
+        }
         console.log('[Encaixe] Cliente walk-in (manual):', manualClientName.trim());
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user?.id) {
@@ -428,6 +557,14 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
       const startMinutes = hh * 60 + mm;
       const qty = Math.max(1, quantity);
 
+      // Verificar se o cliente selecionado possui plano ativo com cortes disponíveis
+      const isClientPlanActive = Boolean(
+        selectedClient &&
+        selectedClientPlan &&
+        (selectedClientPlan.status === "active" || selectedClientPlan.status === "pending_cash") &&
+        selectedClientPlan.restantes > 0
+      );
+
       try {
         for (let i = 0; i < qty; i++) {
           const slotMinutes = startMinutes + finalDuration * i;
@@ -435,16 +572,30 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
           const sM = (slotMinutes % 60).toString().padStart(2, "0");
           const slotHora = `${sH}:${sM}`;
 
+          // Se tiver plano disponível e este corte estiver dentro do saldo restante
+          const cutCoversPlan = isClientPlanActive && i < (selectedClientPlan?.restantes || 0);
+
+          const clienteNomeResolved = selectedClient?.nome || manualClientName.trim() || null;
           await manualBookingMutation.mutateAsync({
             userId: clientId,
             servicoId: selectedService,
             data: date,
             hora: slotHora,
             duracao: finalDuration,
-            preco: selectedServiceData.preco,
+            preco: cutCoversPlan ? 0 : selectedServiceData.preco,
             observacoes: appointmentObservations || null,
             barbeiroId: effectiveBarbeiroId,
+            clienteNome: clienteNomeResolved,
+            paymentMethod: cutCoversPlan ? "plano" : "cash",
+            isFree: cutCoversPlan,
           });
+        }
+
+        if (isClientPlanActive) {
+          const usedFromPlan = Math.min(qty, selectedClientPlan?.restantes || 0);
+          toast.success(`Encaixe criado! ${usedFromPlan} corte(s) debitado(s) do plano.`);
+        } else {
+          toast.success("Encaixe criado com sucesso!");
         }
 
         setConfirmStatus("success");
@@ -469,6 +620,13 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
   };
 
   const selectedServiceData = services.find((s) => s.id === selectedService);
+
+  const isUsingPlan = Boolean(
+    selectedClient &&
+    selectedClientPlan &&
+    (selectedClientPlan.status === "active" || selectedClientPlan.status === "pending_cash") &&
+    selectedClientPlan.restantes > 0
+  );
 
   const canProceedStep1 = selectedClient || manualClientName.trim();
   const canProceedStep2 = selectedService && !!resolvedBarbeiroId;
@@ -528,30 +686,91 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
                 <p className="text-sm text-muted-foreground">Busque ou digite o nome</p>
               </div>
               {selectedClient ? (
-                <Card className="border-2 border-primary/20 bg-primary/5">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="h-5 w-5 text-primary" />
+                <div className="space-y-3">
+                  <Card className="border-2 border-primary/20 bg-primary/5">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <User className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold">{selectedClient.nome}</p>
+                              {selectedClientPlan && (
+                                <Badge variant="secondary" className="bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] gap-1 px-1.5 py-0 h-4 font-semibold">
+                                  <Crown className="w-2.5 h-2.5" />
+                                  Plano
+                                </Badge>
+                              )}
+                            </div>
+                            {selectedClient.telefone && (
+                              <p className="text-sm text-muted-foreground">{selectedClient.telefone}</p>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold">{selectedClient.nome}</p>
-                          {selectedClient.telefone && (
-                            <p className="text-sm text-muted-foreground">{selectedClient.telefone}</p>
-                          )}
-                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedClient(null);
+                            setSelectedClientPlan(null);
+                          }}
+                        >
+                          Trocar
+                        </Button>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedClient(null)}
-                      >
-                        Trocar
-                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {/* Informação do Plano do Cliente */}
+                  {selectedClientPlan && (
+                    <div className="rounded-xl p-3.5 border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+                            <Crown className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                              {selectedClientPlan.planoNome}
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-500 font-bold">
+                                Ativo
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Saldo: <strong className="text-foreground">{selectedClientPlan.restantes}/{selectedClientPlan.limite} cortes disponíveis</strong>
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-xs font-bold shrink-0",
+                            selectedClientPlan.restantes > 0
+                              ? "border-emerald-500/40 text-emerald-500 bg-emerald-500/10"
+                              : "border-destructive/40 text-destructive bg-destructive/10"
+                          )}
+                        >
+                          {selectedClientPlan.restantes > 0
+                            ? `${selectedClientPlan.restantes} disponível${selectedClientPlan.restantes > 1 ? "is" : ""}`
+                            : "Sem cortes"}
+                        </Badge>
+                      </div>
+
+                      {selectedClientPlan.restantes > 0 ? (
+                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 p-2 rounded-lg flex items-center gap-1.5 leading-tight">
+                          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                          Este encaixe será contabilizado automaticamente no plano (saldo passará de {selectedClientPlan.restantes}/{selectedClientPlan.limite} para {Math.max(0, selectedClientPlan.restantes - 1)}/{selectedClientPlan.limite}).
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2 rounded-lg leading-tight">
+                          Cliente atingiu o limite de cortes do ciclo atual. O encaixe será cobrado normalmente.
+                        </p>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-3">
                   <div className="relative">
@@ -565,27 +784,47 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
                   </div>
                   
                   {filteredClients.length > 0 && (
-                    <Card className="max-h-40 overflow-auto">
+                    <Card className="max-h-48 overflow-auto">
                       <div className="p-2 space-y-1">
-                        {filteredClients.map((client) => (
-                          <button
-                            key={client.id}
-                            onClick={() => {
-                              setSelectedClient(client);
-                              setSearchQuery("");
-                              setManualClientName("");
-                            }}
-                            className="w-full text-left p-2 hover:bg-muted rounded-md transition-colors flex items-center gap-2"
-                          >
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="font-medium text-sm">{client.nome}</p>
-                              {client.telefone && (
-                                <p className="text-xs text-muted-foreground">{client.telefone}</p>
+                        {filteredClients.map((client) => {
+                          const plan = clientPlansMap[client.id];
+                          return (
+                            <button
+                              key={client.id}
+                              onClick={() => handleSelectClient(client)}
+                              className="w-full text-left p-2.5 hover:bg-muted rounded-md transition-colors flex items-center justify-between gap-2"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="font-medium text-sm">{client.nome}</p>
+                                    {plan && (
+                                      <Badge variant="secondary" className="bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] gap-1 px-1.5 py-0 h-4">
+                                        <Crown className="w-2.5 h-2.5" />
+                                        Plano
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {client.telefone && (
+                                    <p className="text-xs text-muted-foreground">{client.telefone}</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {plan && (
+                                <span className={cn(
+                                  "text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0",
+                                  plan.restantes > 0
+                                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+                                    : "bg-muted text-muted-foreground border-border"
+                                )}>
+                                  {plan.restantes}/{plan.limite} cortes
+                                </span>
                               )}
-                            </div>
-                          </button>
-                        ))}
+                            </button>
+                          );
+                        })}
                       </div>
                     </Card>
                   )}
@@ -723,12 +962,30 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
 
               {/* Cliente Info */}
               <Card>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <User className="h-4 w-4" />
-                    Cliente
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <User className="h-4 w-4" />
+                      Cliente
+                    </div>
+                    {selectedClientPlan && (
+                      <Badge variant="secondary" className="bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] gap-1 px-1.5 py-0 font-semibold">
+                        <Crown className="w-2.5 h-2.5" />
+                        {selectedClientPlan.planoNome}
+                      </Badge>
+                    )}
                   </div>
-                  <p className="font-semibold">{selectedClient?.nome || manualClientName}</p>
+                  <p className="font-semibold text-base">{selectedClient?.nome || manualClientName}</p>
+                  {selectedClientPlan && (
+                    <div className="pt-1 flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 mt-1">
+                      <span>Saldo atual: <strong className="text-foreground">{selectedClientPlan.restantes}/{selectedClientPlan.limite} cortes</strong></span>
+                      {selectedClientPlan.restantes > 0 && (
+                        <span className="text-emerald-500 font-medium">
+                          Novo saldo: {Math.max(0, selectedClientPlan.restantes - quantity)}/{selectedClientPlan.limite}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -736,9 +993,16 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
               {selectedServiceData && (
                 <Card>
                   <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      Serviço
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                        Serviço
+                      </div>
+                      {isUsingPlan && (
+                        <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-xs font-semibold">
+                          Incluso no Plano
+                        </Badge>
+                      )}
                     </div>
                     <div>
                       <p className="font-semibold mb-2">
@@ -754,7 +1018,9 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
                         </div>
                         <div className="p-2 bg-muted rounded-md">
                           <p className="text-xs text-muted-foreground">Preço</p>
-                          <p className="font-bold text-sm">R$ {(selectedServiceData.preco * quantity).toFixed(2)}</p>
+                          <p className={cn("font-bold text-sm", isUsingPlan ? "text-emerald-500" : "")}>
+                            {isUsingPlan ? "Grátis" : `R$ ${(selectedServiceData.preco * quantity).toFixed(2)}`}
+                          </p>
                         </div>
                         <div className="p-2 bg-muted rounded-md">
                           <p className="text-xs text-muted-foreground">Término</p>
@@ -772,6 +1038,15 @@ export function ManualBookingModal({ open, onOpenChange, date, time, onSuccess, 
                     </div>
                   </CardContent>
                 </Card>
+              )}
+
+              {isUsingPlan && (
+                <div className="rounded-xl p-3 bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 shrink-0" />
+                  <span>
+                    {Math.min(quantity, selectedClientPlan?.restantes || 0)} corte(s) será(ão) debitado(s) automaticamente do plano do cliente.
+                  </span>
+                </div>
               )}
 
               {/* Observações */}

@@ -32,7 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { extractWalkInName, isWhatsAppAppointment, extractWhatsAppName } from "@/lib/walkInName";
+import { extractWalkInName, isWhatsAppAppointment, extractWhatsAppName, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
@@ -57,6 +57,7 @@ export interface TimelineAppointment {
   status: string;
   preco: number;
   observacoes: string | null;
+  cliente_nome?: string | null;
   barbeiro_confirmou: boolean | null;
   cliente_confirmou: boolean | null;
   ponto_liberado: boolean | null;
@@ -332,7 +333,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       /* Select apenas campos usados nos cards + batch fetching em vez de N+1 */
       let query = supabase
         .from("agendamentos")
-        .select("id, data, hora, duracao, status, preco, observacoes, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao")
+        .select("id, data, hora, duracao, status, preco, observacoes, cliente_nome, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao")
         .eq("data", dateStr)
         .neq("status", "excluido")
         .order("hora", { ascending: true });
@@ -386,10 +387,10 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       const appointmentsWithDetails = agendamentos.map((apt) => {
         const profile = profilesMap.get(apt.user_id);
         const servico = servicosMap.get(apt.servico_id);
-        // Encaixe walk-in ou WhatsApp: nome real digitado fica em observacoes
+        // Encaixe walk-in ou WhatsApp: nome real digitado fica em observacoes / cliente_nome
         const walkInName = extractWalkInName(apt.observacoes);
         const whatsAppName = extractWhatsAppName(apt.observacoes);
-        const displayName = whatsAppName || walkInName || profile?.nome || null;
+        const displayName = (apt as any).cliente_nome || whatsAppName || walkInName || profile?.nome || null;
         return {
           ...apt,
           profile: displayName
@@ -835,7 +836,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                     <div className="flex items-center gap-2.5 mb-3">
                       <User className="w-4 h-4 dark:text-muted-foreground/50 text-foreground/40 flex-shrink-0" />
                       <span className="text-sm dark:text-muted-foreground text-foreground/80 font-medium truncate">
-                        {apt.profile?.nome || "Cliente"}
+                        {resolveClienteDisplayName(apt.observacoes, apt.profile?.nome, "Cliente", (apt as any).cliente_nome)}
                       </span>
                       {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       {debtInfo.hasDebt && (

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { usePlanPaymentInfo } from "@/hooks/usePlanPaymentInfo";
 import { useCompleteAppointment, useNoShowAppointment } from "@/hooks/useAgendaMutations";
 import { toast } from "sonner";
-import { isWhatsAppAppointment } from "@/lib/walkInName";
+import { isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 
 interface ConfirmAttendanceModalProps {
@@ -28,6 +28,12 @@ export function ConfirmAttendanceModal({ appointment, open, onClose, onUpdate }:
   const payment = appointment.pagamentos?.[0];
   const paymentMethod = payment?.metodo || appointment.payment_method || 'cash';
   const isPrepaid = payment?.status === 'paid';
+  const clientDisplayName = resolveClienteDisplayName(
+    appointment.observacoes,
+    appointment.profile?.nome,
+    "Cliente",
+    appointment.cliente_nome
+  );
   const loading = completeMutation.isPending || noShowMutation.isPending;
   const barbeiroId = (appointment as any).barbeiro_id || "";
 
@@ -96,7 +102,7 @@ export function ConfirmAttendanceModal({ appointment, open, onClose, onUpdate }:
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold text-foreground">{appointment.profile?.nome || "Cliente"}</p>
+                  <p className="font-semibold text-foreground">{clientDisplayName}</p>
                   {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
                 </div>
                 <p className="text-sm text-muted-foreground">

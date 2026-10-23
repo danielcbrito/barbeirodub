@@ -34,6 +34,7 @@ import {
   Loader2,
   ChevronLeft,
   Award,
+  Pencil,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -47,9 +48,9 @@ import { useCompleteAppointment, useCancelAppointment, useNoShowAppointment } fr
 import { useConfirmarPagamentoPlano } from "@/hooks/useAdminMutations";
 import { CupomSection, type AppliedCupomInfo } from "@/components/shared/CupomSection";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ClientPlanConversionScreen } from "@/components/shared/ClientPlanConversionScreen";
-import type { TimelineAppointment } from "@/hooks/useBarberAgenda";
-import { isWhatsAppAppointment } from "@/lib/walkInName";
+import { isWhatsAppAppointment, resolveClienteDisplayName, isBarberOrSystemName } from "@/lib/walkInName";
 import {
   extractDebtFromAppointment,
   dispenseCancellationDebt,
@@ -117,6 +118,14 @@ export function AppointmentDetailsView({
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentBarberId, setCurrentBarberId] = useState<string | null>(null);
+  const [localClientName, setLocalClientName] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newNameInput, setNewNameInput] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+
+  useEffect(() => {
+    setLocalClientName(null);
+  }, [appointment?.id]);
 
   // Garante que o body nunca permaneça congelado com pointer-events: none ao fechar modais
   useEffect(() => {
@@ -347,13 +356,22 @@ export function AppointmentDetailsView({
   const loadRequiredPoints = async () => { /* handled by loadClientPoints */ };
 
   /** Carrega uso do plano com busca direta robusta na tabela de assinaturas */
+  const resolvedBaseName = resolveClienteDisplayName(
+    appointment.observacoes,
+    appointment.profile?.nome,
+    "Cliente",
+    (appointment as any).cliente_nome,
+    appointment.barbeiro_apelido
+  );
+  const clientDisplayName = localClientName || resolvedBaseName;
+
   const loadPlanUsage = async () => {
     let targetUserId = appointment?.user_id;
 
     // Se o agendamento não tiver user_id direto, tenta encontrar por nome de perfil
-    if (!targetUserId && (appointment?.profile?.nome || (appointment as any)?.client_name)) {
-      const searchName = (appointment?.profile?.nome || (appointment as any)?.client_name || "").trim();
-      if (searchName) {
+    if (!targetUserId && (clientDisplayName || (appointment as any)?.client_name)) {
+      const searchName = (clientDisplayName || (appointment as any)?.client_name || "").trim();
+      if (searchName && searchName !== "Cliente") {
         try {
           const { data: prof } = await supabase
             .from("profiles")
@@ -662,7 +680,7 @@ export function AppointmentDetailsView({
         <ClientPlanConversionScreen
           client={{
             id: appointment.user_id,
-            nome: appointment.profile?.nome || "Cliente",
+            nome: clientDisplayName,
           }}
           tenantId={resolvedTenantId}
           currentUserId={currentUserId}
@@ -756,7 +774,7 @@ export function AppointmentDetailsView({
     return sName;
   })();
 
-  const initials = (appointment.profile?.nome || "?")
+  const initials = (clientDisplayName || "?")
     .split(" ")
     .slice(0, 2)
     .map(n => n[0])
@@ -778,8 +796,20 @@ export function AppointmentDetailsView({
           {!renderAsPage && (
             <div className="flex items-center gap-2">
               <h2 className="text-[16px] font-semibold text-foreground leading-tight truncate">
-                {appointment.profile?.nome || "Cliente"}
+                {clientDisplayName}
               </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewNameInput(clientDisplayName === "Cliente" ? "" : clientDisplayName);
+                  setIsEditingName(true);
+                }}
+                className="w-7 h-7 rounded-full bg-secondary/80 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all shrink-0 cursor-pointer"
+                aria-label="Editar nome do cliente"
+                title="Editar nome do cliente"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
               {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
             </div>
           )}
@@ -1108,8 +1138,20 @@ export function AppointmentDetailsView({
           </button>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <h2 className="text-[18px] font-semibold text-foreground tracking-tight truncate">
-              {appointment.profile?.nome || "Cliente"}
+              {clientDisplayName}
             </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setNewNameInput(clientDisplayName === "Cliente" ? "" : clientDisplayName);
+                setIsEditingName(true);
+              }}
+              className="w-7 h-7 rounded-full bg-secondary/80 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all shrink-0 cursor-pointer"
+              aria-label="Editar nome do cliente"
+              title="Editar nome do cliente"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
             {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
           </div>
         </div>
@@ -1320,7 +1362,7 @@ export function AppointmentDetailsView({
               Confirmar falta do cliente?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[12.5px] text-muted-foreground leading-relaxed">
-              O agendamento de <strong className="text-foreground">{appointment?.profile?.nome || "Cliente"}</strong> será marcado como <strong className="text-foreground">Falta</strong>.
+              O agendamento de <strong className="text-foreground">{clientDisplayName}</strong> será marcado como <strong className="text-foreground">Falta</strong>.
               {isCancellationFeeEnabled ? (
                 <>
                   <br /><br />
@@ -1366,7 +1408,7 @@ export function AppointmentDetailsView({
               Cancelar agendamento?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[12.5px] text-muted-foreground leading-relaxed">
-              Tem certeza que deseja cancelar o agendamento de <strong className="text-foreground">{appointment?.profile?.nome || "Cliente"}</strong>? O horário será liberado na agenda.
+              Tem certeza que deseja cancelar o agendamento de <strong className="text-foreground">{clientDisplayName}</strong>? O horário será liberado na agenda.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -1384,6 +1426,74 @@ export function AppointmentDetailsView({
               className="flex-1 h-11 rounded-full bg-destructive text-destructive-foreground text-[13px] font-semibold hover:opacity-90 active:scale-[0.99] transition-all shadow-xs disabled:opacity-50"
             >
               Sim, cancelar
+            </button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ═══ DIALOG EDIÇÃO NOME DO CLIENTE ═══ */}
+      <AlertDialog open={isEditingName} onOpenChange={setIsEditingName}>
+        <AlertDialogContent className="max-w-sm rounded-3xl border border-border/60 p-6 bg-background z-[100] space-y-4">
+          <AlertDialogHeader className="space-y-1.5 text-center sm:text-center">
+            <div className="w-12 h-12 rounded-full bg-secondary/80 border border-border/60 flex items-center justify-center mx-auto text-foreground mb-1">
+              <Pencil className="w-5 h-5 stroke-[1.8]" />
+            </div>
+            <AlertDialogTitle className="text-[17px] font-semibold tracking-tight text-foreground">
+              Editar nome do cliente
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[12.5px] text-muted-foreground leading-relaxed">
+              Informe o nome do cliente que será exibido na agenda para este agendamento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2">
+            <Input
+              placeholder="Nome do cliente (ex: Carlos, Lucas)..."
+              value={newNameInput}
+              onChange={(e) => setNewNameInput(e.target.value)}
+              className="h-11 rounded-xl text-[14px]"
+              autoFocus
+            />
+            {isBarberOrSystemName(newNameInput, appointment.barbeiro_apelido) && (
+              <p className="text-[11.5px] text-destructive px-1 font-medium flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Por favor, informe o nome do cliente (e não o nome do barbeiro).</span>
+              </p>
+            )}
+          </div>
+
+          <div className="pt-2 flex gap-2">
+            <AlertDialogCancel
+              disabled={isSavingName}
+              onClick={() => setIsEditingName(false)}
+              className="flex-1 h-11 rounded-full bg-secondary border border-border/60 text-[13px] font-medium text-foreground hover:bg-secondary/80 mt-0"
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <button
+              type="button"
+              disabled={isSavingName || !newNameInput.trim() || isBarberOrSystemName(newNameInput, appointment.barbeiro_apelido)}
+              onClick={async () => {
+                setIsSavingName(true);
+                try {
+                  const { error } = await supabase.rpc("update_agendamento_cliente_nome", {
+                    p_agendamento_id: appointment.id,
+                    p_cliente_nome: newNameInput.trim(),
+                  });
+                  if (error) throw error;
+                  setLocalClientName(newNameInput.trim());
+                  toast.success("Nome do cliente atualizado com sucesso!");
+                  setIsEditingName(false);
+                  onUpdate();
+                } catch (err: any) {
+                  toast.error(err?.message || "Erro ao atualizar nome");
+                } finally {
+                  setIsSavingName(false);
+                }
+              }}
+              className="flex-1 h-11 rounded-full bg-foreground text-background text-[13px] font-semibold hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              {isSavingName ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
             </button>
           </div>
         </AlertDialogContent>

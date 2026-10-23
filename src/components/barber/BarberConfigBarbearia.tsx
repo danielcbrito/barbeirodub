@@ -57,6 +57,16 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
 
+/** Número e link padrão de suporte do app DUB */
+const SUPPORT_WHATSAPP_PHONE = "5511963390043";
+
+const getWhatsAppSupportUrl = (unitName?: string) => {
+  const msg = unitName
+    ? `Olá! Preciso de suporte no app DUB para solicitar a exclusão permanente da barbearia (${unitName}) 🙏`
+    : "Olá! Preciso de suporte no app DUB 🙏";
+  return `https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`;
+};
+
 /**
  * Hub de Configurações da Barbearia — exclusivo do Administrador / Dono.
  * Padrão 100% sério, minimalista e institucional (Alinhado rigorosamente a Atendimento & Notificações):
@@ -184,9 +194,7 @@ export function BarberConfigBarbearia({
   // Estados para Gerenciamento Operacional da Barbearia (Pausar / Excluir)
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isPausing, setIsPausing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   useStatusBarColor("app-background");
 
@@ -593,9 +601,9 @@ export function BarberConfigBarbearia({
         id: "excluir-pausar",
         icon: AlertTriangle,
         label: "Excluir e pausar",
-        description: "Pausar agendamentos temporariamente ou excluir esta barbearia",
+        description: "Pausar agendamentos temporariamente ou solicitar exclusão da barbearia",
         destructive: true,
-        keywords: ["excluir", "pausar", "reativar", "apagar", "deletar", "suspender", "fechar"],
+        keywords: ["excluir", "pausar", "reativar", "apagar", "deletar", "suspender", "fechar", "suporte", "whatsapp"],
         onClick: () => setActiveScreen("excluir-pausar"),
       },
     ];
@@ -655,83 +663,6 @@ export function BarberConfigBarbearia({
     }
   };
 
-  /** Excluir barbearia permanentemente com confirmação rigorosa e cascade seguro */
-  const handleDeleteUnit = async () => {
-    if (!activeUnit?.id) return;
-    if (deleteConfirmText.trim().toUpperCase() !== "EXCLUIR") {
-      toast.error('Digite "EXCLUIR" em maiúsculas para confirmar a exclusão.');
-      return;
-    }
-
-    const unitIdToDelete = activeUnit.id;
-    const unitNameToDelete = activeUnit.nome || "Barbearia";
-    setIsDeleting(true);
-
-    try {
-      // 1. Tenta invocar a Edge Function atômica delete-unit
-      let deletedViaEdge = false;
-      try {
-        const { data, error } = await supabase.functions.invoke("delete-unit", {
-          body: { unidadeId: unitIdToDelete },
-        });
-        if (!error && !data?.error) {
-          deletedViaEdge = true;
-        }
-      } catch (edgeErr) {
-        console.warn("[handleDeleteUnit] Edge function falhou ou inacessível, aplicando cascade direto:", edgeErr);
-      }
-
-      // 2. Se a Edge Function não concluiu, executa fallback seguro direto
-      if (!deletedViaEdge) {
-        await supabase.from("barbeiro_unidades").delete().eq("unidade_id", unitIdToDelete);
-        await supabase.from("agendamentos").update({ unidade_id: null }).eq("unidade_id", unitIdToDelete);
-        await supabase.from("barbeiros").update({ unidade_id: null }).eq("unidade_id", unitIdToDelete);
-
-        try {
-          await supabase.from("configuracoes_horario_unidade").delete().eq("unidade_id", unitIdToDelete);
-          await supabase.from("horarios_excepcionais").delete().eq("unidade_id", unitIdToDelete);
-          await supabase.from("client_booking_blocks").delete().eq("unidade_id", unitIdToDelete);
-          await supabase.from("barber_unit_roles").delete().eq("unidade_id", unitIdToDelete);
-        } catch {
-          // limpeza não-fatal
-        }
-
-        const { error: delError } = await supabase
-          .from("tenant_unidades")
-          .delete()
-          .eq("id", unitIdToDelete);
-
-        if (delError) throw delError;
-      }
-
-      toast.success(`Barbearia "${unitNameToDelete}" excluída com sucesso.`);
-      setShowDeleteModal(false);
-      setDeleteConfirmText("");
-
-      const remainingUnits = unidades.filter((u) => u.id !== unitIdToDelete);
-      setUnidades(remainingUnits);
-
-      if (remainingUnits.length > 0) {
-        setSelectedUnidadeId(remainingUnits[0].id);
-        if (remainingUnits[0].nome) setTenantNome(remainingUnits[0].nome);
-        if (remainingUnits[0].logo_url) setTenantLogoUrl(remainingUnits[0].logo_url);
-      } else {
-        setSelectedUnidadeId(null);
-      }
-
-      await loadUnidades();
-      setActiveScreen("hub");
-    } catch (err: any) {
-      console.error("[handleDeleteUnit]", err);
-      toast.error(
-        err?.message?.includes("foreign")
-          ? "Não foi possível excluir: existem registros vinculados a esta unidade."
-          : "Erro ao excluir a barbearia. Tente novamente."
-      );
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
   /** Upload da Logo da Barbearia */
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1465,10 +1396,7 @@ export function BarberConfigBarbearia({
                 {/* Excluir Barbearia */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setDeleteConfirmText("");
-                    setShowDeleteModal(true);
-                  }}
+                  onClick={() => setShowDeleteModal(true)}
                   className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
                 >
                   <div className="min-w-0 pr-3">
@@ -1476,7 +1404,7 @@ export function BarberConfigBarbearia({
                       Excluir barbearia permanentemente
                     </p>
                     <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                      Remove esta filial e desvincula os dados operacionais permanentemente.
+                      Entre em contato com nossa equipe de atendimento para solicitar a exclusão definitiva.
                     </p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-destructive/50 group-hover:text-destructive transition-colors shrink-0" />
@@ -1568,111 +1496,100 @@ export function BarberConfigBarbearia({
         )}
       </AnimatePresence>
 
-      {/* ═══ MODAL DE EXCLUIR BARBEARIA (AÇÃO CRÍTICA DE ALTA SEGURANÇA) ═══ */}
+      {/* ═══ MODAL DE EXCLUIR BARBEARIA (SOLICITAÇÃO DE SUPORTE VIA WHATSAPP) ═══ */}
       <AnimatePresence>
         {showDeleteModal && (
           <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm">
-            <div className="absolute inset-0" onClick={() => !isDeleting && setShowDeleteModal(false)} />
+            <div className="absolute inset-0" onClick={() => setShowDeleteModal(false)} />
             <motion.div
               initial={{ y: "100%", opacity: 0.5 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
               transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-destructive/40 bg-card p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
+              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-border/80 dark:border-white/[0.1] bg-card p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
             >
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
 
               <div className="flex items-start gap-3.5">
                 <div className="w-10 h-10 rounded-xl bg-destructive/15 border border-destructive/25 flex items-center justify-center shrink-0 text-destructive">
-                  <AlertTriangle className="w-5 h-5" />
+                  <Trash2 className="w-5 h-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-[16px] font-bold text-foreground leading-tight">
-                    Excluir barbearia definitivamente?
+                    Solicitar exclusão da barbearia
                   </h3>
                   <p className="text-[12px] text-muted-foreground mt-1">
-                    Unidade: <strong className="text-destructive font-semibold">{activeUnit?.nome || tenantNome}</strong>
+                    Unidade: <strong className="text-foreground font-semibold">{activeUnit?.nome || tenantNome}</strong>
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => !isDeleting && setShowDeleteModal(false)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Alerta de Perigo Crítico */}
-              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 space-y-2 text-[12px]">
-                <p className="font-semibold text-destructive flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>Atenção: Ação permanente e irreversível!</span>
+              {/* Informação sobre exigência de contato com o suporte */}
+              <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-4 space-y-2 text-[12px]">
+                <p className="font-semibold text-foreground flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+                  <span>Exclusão permanente requer suporte da equipe</span>
                 </p>
                 <p className="text-muted-foreground leading-relaxed">
-                  Esta operação apagará todos os dados exclusivos vinculados a esta unidade (<strong className="text-foreground">{activeUnit?.nome || tenantNome}</strong>) do banco de dados:
+                  Para garantir a segurança dos seus dados, o cancelamento de eventuais assinaturas ativas, a conferência de saldos e repasses pendentes e o encerramento seguro da conta, a exclusão permanente deve ser solicitada à nossa equipe de atendimento.
                 </p>
-                <ul className="space-y-1 list-disc list-inside text-muted-foreground">
-                  <li>Os vínculos de barbeiros com esta unidade serão desfeitos.</li>
-                  <li>As referências de agendamentos desta filial serão desvinculadas.</li>
-                  <li>A unidade será apagada permanentemente do cadastro.</li>
-                  <li><strong>As outras barbearias e filiais não serão afetadas.</strong></li>
-                </ul>
               </div>
 
-              {/* Dica estratégica antes da exclusão */}
-              <div className="rounded-xl border border-border/60 bg-secondary/30 p-3 flex items-start gap-2.5">
-                <Store className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+              {/* Dica da Pausa como alternativa rápida pelo próprio usuário */}
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3.5 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <PauseCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                  <p className="text-[12.5px] font-medium text-foreground">
+                    Deseja apenas suspender os agendamentos?
+                  </p>
+                </div>
                 <p className="text-[11.5px] text-muted-foreground leading-relaxed">
-                  Se você quer apenas suspender a unidade temporariamente sem perder seus dados, use a opção <strong className="text-foreground">Pausar barbearia</strong>.
+                  Você mesmo pode <strong>Pausar a barbearia</strong> diretamente pelo sistema a qualquer momento, sem precisar falar com ninguém e mantendo todos os seus dados, clientes e histórico salvos.
                 </p>
-              </div>
-
-              {/* Confirmação por digitação */}
-              <div className="space-y-2 pt-1">
-                <label className="text-[12px] font-medium text-foreground block">
-                  Para confirmar, digite <span className="font-mono font-bold text-destructive">EXCLUIR</span> no campo abaixo:
-                </label>
-                <input
-                  type="text"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  placeholder="Digite EXCLUIR"
-                  disabled={isDeleting}
-                  className="w-full h-11 px-3.5 rounded-xl border border-border/80 bg-background text-foreground text-[13px] placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-destructive/40 focus:border-destructive transition-all"
-                  autoCapitalize="characters"
-                  autoCorrect="off"
-                  spellCheck={false}
-                />
               </div>
 
               {/* Botões de Ação */}
-              <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = getWhatsAppSupportUrl(activeUnit?.nome || tenantNome);
+                    window.open(url, "_blank", "noopener,noreferrer");
+                    setShowDeleteModal(false);
+                  }}
+                  className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-semibold text-[13.5px] transition-all flex items-center justify-center gap-2.5 shadow-md shadow-emerald-600/20 cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4 stroke-[2.5]" />
+                  <span>Falar com suporte no WhatsApp</span>
+                </button>
+
+                {activeUnit?.ativo !== false && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeleteModal(false);
+                      setShowPauseModal(true);
+                    }}
+                    className="w-full h-11 rounded-xl border border-amber-500/35 bg-amber-500/10 hover:bg-amber-500/15 active:scale-[0.98] text-amber-600 dark:text-amber-400 font-medium text-[13px] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <PauseCircle className="w-4 h-4" />
+                    <span>Pausar barbearia pelo sistema</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setShowDeleteModal(false)}
-                  disabled={isDeleting}
-                  className="h-11 rounded-xl border border-border/80 bg-secondary/60 hover:bg-secondary text-foreground text-[13px] font-medium transition-all active:scale-[0.98]"
+                  className="w-full h-11 rounded-xl border border-border/80 bg-secondary/60 hover:bg-secondary text-foreground text-[13px] font-medium transition-all active:scale-[0.98] cursor-pointer"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteUnit}
-                  disabled={isDeleting || deleteConfirmText.trim().toUpperCase() !== "EXCLUIR"}
-                  className={cn(
-                    "h-11 rounded-xl text-white font-semibold text-[13px] transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xs",
-                    deleteConfirmText.trim().toUpperCase() === "EXCLUIR" && !isDeleting
-                      ? "bg-destructive hover:bg-destructive/90 cursor-pointer"
-                      : "bg-destructive/40 text-white/50 cursor-not-allowed opacity-60"
-                  )}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  <span>{isDeleting ? "Excluindo..." : "Excluir Definitivamente"}</span>
+                  Voltar
                 </button>
               </div>
             </motion.div>
