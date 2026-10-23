@@ -38,7 +38,7 @@ export function useBarberReportData(barbeiroId?: string | null, tenantId?: strin
       const [apts, cash, subs, reviews] = await Promise.all([
         readAllPages((f, t) => supabase.from('agendamentos').select('id, preco, preco_final, status, data, hora, is_free, payment_method, user_id, servico_id, observacoes, servico:servicos(nome)').in('barbeiro_id', ids).gte('data', first).lte('data', today).order('id').range(f, t)),
         readAllPages((f, t) => supabase.from('pagamentos_plano_barbearia').select('id, valor, created_at').in('barbeiro_id', ids).gte('created_at', `${first}T00:00:00-03:00`).order('id').range(f, t)),
-        readAllPages((f, t) => supabase.from('assinaturas').select('id, user_id, valor_mensal, status').in('barbeiro_id', ids).order('id').range(f, t)),
+        readAllPages((f, t) => supabase.from('assinaturas').select('id, user_id, status').in('barbeiro_id', ids).order('id').range(f, t)),
         readAllPages((f, t) => supabase.from('barbeiro_avaliacoes').select('id, rating, created_at').in('barber_id', ids).gte('created_at', `${first}T00:00:00-03:00`).order('id').range(f, t)),
       ]);
       const pix = [];
