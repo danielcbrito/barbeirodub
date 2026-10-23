@@ -41,7 +41,7 @@ export function performanceMetrics(data: ReportData | undefined, month: string, 
   const returning = [...clients].filter(id => previousClients.has(id)).length;
   const previousMonth = new Date(`${month}-15T12:00:00Z`); previousMonth.setUTCMonth(previousMonth.getUTCMonth() - 1);
   const previousKey = previousMonth.toISOString().slice(0, 7);
-  const elapsedDay = month === today.slice(0, 7) ? Number(today.slice(8)) : new Date(`${month}-01T12:00:00Z`).getUTCMonth() === 11 ? 31 : new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)).getUTCDate();
+  const elapsedDay = month === today.slice(0, 7) ? Number(today.slice(8)) : new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)).getUTCDate();
   const prevCompleted = all.filter(a => a.data.startsWith(previousKey) && Number(a.data.slice(8)) <= elapsedDay && a.status === 'completed').length;
   const daily = new Map<string, { date: string; appointments: number; completed: number; revenue: number }>();
   for (const a of current) {

@@ -23,7 +23,7 @@ export function useBarberReportData(barbeiroId?: string | null, tenantId?: strin
     enabled,
     staleTime: 60_000,
     refetchOnWindowFocus: true,
-    refetchInterval: 120_000,
+    refetchInterval: 300_000,
     queryFn: async (): Promise<ReportData> => {
       let scopeTenant = tenantId;
       if (!barbeiroId && !scopeTenant) {

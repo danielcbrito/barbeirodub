@@ -1,0 +1,79 @@
+RELATÓRIOS E DESEMPENHO — 23/10/2026
+
+1. USUÁRIO
+Início e Relatórios agora usam a mesma série mensal e o mesmo comparativo.
+Aplica-se a barbeiros comuns e administradores com perfil de barbeiro; sem
+exceção por pessoa. Administrador sem perfil vê o tenant resolvido, nunca
+um conjunto global de barbearias como fallback.
+
+2. CAUSAS COMPROVADAS NO CÓDIGO
+- Início consultava confirmed e completed e somava ambos como faturamento.
+- Usava o maior valor entre soma própria e snapshot do dashboard (Math.max).
+- Inventava valores para meses vazios usando fatores 0,65 a 1,00.
+- Sem mês anterior, inventava receita anterior em vez de mostrar ausência.
+- Relatórios usavam apenas completed; fontes, cache e pagamentos divergiam.
+- Consulta de assinaturas solicitava valor_mensal, coluna inexistente.
+- Barbeiros não tinham política para ler pagamentos de assinatura sem corte
+  associado; isso podia esconder recibos de plano no relatório.
+- Score assumia nota 4,8 e pontuação positiva mesmo sem avaliações/dados.
+
+3. FRONTEND
+Fonte compartilhada: useBarberReportData + barberReportMetrics.
+Paginação de 500 registros, ordenação estável e erro interrompendo a leitura.
+Janela de 12 meses anteriores mais mês atual; telas exibem últimos 6 meses.
+Recibos e datas agrupados em America/Sao_Paulo.
+Receita: serviços concluídos pelo preço final, excluindo grátis/fidelidade e
+uso de plano (para não somar o mesmo plano duas vezes), mais recibos de planos
+em dinheiro e pagamentos não-dinheiro paid, sem agendamento associado.
+Receita bruta operacional não é saldo da carteira nem valor líquido sacável.
+Atualização ao voltar à janela, eventos de alterações e fallback a cada 5 min.
+Nenhum histórico financeiro foi modificado.
+
+4. SUPABASE
+Política de leitura adicionada em pagamentos: assinatura atribuída ao barbeiro
+autenticado, dono da mesma barbearia ou membro administrador do mesmo tenant.
+Não concede edição, inserção, saque ou acesso anônimo.
+RLS preexistente continua aplicada às consultas paginadas.
+115 alertas de segurança preexistentes; nenhum novo gerado pela alteração.
+
+5. DESEMPENHO
+Fatores ponderados: realização 25, avaliações reais 25, retorno de clientes 20,
+evolução de atendimentos 15, consistência semanal 10 e evolução de receita 5.
+Ausência de fator não inventa nota; mostra Sem dados e cobertura dos fatores.
+Sem corte concluído: score não atribuído.
+Evolução compara mesmos dias decorridos para evitar comparação injusta entre
+mês parcial e mês inteiro. Sem base anterior, não cria percentual.
+Semanas são faixas 1–7, 8–14, 15–21, 22–28 e 29–fim; consistência usa somente
+faixas completas. Dias e semanas exibem volumes reais.
+Retorno usa histórico observado de 12 meses, não histórico vitalício.
+Preço acessível, ocupação real, satisfação não avaliada e comportamento de uso
+do aplicativo NÃO são inferidos: faltam benchmarks, capacidade por expediente
+e instrumentação de eventos. Score é indicador operacional, não certeza de
+100% nem prova causal do comportamento do profissional.
+
+6. CHECAGEM AO VIVO (não equivale à sessão da pessoa)
+Consulta SQL do perfil Tulio, sem IDs pessoais inseridos na aplicação:
+Setembro serviços: R$ 2.616,80.
+Outubro serviços: R$ 2.641,80; recibos cash R$ 194,80;
+pagamentos não-cash de assinatura R$ 129,90.
+Soma disponível no momento: R$ 2.966,50 (crescimento 13,4% se não houver
+outros recibos de setembro). Valores evoluem com novas operações.
+R$ 2.836 informado corresponde aproximadamente a serviços + cash, omitindo
+o recibo não-cash. Não há evidência suficiente para atribuir exatamente toda
+a diferença de R$ 1.500; é incorreto declarar esse detalhamento sem rastreio.
+
+7. FLUXOS / ERROS
+Contexto autenticado -> escopo -> páginas de dados sob RLS -> métricas ->
+mesma fonte para início e relatórios -> alteração invalida a fonte.
+Contexto ausente ou falha de rede/permissão: estado indisponível/erro e nova
+tentativa; não substitui por valores inventados ou receita de outro tenant.
+N8N, Woovi e fluxos críticos de autenticação/agendamento/pagamento não foram
+alterados; apenas leitura e indicadores. Pagamentos continuam na Woovi.
+
+8. VERIFICAÇÃO / LIMITES
+19 testes unitários passaram (11 de relatório/desempenho e 8 regressões).
+Compilação automática: build OK após remoção da coluna inexistente.
+Backend externo não gerenciado: não há sessão disponível para validar o fluxo
+autenticado nas telas reais. Não foi simulado como se tivesse sido verificado.
+Relatórios mensais arquivados do superadmin são documentos históricos,
+não esta série operacional; não foram regravados.
