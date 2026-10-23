@@ -444,15 +444,14 @@ async function getWooviBalance(admin: SupabaseAdminClient, barber: WooviBarberRo
   const theoreticalAvailable = Math.max(0, wooviBalance - blocked);
   // O valor líquido sacável do barbeiro respeita o dinheiro físico da matriz menos o saldo de outros barbeiros
   const liquidAccountAvailable = masterTotal !== null ? Math.max(0, masterTotal - otherSubsTotal) : theoreticalAvailable;
-  const realWithdrawable = Math.min(theoreticalAvailable, liquidAccountAvailable);
-  const realBalance = realWithdrawable + blocked;
-
+  // Saldo exibido = 100% do saldo real da subconta Woovi (fonte de verdade).
+  // A liquidez da conta matriz só é usada como trava no momento do saque.
   return {
-    balance_centavos: realBalance,
+    balance_centavos: wooviBalance,
     raw_subaccount_balance_centavos: wooviBalance,
-    blocked_centavos: blocked,
-    available_centavos: realWithdrawable,
-    master_available_centavos: realWithdrawable,
+    blocked_centavos: Math.min(blocked, wooviBalance),
+    available_centavos: theoreticalAvailable,
+    master_available_centavos: masterTotal !== null ? liquidAccountAvailable : null,
     pix_key: sub?.pixKey ?? barber.woovi_pix_key,
     withdraw_blocked: Boolean(sub?.withdrawBlocked),
     configured: true,
