@@ -23,3 +23,11 @@ ATUALIZAÇÃO 10:40 — CAUSA REAL (função woovi-wallet, a que a tela usa)
 - Corrigido: balance_centavos = saldo bruto da subconta; disponível = subconta - retido (aguardando corte).
 - A liquidez da matriz continua sendo checada só no saque (master_available_centavos), com mensagem clara
   se o caixa da matriz não cobrir o valor pedido.
+
+ATUALIZAÇÃO 10:45 — ABRANGÊNCIA (TODOS OS BARBEIROS E ADMINS)
+- Barbeiro (/barbeiro/carteira) e Admin (/admin/financeiro) usam a mesma tela (CarteiraPage) e a mesma
+  função (woovi-wallet) — a correção vale para todos, sem ajuste individual.
+- Tela secundária (WooviWalletSheet / store-api) também corrigida para ler a subconta.
+- Telas legadas do módulo Efí (FinancialModule/carteiras.saldo_disponivel) não estão montadas em nenhuma rota.
+- Regra registrada em AGENTS.md: o saldo exibido é sempre o bruto da subconta Woovi; a liquidez da matriz
+  só trava o saque.
