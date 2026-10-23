@@ -16,3 +16,10 @@ Correção:
 
 Vale para todos os barbeiros. Função publicada: store-api.
 Não verificado: valor exibido com login do José (sem sessão de teste disponível).
+
+ATUALIZAÇÃO 10:40 — CAUSA REAL (função woovi-wallet, a que a tela usa)
+- A tela chama woovi-wallet (não store-api). Ela lia a subconta (R$ 60,40), mas limitava o saldo a
+  "caixa da conta matriz - saldo das outras subcontas", reduzindo para R$ 41,60.
+- Corrigido: balance_centavos = saldo bruto da subconta; disponível = subconta - retido (aguardando corte).
+- A liquidez da matriz continua sendo checada só no saque (master_available_centavos), com mensagem clara
+  se o caixa da matriz não cobrir o valor pedido.
