@@ -160,7 +160,7 @@ export function MobileManualBookingModal({
     if (open && selectedService) {
       loadAvailableSlots();
     }
-  }, [open, selectedService, quantity, date]);
+  }, [open, selectedService, quantity, date, resolvedBarbeiroId]);
 
   const resetForm = () => {
     setStep(1);
@@ -441,151 +441,175 @@ export function MobileManualBookingModal({
     
     setLoadingSlots(true);
     try {
-      // Encaixe manual (skipValidation=true): barbeiro tem liberdade total de agenda.
-      // Gera TODOS os slots do dia sem filtrar conflitos — o barbeiro decide onde encaixar.
-      if (skipValidation) {
-        const slots: TimeSlot[] = [];
-        let current = new Date();
-        current.setHours(6, 0, 0, 0);
-        
-        const end = new Date();
-        end.setHours(23, 0, 0, 0);
-
-        while (current <= end) {
-          const timeStr = format(current, "HH:mm");
-          slots.push({ time: timeStr, available: true });
-          current = addMinutes(current, 10);
-        }
-
-        setAvailableSlots(slots);
-        setLoadingSlots(false);
-        return;
-      }
-
       const dayOfWeek = new Date(date + "T12:00:00").getDay();
-      
-      // Buscar config do barbeiro primeiro, fallback para global
-      let config: ScheduleConfig | null = null;
       const effectiveBarberId = resolvedBarbeiroId;
 
-      if (effectiveBarberId) {
-        const { data: barberConfig } = await supabase
-          .from("configuracoes_horario_barbeiro")
-          .select("hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, aberto, delay_entre_servicos")
-          .eq("barbeiro_id", effectiveBarberId)
-          .eq("dia_semana", dayOfWeek)
+      // ── 1. Resolver Tenant ID da barbearia ──
+      let effectiveTenantId = tenantId || null;
+      if (!effectiveTenantId && effectiveBarberId) {
+        const { data: barbRow } = await supabase
+          .from("barbeiros")
+          .select("tenant_id")
+          .eq("id", effectiveBarberId)
           .maybeSingle();
-        if (barberConfig) config = barberConfig;
+        effectiveTenantId = (barbRow as { tenant_id?: string } | null)?.tenant_id ?? null;
       }
 
-      if (!config) {
-        // Escopo por tenant do barbeiro para evitar vazamento entre barbearias
-        let tenantId: string | null = null;
-        if (effectiveBarberId) {
-          const { data: barbRow } = await supabase
-            .from("barbeiros")
-            .select("tenant_id")
-            .eq("id", effectiveBarberId)
-            .maybeSingle();
-          tenantId = (barbRow as { tenant_id?: string } | null)?.tenant_id ?? null;
-        }
-        const exceptionalData = tenantId
-          ? (await supabase
-              .from("horarios_excepcionais")
-              .select("hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, aberto")
-              .eq("data", date)
-              .eq("tenant_id", tenantId)
-              .maybeSingle()).data
-          : null;
-        if (exceptionalData) {
-          config = exceptionalData;
+      // ── 2. Buscar Horário da BARBEARIA (Tenant) ──
+      let barbeariaConfig: {
+        aberto?: boolean | null;
+        hora_abertura?: string | null;
+        hora_fechamento?: string | null;
+        hora_almoco_inicio?: string | null;
+        hora_almoco_fim?: string | null;
+      } | null = null;
+
+      if (effectiveTenantId) {
+        // A) Exceção de horário da barbearia na data
+        const { data: excBarbearia } = await supabase
+          .from("horarios_excepcionais")
+          .select("aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim")
+          .eq("data", date)
+          .eq("tenant_id", effectiveTenantId)
+          .maybeSingle();
+
+        if (excBarbearia) {
+          barbeariaConfig = excBarbearia;
         } else {
-          const { data: globalConfig } = await supabase
-            .from("configuracoes_horario")
-            .select("hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, aberto, delay_entre_servicos")
+          // B) Horário semanal regular da barbearia
+          const { data: regBarbearia } = await supabase
+            .from("configuracoes_horario_unidade")
+            .select("aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim")
+            .eq("tenant_id", effectiveTenantId)
             .eq("dia_semana", dayOfWeek)
+            .order("unidade_id", { nullsFirst: false })
+            .limit(1)
             .maybeSingle();
-          config = globalConfig;
-        }
-      }
 
-      if (!config) {
-        config = {
-          hora_abertura: "08:00",
-          hora_fechamento: "20:00",
-          hora_almoco_inicio: null,
-          hora_almoco_fim: null
-        };
-      }
-
-      const DELAY_MINUTES = config.delay_entre_servicos || 10;
-
-      // Buscar agendamentos FILTRADOS por barbeiro
-      let appointmentsQuery = supabase
-        .from("agendamentos")
-        .select("hora, duracao")
-        .eq("data", date)
-        .in("status", ["pending", "confirmed", "completed"]);
-      
-      if (effectiveBarberId) {
-        appointmentsQuery = appointmentsQuery.eq("barbeiro_id", effectiveBarberId);
-      }
-
-      const { data: appointmentsData } = await appointmentsQuery;
-
-      const existingAppointments = appointmentsData || [];
-      
-      const slots: TimeSlot[] = [];
-      const [startH, startM] = config.hora_abertura.split(":").map(Number);
-      const [endH, endM] = config.hora_fechamento.split(":").map(Number);
-      
-      let current = new Date();
-      current.setHours(startH, startM, 0, 0);
-      
-      const end = new Date();
-      end.setHours(endH, endM, 0, 0);
-
-      const totalSelectedDuration = selectedService.duracao_minutos * Math.max(1, quantity);
-      const lastPossibleStart = addMinutes(end, -totalSelectedDuration);
-
-      while (current <= lastPossibleStart) {
-        const timeStr = format(current, "HH:mm");
-        
-        let isLunch = false;
-        if (config.hora_almoco_inicio && config.hora_almoco_fim) {
-          const [lsH, lsM] = config.hora_almoco_inicio.split(":").map(Number);
-          const [leH, leM] = config.hora_almoco_fim.split(":").map(Number);
-          const currentMinutes = current.getHours() * 60 + current.getMinutes();
-          const lunchStart = lsH * 60 + lsM;
-          const lunchEnd = leH * 60 + leM;
-          isLunch = currentMinutes >= lunchStart && currentMinutes < lunchEnd;
-        }
-
-        const serviceEnd = addMinutes(current, totalSelectedDuration);
-        let hasConflict = false;
-        
-        for (const apt of existingAppointments) {
-          const [aptH, aptM] = (apt.hora || "00:00").split(":").map(Number);
-          const aptStart = new Date();
-          aptStart.setHours(aptH || 0, aptM || 0, 0, 0);
-          const aptEnd = addMinutes(aptStart, apt.duracao || 30);
-          const aptEndWithDelay = addMinutes(aptEnd, DELAY_MINUTES);
-          
-          if (current < aptEndWithDelay && serviceEnd > aptStart) {
-            hasConflict = true;
-            break;
+          if (regBarbearia) {
+            barbeariaConfig = regBarbearia;
           }
         }
+      }
+
+      // C) Fallback global de barbearia se não achou por tenant
+      if (!barbeariaConfig) {
+        const { data: globalConfig } = await supabase
+          .from("configuracoes_horario")
+          .select("aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim")
+          .eq("dia_semana", dayOfWeek)
+          .maybeSingle();
+        if (globalConfig) barbeariaConfig = globalConfig;
+      }
+
+      // ── 3. Buscar Horário do BARBEIRO ──
+      let barberConfig: {
+        aberto?: boolean | null;
+        hora_abertura?: string | null;
+        hora_fechamento?: string | null;
+        hora_almoco_inicio?: string | null;
+        hora_almoco_fim?: string | null;
+      } | null = null;
+
+      if (effectiveBarberId) {
+        // A) Exceção do barbeiro na data
+        const { data: excBarbeiro } = await supabase
+          .from("horarios_excepcionais_barbeiro")
+          .select("aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim")
+          .eq("barbeiro_id", effectiveBarberId)
+          .eq("data", date)
+          .maybeSingle();
+
+        if (excBarbeiro) {
+          barberConfig = excBarbeiro;
+        } else {
+          // B) Horário semanal regular do barbeiro
+          const { data: regBarbeiro } = await supabase
+            .from("configuracoes_horario_barbeiro")
+            .select("aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim")
+            .eq("barbeiro_id", effectiveBarberId)
+            .eq("dia_semana", dayOfWeek)
+            .maybeSingle();
+
+          if (regBarbeiro) {
+            barberConfig = regBarbeiro;
+          }
+        }
+      }
+
+      // Helper para converter "HH:mm" ou "HH:mm:ss" em minutos do dia
+      const toMinutes = (timeStr?: string | null): number | null => {
+        if (!timeStr) return null;
+        const [h, m] = timeStr.split(":").map(Number);
+        if (isNaN(h) || isNaN(m)) return null;
+        return h * 60 + m;
+      };
+
+      const minBarbOpen = toMinutes(barbeariaConfig?.hora_abertura);
+      const minBarbClose = toMinutes(barbeariaConfig?.hora_fechamento);
+      const minBarberOpen = toMinutes(barberConfig?.hora_abertura);
+      const minBarberClose = toMinutes(barberConfig?.hora_fechamento);
+
+      // ── 4. Combinar horários da Barbearia E do Barbeiro ──
+      // Início: o barbeiro atende quando a barbearia abre E quando ele inicia o expediente
+      let openMinutes: number;
+      if (minBarbOpen !== null && minBarberOpen !== null) {
+        openMinutes = Math.max(minBarbOpen, minBarberOpen);
+      } else {
+        openMinutes = minBarberOpen ?? minBarbOpen ?? (9 * 60);
+      }
+
+      // Fim: o atendimento encerra quando o barbeiro ou a barbearia encerrarem
+      let closeMinutes: number;
+      if (minBarbClose !== null && minBarberClose !== null) {
+        closeMinutes = Math.min(minBarbClose, minBarberClose);
+      } else {
+        closeMinutes = minBarberClose ?? minBarbClose ?? (20 * 60);
+      }
+
+      // Se porventura o intervalo ficou inválido
+      if (closeMinutes <= openMinutes) {
+        openMinutes = minBarbOpen ?? (9 * 60);
+        closeMinutes = minBarbClose ?? (20 * 60);
+      }
+
+      const totalSelectedDuration = selectedService.duracao_minutos * Math.max(1, quantity);
+      const slots: TimeSlot[] = [];
+
+      let curMin = openMinutes;
+      // Permite encaixar enquanto o início do serviço couber no expediente
+      const lastPossibleMin = Math.max(openMinutes, closeMinutes - totalSelectedDuration);
+
+      while (curMin <= lastPossibleMin) {
+        const sH = Math.floor(curMin / 60).toString().padStart(2, "0");
+        const sM = (curMin % 60).toString().padStart(2, "0");
+        const timeStr = `${sH}:${sM}`;
 
         slots.push({
           time: timeStr,
-          available: !isLunch && !hasConflict
+          available: true // Em encaixe manual, o barbeiro tem autonomia para encaixar nos horários de funcionamento
         });
 
-        current = addMinutes(current, 10);
+        curMin += 10;
+      }
+
+      // Se nenhum slot foi gerado (caso extremo), gera das 09:00 às 20:00 como segurança
+      if (slots.length === 0) {
+        let fallbackMin = 9 * 60;
+        while (fallbackMin <= 20 * 60 - totalSelectedDuration) {
+          const sH = Math.floor(fallbackMin / 60).toString().padStart(2, "0");
+          const sM = (fallbackMin % 60).toString().padStart(2, "0");
+          slots.push({ time: `${sH}:${sM}`, available: true });
+          fallbackMin += 10;
+        }
       }
 
       setAvailableSlots(slots);
+
+      // Se o horário selecionado atualmente estiver fora dos slots disponíveis, atualiza para o primeiro slot
+      if (slots.length > 0 && !slots.some(s => s.time === selectedTime)) {
+        setSelectedTime(slots[0].time);
+      }
     } catch (error) {
       console.error("Error loading slots:", error);
     } finally {
@@ -1020,88 +1044,82 @@ export function MobileManualBookingModal({
 
                 {selectedClient ? (
                   <div className="space-y-3">
-                    <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <div className="w-11 h-11 rounded-full bg-secondary flex items-center justify-center text-foreground font-bold text-base shrink-0">
-                          {selectedClient.nome ? selectedClient.nome.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
+                    {/* Card unificado do Cliente e Plano */}
+                    <div className="rounded-2xl bg-card border border-border/60 shadow-sm overflow-hidden transition-all">
+                      {/* Top: Dados do Cliente */}
+                      <div className="p-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="w-11 h-11 rounded-full bg-foreground text-background font-semibold text-base flex items-center justify-center shrink-0 shadow-sm">
+                            {selectedClient.nome ? selectedClient.nome.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-foreground text-[15px] truncate tracking-tight">{selectedClient.nome}</p>
+                            {selectedClient.telefone && (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5 tabular-nums">{selectedClient.telefone}</p>
+                            )}
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-bold text-foreground text-[15px] truncate">{selectedClient.nome}</p>
-                          {selectedClient.telefone && (
-                            <p className="text-[12px] text-muted-foreground truncate mt-0.5">{selectedClient.telefone}</p>
-                          )}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedClient(null);
+                            setSelectedClientPlan(null);
+                            setSearchQuery("");
+                          }}
+                          className="h-8 px-3.5 rounded-full border border-border/50 bg-muted/20 hover:bg-muted/50 text-foreground text-xs font-medium transition-colors shrink-0 active:scale-95"
+                        >
+                          Trocar
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedClient(null);
-                          setSelectedClientPlan(null);
-                          setSearchQuery("");
-                        }}
-                        className="h-9 px-4 rounded-full bg-secondary hover:bg-secondary/80 text-foreground text-xs font-bold transition-colors shrink-0 shadow-sm active:scale-95"
-                      >
-                        Trocar
-                      </button>
+
+                      {/* Seção do Plano do Cliente */}
+                      {selectedClientPlan ? (
+                        <div className="px-4 py-3.5 bg-muted/15 border-t border-border/30 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-foreground/5 border border-foreground/10 flex items-center justify-center text-foreground shrink-0">
+                                <Crown className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                                  Plano Ativo
+                                </p>
+                                <p className="text-sm font-semibold text-foreground truncate">
+                                  {selectedClientPlan.planoNome}
+                                </p>
+                              </div>
+                            </div>
+
+                            <span className="text-xs font-medium px-2.5 py-1 rounded-full border border-border/50 bg-background text-foreground shrink-0 tabular-nums">
+                              {selectedClientPlan.restantes}/{selectedClientPlan.limite} disponíveis
+                            </span>
+                          </div>
+
+                          <div className="pt-2 border-t border-border/20 text-xs text-muted-foreground leading-relaxed flex items-center justify-between gap-2">
+                            {selectedClientPlan.restantes > 0 ? (
+                              <>
+                                <span className="flex items-center gap-1.5 text-foreground/80">
+                                  <Sparkles className="w-3.5 h-3.5 text-foreground/70 shrink-0" />
+                                  Será debitado 1 corte do plano
+                                </span>
+                                <span className="text-[11px] font-medium text-muted-foreground shrink-0 tabular-nums">
+                                  Saldo: {Math.max(0, selectedClientPlan.restantes - 1)}/{selectedClientPlan.limite}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                Limite do plano atingido no ciclo atual. Cobrança avulsa normal.
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="px-4 py-2.5 bg-muted/10 border-t border-border/20 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Cliente sem plano ativo</span>
+                          <span className="font-medium text-muted-foreground/80">Cobrança avulsa</span>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Card de Informação do Plano do Cliente */}
-                    {selectedClientPlan ? (
-                      <div className={cn(
-                        "p-3.5 rounded-2xl border shadow-sm space-y-2.5 transition-all",
-                        selectedClientPlan.restantes > 0
-                          ? "bg-amber-500/[0.08] border-amber-500/30"
-                          : "bg-muted/40 border-border/60"
-                      )}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className={cn(
-                              "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
-                              selectedClientPlan.restantes > 0
-                                ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
-                                : "bg-muted text-muted-foreground"
-                            )}>
-                              <Crown className="w-4 h-4" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Plano do Cliente</p>
-                              <p className="text-[14px] font-bold text-foreground truncate">{selectedClientPlan.planoNome}</p>
-                            </div>
-                          </div>
-                          <Badge className={cn(
-                            "text-[11px] font-bold px-2.5 py-0.5 shrink-0",
-                            selectedClientPlan.restantes > 0
-                              ? "bg-amber-500 hover:bg-amber-500 text-white"
-                              : "bg-muted text-muted-foreground"
-                          )}>
-                            {selectedClientPlan.restantes}/{selectedClientPlan.limite} disponíveis
-                          </Badge>
-                        </div>
-
-                        {selectedClientPlan.restantes > 0 ? (
-                          <div className="text-[12px] text-foreground/85 bg-background/80 rounded-xl p-2.5 border border-amber-500/20 flex items-start gap-2">
-                            <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                            <p className="leading-snug">
-                              Este encaixe será <strong>descontado do plano</strong>. Ao confirmar, o saldo passará de{" "}
-                              <span className="font-semibold text-amber-600 dark:text-amber-400">{selectedClientPlan.restantes}/{selectedClientPlan.limite}</span> para{" "}
-                              <span className="font-semibold text-amber-600 dark:text-amber-400">{Math.max(0, selectedClientPlan.restantes - 1)}/{selectedClientPlan.limite}</span> cortes disponíveis.
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="text-[12px] text-muted-foreground bg-background/80 rounded-xl p-2.5 border border-border/40 flex items-start gap-2">
-                            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                            <p className="leading-snug">
-                              O cliente já utilizou os <strong>{selectedClientPlan.limite} cortes</strong> do ciclo deste plano. Este atendimento será <strong>cobrado normalmente</strong>.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="px-3.5 py-2.5 rounded-xl bg-card border border-border/40 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Cliente sem plano ativo</span>
-                        <span className="text-[11px] font-medium text-muted-foreground/70">Cobrança normal</span>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1208,8 +1226,8 @@ export function MobileManualBookingModal({
                           {quantity > 1 && <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-foreground">×{quantity}</span>}
                         </p>
                         {isUsingPlan && (
-                          <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
-                            <Crown className="w-3.5 h-3.5 text-amber-500" /> Coberto pelo plano ({selectedClientPlan?.planoNome})
+                          <span className="text-[11px] font-medium text-foreground/80 flex items-center gap-1 mt-0.5">
+                            <Crown className="w-3.5 h-3.5 text-foreground/70" /> Coberto pelo plano ({selectedClientPlan?.planoNome})
                           </span>
                         )}
                       </div>
@@ -1219,7 +1237,7 @@ export function MobileManualBookingModal({
                             <span className="text-[12px] line-through text-muted-foreground mr-1.5 tabular-nums">
                               R$ {((selectedService?.preco || 0) * quantity).toFixed(2).replace('.', ',')}
                             </span>
-                            <span className="text-[15px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <span className="text-[15px] font-bold text-foreground">
                               Grátis
                             </span>
                           </>
@@ -1236,14 +1254,14 @@ export function MobileManualBookingModal({
                   </div>
 
                   {isUsingPlan && (
-                    <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-2.5">
-                      <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="p-3.5 rounded-2xl bg-card border border-border/60 flex items-start gap-2.5 shadow-sm">
+                      <Sparkles className="w-4 h-4 text-foreground/70 shrink-0 mt-0.5" />
                       <div className="text-[12px] text-foreground/90 leading-tight">
-                        <p className="font-semibold text-amber-600 dark:text-amber-400">
+                        <p className="font-medium text-foreground">
                           1 corte será debitado do plano
                         </p>
                         <p className="text-muted-foreground mt-0.5">
-                          Saldo passará de <strong>{selectedClientPlan?.restantes}/{selectedClientPlan?.limite}</strong> para <strong>{Math.max(0, (selectedClientPlan?.restantes || 1) - 1)}/{selectedClientPlan?.limite}</strong> cortes disponíveis.
+                          Saldo passará de <strong className="text-foreground">{selectedClientPlan?.restantes}/{selectedClientPlan?.limite}</strong> para <strong className="text-foreground">{Math.max(0, (selectedClientPlan?.restantes || 1) - 1)}/{selectedClientPlan?.limite}</strong> cortes disponíveis.
                         </p>
                       </div>
                     </div>
