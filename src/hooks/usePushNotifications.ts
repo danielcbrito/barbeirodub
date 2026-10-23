@@ -132,8 +132,6 @@ export function usePushNotifications(barbeiroId: string | null | undefined) {
         lastSyncedToken.current = newToken;
       }
 
-      // Sincroniza também com push_subscriptions
-      await syncPushSubscription(newToken);
     },
     [barbeiroId, syncPushSubscription],
   );
@@ -152,8 +150,6 @@ export function usePushNotifications(barbeiroId: string | null | undefined) {
       if (fcmToken) {
         setToken(fcmToken);
         await syncToken(fcmToken);
-      } else {
-        await syncPushSubscription(null);
       }
       return 'granted';
     } finally {
@@ -193,8 +189,6 @@ export function usePushNotifications(barbeiroId: string | null | undefined) {
       if (fcmToken) {
         setToken(fcmToken);
         await syncToken(fcmToken);
-      } else {
-        await syncPushSubscription(null);
       }
     })();
     return () => {

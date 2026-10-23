@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const { data: pushSubs } = await supabase
-      .from('push_subscriptions')
+      .from('push_subscriptions' as any)
       .select('id, endpoint, subscription_json')
       .or(`barbeiro_id.eq.${input.barber_id}${barberRow?.user_id ? `,user_id.eq.${barberRow.user_id}` : ''}`);
 
@@ -171,25 +171,23 @@ Deno.serve(async (req) => {
 
       await Promise.all(
         Array.from(tokenMap.entries()).map(async ([tokenStr, tokenId]) => {
+          // Mensagem só de dados: o service worker monta a notificação uma única vez
+          // (com logo), evitando duplicatas e funcionando com o app fechado.
+          const data: Record<string, string> = {
+            ...(input.data
+              ? Object.fromEntries(Object.entries(input.data).map(([k, v]) => [k, String(v)]))
+              : {}),
+            title: input.title,
+            body: input.body,
+            url: input.data?.url ?? '/barbeiro',
+          };
           const payload = {
             message: {
               token: tokenStr,
-              notification: { title: input.title, body: input.body },
-              webpush: {
-                notification: {
-                  title: input.title,
-                  body: input.body,
-                  icon: '/app-icon.png',
-                  badge: '/app-icon.png',
-                  requireInteraction: false,
-                },
-                fcm_options: { link: input.data?.url ?? '/barbeiro' },
-              },
-              data: input.data
-                ? Object.fromEntries(
-                    Object.entries(input.data).map(([k, v]) => [k, String(v)]),
-                  )
-                : {},
+              data,
+              webpush: { headers: { Urgency: 'high', TTL: '86400' } },
+              android: { priority: 'HIGH' },
+              apns: { headers: { 'apns-priority': '10' } },
             },
           };
 

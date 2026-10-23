@@ -30,33 +30,8 @@ messaging.onBackgroundMessage((payload) => {
   });
 });
 
-// Listener nativo de push da Web Push API (iOS 16.4+ Safari PWA, Android Chrome, navegadores desktop)
-self.addEventListener('push', (event) => {
-  let data = {};
-  if (event.data) {
-    try {
-      data = event.data.json();
-    } catch {
-      data = { body: event.data.text() };
-    }
-  }
-
-  const notification = data.notification || data;
-  const title = notification.title || data.title || 'DUB Agenda';
-  const body = notification.body || data.body || '';
-  const url = data?.data?.url || data?.url || '/barbeiro';
-
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/app-icon.png',
-      badge: '/app-icon.png',
-      data: { url, ...(data.data || {}) },
-      tag: data.tag || data.appointment_id || undefined,
-      renotify: true,
-    }),
-  );
-});
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
