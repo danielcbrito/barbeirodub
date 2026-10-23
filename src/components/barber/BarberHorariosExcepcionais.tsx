@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { NumericDateInput } from '@/components/shared/NumericDateInput';
 import { NumericTimeInput } from '@/components/shared/NumericTimeInput';
+import { VisualCalendarPicker } from '@/components/shared/VisualCalendarPicker';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { format, parseISO, isBefore, startOfDay } from 'date-fns';
@@ -118,12 +119,14 @@ export default function BarberHorariosExcepcionais({ barbeiroId }: BarberHorario
               Escolha a data, defina se estará disponível ou não e ajuste os horários.
             </p>
 
-            {/* Data */}
-            <div className="space-y-1.5">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest">Data</p>
-              <NumericDateInput
+            {/* Data (Calendário Visual) */}
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest">
+                Selecione o dia
+              </p>
+              <VisualCalendarPicker
                 value={novaExcecao.data}
-                min={format(new Date(), 'yyyy-MM-dd')}
+                minDate={new Date()}
                 onChange={(iso) => setNovaExcecao(prev => ({ ...prev, data: iso }))}
               />
             </div>
