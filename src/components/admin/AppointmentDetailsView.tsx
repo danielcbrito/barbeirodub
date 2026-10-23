@@ -38,15 +38,10 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { TimelineAppointment } from "@/hooks/useBarberAgenda";
+import type { TimelineAppointment as BaseTimelineAppointment } from "@/hooks/useBarberAgenda";
+import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 
-function WhatsAppBadge() {
-  return (
-    <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-      WhatsApp
-    </span>
-  );
-}
+type TimelineAppointment = BaseTimelineAppointment & { barbeiro_apelido?: string | null };
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useState, useEffect } from "react";
