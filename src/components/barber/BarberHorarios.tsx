@@ -62,25 +62,45 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
   /* ── TanStack Query: configurações de horário ── */
   const { data: queryConfigs = [], isLoading: loading } = useBarberHorarioConfig(barberContext.barbeiroId);
 
-  /* ── Horários da barbearia (unidade/tenant) para validação de limites ── */
+  /* ── Horários da barbearia (unidade/tenant/global) para validação de limites ── */
   const { data: companyHours } = useQuery({
     queryKey: ['company-hours-tenant', barberContext.tenantId],
     staleTime: STALE_TIMES.HORARIOS,
     queryFn: async () => {
+      // 1. Template global como base (todos os 7 dias)
+      const { data: globalData } = await supabase
+        .from('configuracoes_horario')
+        .select('dia_semana, aberto, hora_abertura, hora_fechamento')
+        .order('dia_semana');
+
+      const map = new Map<number, any>();
+      (globalData || []).forEach(r => map.set(r.dia_semana, {
+        dia_semana: r.dia_semana,
+        aberto: r.aberto ?? true,
+        hora_abertura: formatTimeClean(r.hora_abertura, '09:00'),
+        hora_fechamento: formatTimeClean(r.hora_fechamento, '20:00'),
+      }));
+
+      // 2. Sobrepor com tenant/unidade
       if (barberContext.tenantId) {
         const { data: unitData } = await (supabase as any)
           .from('configuracoes_horario_unidade')
           .select('dia_semana, aberto, hora_abertura, hora_fechamento')
           .eq('tenant_id', barberContext.tenantId)
           .order('dia_semana');
-        if (unitData && unitData.length > 0) return unitData;
+        (unitData || []).forEach((r: any) => {
+          if (typeof r.dia_semana === 'number') {
+            map.set(r.dia_semana, {
+              dia_semana: r.dia_semana,
+              aberto: r.aberto ?? true,
+              hora_abertura: formatTimeClean(r.hora_abertura, map.get(r.dia_semana)?.hora_abertura || '09:00'),
+              hora_fechamento: formatTimeClean(r.hora_fechamento, map.get(r.dia_semana)?.hora_fechamento || '20:00'),
+            });
+          }
+        });
       }
-      const { data, error } = await supabase
-        .from('configuracoes_horario')
-        .select('dia_semana, aberto, hora_abertura, hora_fechamento')
-        .order('dia_semana');
-      if (error) throw error;
-      return data ?? [];
+
+      return Array.from(map.values()).sort((a, b) => a.dia_semana - b.dia_semana);
     },
   });
 
@@ -189,9 +209,10 @@ export function BarberHorarios({ barberContext }: BarberHorariosProps) {
       if (!barberCfg.aberto) continue; // Dia fechado para o barbeiro, OK
 
       const companyCfg = companyHours.find(c => c.dia_semana === barberCfg.dia_semana);
-      if (!companyCfg || !companyCfg.aberto) {
+      if (companyCfg && companyCfg.aberto === false) {
         return `${DIAS[barberCfg.dia_semana]}: a barbearia está fechada neste dia. Você não pode abrir.`;
       }
+      if (!companyCfg) continue;
 
       const barberOpenMin = timeToMinutes(barberCfg.hora_abertura, 9 * 60, false);
       const barberCloseMin = timeToMinutes(barberCfg.hora_fechamento, 18 * 60, true);

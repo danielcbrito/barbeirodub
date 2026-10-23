@@ -284,50 +284,90 @@ export default function AdminHorarios({
     return map;
   }, [configs]);
 
-  // Carregar horários da barbearia (unidade/tenant) para validação (quando barbeiro pessoal)
+  // Carregar horários da barbearia (unidade/tenant/global) para validação (quando barbeiro pessoal)
   useEffect(() => {
     if (barbeiroId && !companyMode) {
+      let isMounted = true;
       (async () => {
-        const { tId, uId } = await resolveTenantAndUnit();
-        let list: any[] | null = null;
-        if (uId) {
-          const { data } = await (supabase as any)
-            .from('configuracoes_horario_unidade')
+        try {
+          const { tId, uId } = await resolveTenantAndUnit();
+
+          // 1. Carregar template global (com todos os dias da semana)
+          const { data: globalData } = await supabase
+            .from('configuracoes_horario')
             .select('dia_semana, aberto, hora_abertura, hora_fechamento')
-            .eq('unidade_id', uId)
             .order('dia_semana');
-          if (data && data.length > 0) list = data;
-        }
-        if (!list && tId) {
-          const { data } = await (supabase as any)
-            .from('configuracoes_horario_unidade')
-            .select('dia_semana, aberto, hora_abertura, hora_fechamento')
-            .eq('tenant_id', tId)
-            .order('dia_semana');
-          if (data && data.length > 0) list = data;
-        }
-        if (list && list.length > 0) {
-          setCompanyHoursCache(list.map((c: any) => ({
-            ...c,
-            hora_abertura: formatTimeClean(c.hora_abertura, '09:00'),
-            hora_fechamento: formatTimeClean(c.hora_fechamento, '20:00'),
-          })));
-          return;
-        }
-        supabase
-          .from('configuracoes_horario')
-          .select('dia_semana, aberto, hora_abertura, hora_fechamento')
-          .order('dia_semana')
-          .then(({ data }) => {
-            if (data) {
-              setCompanyHoursCache(data.map((c: any) => ({
-                ...c,
+
+          // 2. Carregar horários específicos do tenant
+          let tenantRows: any[] = [];
+          if (tId) {
+            const { data: tData } = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .select('dia_semana, aberto, hora_abertura, hora_fechamento')
+              .eq('tenant_id', tId)
+              .order('dia_semana');
+            if (tData) tenantRows = tData;
+          }
+
+          // 3. Carregar horários específicos da unidade
+          let unitRows: any[] = [];
+          if (uId) {
+            const { data: uData } = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .select('dia_semana, aberto, hora_abertura, hora_fechamento')
+              .eq('unidade_id', uId)
+              .order('dia_semana');
+            if (uData) unitRows = uData;
+          }
+
+          if (!isMounted) return;
+
+          // Montar mapa consolidado para todos os 7 dias (0 a 6)
+          const map = new Map<number, { dia_semana: number; aberto: boolean; hora_abertura: string; hora_fechamento: string }>();
+
+          // Base: global ou defaults
+          (globalData || []).forEach((c: any) => {
+            if (typeof c.dia_semana === 'number') {
+              map.set(c.dia_semana, {
+                dia_semana: c.dia_semana,
+                aberto: c.aberto ?? true,
                 hora_abertura: formatTimeClean(c.hora_abertura, '09:00'),
                 hora_fechamento: formatTimeClean(c.hora_fechamento, '20:00'),
-              })));
+              });
             }
           });
+
+          // Sobrepor com tenant (se houver)
+          tenantRows.forEach((c: any) => {
+            if (typeof c.dia_semana === 'number') {
+              map.set(c.dia_semana, {
+                dia_semana: c.dia_semana,
+                aberto: c.aberto ?? true,
+                hora_abertura: formatTimeClean(c.hora_abertura, map.get(c.dia_semana)?.hora_abertura || '09:00'),
+                hora_fechamento: formatTimeClean(c.hora_fechamento, map.get(c.dia_semana)?.hora_fechamento || '20:00'),
+              });
+            }
+          });
+
+          // Sobrepor com unidade (se houver, maior prioridade)
+          unitRows.forEach((c: any) => {
+            if (typeof c.dia_semana === 'number') {
+              map.set(c.dia_semana, {
+                dia_semana: c.dia_semana,
+                aberto: c.aberto ?? true,
+                hora_abertura: formatTimeClean(c.hora_abertura, map.get(c.dia_semana)?.hora_abertura || '09:00'),
+                hora_fechamento: formatTimeClean(c.hora_fechamento, map.get(c.dia_semana)?.hora_fechamento || '20:00'),
+              });
+            }
+          });
+
+          const consolidated = Array.from(map.values()).sort((a, b) => a.dia_semana - b.dia_semana);
+          setCompanyHoursCache(consolidated);
+        } catch (err) {
+          console.error('[AdminHorarios] Erro ao carregar companyHoursCache:', err);
+        }
       })();
+      return () => { isMounted = false; };
     }
   }, [barbeiroId, companyMode, tenantId, unidadeId]);
 
@@ -385,38 +425,44 @@ export default function AdminHorarios({
       }
 
       if (!data || data.length === 0) {
-        // Horário da barbearia (unidade / tenant)
+        // Horário da barbearia (unidade / tenant / global)
         const { tId, uId } = await resolveTenantAndUnit();
-        let res: any = null;
+        let unitRows: any[] = [];
+        let tenantRows: any[] = [];
 
         if (uId) {
-          res = await (supabase as any)
+          const resU = await (supabase as any)
             .from('configuracoes_horario_unidade')
             .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
             .eq('unidade_id', uId)
             .order('dia_semana');
+          if (resU?.data) unitRows = resU.data;
         }
 
-        if ((!res || !res.data || res.data.length === 0) && tId) {
-          res = await (supabase as any)
+        if (tId) {
+          const resT = await (supabase as any)
             .from('configuracoes_horario_unidade')
             .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
             .eq('tenant_id', tId)
             .order('dia_semana');
+          if (resT?.data) tenantRows = resT.data;
         }
 
-        if (res?.data && res.data.length > 0) {
-          data = res.data;
-          error = res.error;
-        } else {
-          // Se ainda não há linhas na barbearia, exibe defaults baseados no template global
-          const defaultRes = await supabase
-            .from('configuracoes_horario')
-            .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos')
-            .order('dia_semana');
-          data = defaultRes.data;
-          error = defaultRes.error;
-        }
+        // Carrega template global como base para todos os 7 dias
+        const defaultRes = await supabase
+          .from('configuracoes_horario')
+          .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos')
+          .order('dia_semana');
+        if (defaultRes.error) error = defaultRes.error;
+
+        const globalMap = new Map<number, any>();
+        (defaultRes.data || []).forEach(r => globalMap.set(r.dia_semana, r));
+        // Sobrepor com tenant (se houver)
+        tenantRows.forEach(r => globalMap.set(r.dia_semana, { ...globalMap.get(r.dia_semana), ...r }));
+        // Sobrepor com unidade (se houver)
+        unitRows.forEach(r => globalMap.set(r.dia_semana, { ...globalMap.get(r.dia_semana), ...r }));
+
+        data = Array.from(globalMap.values()).sort((a, b) => a.dia_semana - b.dia_semana);
       }
 
       if (error) throw error;
@@ -467,9 +513,10 @@ export default function AdminHorarios({
     for (const cfg of configsToValidate) {
       if (!cfg.aberto) continue;
       const company = companyHoursCache.find(c => c.dia_semana === cfg.dia_semana);
-      if (!company || !company.aberto) {
+      if (company && company.aberto === false) {
         return `${DIAS[cfg.dia_semana]}: a barbearia está fechada neste dia.`;
       }
+      if (!company) continue;
       const barberOpenMin = timeToMinutes(cfg.hora_abertura, 9 * 60, false);
       const barberCloseMin = timeToMinutes(cfg.hora_fechamento, 18 * 60, true);
       const companyOpenMin = timeToMinutes(company.hora_abertura, 9 * 60, false);
