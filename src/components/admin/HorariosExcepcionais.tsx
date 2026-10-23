@@ -329,22 +329,21 @@ export default function HorariosExcepcionais({ barbeiroId }: HorariosExcepcionai
             className="flex flex-col min-h-[calc(100vh-200px)]"
           >
             <div className="flex-1 space-y-6 pb-24">
-              {/* Header com botão voltar */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setScreen('list')}
-                  className="w-9 h-9 rounded-full border border-border/40 bg-muted/10 flex items-center justify-center hover:bg-muted/30 active:scale-95 transition-all text-foreground"
-                  aria-label="Voltar para a lista"
-                >
-                  <ChevronLeft className="w-4 h-4 stroke-[2.2]" />
-                </button>
+              {/* Header: Nova Exceção */}
+              <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-semibold text-foreground">Nova Exceção</h3>
                   <p className="text-xs font-extralight text-muted-foreground">
                     Selecione o dia e configure os horários.
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setScreen('list')}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors font-medium py-1 px-2.5 rounded-lg hover:bg-muted/30"
+                >
+                  Cancelar
+                </button>
               </div>
 
               {/* ── Data (Calendário Visual) ── */}
