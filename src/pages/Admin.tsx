@@ -502,7 +502,7 @@ const Admin = () => {
                 } />
                 <Route path="avaliacoes" element={<AdminAvaliacoes />} />
                 <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId || (adminContext?.tenantBarberIds && adminContext.tenantBarberIds.length > 0 ? adminContext.tenantBarberIds[0] : null)} userName={adminContext?.apelido || "Admin"} basePath="/admin" />} />
-                <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext?.barbeiroId ?? null} basePath="/admin/perfil" />} />
+                <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext?.barbeiroId ?? null} tenantId={adminContext?.tenantId} basePath="/admin/perfil" />} />
                 <Route path="servicos/*" element={<AdminServicos />} />
                 <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />
                 <Route path="promocoes" element={<AdminCampanhas basePath="/admin" />} />
@@ -622,7 +622,7 @@ const Admin = () => {
                   />
                   <Route path="avaliacoes" element={<AdminAvaliacoes />} />
                   <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId} userName={adminContext?.apelido || "Admin"} />} />
-                  <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} basePath="/admin/perfil" />} />
+                  <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} tenantId={adminContext.tenantId} basePath="/admin/perfil" />} />
                   <Route path="servicos/*" element={<AdminServicos />} />
                   <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />
                   <Route path="promocoes" element={<AdminCampanhas basePath="/admin" />} />
