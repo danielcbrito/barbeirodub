@@ -38,6 +38,15 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import type { TimelineAppointment } from "@/hooks/useBarberAgenda";
+
+function WhatsAppBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+      WhatsApp
+    </span>
+  );
+}
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useState, useEffect } from "react";
