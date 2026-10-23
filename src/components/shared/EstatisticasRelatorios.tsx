@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { STALE_TIMES } from "@/lib/queryConstants";
+import { useBarberReportData } from "@/hooks/useBarberReportData";
+import { brazilDate, monthRevenue, serviceRevenue, revenueComparison, performanceMetrics } from "@/lib/barberReportMetrics";
+import { Button } from "@/components/ui/button";
 import {
   format,
   startOfMonth,
@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Sparkles,
   ChevronRight as ChevronIcon,
   RefreshCw,
   X,
@@ -72,7 +71,6 @@ export function EstatisticasRelatorios({
 
   // Referência do mês selecionado — padrão: mês atual
   const [selectedMonth, setSelectedMonth] = useState<Date>(() => startOfMonth(now));
-  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [monthMenuOpen, setMonthMenuOpen] = useState(false);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [tempGoalInput, setTempGoalInput] = useState("");
@@ -106,188 +104,11 @@ export function EstatisticasRelatorios({
     return list;
   }, [now]);
 
-  // Resolver IDs de barbeiros do tenant para relatórios globais
-  const { data: tenantBarberIds } = useQuery({
-    queryKey: ["tenant-barber-ids", tenantId],
-    queryFn: async () => {
-      if (!tenantId) return [];
-      const { data } = await supabase
-        .from("barbeiros")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .eq("ativo", true)
-        .is("deleted_at", null);
-      return (data || []).map((b) => b.id);
-    },
-    enabled: isGlobal && !!tenantId,
-    staleTime: STALE_TIMES.PERFIL_BARBEIRO,
-  });
-
-  // Janela de datas do mês selecionado
-  const sixMonthsStart = useMemo(
-    () => format(subMonths(startOfMonth(selectedMonth), 5), "yyyy-MM-01"),
-    [selectedMonth]
-  );
-  const currentMonthStart = useMemo(
-    () => format(startOfMonth(selectedMonth), "yyyy-MM-dd"),
-    [selectedMonth]
-  );
-  const currentMonthEnd = useMemo(
-    () => format(endOfMonth(selectedMonth), "yyyy-MM-dd"),
-    [selectedMonth]
-  );
-  const prevMonthStart = useMemo(
-    () => format(startOfMonth(subMonths(selectedMonth, 1)), "yyyy-MM-dd"),
-    [selectedMonth]
-  );
-  const prevMonthEnd = useMemo(
-    () => format(endOfMonth(subMonths(selectedMonth, 1)), "yyyy-MM-dd"),
-    [selectedMonth]
-  );
-
-  const isReady = !(isGlobal && tenantId && tenantBarberIds === undefined);
-
-  // ═══════════════════════════════════════════════════════
-  // QUERY PRINCIPAL DE DADOS CONSOLIDADOS
-  // ═══════════════════════════════════════════════════════
-  const { data: dashboardData, isLoading: loading, refetch } = useQuery({
-    queryKey: [
-      "relatorios-fintech-dub",
-      barbeiroId || null,
-      tenantId || null,
-      isGlobal,
-      format(selectedMonth, "yyyy-MM"),
-    ],
-    queryFn: async () => {
-      const resolvedBarberIds = tenantBarberIds || null;
-
-      // 1. Agendamentos
-      let aptsQuery = supabase
-        .from("agendamentos")
-        .select("id, preco, status, data, hora, is_free, user_id, servico_id, observacoes, servico:servicos(nome)")
-        .gte("data", sixMonthsStart)
-        .lte("data", currentMonthEnd)
-        .limit(10000);
-
-      if (barbeiroId) {
-        aptsQuery = aptsQuery.eq("barbeiro_id", barbeiroId);
-      } else if (isGlobal && resolvedBarberIds && resolvedBarberIds.length > 0) {
-        aptsQuery = aptsQuery.in("barbeiro_id", resolvedBarberIds);
-      }
-
-      // 2. Histórico de clientes
-      let prevClientsQuery = supabase
-        .from("agendamentos")
-        .select("user_id")
-        .lt("data", currentMonthStart)
-        .in("status", ["completed", "confirmed", "pending"])
-        .limit(10000);
-
-      if (barbeiroId) {
-        prevClientsQuery = prevClientsQuery.eq("barbeiro_id", barbeiroId);
-      } else if (isGlobal && resolvedBarberIds && resolvedBarberIds.length > 0) {
-        prevClientsQuery = prevClientsQuery.in("barbeiro_id", resolvedBarberIds);
-      }
-
-      // 3. Pagamentos de planos em balcão/dinheiro
-      let planCashQuery = supabase
-        .from("pagamentos_plano_barbearia")
-        .select("valor, created_at")
-        .gte("created_at", `${sixMonthsStart}T00:00:00`)
-        .lte("created_at", `${currentMonthEnd}T23:59:59`);
-
-      if (barbeiroId) {
-        planCashQuery = planCashQuery.eq("barbeiro_id", barbeiroId);
-      } else if (isGlobal && resolvedBarberIds && resolvedBarberIds.length > 0) {
-        planCashQuery = planCashQuery.in("barbeiro_id", resolvedBarberIds);
-      }
-
-      // 4. Assinaturas vinculadas para filtro de PIX
-      const subsQuery = barbeiroId
-        ? supabase.from("assinaturas").select("id").eq("barbeiro_id", barbeiroId)
-        : resolvedBarberIds && resolvedBarberIds.length > 0
-        ? supabase.from("assinaturas").select("id").in("barbeiro_id", resolvedBarberIds)
-        : Promise.resolve({ data: null } as any);
-
-      // 5. Pagamentos de planos via PIX
-      const planPixQuery = supabase
-        .from("pagamentos")
-        .select("valor, assinatura_id, created_at")
-        .not("assinatura_id", "is", null)
-        .is("agendamento_id", null)
-        .eq("status", "paid")
-        .gte("created_at", `${sixMonthsStart}T00:00:00`)
-        .lte("created_at", `${currentMonthEnd}T23:59:59`);
-
-      // 6. Assinaturas ativas no momento
-      let activeSubsQuery = supabase
-        .from("assinaturas")
-        .select("id, user_id, valor_mensal, status")
-        .in("status", ["active", "pending_cash"]);
-
-      if (barbeiroId) {
-        activeSubsQuery = activeSubsQuery.eq("barbeiro_id", barbeiroId);
-      } else if (resolvedBarberIds && resolvedBarberIds.length > 0) {
-        activeSubsQuery = activeSubsQuery.in("barbeiro_id", resolvedBarberIds);
-      }
-
-      // 7. Avaliações reais dos clientes
-      let reviewsQuery: any = supabase
-        .from("barbeiro_avaliacoes")
-        .select("rating, created_at")
-        .limit(1000);
-      if (barbeiroId) {
-        reviewsQuery = reviewsQuery.eq("barber_id", barbeiroId);
-      } else if (resolvedBarberIds && resolvedBarberIds.length > 0) {
-        reviewsQuery = reviewsQuery.in("barber_id", resolvedBarberIds);
-      }
-
-      const [
-        aptsRes,
-        prevClientsRes,
-        planCashRes,
-        subsRes,
-        planPixRes,
-        activeSubsRes,
-        reviewsRes,
-      ] = await Promise.all([
-        aptsQuery,
-        prevClientsQuery,
-        planCashQuery,
-        subsQuery,
-        planPixQuery,
-        activeSubsQuery,
-        reviewsQuery.then((r: any) => r).catch(() => ({ data: [] })),
-      ]);
-
-      const subIdSet = subsRes?.data
-        ? new Set((subsRes.data as any[]).map((s: any) => s.id))
-        : null;
-
-      const isScoped = !!barbeiroId || (isGlobal && !!tenantId);
-      const allPix = (planPixRes.data || []).filter((p: any) =>
-        subIdSet ? subIdSet.has(p.assinatura_id) : isScoped ? false : true
-      );
-
-      const allCash = planCashRes.data || [];
-      const allAppointments = aptsRes.data || [];
-      const allReviews = (reviewsRes?.data as any[]) || [];
-      const previousClientIdsSet = new Set(
-        (prevClientsRes.data || []).map((c) => c.user_id)
-      );
-
-      return {
-        allAppointments,
-        allCashPlans: allCash,
-        allPixPlans: allPix,
-        activeSubscriptions: activeSubsRes.data || [],
-        allReviews,
-        previousClientIdsSet,
-      };
-    },
-    enabled: isReady,
-    staleTime: STALE_TIMES.RELATORIOS,
-  });
+  const currentMonthStart = format(startOfMonth(selectedMonth), "yyyy-MM-dd");
+  const currentMonthEnd = format(endOfMonth(selectedMonth), "yyyy-MM-dd");
+  const prevMonthStart = format(startOfMonth(subMonths(selectedMonth, 1)), "yyyy-MM-dd");
+  const prevMonthEnd = format(endOfMonth(subMonths(selectedMonth, 1)), "yyyy-MM-dd");
+  const { data: dashboardData, isLoading: loading, isError, error, refetch } = useBarberReportData(barbeiroId, tenantId);
 
   // Agendamentos do mês selecionado
   const currentMonthAppts = useMemo(() => {
@@ -308,50 +129,14 @@ export function EstatisticasRelatorios({
   // ═══════════════════════════════════════════════════════
   // CÁLCULOS: RECEITA & CRESCIMENTO
   // ═══════════════════════════════════════════════════════
-  const servicesRevCur = useMemo(() => {
-    return currentMonthAppts
-      .filter((a) => a.status === "completed")
-      .reduce((s, a) => s + Number(a.preco || 0), 0);
-  }, [currentMonthAppts]);
-
-  const servicesRevPrev = useMemo(() => {
-    return prevMonthAppts
-      .filter((a) => a.status === "completed")
-      .reduce((s, a) => s + Number(a.preco || 0), 0);
-  }, [prevMonthAppts]);
-
-  const plansRevCur = useMemo(() => {
-    const cash = (dashboardData?.allCashPlans || [])
-      .filter((p) => p.created_at >= `${currentMonthStart}T00:00:00` && p.created_at <= `${currentMonthEnd}T23:59:59`)
-      .reduce((s, p) => s + Number(p.valor || 0), 0);
-
-    const pix = (dashboardData?.allPixPlans || [])
-      .filter((p) => p.created_at >= `${currentMonthStart}T00:00:00` && p.created_at <= `${currentMonthEnd}T23:59:59`)
-      .reduce((s, p) => s + Number(p.valor || 0), 0);
-
-    return cash + pix;
-  }, [dashboardData?.allCashPlans, dashboardData?.allPixPlans, currentMonthStart, currentMonthEnd]);
-
-  const plansRevPrev = useMemo(() => {
-    const cash = (dashboardData?.allCashPlans || [])
-      .filter((p) => p.created_at >= `${prevMonthStart}T00:00:00` && p.created_at <= `${prevMonthEnd}T23:59:59`)
-      .reduce((s, p) => s + Number(p.valor || 0), 0);
-
-    const pix = (dashboardData?.allPixPlans || [])
-      .filter((p) => p.created_at >= `${prevMonthStart}T00:00:00` && p.created_at <= `${prevMonthEnd}T23:59:59`)
-      .reduce((s, p) => s + Number(p.valor || 0), 0);
-
-    return cash + pix;
-  }, [dashboardData?.allCashPlans, dashboardData?.allPixPlans, prevMonthStart, prevMonthEnd]);
-
-  const totalRevenueCur = servicesRevCur + plansRevCur;
-  const totalRevenuePrev = servicesRevPrev + plansRevPrev;
-  const revenueDelta = totalRevenueCur - totalRevenuePrev;
-  const revenueGrowthPercent = useMemo(() => {
-    if (totalRevenuePrev === 0) return totalRevenueCur > 0 ? 100 : 0;
-    const pct = ((totalRevenueCur - totalRevenuePrev) / totalRevenuePrev) * 100;
-    return Number(pct.toFixed(1));
-  }, [totalRevenueCur, totalRevenuePrev]);
+  const currentRevenue = monthRevenue(dashboardData, format(selectedMonth, "yyyy-MM"));
+  const previousRevenue = monthRevenue(dashboardData, format(subMonths(selectedMonth, 1), "yyyy-MM"));
+  const servicesRevCur = currentRevenue.services;
+  const plansRevCur = currentRevenue.plans;
+  const totalRevenueCur = currentRevenue.total;
+  const comparison = revenueComparison(totalRevenueCur, previousRevenue.total);
+  const revenueDelta = comparison.delta;
+  const revenueGrowthPercent = comparison.percent;
 
   // ═══════════════════════════════════════════════════════
   // AGENDAMENTOS & TAXAS OPERACIONAIS
@@ -388,111 +173,21 @@ export function EstatisticasRelatorios({
   // Mapeia: Conclusão de Cortes, Avaliações Reais, Evolução e Volume
   // Verde (>= 80): Excelente | Laranja (60 a 79): Muito Bom | Vermelho (< 60): Atenção
   // ═══════════════════════════════════════════════════════
-  const scoreAnalytics = useMemo(() => {
-    // 1. Taxa de Conclusão de Cortes (até 40 pontos)
-    let completionPts = 36;
-    if (totalAppointmentsCount > 0) {
-      completionPts = Math.min(40, Math.round((completedApptsCount / totalAppointmentsCount) * 40));
-    }
-
-    // 2. Avaliações Reais dos Clientes (até 25 pontos)
-    const reviews: any[] = (dashboardData as any)?.allReviews || [];
-    let ratingPts = 24; // Padrão de entrada para novos barbeiros (~4.8)
-    let avgRating = 4.8;
-    if (reviews.length > 0) {
-      const sum = reviews.reduce((acc: number, r: any) => acc + (Number(r.rating) || 5), 0);
-      avgRating = Number((sum / reviews.length).toFixed(1));
-      ratingPts = Math.min(25, Math.round((avgRating / 5) * 25));
-    }
-
-    // 3. Progresso e Crescimento de Faturamento & Agendamentos (até 20 pontos)
-    let growthPts = 16;
-    if (revenueGrowthPercent >= 10) growthPts = 20;
-    else if (revenueGrowthPercent >= 0) growthPts = 17;
-    else if (revenueGrowthPercent >= -10) growthPts = 13;
-    else if (revenueGrowthPercent >= -25) growthPts = 9;
-    else growthPts = 5;
-
-    // 4. Volume e Consistência Operacional (até 15 pontos)
-    let volumePts = 12;
-    if (completedApptsCount >= 40) volumePts = 15;
-    else if (completedApptsCount >= 20) volumePts = 13;
-    else if (completedApptsCount >= 8) volumePts = 11;
-    else if (completedApptsCount > 0) volumePts = 9;
-
-    const totalScore = Math.max(0, Math.min(100, completionPts + ratingPts + growthPts + volumePts));
-
-    // Perímetro do semicírculo com R = 142 (π * 142 ≈ 446.1px)
-    const trackLength = 446.1;
-    const fillDashoffset = trackLength * (1 - totalScore / 100);
-
-    if (totalScore >= 80) {
-      return {
-        score: totalScore,
-        tier: "excelente" as const,
-        title: "Excelente!",
-        solidColor: "#34C759", // Verde Apple sólido
-        badgeBg: "bg-[#34C759] text-white",
-        textColor: "text-[#34C759]",
-        trackLength,
-        fillDashoffset,
-      };
-    } else if (totalScore >= 60) {
-      return {
-        score: totalScore,
-        tier: "moderado" as const,
-        title: "Muito Bom!",
-        solidColor: "#FF9500", // Laranja Apple sólido
-        badgeBg: "bg-[#FF9500] text-white",
-        textColor: "text-[#FF9500]",
-        trackLength,
-        fillDashoffset,
-      };
-    } else {
-      return {
-        score: totalScore,
-        tier: "critico" as const,
-        title: "Atenção!",
-        solidColor: "#FF3B30", // Vermelho Apple sólido
-        badgeBg: "bg-[#FF3B30] text-white",
-        textColor: "text-[#FF3B30]",
-        trackLength,
-        fillDashoffset,
-      };
-    }
-  }, [
-    completedApptsCount,
-    totalAppointmentsCount,
-    (dashboardData as any)?.allReviews,
-    revenueGrowthPercent,
-  ]);
+  const performance = useMemo(() => performanceMetrics(dashboardData, format(selectedMonth, "yyyy-MM"), brazilDate(new Date())), [dashboardData, selectedMonth]);
+  const scoreAnalytics = {
+    score: performance.score,
+    title: performance.score === null ? "Sem dados" : performance.score >= 80 ? "Excelente" : performance.score >= 60 ? "Em evolução" : "Atenção",
+    solidColor: "hsl(var(--foreground))",
+    badgeBg: "bg-foreground text-background",
+    trackLength: 446.1,
+    fillDashoffset: 446.1 * (1 - (performance.score ?? 0) / 100),
+  };
 
   // ═══════════════════════════════════════════════════════
   // CÁLCULO DOS 6 MESES E CURVA SPLINE (IMAGEM 2)
   // ═══════════════════════════════════════════════════════
   const chartPointsData = useMemo(() => {
-    const allApts = dashboardData?.allAppointments || [];
-    const allCash = dashboardData?.allCashPlans || [];
-    const allPix = dashboardData?.allPixPlans || [];
-
-    const monthRevenues = availableMonths.map((m) => {
-      const mStart = format(startOfMonth(m.date), "yyyy-MM-dd");
-      const mEnd = format(endOfMonth(m.date), "yyyy-MM-dd");
-
-      const sRev = allApts
-        .filter((a) => a.data >= mStart && a.data <= mEnd && a.status === "completed")
-        .reduce((s, a) => s + Number(a.preco || 0), 0);
-
-      const cPlan = allCash
-        .filter((p) => p.created_at >= `${mStart}T00:00:00` && p.created_at <= `${mEnd}T23:59:59`)
-        .reduce((s, p) => s + Number(p.valor || 0), 0);
-
-      const pPlan = allPix
-        .filter((p) => p.created_at >= `${mStart}T00:00:00` && p.created_at <= `${mEnd}T23:59:59`)
-        .reduce((s, p) => s + Number(p.valor || 0), 0);
-
-      return sRev + cPlan + pPlan;
-    });
+    const monthRevenues = availableMonths.map(m => monthRevenue(dashboardData, m.key).total);
 
     const effectiveValues = monthRevenues;
 
@@ -576,7 +271,7 @@ export function EstatisticasRelatorios({
     const text =
       `💈 *Relatório Barbearia DUB - ${mesNome.toUpperCase()}*\n\n` +
       `💰 *Faturamento Total:* ${formatMoney(totalRevenueCur)}\n` +
-      `📈 *Evolução:* ${revenueGrowthPercent >= 0 ? `+${revenueGrowthPercent}%` : `${revenueGrowthPercent}%`}\n\n` +
+      `📈 *Evolução:* ${(revenueGrowthPercent ?? 0) >= 0 ? (revenueGrowthPercent === null ? "Sem base" : `+${revenueGrowthPercent}%`) : (revenueGrowthPercent === null ? "Sem base" : `${revenueGrowthPercent}%`)}\n\n` +
       `✂️ *Atendimentos:* ${totalAppointmentsCount} no total\n` +
       `✅ *Concluídos:* ${completedApptsCount}\n` +
       `⏱️ *Confirmados:* ${confirmedApptsCount}\n` +
@@ -620,7 +315,7 @@ export function EstatisticasRelatorios({
           a.hora || "",
           a.user_id || "",
           a.servico?.nome || "Serviço",
-          Number(a.preco || 0).toFixed(2),
+          serviceRevenue(a).toFixed(2),
           a.status,
         ]),
       ];
@@ -646,8 +341,9 @@ export function EstatisticasRelatorios({
   // Atualizar dados do servidor
   const handleRefresh = async () => {
     toast.info("Atualizando dados...");
-    await refetch();
-    toast.success("Dados sincronizados!");
+    const result = await refetch();
+    if (result.error) toast.error("Não foi possível atualizar os indicadores.");
+    else toast.success("Dados sincronizados!");
   };
 
   // ═══════════════════════════════════════════════════════
@@ -691,7 +387,12 @@ export function EstatisticasRelatorios({
 
       {/* ═══ CONTEÚDO PRINCIPAL (100% MINIMALISTA, SEM QUADRADOS PESADOS) ═══ */}
       <main className="max-w-md mx-auto px-4 pt-3 space-y-6 w-full">
-        {loading ? (
+        {isError ? (
+          <div className="py-12 space-y-4 text-center">
+            <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Não foi possível carregar os indicadores."}</p>
+            <Button variant="outline" onClick={() => refetch()}>Tentar novamente</Button>
+          </div>
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center min-h-[360px] gap-2.5">
             <Loader2 className="w-7 h-7 animate-spin text-muted-foreground" />
             <span className="text-[13px] text-muted-foreground">
@@ -753,26 +454,24 @@ export function EstatisticasRelatorios({
                       scoreAnalytics.badgeBg
                     )}
                   >
-                    {scoreAnalytics.score} pts
+                    {scoreAnalytics.score === null ? "—" : `${scoreAnalytics.score} pts`}
                   </div>
                 </div>
               </div>
 
-              {/* Pílula de Otimização AI: Em Breve (Translúcida, Minimalista e Desabilitada) */}
-              <div className="mt-4">
-                <div className="p-3.5 px-4 bg-secondary/30 rounded-full border border-border/25 flex items-center justify-between opacity-60 select-none cursor-default">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-foreground/80 text-background flex items-center justify-center shrink-0">
-                      <Sparkles className="w-4 h-4 fill-current" />
+              <div className="mt-4 space-y-3">
+                <p className="text-xs text-muted-foreground text-center">Cobertura dos indicadores: {performance.coverage}% · {format(selectedMonth, "MMMM yyyy", { locale: ptBR })}</p>
+                <dl className="divide-y divide-border">
+                  {performance.factors.map(factor => (
+                    <div key={factor.label} className="py-3">
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <dt>{factor.label}</dt><dd className="tabular-nums shrink-0">{factor.value === null ? "Sem dados" : `${Math.round(factor.value)} / 100`}</dd>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{factor.detail}</p>
                     </div>
-                    <span className="text-[12px] font-medium text-foreground/80 truncate">
-                      Diagnóstico inteligente com IA
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-foreground/10 text-foreground/70 dark:bg-white/10 dark:text-white/70 shrink-0 ml-2">
-                    Em breve
-                  </span>
-                </div>
+                  ))}
+                </dl>
+                <p className="text-xs text-muted-foreground">Preço acessível, ocupação da agenda e uso do aplicativo: sem dados suficientes para avaliação.</p>
               </div>
             </section>
 
@@ -816,7 +515,7 @@ export function EstatisticasRelatorios({
                           )}
                         >
                           <span>{m.fullLabel}</span>
-                          {isSel && <div className="w-1.5 h-1.5 rounded-full bg-[#00C26F]" />}
+                          {isSel && <div className="w-1.5 h-1.5 rounded-full bg-success" />}
                         </button>
                       );
                     })}
@@ -833,15 +532,15 @@ export function EstatisticasRelatorios({
 
                   <span
                     className={cn(
-                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-white text-[11.5px] font-semibold tabular-nums shadow-xs transition-colors",
-                      revenueGrowthPercent > 0
-                        ? "bg-[#00C26F]"
-                        : revenueGrowthPercent < 0
-                          ? "bg-[#FF3B30]"
+                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-background text-[11.5px] font-semibold tabular-nums shadow-xs transition-colors",
+                      (revenueGrowthPercent ?? 0) > 0
+                        ? "bg-success"
+                        : (revenueGrowthPercent ?? 0) < 0
+                          ? "bg-destructive"
                           : "bg-muted-foreground/30 text-foreground"
                     )}
                   >
-                    {revenueGrowthPercent > 0 ? `+${revenueGrowthPercent}%` : `${revenueGrowthPercent}%`}
+                    {(revenueGrowthPercent ?? 0) > 0 ? (revenueGrowthPercent === null ? "Sem base" : `+${revenueGrowthPercent}%`) : (revenueGrowthPercent === null ? "Sem base" : `${revenueGrowthPercent}%`)}
                   </span>
                 </div>
 
@@ -1066,7 +765,7 @@ export function EstatisticasRelatorios({
                   <span className="text-[10.5px] text-muted-foreground font-medium block">
                     Concluídos
                   </span>
-                  <span className="text-[15px] font-semibold text-[#00C26F] tabular-nums mt-0.5 block">
+                  <span className="text-[15px] font-semibold text-success tabular-nums mt-0.5 block">
                     {completedApptsCount}
                   </span>
                 </div>
@@ -1089,6 +788,13 @@ export function EstatisticasRelatorios({
                   </span>
                 </div>
               </div>
+            </section>
+            <section className="pt-4 border-t border-border space-y-4">
+              <h3 className="text-sm font-semibold">Desempenho semanal</h3>
+              {performance.weeks.map(week => <div key={week.week} className="flex justify-between gap-3 text-xs"><span>Semana {week.week}</span><span className="text-muted-foreground tabular-nums">{week.appointments} agendados · {week.completed} concluídos</span></div>)}
+              <h3 className="text-sm font-semibold pt-2">Desempenho diário</h3>
+              {performance.daily.length === 0 && <p className="text-xs text-muted-foreground">Sem atendimentos no período.</p>}
+              {performance.daily.map(day => <div key={day.date} className="flex flex-wrap justify-between gap-2 text-xs"><span>{format(new Date(`${day.date}T12:00:00`), "dd/MM")}</span><span className="text-muted-foreground tabular-nums">{day.appointments} agendados · {day.completed} concluídos · {formatMoney(day.revenue)}</span></div>)}
             </section>
           </>
         )}
@@ -1143,73 +849,6 @@ export function EstatisticasRelatorios({
           <Download className="w-5 h-5 stroke-[2.2]" />
         </button>
       </div>
-
-      {/* ═══ MODAL RECOMENDAÇÕES INTELIGENTES AI ═══ */}
-      {aiModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-card w-full max-w-md rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl border border-border/30 space-y-4 animate-in slide-in-from-bottom duration-200 text-left">
-            <div className="flex items-center justify-between pb-2 border-b border-border/20">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 fill-current" />
-                </div>
-                <div>
-                  <h3 className="text-[16px] font-semibold text-foreground tracking-tight">
-                    Diagnóstico Estratégico AI
-                  </h3>
-                  <span className="text-[11.5px] text-muted-foreground">
-                    Insights inteligentes para barbearia
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAiModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-secondary/80 flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-90 transition-all cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-[12.5px]">
-              <div className="p-3.5 rounded-2xl bg-secondary/35 border border-border/30">
-                <span className="font-semibold text-foreground block mb-0.5">
-                  1. Otimização de Horários de Pico
-                </span>
-                <p className="text-muted-foreground leading-relaxed">
-                  Quintas, sextas e sábados concentram a maior parte do faturamento. Considere abrir horários de encaixe nesses dias para maximizar sua rentabilidade.
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-secondary/35 border border-border/30">
-                <span className="font-semibold text-foreground block mb-0.5">
-                  2. Elevação do Ticket Médio
-                </span>
-                <p className="text-muted-foreground leading-relaxed">
-                  Oferecer acabamento de barba ou sobrancelha junto ao corte eleva seu faturamento médio por cliente em até 25% com o mesmo tempo de cadeira.
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-secondary/35 border border-border/30">
-                <span className="font-semibold text-foreground block mb-0.5">
-                  3. Planos Recorrentes Dub
-                </span>
-                <p className="text-muted-foreground leading-relaxed">
-                  Clientes cadastrados em planos mensais garantem receita previsível mesmo em semanas de menor movimento na barbearia.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setAiModalOpen(false)}
-              className="w-full h-11 rounded-full bg-foreground text-background font-semibold text-[13px] hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ═══ GAVETA PADRÃO DEFINIR META MENSAL (APPLE HIG / APP STANDARD) ═══ */}
       {goalModalOpen && (

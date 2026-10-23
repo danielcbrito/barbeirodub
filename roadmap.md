@@ -1,5 +1,11 @@
 # Payment provider cleanup
 
+## Report and performance consistency
+- [ ] Diagnose home/report revenue differences using live data and active callers.
+- [ ] Unify revenue and period comparisons for all barber/admin profiles.
+- [ ] Replace partial performance scoring with measurable multi-factor evaluation and explicit missing-data states.
+- [ ] Test shared rules and document findings and verification limits.
+
 - [x] Audit repository frontend, functions and public database function references.
 - [x] Remove operational Asaas API calls from repository; preserve financial history and existing Woovi/Efí flows.
 - [x] Correct charge confirmation, renewal retry, trusted prices and legacy QR contract; run 8 unit tests and check public preview.
