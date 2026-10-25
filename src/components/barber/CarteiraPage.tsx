@@ -20,8 +20,6 @@ import {
   Bell,
   X,
   Check,
-  Scissors,
-  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -905,12 +903,6 @@ export function CarteiraPage({
     return `R$ ${withdrawValue}`;
   }, [withdrawValue]);
 
-  const [changePinOpen, setChangePinOpen] = useState(false);
-  const [changeCurrentDigits, setChangeCurrentDigits] = useState<string[]>(emptyPin);
-  const [changeNewDigits, setChangeNewDigits] = useState<string[]>(emptyPin);
-  const [changeConfirmDigits, setChangeConfirmDigits] = useState<string[]>(emptyPin);
-  const [changePinError, setChangePinError] = useState<string | null>(null);
-  const [savingChangePin, setSavingChangePin] = useState(false);
 
   const [savingSettings, setSavingSettings] = useState(false);
   const [autoEnabled, setAutoEnabled] = useState(false);
@@ -931,103 +923,10 @@ export function CarteiraPage({
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
-  // Resumo financeiro: Cortes + Taxas de cancelamento separados, Total geral
-  const financialSummary = useMemo(() => {
-    let cortesCents = 0;
-    let taxasCents = 0;
-
-    transactions.forEach((t) => {
-      if (t.type === "deposit" && !t.blocked && t.status !== "Estornado") {
-        if (t.category === "cancellation_fee") {
-          taxasCents += t.value_centavos;
-        } else {
-          cortesCents += t.value_centavos;
-        }
-      }
-    });
-
-    return {
-      cortesCents,
-      taxasCents,
-      totalGeralCents: cortesCents + taxasCents,
-    };
-  }, [transactions]);
 
   const firstName = (barbeiroNome ?? "").split(" ")[0] || "Barbeiro";
   const hasSubaccount = Boolean(barber?.woovi_pix_key);
 
-  const resetChangePinForm = () => {
-    setChangeCurrentDigits([...emptyPin]);
-    setChangeNewDigits([...emptyPin]);
-    setChangeConfirmDigits([...emptyPin]);
-    setChangePinError(null);
-  };
-
-  const openChangePin = async () => {
-    try {
-      await loadPinStatus();
-    } catch (err) {
-      console.error("[woovi] pin status:", err);
-    }
-    resetChangePinForm();
-    setChangePinOpen(true);
-  };
-
-  const submitChangePin = async () => {
-    if (savingChangePin) return;
-    const current = changeCurrentDigits.join("");
-    const next = changeNewDigits.join("");
-    const confirm = changeConfirmDigits.join("");
-
-    if (!hasPin) {
-      setChangePinError("Nenhum PIN cadastrado. Faça um saque para criar.");
-      return;
-    }
-    if (current.length !== 4 || next.length !== 4 || confirm.length !== 4) {
-      setChangePinError("Preencha todos os campos com 4 dígitos");
-      return;
-    }
-    if (next !== confirm) {
-      setChangePinError("O novo PIN e a confirmação não conferem");
-      return;
-    }
-    if (next === current) {
-      setChangePinError("O novo PIN deve ser diferente do atual");
-      return;
-    }
-
-    setSavingChangePin(true);
-    try {
-      const { error } = await supabase.rpc("set_financial_pin", {
-        p_new_pin: next,
-        p_current_pin: current,
-      });
-      if (error) {
-        const msg = (error.message || "").toLowerCase();
-        if (msg.includes("current_pin_invalid")) {
-          setChangePinError("PIN atual incorreto");
-          setChangeCurrentDigits([...emptyPin]);
-        } else if (msg.includes("invalid_pin_format")) {
-          setChangePinError("PIN deve ter 4 dígitos");
-        } else {
-          setChangePinError("Erro ao alterar PIN");
-        }
-        return;
-      }
-      setHasPin(true);
-      const { data: auth } = await supabase.auth.getUser();
-      if (auth?.user?.id) {
-        await saveFinancialPin(auth.user.id, next, barbeiroId);
-      }
-      toast.success("PIN financeiro alterado com sucesso");
-      resetChangePinForm();
-      setChangePinOpen(false);
-    } catch (err) {
-      setChangePinError((err as Error).message || "Erro ao alterar PIN");
-    } finally {
-      setSavingChangePin(false);
-    }
-  };
 
   const loadBarber = useCallback(async () => {
     try {
@@ -2608,116 +2507,25 @@ export function CarteiraPage({
                 </div>
               </div>
 
-              {/* 3. CONFIGURAÇÕES & PREFERÊNCIAS (Apple Inset Grouped List) */}
-              <div className="rounded-2xl border border-border/40 bg-card overflow-hidden divide-y divide-border/30 shadow-xs">
-                {/* Linha: Repasse */}
-                <div
-                  onClick={() => setAutoConfigOpen(true)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors cursor-pointer select-none"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 text-foreground">
-                      <Calendar className="w-4 h-4 stroke-[1.8]" />
-                    </div>
-                    <div className="text-left min-w-0">
-                      <p className="text-[14px] font-medium text-foreground leading-tight">
-                        Repasse
-                      </p>
-                      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
-                        {autoEnabled ? "Semanal · Toda segunda-feira" : "Desativado"}
-                      </p>
-                    </div>
+              {/* 3. REPASSE (Card no modelo do app) */}
+              <div
+                onClick={() => setAutoConfigOpen(true)}
+                className="w-full rounded-2xl p-4 sm:p-4.5 bg-card text-card-foreground border border-border/40 shadow-xs flex items-center justify-between gap-3.5 hover:bg-muted/20 active:bg-muted/40 transition-colors cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 text-foreground">
+                    <Calendar className="w-4 h-4 stroke-[1.8]" />
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
-                </div>
-
-                {/* Linha: PIN de segurança */}
-                <div
-                  onClick={openChangePin}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors cursor-pointer select-none"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 text-foreground">
-                      <Lock className="w-4 h-4 stroke-[1.8]" />
-                    </div>
-                    <div className="text-left min-w-0">
-                      <p className="text-[14px] font-medium text-foreground leading-tight">
-                        PIN de segurança
-                      </p>
-                      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
-                        {hasPin ? "PIN de 4 dígitos ativo · Saque automático" : "Criar PIN de segurança"}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
-                </div>
-              </div>
-
-              {/* 3.5 RESUMO FINANCEIRO (BENTO GRID: Cortes + Taxas separados, Total geral) */}
-              <div className="space-y-2.5 pt-2">
-                <div className="flex items-center justify-between px-1">
-                  <h2 className="text-[14px] font-semibold tracking-tight text-foreground flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-emerald-500" />
-                    Resumo financeiro
-                  </h2>
-                  <span className="text-[11px] font-medium text-muted-foreground/80 uppercase tracking-wider">
-                    Líquido
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  {/* Card Cortes */}
-                  <div className="rounded-2xl border border-border/70 bg-card/60 backdrop-blur-xl p-3.5 flex flex-col justify-between shadow-[0_4px_20px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgb(0,0,0,0.25)] transition-all">
-                    <div className="flex items-center justify-between">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                        <Scissors className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-[11px] font-medium text-muted-foreground">Cortes</span>
-                    </div>
-                    <div className="mt-3">
-                      <p className="text-[17px] font-bold tracking-tight text-foreground tabular-nums">
-                        {fmtBRL(financialSummary.cortesCents)}
-                      </p>
-                      <p className="text-[10.5px] text-muted-foreground mt-0.5 truncate">
-                        Serviços realizados
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Card Taxas de Cancelamento */}
-                  <div className="rounded-2xl border border-border/70 bg-card/60 backdrop-blur-xl p-3.5 flex flex-col justify-between shadow-[0_4px_20px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgb(0,0,0,0.25)] transition-all">
-                    <div className="flex items-center justify-between">
-                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-[11px] font-medium text-amber-500/90">Taxas</span>
-                    </div>
-                    <div className="mt-3">
-                      <p className="text-[17px] font-bold tracking-tight text-amber-500 dark:text-amber-400 tabular-nums">
-                        {fmtBRL(financialSummary.taxasCents)}
-                      </p>
-                      <p className="text-[10.5px] text-muted-foreground mt-0.5 truncate">
-                        50% de cancelamentos
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Card Total Geral (Largo, col-span-2) */}
-                  <div className="col-span-2 rounded-2xl border border-border/70 bg-gradient-to-br from-card/80 via-card/50 to-muted/30 backdrop-blur-xl p-3.5 flex items-center justify-between shadow-[0_4px_20px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgb(0,0,0,0.25)]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
-                        <Check className="w-4 h-4 stroke-[2.2]" />
-                      </div>
-                      <div>
-                        <p className="text-[12px] font-medium text-muted-foreground">Total geral recebido</p>
-                        <p className="text-[11px] text-muted-foreground/70">Cortes + Taxas compensadas</p>
-                      </div>
-                    </div>
-                    <p className="text-[18px] font-bold tracking-tight text-foreground tabular-nums">
-                      {fmtBRL(financialSummary.totalGeralCents)}
+                  <div className="text-left min-w-0">
+                    <p className="text-[14px] font-medium text-foreground leading-tight">
+                      Repasse
+                    </p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
+                      {autoEnabled ? "Semanal · Toda segunda-feira" : "Desativado"}
                     </p>
                   </div>
                 </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
               </div>
 
               {/* 4. EXTRATO (SOLTO na página, sem quadrado/container externo) */}
@@ -3150,107 +2958,6 @@ export function CarteiraPage({
         </div>
       )}
 
-      {/* TELA INTEIRA: ALTERAR PIN FINANCEIRO */}
-      {changePinOpen && (
-        <div
-          className="fixed inset-0 z-[120] flex flex-col bg-background text-foreground overflow-hidden"
-          style={{ minHeight: viewportHeight }}
-        >
-          {/* Header com ChevronLeft limpo */}
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5"
-            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
-          >
-            <div className="flex items-center gap-2 min-h-[52px]">
-              <button
-                onClick={() => !savingChangePin && setChangePinOpen(false)}
-                disabled={savingChangePin}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
-                aria-label="Voltar"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                PIN de Segurança
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-6">
-              <p className="text-[13px] text-muted-foreground">
-                Defina seu código de 4 dígitos para autorizar transferências e saques
-              </p>
-
-              {[
-                { label: "PIN atual", digits: changeCurrentDigits, setter: setChangeCurrentDigits, prefix: "cur" },
-                { label: "Novo PIN (4 dígitos)", digits: changeNewDigits, setter: setChangeNewDigits, prefix: "new" },
-                { label: "Confirmar novo PIN", digits: changeConfirmDigits, setter: setChangeConfirmDigits, prefix: "cnf" },
-              ].map((field) => (
-                <div key={field.prefix} className="space-y-2">
-                  <Label className="text-[12px] font-medium text-muted-foreground">
-                    {field.label}
-                  </Label>
-                  <div className="flex items-center justify-center gap-3">
-                    {[0, 1, 2, 3].map((index) => (
-                      <Input
-                        key={`${field.prefix}-${index}`}
-                        id={`pin-input-${field.prefix}-${index}`}
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={field.digits[index]}
-                        onChange={(event) => {
-                          const value = event.target.value.replace(/\D/g, "").slice(-1);
-                          const arr = [...field.digits];
-                          arr[index] = value;
-                          field.setter(arr);
-                          setChangePinError(null);
-                          if (value && index < 3) {
-                            const nextInput = document.getElementById(`pin-input-${field.prefix}-${index + 1}`);
-                            nextInput?.focus();
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Backspace" && !field.digits[index] && index > 0) {
-                            const prevInput = document.getElementById(`pin-input-${field.prefix}-${index - 1}`);
-                            prevInput?.focus();
-                          }
-                        }}
-                        className="w-12 h-13 text-center text-xl font-bold rounded-xl bg-background border-border/80 text-foreground touch-manipulation"
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-
-              {changePinError && (
-                <div className="flex items-center justify-center gap-2 text-[12px] text-destructive font-medium">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>{changePinError}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3 bg-background border-t border-border/60"
-            style={{
-              paddingBottom: keyboardOpen
-                ? 12
-                : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
-            }}
-          >
-            <Button
-              onClick={submitChangePin}
-              disabled={savingChangePin}
-              className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all shadow-sm"
-            >
-              {savingChangePin ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar novo PIN"}
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* MODAL ESTRATÉGICO DE PIN (CENTRALIZADO COM TECLADO TÁTIL NATIVO) */}
       {pinOpen && (

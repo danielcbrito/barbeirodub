@@ -88,6 +88,8 @@ interface AdminMobileAgendaProps {
   title?: string;
   onBack?: () => void;
   showBack?: boolean;
+  initialSelectedDate?: Date | string;
+  onDateChange?: (date: Date) => void;
 }
 
 /** Status oficial do sistema com cores solicitadas:
@@ -172,6 +174,8 @@ export function AdminMobileAgenda({
   title = "Agenda",
   onBack,
   showBack = false,
+  initialSelectedDate,
+  onDateChange,
 }: AdminMobileAgendaProps) {
   const navigate = useNavigate();
 
@@ -186,26 +190,32 @@ export function AdminMobileAgenda({
   const location = useLocation();
   const today = useMemo(() => getLocalToday(), []);
 
-  // Data inicial persistida via location.state (retorno de detalhes) ou sessionStorage
-  const initialDate = useMemo(() => getStoredAgendaDate(location.state?.selectedDate), [location.state?.selectedDate]);
+  // Data inicial persistida via prop, location.state (retorno de detalhes) ou sessionStorage
+  const initialDate = useMemo(
+    () => getStoredAgendaDate(initialSelectedDate || location.state?.selectedDate),
+    [initialSelectedDate, location.state?.selectedDate]
+  );
 
   // Mês selecionado no carrossel e data selecionada
   const [selectedMonth, setSelectedMonth] = useState<Date>(() => startOfMonth(initialDate));
   const [selectedDate, setSelectedDate] = useState<Date>(() => initialDate);
 
-  // Sincroniza quando location.state trouxer uma data explícita (ex: ao fechar tela de agendamento)
+  // Sincroniza quando props ou location.state trouxerem uma data explícita (ex: ao fechar tela de agendamento)
   useEffect(() => {
-    if (location.state?.selectedDate) {
-      const parsed = getStoredAgendaDate(location.state.selectedDate);
+    const candidate = initialSelectedDate || location.state?.selectedDate;
+    if (candidate) {
+      const parsed = getStoredAgendaDate(candidate);
       setSelectedDate(parsed);
       setSelectedMonth(startOfMonth(parsed));
+      saveAgendaSelectedDate(parsed);
     }
-  }, [location.state?.selectedDate]);
+  }, [initialSelectedDate, location.state?.selectedDate]);
 
-  // Persiste na sessão sempre que o barbeiro mudar a data selecionada
+  // Persiste na sessão sempre que o barbeiro mudar a data selecionada e notifica callback pai
   useEffect(() => {
     saveAgendaSelectedDate(selectedDate);
-  }, [selectedDate]);
+    onDateChange?.(selectedDate);
+  }, [selectedDate, onDateChange]);
 
   // Modal de seleção rápida de mês/ano
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
@@ -400,7 +410,9 @@ export function AdminMobileAgenda({
     if (dateKey) setAppointmentsDateKey(dateKey);
   }, []);
 
-  const isScrollingFromCodeRef = useRef(false);
+  const isScrollingFromCodeRef = useRef(true);
+  const isUserTouchingRef = useRef(false);
+  const touchEndTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Centraliza com precisão o dia selecionado no centro geométrico do carrossel
@@ -417,18 +429,25 @@ export function AdminMobileAgenda({
     const cardWidth = el.offsetWidth;
     const targetScroll = cardLeft - (containerWidth / 2) + (cardWidth / 2);
 
-    container.scrollTo({
-      left: Math.max(0, targetScroll),
-      behavior,
-    });
+    if (behavior === "auto") {
+      container.scrollLeft = Math.max(0, targetScroll);
+      setTimeout(() => {
+        isScrollingFromCodeRef.current = false;
+      }, 50);
+    } else {
+      container.scrollTo({
+        left: Math.max(0, targetScroll),
+        behavior,
+      });
 
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    scrollTimeoutRef.current = setTimeout(() => {
-      isScrollingFromCodeRef.current = false;
-    }, behavior === "smooth" ? 350 : 50);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => {
+        isScrollingFromCodeRef.current = false;
+      }, 600);
+    }
   }, []);
 
-  // Detecta o dia mais próximo ao centro quando o usuário passa o dedo no carrossel
+  // Detecta o dia mais próximo ao centro APENAS quando o usuário arrasta manualmente com o dedo
   useEffect(() => {
     const container = carouselRef.current;
     if (!container) return;
@@ -437,11 +456,17 @@ export function AdminMobileAgenda({
     const handleScroll = () => {
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
-        if (isScrollingFromCodeRef.current) return;
+        // NUNCA alterar data se foi rolagem por código, ou antes do scroll inicial assentar,
+        // ou se o usuário NÃO está ativamente tocando/arrastando a barra de dias!
+        if (isScrollingFromCodeRef.current || !isInitialScrollDone.current || !isUserTouchingRef.current) {
+          return;
+        }
 
         if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
         scrollTimeoutRef.current = setTimeout(() => {
-          if (isScrollingFromCodeRef.current) return;
+          if (isScrollingFromCodeRef.current || !isInitialScrollDone.current || !isUserTouchingRef.current) {
+            return;
+          }
           const centerX = container.scrollLeft + container.offsetWidth / 2;
           const children = container.querySelectorAll("[data-date]");
           let closestDate: Date | null = null;
@@ -464,7 +489,7 @@ export function AdminMobileAgenda({
           if (closestDate && !isSameDay(closestDate, selectedDate)) {
             setSelectedDate(closestDate);
           }
-        }, 60);
+        }, 80);
       });
     };
 
@@ -760,6 +785,8 @@ export function AdminMobileAgenda({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     let cancelled = false;
+    isScrollingFromCodeRef.current = true;
+
     const attemptScroll = (attemptsLeft: number) => {
       if (cancelled) return;
       const container = carouselRef.current;
@@ -769,10 +796,14 @@ export function AdminMobileAgenda({
         scrollToDay(selectedDate, isInitialScrollDone.current ? "smooth" : "auto");
         isInitialScrollDone.current = true;
       } else if (attemptsLeft > 0) {
-        timer = setTimeout(() => attemptScroll(attemptsLeft - 1), 50);
+        timer = setTimeout(() => attemptScroll(attemptsLeft - 1), 30);
+      } else {
+        isInitialScrollDone.current = true;
+        isScrollingFromCodeRef.current = false;
       }
     };
-    timer = setTimeout(() => attemptScroll(5), 50);
+
+    attemptScroll(10);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -870,6 +901,28 @@ export function AdminMobileAgenda({
         {/* ══════ CARROSSEL DE DATAS FLUIDO (SEM LINHA DIVISÓRIA INFERIOR) ══════ */}
         <div
           ref={carouselRef}
+          onTouchStart={() => {
+            isUserTouchingRef.current = true;
+            if (touchEndTimerRef.current) clearTimeout(touchEndTimerRef.current);
+          }}
+          onTouchEnd={() => {
+            if (touchEndTimerRef.current) clearTimeout(touchEndTimerRef.current);
+            touchEndTimerRef.current = setTimeout(() => {
+              isUserTouchingRef.current = false;
+            }, 300);
+          }}
+          onPointerDown={(e) => {
+            if (e.pointerType === "touch" || e.pointerType === "mouse") {
+              isUserTouchingRef.current = true;
+              if (touchEndTimerRef.current) clearTimeout(touchEndTimerRef.current);
+            }
+          }}
+          onPointerUp={() => {
+            if (touchEndTimerRef.current) clearTimeout(touchEndTimerRef.current);
+            touchEndTimerRef.current = setTimeout(() => {
+              isUserTouchingRef.current = false;
+            }, 300);
+          }}
           className="w-full overflow-x-auto scrollbar-hide py-1 scroll-smooth"
           style={{
             WebkitOverflowScrolling: "touch",

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBarberReportData } from "@/hooks/useBarberReportData";
 import { brazilDate, monthRevenue, serviceRevenue, revenueComparison, performanceMetrics } from "@/lib/barberReportMetrics";
@@ -15,6 +15,7 @@ import { ptBR } from "date-fns/locale";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Loader2,
   ChevronRight as ChevronIcon,
   RefreshCw,
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { DesempenhoDetalhadoView } from "./DesempenhoDetalhadoView";
 
 /* ═══════════════════════════════════════
    Tipos
@@ -56,6 +58,13 @@ function formatShortMoney(val: number): string {
   return formatMoney(val);
 }
 
+function getFactorTextColor(value: number | null): string {
+  if (value === null) return "text-muted-foreground";
+  if (value >= 80) return "text-emerald-600 dark:text-emerald-400";
+  if (value >= 60) return "text-amber-600 dark:text-amber-400";
+  return "text-rose-600 dark:text-rose-400";
+}
+
 /* ═══════════════════════════════════════
    Tela Principal de Relatórios
    Design 100% Minimalista e Fiel à Referência
@@ -74,6 +83,22 @@ export function EstatisticasRelatorios({
   const [monthMenuOpen, setMonthMenuOpen] = useState(false);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [tempGoalInput, setTempGoalInput] = useState("");
+  const [showFactorDetails, setShowFactorDetails] = useState(false);
+  const [viewingPerformanceDetails, setViewingPerformanceDetails] = useState(false);
+
+  // Sincronização suave com o botão voltar do navegador
+  useEffect(() => {
+    const handlePopState = () => {
+      setViewingPerformanceDetails(false);
+    };
+    if (viewingPerformanceDetails) {
+      window.history.pushState({ screen: "performance" }, "");
+      window.addEventListener("popstate", handlePopState);
+    }
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [viewingPerformanceDetails]);
   const [metaMensal, setMetaMensal] = useState<number>(() => {
     try {
       const saved = localStorage.getItem("barbeirodub_meta_mensal");
@@ -174,14 +199,61 @@ export function EstatisticasRelatorios({
   // Verde (>= 80): Excelente | Laranja (60 a 79): Muito Bom | Vermelho (< 60): Atenção
   // ═══════════════════════════════════════════════════════
   const performance = useMemo(() => performanceMetrics(dashboardData, format(selectedMonth, "yyyy-MM"), brazilDate(new Date())), [dashboardData, selectedMonth]);
-  const scoreAnalytics = {
-    score: performance.score,
-    title: performance.score === null ? "Sem dados" : performance.score >= 80 ? "Excelente" : performance.score >= 60 ? "Em evolução" : "Atenção",
-    solidColor: "hsl(var(--foreground))",
-    badgeBg: "bg-foreground text-background",
-    trackLength: 446.1,
-    fillDashoffset: 446.1 * (1 - (performance.score ?? 0) / 100),
-  };
+  const scoreAnalytics = useMemo(() => {
+    const score = performance.score;
+    const trackLength = 446.1;
+    const fillDashoffset = trackLength * (1 - (score ?? 0) / 100);
+
+    if (score === null) {
+      return {
+        score: null,
+        title: "Sem dados",
+        subtitle: "Ainda não há dados suficientes",
+        solidColor: "hsl(var(--muted-foreground) / 0.35)",
+        badgeBg: "bg-muted text-muted-foreground border border-border/40",
+        textColor: "text-muted-foreground",
+        trackLength,
+        fillDashoffset,
+      };
+    }
+
+    if (score >= 80) {
+      return {
+        score,
+        title: "Excelente",
+        subtitle: "Desempenho de alto padrão",
+        solidColor: "#10B981", // Verde (Emerald)
+        badgeBg: "bg-emerald-500 text-white shadow-xs",
+        textColor: "text-emerald-600 dark:text-emerald-400",
+        trackLength,
+        fillDashoffset,
+      };
+    }
+
+    if (score >= 60) {
+      return {
+        score,
+        title: "Em evolução",
+        subtitle: "Bom desempenho com potencial",
+        solidColor: "#F59E0B", // Laranja / Âmbar
+        badgeBg: "bg-amber-500 text-white shadow-xs",
+        textColor: "text-amber-600 dark:text-amber-400",
+        trackLength,
+        fillDashoffset,
+      };
+    }
+
+    return {
+      score,
+      title: "Atenção",
+      subtitle: "Requer atenção nos atendimentos",
+      solidColor: "#EF4444", // Vermelho
+      badgeBg: "bg-rose-500 text-white shadow-xs",
+      textColor: "text-rose-600 dark:text-rose-400",
+      trackLength,
+      fillDashoffset,
+    };
+  }, [performance.score]);
 
   // ═══════════════════════════════════════════════════════
   // CÁLCULO DOS 6 MESES E CURVA SPLINE (IMAGEM 2)
@@ -347,6 +419,31 @@ export function EstatisticasRelatorios({
   };
 
   // ═══════════════════════════════════════════════════════
+  // TELA DEDICADA: DESEMPENHO SEMANAL E DIÁRIO
+  // ═══════════════════════════════════════════════════════
+  if (viewingPerformanceDetails) {
+    return (
+      <DesempenhoDetalhadoView
+        monthDate={selectedMonth}
+        weeks={performance.weeks}
+        daily={performance.daily}
+        appointments={currentMonthAppts}
+        totalRevenue={totalRevenueCur}
+        totalAppointments={totalAppointmentsCount}
+        completedAppointments={completedApptsCount}
+        completionRate={completionRate}
+        onBack={() => {
+          if (window.history.state?.screen === "performance") {
+            window.history.back();
+          } else {
+            setViewingPerformanceDetails(false);
+          }
+        }}
+      />
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
   // RENDERIZAÇÃO PRINCIPAL
   // ═══════════════════════════════════════════════════════
   return (
@@ -359,7 +456,7 @@ export function EstatisticasRelatorios({
           paddingBottom: "12px",
         }}
       >
-        <div className="max-w-md mx-auto px-4 flex items-center justify-between">
+        <div className="max-w-2xl sm:max-w-3xl mx-auto px-4 sm:px-6 flex items-center justify-between">
           {/* Botão Voltar Circular */}
           <button
             type="button"
@@ -386,7 +483,7 @@ export function EstatisticasRelatorios({
       </header>
 
       {/* ═══ CONTEÚDO PRINCIPAL (100% MINIMALISTA, SEM QUADRADOS PESADOS) ═══ */}
-      <main className="max-w-md mx-auto px-4 pt-3 space-y-6 w-full">
+      <main className="max-w-2xl sm:max-w-3xl mx-auto px-4 sm:px-6 pt-3 space-y-6 w-full text-left">
         {isError ? (
           <div className="py-12 space-y-4 text-center">
             <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Não foi possível carregar os indicadores."}</p>
@@ -459,20 +556,45 @@ export function EstatisticasRelatorios({
                 </div>
               </div>
 
-              <div className="mt-4 space-y-3">
-                <p className="text-xs text-muted-foreground text-center">Cobertura dos indicadores: {performance.coverage}% · {format(selectedMonth, "MMMM yyyy", { locale: ptBR })}</p>
-                <dl className="divide-y divide-border">
-                  {performance.factors.map(factor => (
-                    <div key={factor.label} className="py-3">
-                      <div className="flex items-center justify-between gap-3 text-sm">
-                        <dt>{factor.label}</dt><dd className="tabular-nums shrink-0">{factor.value === null ? "Sem dados" : `${Math.round(factor.value)} / 100`}</dd>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">{factor.detail}</p>
-                    </div>
-                  ))}
-                </dl>
-                <p className="text-xs text-muted-foreground">Preço acessível, ocupação da agenda e uso do aplicativo: sem dados suficientes para avaliação.</p>
+              {/* Gatilho dos Indicadores: Minimalista, aproveita a largura da tela (esquerda: Indicadores, direita: setinha) */}
+              <div className="mt-5 pt-3 border-t border-border/15 w-full">
+                <button
+                  type="button"
+                  onClick={() => setShowFactorDetails((prev) => !prev)}
+                  className="w-full flex items-center justify-between text-left py-1 text-foreground hover:text-primary transition-colors cursor-pointer group"
+                  aria-expanded={showFactorDetails}
+                >
+                  <span className="text-[14px] font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Indicadores
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "w-4 h-4 text-muted-foreground group-hover:text-foreground transition-transform duration-200",
+                      showFactorDetails && "rotate-180"
+                    )}
+                  />
+                </button>
               </div>
+
+              {/* Lista dos Indicadores Idêntica à Original: Apenas os números com cores, nada por trás */}
+              {showFactorDetails && (
+                <div className="mt-4 space-y-3 animate-in fade-in duration-150">
+                  <dl className="divide-y divide-border">
+                    {performance.factors.map((factor) => (
+                      <div key={factor.label} className="py-3">
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <dt>{factor.label}</dt>
+                          <dd className={cn("tabular-nums shrink-0 font-medium", getFactorTextColor(factor.value))}>
+                            {factor.value === null ? "Sem dados" : `${Math.round(factor.value)} / 100`}
+                          </dd>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{factor.detail}</p>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="text-xs text-muted-foreground">Preço acessível, ocupação da agenda e uso do aplicativo: sem dados suficientes para avaliação.</p>
+                </div>
+              )}
             </section>
 
             {/* ═════════════════════════════════════════════════════════════
@@ -789,19 +911,39 @@ export function EstatisticasRelatorios({
                 </div>
               </div>
             </section>
-            <section className="pt-4 border-t border-border space-y-4">
-              <h3 className="text-sm font-semibold">Desempenho semanal</h3>
-              {performance.weeks.map(week => <div key={week.week} className="flex justify-between gap-3 text-xs"><span>Semana {week.week}</span><span className="text-muted-foreground tabular-nums">{week.appointments} agendados · {week.completed} concluídos</span></div>)}
-              <h3 className="text-sm font-semibold pt-2">Desempenho diário</h3>
-              {performance.daily.length === 0 && <p className="text-xs text-muted-foreground">Sem atendimentos no período.</p>}
-              {performance.daily.map(day => <div key={day.date} className="flex flex-wrap justify-between gap-2 text-xs"><span>{format(new Date(`${day.date}T12:00:00`), "dd/MM")}</span><span className="text-muted-foreground tabular-nums">{day.appointments} agendados · {day.completed} concluídos · {formatMoney(day.revenue)}</span></div>)}
+            {/* ═════════════════════════════════════════════════════════════
+               CARD 4: DESEMPENHO SEMANAL E DIÁRIO (TELA DEDICADA)
+               ═════════════════════════════════════════════════════════════ */}
+            <section className="w-full text-left pt-4 border-t border-border/15">
+              <button
+                type="button"
+                onClick={() => setViewingPerformanceDetails(true)}
+                className="w-full p-4 rounded-2xl bg-secondary/25 hover:bg-secondary/45 border border-border/30 active:scale-[0.98] transition-all flex items-center justify-between gap-3 text-left cursor-pointer group shadow-xs"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[15px] font-semibold text-foreground tracking-tight group-hover:text-primary transition-colors">
+                      Desempenho Semanal e Diário
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-primary/10 text-primary shrink-0">
+                      Ver detalhes
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-muted-foreground mt-1 leading-snug">
+                    Acompanhe agendamentos, cortes concluídos e faturamento por semana e por dia
+                  </p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-secondary/80 flex items-center justify-center text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0">
+                  <ChevronRight className="w-4 h-4" />
+                </div>
+              </button>
             </section>
           </>
         )}
       </main>
 
       {/* ═══ BARRA INFERIOR DE NAVEGAÇÃO + BOTÃO PRETO CIRCULAR DE DOWNLOAD ═══ */}
-      <div className="fixed bottom-5 left-0 right-0 z-30 px-4 max-w-md mx-auto flex items-center justify-between pointer-events-none">
+      <div className="fixed bottom-5 left-0 right-0 z-30 px-4 sm:px-6 max-w-2xl sm:max-w-3xl mx-auto flex items-center justify-between pointer-events-none">
         {/* Floating Nav Pill à esquerda com Ações */}
         <div className="pointer-events-auto bg-white/95 dark:bg-card/95 backdrop-blur-xl border border-border/40 rounded-full px-4 py-2 shadow-xl flex items-center gap-4">
           {/* WhatsApp */}

@@ -257,20 +257,22 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     return names[date.getDay()];
   };
 
-  // Scroll inicial para o dia de hoje
+  // Scroll inicial para o dia selecionado (ou hoje)
   useEffect(() => {
     if (isMobile) return;
     const timer = setTimeout(() => {
       const el = scrollRef.current;
       const inner = innerRef.current;
       if (!el || !inner) return;
-      const child = inner.children[todayIndex] as HTMLElement;
+      const targetIdx = allDays.findIndex(d => isSameDay(d, selectedDate));
+      const idxToScroll = targetIdx >= 0 ? targetIdx : todayIndex;
+      const child = inner.children[idxToScroll] as HTMLElement;
       if (!child) return;
       el.scrollLeft = child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2;
       setTimeout(() => { isInitialScrollDone.current = true; }, 100);
     }, 50);
     return () => clearTimeout(timer);
-  }, [isMobile]);
+  }, [isMobile, selectedDate, allDays, todayIndex]);
 
   // Detectar o dia central durante scroll
   useEffect(() => {
@@ -416,6 +418,8 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
           }}
           barbeiroId={barberContext.barbeiroId}
           tenantId={barberContext.tenantId}
+          initialSelectedDate={selectedDate}
+          onDateChange={setSelectedDate}
         />
         <ConfirmAttendanceModal
           appointment={confirmModalAppointment}
