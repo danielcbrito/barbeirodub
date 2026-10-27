@@ -62,44 +62,48 @@ const Onboarding = () => {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) { navigate("/", { replace: true }); return; }
-      if (!mounted) return;
-      setUserId(session.user.id);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) { navigate("/", { replace: true }); return; }
+        if (!mounted) return;
+        setUserId(session.user.id);
 
-      const { data: tenant } = await supabase
-        .from("tenants")
-        .select("id, nome, onboarding_completed, onboarding_step, rua, numero, bairro, cidade, estado")
-        .eq("owner_user_id", session.user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        const { data: tenant } = await supabase
+          .from("tenants")
+          .select("id, nome, onboarding_completed, onboarding_step, rua, numero, bairro, cidade, estado")
+          .eq("owner_user_id", session.user.id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (tenant) {
-        // Só redireciona se o wizard já foi percorrido inteiro.
-        // Barbearias marcadas como onboarding_completed no meio do fluxo
-        // (visibilidade antecipada para clientes) ainda podem retomar aqui.
-        if ((tenant.onboarding_step ?? 0) >= TOTAL_STEPS) {
-          navigate("/admin", { replace: true });
-          return;
+        if (tenant) {
+          // Só redireciona se o wizard já foi percorrido inteiro.
+          // Barbearias marcadas como onboarding_completed no meio do fluxo
+          // (visibilidade antecipada para clientes) ainda podem retomar aqui.
+          if ((tenant.onboarding_step ?? 0) >= TOTAL_STEPS) {
+            navigate("/admin", { replace: true });
+            return;
+          }
+          setTenantId(tenant.id);
+          setNome(tenant.nome || "");
+          setEndereco({
+            cep: "",
+            rua: tenant.rua || "",
+            numero: tenant.numero || "",
+            bairro: tenant.bairro || "",
+            cidade: tenant.cidade || "",
+            estado: tenant.estado || "",
+          });
+          const s = Math.max(1, Math.min(TOTAL_STEPS, tenant.onboarding_step || 1));
+          setStep(s);
         }
-        setTenantId(tenant.id);
-        setNome(tenant.nome || "");
-        setEndereco({
-          cep: "",
-          rua: tenant.rua || "",
-          numero: tenant.numero || "",
-          bairro: tenant.bairro || "",
-          cidade: tenant.cidade || "",
-          estado: tenant.estado || "",
-        });
-        const s = Math.max(1, Math.min(TOTAL_STEPS, tenant.onboarding_step || 1));
-        setStep(s);
+      } catch (err) {
+        console.error("Erro ao inicializar onboarding:", err);
+      } finally {
+        if (mounted) setLoading(false);
       }
-
-      setLoading(false);
     })();
     return () => { mounted = false; };
   }, [navigate]);

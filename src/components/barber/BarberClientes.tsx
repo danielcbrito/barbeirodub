@@ -33,6 +33,8 @@ import {
   Banknote,
   ShieldCheck,
   Unlock,
+  AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -540,7 +542,7 @@ export function BarberClientes({
   const viewId = searchParams.get("view");
 
   /* ── TanStack Query: dados dos clientes ── */
-  const { data: queryResult, isLoading: loading } = useBarberClientes(barberContext.barbeiroId);
+  const { data: queryResult, isLoading: loading, isError: isBarberClientsError, refetch: refetchBarberClients } = useBarberClientes(barberContext.barbeiroId);
   const clients = useMemo(() => queryResult?.clients ?? [], [queryResult?.clients]);
   const barberTenantId = queryResult?.tenantId ?? null;
   const loyaltyEnabled = queryResult?.loyaltyEnabled ?? false;
@@ -579,6 +581,7 @@ export function BarberClientes({
   const {
     data: allTenantClientsData,
     isLoading: loadingTenantClients,
+    isError: isTenantClientsError,
     refetch: refetchTenantClients,
   } = useTenantClientes(
     viewMode === "todos" ? barberContext.tenantId : null,
@@ -1034,6 +1037,38 @@ export function BarberClientes({
   /* ─── Loading ─── */
   if (loading) {
     return <ListSkeleton rows={8} showAvatar />;
+  }
+
+  if (viewMode === "meus" && isBarberClientsError && clients.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 px-4 text-center">
+        <AlertTriangle className="w-10 h-10 text-amber-500/80" strokeWidth={1.5} />
+        <p className="text-sm text-muted-foreground">Não foi possível carregar os clientes.</p>
+        <button
+          onClick={() => refetchBarberClients()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  if (viewMode === "todos" && isTenantClientsError && allTenantClients.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 px-4 text-center">
+        <AlertTriangle className="w-10 h-10 text-amber-500/80" strokeWidth={1.5} />
+        <p className="text-sm text-muted-foreground">Não foi possível carregar os clientes da barbearia.</p>
+        <button
+          onClick={() => refetchTenantClients()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Tentar novamente
+        </button>
+      </div>
+    );
   }
 
   // ═══════════════════════════════════

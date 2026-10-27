@@ -598,7 +598,10 @@ export function WhatsAppConnectionPage({
           if (mounted) setResolvedTenantId(b.tenant_id);
         }
       }
-      if (!tId) return;
+      if (!tId) {
+        if (mounted) setLoading(false);
+        return;
+      }
 
       try {
         const { data: units } = await supabase
@@ -609,7 +612,11 @@ export function WhatsAppConnectionPage({
           .order("is_sede", { ascending: false })
           .order("created_at", { ascending: true });
 
-        if (!mounted || !units || units.length === 0) return;
+        if (!mounted) return;
+        if (!units || units.length === 0) {
+          setLoading(false);
+          return;
+        }
 
         setUnidadesList(units);
 
@@ -708,7 +715,10 @@ export function WhatsAppConnectionPage({
 
   /* ─── estado persistido ─── */
   const loadCurrentState = useCallback(async () => {
-    if (!resolvedBarbeiroId) return;
+    if (!resolvedBarbeiroId) {
+      setLoading(false);
+      return;
+    }
     try {
       const { data } = await supabase
         .from("whatsapp_instances")
@@ -1511,7 +1521,15 @@ export function WhatsAppConnectionPage({
               <p className="text-xs text-muted-foreground">Carregando WhatsApp...</p>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center">Nenhum perfil de barbeiro encontrado.</p>
+            <div className="flex flex-col items-center gap-3 text-center">
+              <p className="text-sm text-muted-foreground">Nenhum perfil de barbeiro encontrado.</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+              >
+                Tentar novamente
+              </button>
+            </div>
           )}
         </div>
       </div>

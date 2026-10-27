@@ -64,10 +64,11 @@ export function useBarberDados(barbeiroId: string) {
   const [originalData, setOriginalData] = useState<BarberData>(INITIAL);
   const [saving, setSaving] = useState(false);
 
-  const { isLoading } = useQuery({
+  const { isLoading, isError, error, refetch } = useQuery({
     queryKey: QUERY_KEYS.barbeiro.dadosPessoais(barbeiroId),
     queryFn: () => fetchBarberDados(barbeiroId),
     enabled: !!barbeiroId,
+    retry: 1,
     staleTime: STALE_TIMES.PERFIL_BARBEIRO,
     select: (fetched) => {
       // Popula estado local apenas quando não há edições pendentes
@@ -127,5 +128,5 @@ export function useBarberDados(barbeiroId: string) {
     }
   };
 
-  return { data, loading: isLoading, saving, hasChanges, update, saveData };
+  return { data, loading: isLoading, isError, error, refetch, saving, hasChanges, update, saveData };
 }

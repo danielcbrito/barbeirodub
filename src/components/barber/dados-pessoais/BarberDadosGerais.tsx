@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBarberDados } from "./useBarberDados";
 import { CompactField } from "@/components/admin/dados-empresa/CompactField";
-import { Loader2, Save, Camera } from "lucide-react";
+import { Loader2, Save, Camera, AlertCircle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,7 +24,7 @@ interface Props {
  */
 export function BarberDadosGerais({ barbeiroId, userId, basePath = "/barbeiro" }: Props) {
   const navigate = useNavigate();
-  const { data, loading, saving, hasChanges, update, saveData } = useBarberDados(barbeiroId);
+  const { data, loading, isError, refetch, saving, hasChanges, update, saveData } = useBarberDados(barbeiroId);
   const { fetchCep, loadingCep } = useCepLookup();
 
   // ── Avatar state ──
@@ -101,6 +101,22 @@ export function BarberDadosGerais({ barbeiroId, userId, basePath = "/barbeiro" }
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 px-4 text-center">
+        <AlertCircle className="w-10 h-10 text-amber-500/80" strokeWidth={1.5} />
+        <p className="text-sm text-muted-foreground">Não foi possível carregar os dados pessoais.</p>
+        <button
+          onClick={() => refetch()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Tentar novamente
+        </button>
       </div>
     );
   }

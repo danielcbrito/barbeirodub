@@ -31,6 +31,7 @@ export function useBarberAvaliacoes(barbeiroId: string, limit?: number) {
       return data || [];
     },
     staleTime: STALE_TIMES.AVALIACOES,
+    retry: 1,
     enabled: !!barbeiroId,
   });
 }

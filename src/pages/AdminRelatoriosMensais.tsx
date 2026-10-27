@@ -33,7 +33,9 @@ import {
   CreditCard,
   Wallet,
   Star,
-  Clock
+  Clock,
+  Loader2,
+  AlertTriangle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -76,6 +78,7 @@ export default function AdminRelatoriosMensais() {
   
   const [reports, setReports] = useState<MonthlyReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [yearFilter, setYearFilter] = useState<string>("");
   const [selectedReport, setSelectedReport] = useState<MonthlyReport | null>(null);
@@ -98,6 +101,7 @@ export default function AdminRelatoriosMensais() {
 
   const loadReports = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { data, error } = await supabase
         .from('relatorios_mensais')
@@ -110,6 +114,7 @@ export default function AdminRelatoriosMensais() {
       setReports(data || []);
     } catch (error) {
       console.error('Erro ao carregar relatórios:', error);
+      setLoadError('Não foi possível carregar os relatórios.');
       toast.error('Erro ao carregar relatórios');
     } finally {
       setLoading(false);
@@ -302,7 +307,21 @@ Sistema de Gestão - Barbearia
 
               <CardContent className="p-0">
                 <ScrollArea className="h-[calc(100vh-320px)]">
-                  {filteredReports.length === 0 ? (
+                  {loading ? (
+                    <div className="flex flex-col items-center justify-center py-12 px-4 gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">Carregando relatórios...</p>
+                    </div>
+                  ) : loadError ? (
+                    <div className="text-center py-12 px-4 space-y-3">
+                      <AlertTriangle className="w-10 h-10 mx-auto text-amber-500/80" />
+                      <p className="text-sm text-muted-foreground">{loadError}</p>
+                      <Button variant="outline" size="sm" onClick={() => loadReports()} className="gap-2">
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Tentar novamente
+                      </Button>
+                    </div>
+                  ) : filteredReports.length === 0 ? (
                     <div className="text-center py-12 px-4">
                       <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
                       <p className="text-muted-foreground">Nenhum relatório encontrado</p>

@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { useEffect, Suspense, useState, useRef, lazy } from "react";
 import { useNavigate, Routes, Route, useLocation, Navigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -107,6 +107,7 @@ const Admin = () => {
   const { playNotificationSound } = useNotificationSound();
   const { requestPermission, sendBrowserNotification } = useNotificationPermission();
   const [adminContext, setAdminContext] = useState<AdminContext | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   
   // Verificação de manutenção
   const { 
@@ -248,86 +249,97 @@ const Admin = () => {
   }, []);
 
   const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    setAuthError(null);
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
 
-    if (!session) {
-      try { localStorage.removeItem(ADMIN_CTX_KEY); } catch { /* ignore */ }
-      navigate("/login");
-      return;
-    }
-
-    // Uma única ida ao banco em paralelo: roles + perfil de barbeiro
-    const [{ data: roles }, { data: ownBarber }] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", session.user.id),
-      supabase
-        .from("barbeiros")
-        .select("id, apelido, tenant_id")
-        .eq("user_id", session.user.id)
-        .eq("ativo", true)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
-    ]);
-
-    const roleList = (roles || []).map((r) => r.role as string);
-    const isAdminRole = roleList.includes("admin");
-    const isTenantAdminRole = roleList.includes("tenant_admin");
-    const isBarberRole = roleList.includes("barber");
-
-    if (isAdminRole || isTenantAdminRole) {
-      let tenantId: string | null = ownBarber?.tenant_id || null;
-      if (!tenantId) {
-        const { data: tm } = await supabase
-          .from("tenant_members")
-          .select("tenant_id")
-          .eq("user_id", session.user.id)
-          .limit(1)
-          .maybeSingle();
-        tenantId = tm?.tenant_id || null;
+      if (!session) {
+        try { localStorage.removeItem(ADMIN_CTX_KEY); } catch { /* ignore */ }
+        navigate("/login");
+        return;
       }
-      if (!tenantId) {
-        const { data: ownedTenant } = await supabase
-          .from("tenants")
-          .select("id")
-          .eq("owner_user_id", session.user.id)
+
+      // Uma única ida ao banco em paralelo: roles + perfil de barbeiro
+      const [{ data: roles, error: rolesError }, { data: ownBarber, error: barberError }] = await Promise.all([
+        supabase.from("user_roles").select("role").eq("user_id", session.user.id),
+        supabase
+          .from("barbeiros")
+          .select("id, apelido, tenant_id")
+          .eq("user_id", session.user.id)
+          .eq("ativo", true)
+          .is("deleted_at", null)
           .order("created_at", { ascending: true })
           .limit(1)
-          .maybeSingle();
-        tenantId = ownedTenant?.id || null;
+          .maybeSingle(),
+      ]);
+
+      if (rolesError) throw rolesError;
+      if (barberError) throw barberError;
+
+      const roleList = (roles || []).map((r) => r.role as string);
+      const isAdminRole = roleList.includes("admin");
+      const isTenantAdminRole = roleList.includes("tenant_admin");
+      const isBarberRole = roleList.includes("barber");
+
+      if (isAdminRole || isTenantAdminRole) {
+        let tenantId: string | null = ownBarber?.tenant_id || null;
+        if (!tenantId) {
+          const { data: tm } = await supabase
+            .from("tenant_members")
+            .select("tenant_id")
+            .eq("user_id", session.user.id)
+            .limit(1)
+            .maybeSingle();
+          tenantId = tm?.tenant_id || null;
+        }
+        if (!tenantId) {
+          const { data: ownedTenant } = await supabase
+            .from("tenants")
+            .select("id")
+            .eq("owner_user_id", session.user.id)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          tenantId = ownedTenant?.id || null;
+        }
+        const ctx: AdminContext = {
+          barbeiroId: ownBarber?.id || null,
+          apelido: ownBarber?.apelido || null,
+          userId: session.user.id,
+          isAdmin: true,
+          tenantId,
+        };
+
+        setAdminContext(ctx);
+        cacheAdminContext(ctx);
+
+        localStorage.setItem("userRole", "admin");
+        if (ownBarber?.id) {
+          localStorage.setItem("barbeiroId", ownBarber.id);
+        } else {
+          localStorage.removeItem("barbeiroId");
+        }
+        setAuthChecked(true);
+        return;
       }
-      const ctx: AdminContext = {
-        barbeiroId: ownBarber?.id || null,
-        apelido: ownBarber?.apelido || null,
-        userId: session.user.id,
-        isAdmin: true,
-        tenantId,
-      };
 
-      setAdminContext(ctx);
-      cacheAdminContext(ctx);
+      try { localStorage.removeItem(ADMIN_CTX_KEY); } catch { /* ignore */ }
 
-
-      localStorage.setItem("userRole", "admin");
-      if (ownBarber?.id) {
-        localStorage.setItem("barbeiroId", ownBarber.id);
-      } else {
-        localStorage.removeItem("barbeiroId");
+      if (isBarberRole) {
+        navigate("/barbeiro");
+        return;
       }
-      setAuthChecked(true);
-      return;
+
+      // Não é admin, barbeiro ou tenant_admin
+      toast.error("Você não tem permissão para acessar este sistema.");
+      navigate("/");
+    } catch (err: any) {
+      console.error("[Admin checkAuth error]", err);
+      if (!adminContext) {
+        setAuthError(err?.message || "Não foi possível carregar as informações da sua conta.");
+      }
     }
-
-    try { localStorage.removeItem(ADMIN_CTX_KEY); } catch { /* ignore */ }
-
-    if (isBarberRole) {
-      navigate("/barbeiro");
-      return;
-    }
-
-    // Não é admin, barbeiro ou tenant_admin
-    toast.error("Você não tem permissão para acessar este sistema.");
-    navigate("/");
   };
 
 
@@ -382,6 +394,36 @@ const Admin = () => {
       </div>
     </div>
   );
+
+  if (authError && !adminContext) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm space-y-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <p className="text-sm text-muted-foreground">{authError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              authCheckRef.current = false;
+              checkAuth();
+            }}
+            className="h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
+          >
+            Tentar novamente
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/", { replace: true })}
+            className="h-11 w-full rounded-xl border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted transition-all cursor-pointer"
+          >
+            Voltar para o início
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Só bloqueia a tela quando ainda não há contexto (cache local já hidrata em ~0ms)
   if (!adminContext) {

@@ -215,6 +215,7 @@ const Barbeiro = () => {
   const [pendingSetupOpen, setPendingSetupOpen] = useState(false);
   const { user: authUser, isReady: isAuthReady } = useAuthReady();
   const [isBarberApproved, setIsBarberApproved] = useState<boolean | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!barberContext) return;
@@ -556,8 +557,14 @@ const Barbeiro = () => {
   }, [navigate]);
 
   const checkAuth = useCallback(async (userId: string) => {
+    setAuthError(null);
     try {
-      const { data: bootData, error: contextError } = await supabase.rpc("get_barber_boot_bundle");
+      const bootPromise = supabase.rpc("get_barber_boot_bundle");
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
+        setTimeout(() => reject(new Error("Tempo limite ao carregar dados do barbeiro")), 10000)
+      );
+
+      const { data: bootData, error: contextError } = await Promise.race([bootPromise, timeoutPromise]);
 
       if (contextError) {
         throw contextError;
@@ -571,18 +578,17 @@ const Barbeiro = () => {
       }
 
       applyValidatedBarberContext(userId, appContext);
-
-      /* Prefetch: NÃO chamamos aqui — o useEffect abaixo (dependente de
-       * barberContext) já dispara o mesmo cascade em requestIdleCallback
-       * assim que o contexto está disponível (inclusive vindo do cache
-       * localStorage, antes mesmo desta RPC responder). Duplicar aqui
-       * dobrava a carga de rede no cold start. */
     } catch (error) {
       console.error("[Barbeiro] Falha ao validar sessão:", error);
 
       try {
         // Fallback leve: valida só contexto/role sem depender do snapshot do início.
-        const { data: appContext, error: fallbackError } = await supabase.rpc("get_barber_app_context_fast");
+        const fastPromise = supabase.rpc("get_barber_app_context_fast");
+        const fastTimeout = new Promise<{ data: null; error: Error }>((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout no fallback rápido")), 6000)
+        );
+        const { data: appContext, error: fallbackError } = await Promise.race([fastPromise, fastTimeout]);
+
         if (!fallbackError && appContext) {
           applyValidatedBarberContext(userId, appContext);
           authCheckRef.current = false;
@@ -604,10 +610,10 @@ const Barbeiro = () => {
         return;
       }
 
-      toast.error("Não foi possível validar sua sessão. Tente novamente.");
-      navigate("/", { replace: true });
+      setAuthError("Não foi possível carregar as informações da sua conta. Verifique sua conexão e tente novamente.");
+      setAuthChecked(true);
     }
-  }, [applyValidatedBarberContext, barberContext, cachedSnapshot, navigate, queryClient]);
+  }, [applyValidatedBarberContext, barberContext, cachedSnapshot, queryClient]);
 
   // Pré-aquecimento agressivo: assim que existe contexto (até vindo do cache),
   // dashboard/agenda/perfil/disparo são hidratados em background. A UI nunca
@@ -707,6 +713,38 @@ const Barbeiro = () => {
       <p className="text-xs text-muted-foreground animate-pulse font-medium">Carregando...</p>
     </div>
   );
+
+  if (authError && !barberContext) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm space-y-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <p className="text-sm text-muted-foreground">{authError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthError(null);
+              authCheckRef.current = false;
+              if (authUser) void checkAuth(authUser.id);
+              else window.location.reload();
+            }}
+            className="h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
+          >
+            Tentar novamente
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/", { replace: true })}
+            className="h-11 w-full rounded-xl border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted transition-all cursor-pointer"
+          >
+            Voltar para o início
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Loading state: se ainda não temos contexto (nem via cache nem via revalidação)
   if (!barberContext) {

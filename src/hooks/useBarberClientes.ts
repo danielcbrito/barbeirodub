@@ -145,7 +145,7 @@ export async function fetchBarberClientes(barbeiroId: string): Promise<BarberCli
         .from("barbeiros")
         .select("tenant_id, user_id")
         .eq("id", barbeiroId)
-        .single();
+        .maybeSingle();
       const tenantId = barberData?.tenant_id || null;
       const barberUserId = barberData?.user_id || null;
 
@@ -480,6 +480,7 @@ export function useBarberClientes(barbeiroId: string) {
     initialDataUpdatedAt: cached?.updatedAt,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
+    retry: 1,
   });
 }
 
@@ -729,6 +730,7 @@ export function useTenantClientes(
     initialDataUpdatedAt: cached?.updatedAt,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
+    retry: 1,
   });
 }
 

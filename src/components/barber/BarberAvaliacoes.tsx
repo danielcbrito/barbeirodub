@@ -5,7 +5,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare,
   Loader2,
+  AlertCircle,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { BarberContext } from "@/pages/Barbeiro";
 import { useBarberAvaliacoes } from "@/hooks/useBarberAvaliacoes";
@@ -37,7 +39,7 @@ export function BarberAvaliacoes({
 }: BarberAvaliacoesProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: reviews = [], isLoading: loading } = useBarberAvaliacoes(barberContext.barbeiroId);
+  const { data: reviews = [], isLoading: loading, isError, refetch } = useBarberAvaliacoes(barberContext.barbeiroId);
   const [filterStar, setFilterStar] = useState<number | null>(null);
 
   /* ── Realtime — invalida o cache quando há mudança ── */
@@ -88,6 +90,23 @@ export function BarberAvaliacoes({
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center space-y-4">
+        <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">Erro ao carregar avaliações</p>
+          <p className="text-xs text-muted-foreground">Não foi possível carregar as avaliações no momento.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="cursor-pointer">
+          Tentar novamente
+        </Button>
       </div>
     );
   }

@@ -155,6 +155,7 @@ export function useSlotAvailability(
       setOccupiedSlots([]);
       lastSlotsRef.current = [];
       isInitialLoadRef.current = true;
+      setLoading(false);
       return;
     }
 
@@ -165,6 +166,7 @@ export function useSlotAvailability(
       setOccupiedSlots([]);
       lastSlotsRef.current = [];
       isInitialLoadRef.current = true;
+      setLoading(false);
       return;
     }
 

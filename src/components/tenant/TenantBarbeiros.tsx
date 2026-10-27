@@ -26,7 +26,7 @@ import {
   Plus, Search, Eye, EyeOff, Users, UserX,
   Loader2, Scissors, Mail, Phone, Lock, Trash2,
   AlertTriangle, Inbox, ChevronRight, Calendar, CreditCard,
-  Percent, CheckCircle, XCircle,
+  Percent, CheckCircle, XCircle, RotateCcw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -68,6 +68,7 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
 
   const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -148,6 +149,13 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
 
   /* ─── Data loading ─── */
   const loadBarbeiros = async () => {
+    if (!tenantId) {
+      setBarbeiros([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setLoadError(null);
     try {
       const { data, error } = await supabase
         .from("barbeiros")
@@ -182,6 +190,7 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
       setBarbeiros(enriched);
     } catch (error) {
       console.error("Erro ao carregar barbeiros:", error);
+      setLoadError("Não foi possível carregar os barbeiros da barbearia.");
       toast.error("Erro ao carregar barbeiros");
     } finally {
       setLoading(false);
@@ -345,6 +354,22 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError && barbeiros.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 px-4 text-center">
+        <AlertTriangle className="w-10 h-10 text-amber-500/80" strokeWidth={1.5} />
+        <p className="text-sm text-muted-foreground">{loadError}</p>
+        <button
+          onClick={() => loadBarbeiros()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Tentar novamente
+        </button>
       </div>
     );
   }

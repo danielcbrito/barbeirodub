@@ -225,6 +225,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   const { 
     slots: availableSlots, 
     loading: loadingSlots, 
+    error: errorSlots,
     refreshSlots,
     verifySlotAvailability 
   } = useSlotAvailability(
@@ -1877,6 +1878,18 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                     <Clock className="w-6 h-6 text-primary animate-spin" />
                   </div>
                   <p className="text-sm text-muted-foreground">Carregando horários...</p>
+                </div>
+              ) : errorSlots && availableSlots.length === 0 ? (
+                <div className="bg-card border border-border rounded-2xl p-8 text-center">
+                  <p className="text-amber-500 font-medium mb-4">
+                    Não foi possível consultar os horários deste dia.
+                  </p>
+                  <button
+                    onClick={() => refreshSlots()}
+                    className="px-6 py-2.5 bg-primary/10 text-primary rounded-xl font-medium hover:bg-primary/20 transition-all text-sm"
+                  >
+                    Tentar novamente
+                  </button>
                 </div>
               ) : availableSlots.filter(slot => slot.available).length === 0 ? (
                 <div className="bg-card border border-border rounded-2xl p-8 text-center">

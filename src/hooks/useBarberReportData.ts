@@ -22,6 +22,7 @@ export function useBarberReportData(barbeiroId?: string | null, tenantId?: strin
     queryKey: ['barber-report-v2', barbeiroId ?? null, tenantId ?? null, today],
     enabled,
     staleTime: 60_000,
+    retry: 1,
     refetchOnWindowFocus: true,
     refetchInterval: 300_000,
     queryFn: async (): Promise<ReportData> => {

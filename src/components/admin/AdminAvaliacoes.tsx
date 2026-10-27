@@ -8,7 +8,9 @@ import {
   Users,
   Scissors,
   Loader2,
+  AlertCircle,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -61,17 +63,19 @@ async function fetchAvaliacoes(tenantId?: string) {
   if (barbersRes.error) throw barbersRes.error;
 
   const barberIds = (barbersRes.data || []).map(b => b.id);
-
-  let reviewsQuery = supabase
-    .from("barbeiro_avaliacoes")
-    .select("id, rating, comment, reviewer_first_name, created_at, barber_id")
-    .order("created_at", { ascending: false });
-
-  if (barberIds.length > 0) {
-    reviewsQuery = reviewsQuery.in("barber_id", barberIds);
+  if (barberIds.length === 0) {
+    return {
+      reviews: [] as Review[],
+      barbers: (barbersRes.data || []) as Barber[],
+    };
   }
 
-  const reviewsRes = await reviewsQuery;
+  const reviewsRes = await supabase
+    .from("barbeiro_avaliacoes")
+    .select("id, rating, comment, reviewer_first_name, created_at, barber_id")
+    .in("barber_id", barberIds)
+    .order("created_at", { ascending: false });
+
   if (reviewsRes.error) throw reviewsRes.error;
 
   return {
@@ -97,10 +101,11 @@ export function AdminAvaliacoes({
 
   const queryKey = QUERY_KEYS.admin.avaliacoes(tenantId || "none");
 
-  const { data, isLoading: loading } = useQuery({
+  const { data, isLoading: loading, isError, refetch } = useQuery({
     queryKey,
     queryFn: () => fetchAvaliacoes(tenantId),
     staleTime: STALE_TIMES.AVALIACOES,
+    retry: 1,
   });
 
   const reviews = data?.reviews || [];
@@ -165,6 +170,23 @@ export function AdminAvaliacoes({
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] px-4 text-center space-y-4">
+        <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">Erro ao carregar avaliações</p>
+          <p className="text-xs text-muted-foreground">Não foi possível carregar as avaliações no momento.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="cursor-pointer">
+          Tentar novamente
+        </Button>
       </div>
     );
   }
