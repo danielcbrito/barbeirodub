@@ -118,24 +118,65 @@ export function BarberConfigBarbearia({
 }: BarberConfigBarbeariaProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isTenantAdmin = !!barberContext.isTenantAdmin;
   const urlUnidadeId = searchParams.get("unidade");
+  const urlScreen = searchParams.get("screen") || searchParams.get("secao") || searchParams.get("tab");
   const urlViewId = searchParams.get("view");
 
+  const resolveScreenFromParam = (param: string | null, isAdmin: boolean): HubScreen => {
+    if (!param) return "hub";
+    const s = param.toLowerCase().trim();
+    if (s === "clientes") return isAdmin ? "clientes-todos" : "clientes-meus";
+    if (s === "clientes-todos") return "clientes-todos";
+    if (s === "clientes-meus") return "clientes-meus";
+    if (s === "servicos" || s === "cortes" || s === "servicos-planos") return "servicos";
+    if (s === "planos") return "planos";
+    if (s === "horarios" || s === "horario") return isAdmin ? "horarios" : "horarios-pessoal";
+    if (s === "horarios-pessoal") return "horarios-pessoal";
+    if (s === "horarios-barbearia") return "horarios-barbearia";
+    if (s === "formas-pagamento" || s === "pagamento") return "formas-pagamento";
+    if (s === "whatsapp" || s === "atendimento") return "whatsapp";
+    if (s === "avaliacoes" || s === "feedback") return isAdmin ? "avaliacoes" : "avaliacoes-pessoal";
+    if (s === "barbeiros" || s === "equipe") return "barbeiros";
+    if (s === "dados-empresa" || s === "empresa") return "dados-empresa";
+    if (s === "fotos-banner" || s === "identidade-visual") return "fotos-banner";
+    if (s === "excluir-pausar") return "excluir-pausar";
+    return "hub";
+  };
+
   const [activeScreen, setActiveScreen] = useState<HubScreen>(() => {
+    if (urlScreen) return resolveScreenFromParam(urlScreen, isTenantAdmin);
     if (urlViewId === "formas-pagamento") return "formas-pagamento";
-    if (urlViewId) return "clientes-todos";
+    if (urlViewId) return isTenantAdmin ? "clientes-todos" : "clientes-meus";
     return "hub";
   });
 
+  const handleSubScreenBack = () => {
+    if (urlScreen || urlViewId) {
+      if (window.history.length > 1) {
+        navigate(-1);
+      } else {
+        navigate(appBasePath);
+      }
+    } else {
+      setActiveScreen("hub");
+    }
+  };
+
   useEffect(() => {
-    if (urlViewId && activeScreen === "hub") {
+    if (urlScreen) {
+      const target = resolveScreenFromParam(urlScreen, isTenantAdmin);
+      if (target !== "hub") {
+        setActiveScreen(target);
+      }
+    } else if (urlViewId && activeScreen === "hub") {
       if (urlViewId === "formas-pagamento") {
         setActiveScreen("formas-pagamento");
       } else {
-        setActiveScreen("clientes-todos");
+        setActiveScreen(isTenantAdmin ? "clientes-todos" : "clientes-meus");
       }
     }
-  }, [urlViewId]);
+  }, [urlScreen, urlViewId, isTenantAdmin]);
   const [tenantNome, setTenantNome] = useState<string>(DEFAULT_COMPANY_NAME);
   const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(DEFAULT_COMPANY_LOGO);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -175,8 +216,6 @@ export function BarberConfigBarbearia({
   const [barberAvatarUrl, setBarberAvatarUrl] = useState<string | null>(null);
   const [uploadingBarberAvatar, setUploadingBarberAvatar] = useState(false);
   const barberAvatarInputRef = useRef<HTMLInputElement>(null);
-
-  const isTenantAdmin = !!barberContext.isTenantAdmin;
 
   // Unidades da Barbearia
   const [unidades, setUnidades] = useState<Unidade[]>([]);
@@ -852,13 +891,13 @@ export function BarberConfigBarbearia({
             barbeiroId={effectiveBarbeiroId}
             userId={barberContext.userId}
             tenantId={resolvedTenantId || barberContext.tenantId}
-            onBack={() => setActiveScreen("hub")}
+            onBack={handleSubScreenBack}
           />
         );
       case "dados-empresa":
         return (
           <div className="pb-10">
-            <ScheduleHeader title="Dados da Barbearia" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Dados da Barbearia" onBack={handleSubScreenBack} />
             <div className="px-4 pt-3 max-w-md mx-auto">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-4">
                 Configure os dados cadastrais, endereço e formas de contato oficiais da barbearia.
@@ -878,7 +917,7 @@ export function BarberConfigBarbearia({
               unidadeNome={activeUnit?.nome}
               tenantNome={activeUnit?.nome || tenantNome}
               barberName={barberContext.apelido}
-              onBackProp={() => setActiveScreen("hub")}
+              onBackProp={handleSubScreenBack}
               hideAgent={!isTenantAdmin}
             />
           </div>
@@ -890,7 +929,7 @@ export function BarberConfigBarbearia({
           return (
             <div className="pb-10 min-h-app bg-background flex flex-col flex-1">
               {scheduleViewMode === 'list' && (
-                <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
+                <ScheduleHeader title="Horário de Funcionamento" onBack={handleSubScreenBack} />
               )}
               <div className="px-4 pt-3 max-w-md mx-auto w-full flex-1 flex flex-col">
                 <AdminHorarios
@@ -910,7 +949,7 @@ export function BarberConfigBarbearia({
         // Dois ou mais barbeiros: exibe as duas opções separadamente
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Horário de Funcionamento" onBack={handleSubScreenBack} />
             <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
                 Escolha o horário que deseja configurar:
@@ -983,7 +1022,13 @@ export function BarberConfigBarbearia({
             {scheduleViewMode === 'list' && (
               <ScheduleHeader
                 title={isTenantAdmin ? "Seu Horário Pessoal" : "Horário de Funcionamento"}
-                onBack={() => setActiveScreen(isTenantAdmin ? (hasMultipleBarbers ? "horarios" : "hub") : "hub")}
+                onBack={() => {
+                  if (hasMultipleBarbers && isTenantAdmin) {
+                    setActiveScreen("horarios");
+                  } else {
+                    handleSubScreenBack();
+                  }
+                }}
               />
             )}
             <div className="px-4 pt-3 max-w-md mx-auto w-full flex-1 flex flex-col">
@@ -1008,7 +1053,7 @@ export function BarberConfigBarbearia({
           <BarberServicosPlanos
             tenantId={tenantId}
             appBasePath={appBasePath}
-            onBack={() => setActiveScreen("hub")}
+            onBack={handleSubScreenBack}
             defaultTab={activeScreen === "planos" ? "planos" : "servicos"}
             barberContext={barberContext}
           />
@@ -1016,12 +1061,12 @@ export function BarberConfigBarbearia({
       case "avaliacoes":
         return (
           <div className="pb-10">
-            <ScheduleHeader title="Avaliações da Barbearia" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Avaliações da Barbearia" onBack={handleSubScreenBack} />
             <div className="px-4 pt-3 max-w-md mx-auto">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-4">
                 Acompanhe o feedback, notas e comentários deixados pelos clientes sobre a barbearia.
               </p>
-              <AdminAvaliacoes tenantId={tenantId} basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />
+              <AdminAvaliacoes tenantId={tenantId} basePath={appBasePath} hideHeader onBack={handleSubScreenBack} />
             </div>
           </div>
         );
@@ -1032,7 +1077,7 @@ export function BarberConfigBarbearia({
               <BarberAvaliacoes
                 barberContext={barberContext}
                 basePath={appBasePath}
-                onBack={() => setActiveScreen("hub")}
+                onBack={handleSubScreenBack}
               />
             </div>
           </div>
@@ -1044,7 +1089,7 @@ export function BarberConfigBarbearia({
               <AdminBarbeiros
                 basePath={appBasePath}
                 tenantId={tenantId || resolvedTenantId}
-                onBack={() => setActiveScreen("hub")}
+                onBack={handleSubScreenBack}
               />
             </div>
           </div>
@@ -1052,7 +1097,7 @@ export function BarberConfigBarbearia({
       case "clientes":
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Clientes" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Clientes" onBack={handleSubScreenBack} />
             <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
                 Escolha a base de clientes que deseja visualizar:
@@ -1101,7 +1146,7 @@ export function BarberConfigBarbearia({
                 barberContext={barberContext}
                 forceViewMode="todos"
                 initialUnitId={selectedUnidadeId === "todas" ? undefined : selectedUnidadeId}
-                onBack={() => setActiveScreen("hub")}
+                onBack={handleSubScreenBack}
               />
             </div>
           </div>
@@ -1113,7 +1158,7 @@ export function BarberConfigBarbearia({
               <BarberClientes
                 barberContext={barberContext}
                 forceViewMode="meus"
-                onBack={() => setActiveScreen("hub")}
+                onBack={handleSubScreenBack}
               />
             </div>
           </div>
@@ -1122,7 +1167,7 @@ export function BarberConfigBarbearia({
         if (!isTenantAdmin) {
           return (
             <div className="pb-10 min-h-app bg-background">
-              <ScheduleHeader title="Foto de Perfil" onBack={() => setActiveScreen("hub")} />
+              <ScheduleHeader title="Foto de Perfil" onBack={handleSubScreenBack} />
               <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
                 <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
                   Personalize sua foto de exibição para seus clientes nos agendamentos e no perfil da barbearia.
@@ -1189,7 +1234,7 @@ export function BarberConfigBarbearia({
 
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Foto e Banner" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Foto e Banner" onBack={handleSubScreenBack} />
             <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
                 Personalize a identidade visual da barbearia atualizando o banner de capa e a foto de perfil.
@@ -1310,7 +1355,7 @@ export function BarberConfigBarbearia({
       case "excluir-pausar":
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Excluir e Pausar" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Excluir e Pausar" onBack={handleSubScreenBack} />
 
             <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">

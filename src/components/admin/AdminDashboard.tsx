@@ -570,7 +570,7 @@ export function AdminDashboard({
         <div className="grid grid-cols-4 gap-2 sm:gap-4">
           <button
             type="button"
-            onClick={() => navigate(`${basePath}/horarios`)}
+            onClick={() => navigate(`${basePath}/config-barbearia?screen=horarios`)}
             className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
           >
             <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
@@ -583,7 +583,7 @@ export function AdminDashboard({
 
           <button
             type="button"
-            onClick={() => navigate(`${basePath}/clientes`)}
+            onClick={() => navigate(`${basePath}/config-barbearia?screen=clientes`)}
             className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
           >
             <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
@@ -596,7 +596,7 @@ export function AdminDashboard({
 
           <button
             type="button"
-            onClick={() => navigate(`${basePath}/servicos/cortes`)}
+            onClick={() => navigate(`${basePath}/config-barbearia?screen=servicos`)}
             className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
           >
             <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">

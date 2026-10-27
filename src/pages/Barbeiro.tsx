@@ -918,11 +918,11 @@ const Barbeiro = () => {
                     <Route path="confirmacoes" element={<BarberConfirmacoesPendentes barberContext={barberContext} />} />
                     <Route path="agenda" element={<BarberAgenda barberContext={barberContext} />} />
                     <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/barbeiro" />} />
-                    <Route path="clientes" element={<BarberClientes barberContext={barberContext} />} />
-                    <Route path="servicos" element={<BarberCortes barberContext={barberContext} />} />
+                    <Route path="clientes" element={<Navigate to="/barbeiro/config-barbearia?screen=clientes" replace />} />
+                    <Route path="servicos" element={<Navigate to="/barbeiro/config-barbearia?screen=servicos" replace />} />
                     <Route path="relatorios" element={<EstatisticasRelatorios barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} basePath="/barbeiro/perfil" />} />
                     <Route path="financeiro" element={<BarberFinanceiro barberContext={barberContext} />} />
-                    <Route path="horarios" element={<BarberMobileHorarios barberContext={barberContext} />} />
+                    <Route path="horarios" element={<Navigate to="/barbeiro/config-barbearia?screen=horarios" replace />} />
                     <Route path="planos" element={<AdminPlanos tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
                     <Route path="meus-planos" element={<AdminMeusPlanos basePath="/barbeiro" />} />
                     <Route path="loja" element={barberContext.tenantId ? <AdminLoja tenantId={barberContext.tenantId} readOnly /> : null} />

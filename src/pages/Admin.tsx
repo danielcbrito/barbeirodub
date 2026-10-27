@@ -490,44 +490,11 @@ const Admin = () => {
                 <Route path="barbeiros" element={<AdminBarbeiros />} />
                 <Route
                   path="clientes"
-                  element={
-                    adminContext ? (
-                      <BarberClientes
-                        barberContext={{
-                          barbeiroId: adminContext.barbeiroId || "",
-                          apelido: adminContext.apelido || "Admin",
-                          userId: adminContext.userId,
-                          tenantId: adminContext.tenantId || null,
-                          isTenantAdmin: true,
-                          deletedAt: null,
-                          graceDaysLeft: 0,
-                          canManageTenantWideClientBlock: true,
-                        }}
-                        basePath="/admin"
-                      />
-                    ) : null
-                  }
+                  element={<Navigate to="/admin/config-barbearia?screen=clientes" replace />}
                 />
                 <Route
                   path="meus-clientes"
-                  element={
-                    adminContext?.barbeiroId ? (
-                      <BarberClientes
-                        barberContext={{
-                          barbeiroId: adminContext.barbeiroId,
-                          apelido: adminContext.apelido || "",
-                          userId: adminContext.userId,
-                          tenantId: adminContext.tenantId || null,
-                          isTenantAdmin: true,
-                          deletedAt: null,
-                          graceDaysLeft: 0,
-                          canManageTenantWideClientBlock: true,
-                        }}
-                        basePath="/admin"
-                        forceViewMode="meus"
-                      />
-                    ) : null
-                  }
+                  element={<Navigate to="/admin/config-barbearia?screen=clientes-meus" replace />}
                 />
                 <Route path="config-barbearia" element={
                   adminContext ? (
@@ -562,7 +529,7 @@ const Admin = () => {
                 <Route path="configuracoes" element={<AdminConfiguracoes />} />
                 <Route path="apis" element={<AdminAPIs />} />
                 <Route path="seguranca/*" element={<AdminSeguranca />} />
-                <Route path="horarios" element={<AdminMobileHorariosRoute barbeiroId={adminContext?.barbeiroId || undefined} tenantId={adminContext?.tenantId || undefined} />} />
+                <Route path="horarios" element={<Navigate to="/admin/config-barbearia?screen=horarios" replace />} />
                 <Route path="dev" element={<AdminDev />} />
                 <Route path="disparo" element={<AdminDisparo />} />
                 <Route path="perfil" element={<AdminMobileProfile />} />
