@@ -785,9 +785,14 @@ export function AdminMobileAgenda({
   const formattedDateTitle = `${capitalizedWeekday}, ${dayAndMonth}`;
 
   return (
-    <div className="admin-mobile-agenda flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
+    <div className="admin-mobile-agenda flex flex-col bg-background relative w-full h-dvh" style={{ height: '100dvh' }}>
       {/* ══════ HEADER FIXO: NAVEGAÇÃO E CARROSSEL DE DATAS ESTILO APPLE HIG (CORES DA MARCA: VERMELHO/PRETO/BRANCO) ══════ */}
-      <div className="flex-shrink-0 z-20 bg-background/80 backdrop-blur-xl pt-3 pb-2.5 relative">
+      <div 
+        className="flex-shrink-0 z-20 bg-background/85 backdrop-blur-xl pb-2.5 relative border-b border-border/15"
+        style={{
+          paddingTop: "max(calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 0.5rem), 1rem)",
+        }}
+      >
         {/* Linha 1: Mês/Ano + Botão Hoje + Setas de Navegação */}
         <div className="flex items-center justify-between px-4 mb-2.5">
           {/* Seletor Mês/Ano */}
@@ -923,7 +928,12 @@ export function AdminMobileAgenda({
       </div>
 
       {/* ══════ ÁREA SCROLLÁVEL: DATA, CONTAGEM E BOTÃO SOBEM JUNTOS AO ROLAR A TELA ══════ */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-20 pt-2">
+      <div 
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain pt-2"
+        style={{
+          paddingBottom: "calc(7.5rem + var(--app-safe-bottom, 8px) + env(safe-area-inset-bottom, 0px))",
+        }}
+      >
         {/* Barra de Ação (Data + Contagem + Botão Novo Encaixe) — sobe junto com os agendamentos */}
         <div className="px-4 pt-2 pb-2.5 flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1 pr-1">
