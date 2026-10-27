@@ -59,17 +59,60 @@ export function getStoredSupabaseUserId(): string | null {
   }
 }
 
-/** Remove todo cache síncrono (chaves com prefixo dub:) do localStorage. */
+/** Remove todo cache de usuário e sincronização do localStorage e sessionStorage */
 export function clearDeviceCaches(): void {
   if (typeof window === "undefined") return;
   try {
     const keys = Object.keys(window.localStorage);
+    const exactKeysToRemove = new Set([
+      "barbeiroId",
+      "userRole",
+      "barbeirodub_meta_mensal",
+      "dub_pending_barber_tenant",
+      "dub_pending_barber_invite",
+      "emailParaLogin",
+      "pendingVerificationEmail",
+      "dub-rq-cache-v2-lite",
+      "dub-rq-cache-v1",
+      "barber_setup_dismissed",
+    ]);
+
     for (const key of keys) {
-      if (key.startsWith("dub:") || key.startsWith("dub-")) {
+      if (
+        key.startsWith("dub:") ||
+        key.startsWith("dub-") ||
+        key.startsWith("dub_") ||
+        key.startsWith("barbeiro_carteira_") ||
+        key.startsWith("sync-cache:") ||
+        exactKeysToRemove.has(key)
+      ) {
         window.localStorage.removeItem(key);
       }
     }
+
+    window.sessionStorage.clear();
   } catch {
     /* ignora */
+  }
+}
+
+/** Encerra a sessão Supabase e remove de forma garantida todos os dados locais do dispositivo */
+export async function signOutAndClearDevice(navigate?: (url: string) => void): Promise<void> {
+  try {
+    clearDeviceCaches();
+  } catch {}
+
+  try {
+    const { supabase } = await import("@/integrations/supabase/client");
+    await supabase.auth.signOut();
+  } catch (err) {
+    console.error("Erro ao encerrar sessão Supabase:", err);
+  } finally {
+    clearDeviceCaches();
+    if (navigate) {
+      navigate("/login");
+    } else if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
   }
 }

@@ -53,7 +53,7 @@ const AdminLoja = lazy(() => import("@/components/admin/loja/AdminLoja").then(m 
 const CarteiraPage = lazy(() => import("@/components/barber/CarteiraPage").then(m => ({ default: m.CarteiraPage })));
 const AppointmentDetailsPage = lazy(() => import("@/pages/AppointmentDetailsPage"));
 
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Clock, Loader2 } from "lucide-react";
 const WhatsAppConnectionPage = lazy(() => import("@/components/whatsapp/WhatsAppConnectionPage").then(m => ({ default: m.WhatsAppConnectionPage })));
 const InstagramConnectionPage = lazy(() => import("@/components/instagram/InstagramConnectionPage").then(m => ({ default: m.InstagramConnectionPage })));
 const InstagramCallbackHandler = lazy(() => import("@/components/barber/InstagramCallbackHandler").then(m => ({ default: m.InstagramCallbackHandler })));
@@ -153,11 +153,18 @@ const readCachedBarberSnapshot = (): CachedBarberSnapshot | null => {
   if (typeof window === "undefined") return null;
   // Segurança: sem sessão Supabase válida no dispositivo, não hidrata cache.
   if (!hasStoredSupabaseSession()) return null;
+  const currentUserId = getStoredSupabaseUserId();
+  if (!currentUserId) return null;
   try {
     const raw = window.localStorage.getItem(BARBER_CONTEXT_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.barberContext?.barbeiroId) return null;
+    // Previne vazamento entre contas: só hidrata se o cache pertencer ao usuário autenticado atual
+    if (parsed.barberContext.userId && parsed.barberContext.userId !== currentUserId) {
+      window.localStorage.removeItem(BARBER_CONTEXT_CACHE_KEY);
+      return null;
+    }
     return parsed as CachedBarberSnapshot;
   } catch {
     return null;
@@ -694,13 +701,21 @@ const Barbeiro = () => {
   const handleCloseDrawer = () => setIsDrawerOpen(false);
 
   // Layout Loading
-  const LoadingFallback = () => <div className="min-h-[40vh] bg-background" />;
+  const LoadingFallback = () => (
+    <div className="flex flex-col items-center justify-center min-h-[40vh] w-full gap-3 py-12">
+      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      <p className="text-xs text-muted-foreground animate-pulse font-medium">Carregando...</p>
+    </div>
+  );
 
-  // Loading state: só bloqueamos se ainda não temos contexto (nem via cache
-  // nem via revalidação). A verificação de manutenção roda em background e
-  // pode assumir a tela depois — não deve atrasar o primeiro paint.
+  // Loading state: se ainda não temos contexto (nem via cache nem via revalidação)
   if (!barberContext) {
-    return <div className="min-h-app bg-background" />;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-app w-full bg-background gap-3 py-20">
+        <Loader2 className="w-9 h-9 text-primary animate-spin" />
+        <p className="text-sm text-muted-foreground animate-pulse font-medium">Carregando painel...</p>
+      </div>
+    );
   }
 
   // Setup incompleto: se ainda não foi dispensado pelo usuário nesta sessão
@@ -893,6 +908,7 @@ const Barbeiro = () => {
                     <Route path="barbeiros" element={<AdminBarbeiros basePath="/barbeiro" />} />
                     <Route path="configuracoes" element={<AdminConfiguracoes />} />
                     <Route path="unidades" element={<AdminUnidades basePath="/barbeiro" />} />
+                    <Route path="*" element={<Navigate to="/barbeiro" replace />} />
                   </>
                 )}
               </Routes>
@@ -995,6 +1011,7 @@ const Barbeiro = () => {
                       <Route path="barbeiros" element={<AdminBarbeiros basePath="/barbeiro" />} />
                       <Route path="configuracoes" element={<AdminConfiguracoes />} />
                       <Route path="unidades" element={<AdminUnidades basePath="/barbeiro" />} />
+                      <Route path="*" element={<Navigate to="/barbeiro" replace />} />
                     </>
                   )}
                 </Routes>

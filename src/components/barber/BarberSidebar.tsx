@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { BarberContext } from "@/pages/Barbeiro";
 import { BarberProfileSheet } from "@/components/barber/BarberProfileSheet";
-import { useTheme } from "next-themes";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 interface BarberSidebarProps {
   barberContext: BarberContext;
@@ -114,11 +114,8 @@ export function BarberSidebar({ barberContext, pendingCount, basePath = "/barbei
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      localStorage.removeItem("userRole");
-      localStorage.removeItem("barbeiroId");
+      await signOutAndClearDevice();
       toast.success("Logout realizado com sucesso");
-      window.location.href = "/login";
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
       toast.error("Erro ao fazer logout");

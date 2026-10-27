@@ -54,6 +54,7 @@ const BarberConfigBarbearia = lazy(() => import("@/components/barber/BarberConfi
 
 import { cn } from "@/lib/utils";
 import { SupportChatBubble } from "@/components/support/SupportChatBubble";
+import { hasStoredSupabaseSession, getStoredSupabaseUserId } from "@/lib/sessionGuard";
 
 // Mapeamento de rotas para títulos
 const routeTitles: Record<string, string> = {
@@ -228,10 +229,18 @@ const Admin = () => {
    */
   useEffect(() => {
     try {
+      if (!hasStoredSupabaseSession()) return;
+      const currentUserId = getStoredSupabaseUserId();
+      if (!currentUserId) return;
+
       const raw = localStorage.getItem(ADMIN_CTX_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as AdminContext;
       if (parsed?.userId) {
+        if (parsed.userId !== currentUserId) {
+          localStorage.removeItem(ADMIN_CTX_KEY);
+          return;
+        }
         setAdminContext(parsed);
         setAuthChecked(true);
       }
@@ -539,6 +548,7 @@ const Admin = () => {
                 <Route path="efi-credenciais" element={<AdminEfiCredenciais />} />
                 <Route path="indicacoes" element={<AdminIndicacoes />} />
                 <Route path="minhas-indicacoes" element={<AdminIndicacoes />} />
+                <Route path="*" element={<Navigate to="/admin" replace />} />
               </Routes>
             </Suspense>
           </div>
@@ -676,6 +686,7 @@ const Admin = () => {
                       </div>
                     )
                   } />
+                  <Route path="*" element={<Navigate to="/admin" replace />} />
                 </Routes>
               </Suspense>
             </div>

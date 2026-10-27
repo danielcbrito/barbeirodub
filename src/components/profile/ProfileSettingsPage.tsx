@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 import { useDadosEmpresaUnits } from "@/components/admin/dados-empresa/useDadosEmpresaUnits";
 
 interface ProfileSettingsPageProps {
@@ -66,11 +67,8 @@ export function ProfileSettingsPage({
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
-      await supabase.auth.signOut();
-      localStorage.removeItem("userRole");
-      localStorage.removeItem("barbeiroId");
+      await signOutAndClearDevice();
       toast.success("Sessão encerrada");
-      window.location.href = "/login";
     } catch {
       toast.error("Erro ao sair");
       setLoggingOut(false);
@@ -89,9 +87,7 @@ export function ProfileSettingsPage({
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro ao excluir");
       toast.success("Barbearia excluída com sucesso");
-      await supabase.auth.signOut();
-      localStorage.clear();
-      window.location.href = "/login";
+      await signOutAndClearDevice();
     } catch (e: any) {
       console.error("[DeleteAccount]", e);
       toast.error(e.message || "Erro ao excluir conta");

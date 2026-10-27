@@ -26,6 +26,7 @@ import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
 import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
 import { ProfileInstagramBanner } from "@/components/profile/ProfileInstagramBanner";
 import { ProfilePortfolioCarousel } from "@/components/profile/ProfilePortfolioCarousel";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 
 interface AdminMobileProfileProps {
@@ -569,11 +570,8 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
                 if (loggingOut) return;
                 setLoggingOut(true);
                 try {
-                  await supabase.auth.signOut();
-                  localStorage.removeItem("userRole");
-                  localStorage.removeItem("barbeiroId");
+                  await signOutAndClearDevice();
                   toast.success("Sessão encerrada");
-                  window.location.href = "/login";
                 } catch {
                   toast.error("Erro ao sair");
                   setLoggingOut(false);

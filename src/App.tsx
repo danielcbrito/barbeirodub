@@ -18,6 +18,8 @@ import { applyStatusBarColor } from "@/hooks/useStatusBarColor";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { LoadingScreen } from "@/components/shared/LoadingScreen";
 import { InstallPwaPrompt } from "@/components/pwa/InstallPwaPrompt";
+import { supabase } from "@/integrations/supabase/client";
+import { clearDeviceCaches } from "@/lib/sessionGuard";
 
 // Landing e Login são eager (páginas de entrada — quase todo primeiro paint cai aqui).
 import Index from "./pages/Index";
@@ -119,6 +121,19 @@ function QueryCacheHousekeeping() {
         window.setTimeout(() => window.localStorage.removeItem("dub-rq-cache-v1"), 1200);
       }
     } catch {}
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        clearDeviceCaches();
+        queryClient.clear();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return null;

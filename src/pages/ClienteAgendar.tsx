@@ -253,7 +253,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           .from("barbeiros")
           .select("woovi_pix_key")
           .eq("id", selectedBarberId)
-          .single(),
+          .maybeSingle(),
       ]);
 
       const map = new Map<string, number>();
@@ -487,7 +487,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         .from("barbeiros")
         .select("tenant_id")
         .eq("id", recentApt.barbeiro_id)
-        .single();
+        .maybeSingle();
       return barber?.tenant_id ?? null;
     }
 
@@ -704,7 +704,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
             .from("servicos")
             .select("id, nome, descricao, duracao_minutos, preco")
             .eq("id", planoData.servico_id)
-            .single();
+            .maybeSingle();
           
           if (servicoData) {
             servicoVinculado = servicoData;
@@ -743,7 +743,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         .from("pending_bookings")
         .select(`*, servico:servicos(*)`)
         .eq("id", bookingId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       if (!booking) {
@@ -780,7 +780,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         .from("agendamentos")
         .select(`id, data, hora, duracao, preco, status, barbeiro_id, servico_id, user_id, observacoes, payment_method, tipo_agendamento, is_free, servico:servicos(id, nome, descricao, duracao_minutos, preco)`)
         .eq("id", appointmentId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       if (!appointment) {
@@ -1043,7 +1043,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         sessionStorage.removeItem('isRescheduling');
         sessionStorage.removeItem('rescheduleAppointmentId');
         
-        const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).single();
+        const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).maybeSingle();
         sendNovoAgendamentoEvent({
           agendamento_id: data.appointmentId || '',
           cliente_id: session.user.id,
@@ -1140,7 +1140,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
       await markRedemptionAsUsed(appointment.id);
 
-      const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).maybeSingle();
       sendNovoAgendamentoEvent({
         agendamento_id: appointment.id,
         cliente_id: session.user.id,
@@ -1257,7 +1257,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       sessionStorage.removeItem('isRescheduling');
       sessionStorage.removeItem('rescheduleAppointmentId');
 
-      const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).maybeSingle();
       sendNovoAgendamentoEvent({
         agendamento_id: appointment.id,
         cliente_id: session.user.id,
@@ -1362,7 +1362,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           status: isPendingCash ? "pending" : "paid",
         });
 
-      const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).maybeSingle();
       sendNovoAgendamentoEvent({
         agendamento_id: appointment.id,
         cliente_id: session.user.id,
@@ -1495,7 +1495,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       sessionStorage.removeItem('isRescheduling');
       sessionStorage.removeItem('rescheduleAppointmentId');
 
-      const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).maybeSingle();
       const mainService = selectedServices[0];
       sendRemarcacaoConcluidaEvent({
         agendamento_id: rescheduleAppointmentId,

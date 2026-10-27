@@ -130,7 +130,7 @@ export function MobileManualBookingModal({
 
   // Resolve barbeiro ID: prop -> seleção -> fallback local/session
   const resolvedBarbeiroId = barbeiroId || selectedBarber?.id || fallbackBarbeiroId || null;
-  const shouldShowBarberSelection = !barbeiroId && !fallbackBarbeiroId;
+  const shouldShowBarberSelection = !barbeiroId;
 
   useEffect(() => {
     if (open) {

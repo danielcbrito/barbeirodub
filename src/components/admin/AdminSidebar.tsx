@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { AdminProfileSheet } from "@/components/admin/AdminProfileSheet";
 import { useTheme } from "next-themes";
 import { resolveOwnerIdentity } from "@/lib/ownerIdentity";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 interface AdminSidebarProps {
   basePath?: string;
@@ -159,9 +160,8 @@ export function AdminSidebar({ basePath = "/admin", tenantNome, pendingCount: ex
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      await signOutAndClearDevice();
       toast.success("Logout realizado com sucesso");
-      window.location.href = "/login";
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
       toast.error("Erro ao fazer logout");
