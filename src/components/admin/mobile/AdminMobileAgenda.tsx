@@ -205,16 +205,24 @@ export function AdminMobileAgenda({
     const candidate = initialSelectedDate || location.state?.selectedDate;
     if (candidate) {
       const parsed = getStoredAgendaDate(candidate);
-      setSelectedDate(parsed);
-      setSelectedMonth(startOfMonth(parsed));
+      setSelectedDate((prev) => (isSameDay(prev, parsed) ? prev : parsed));
+      setSelectedMonth((prev) => {
+        const nextMonth = startOfMonth(parsed);
+        return isSameMonth(prev, nextMonth) ? prev : nextMonth;
+      });
       saveAgendaSelectedDate(parsed);
     }
   }, [initialSelectedDate, location.state?.selectedDate]);
 
   // Persiste na sessão sempre que o barbeiro mudar a data selecionada e notifica callback pai
+  const lastNotifiedDateKeyRef = useRef<string>("");
   useEffect(() => {
+    const key = getDateKey(selectedDate);
     saveAgendaSelectedDate(selectedDate);
-    onDateChange?.(selectedDate);
+    if (lastNotifiedDateKeyRef.current !== key) {
+      lastNotifiedDateKeyRef.current = key;
+      onDateChange?.(selectedDate);
+    }
   }, [selectedDate, onDateChange]);
 
   // Modal de seleção rápida de mês/ano
@@ -410,11 +418,6 @@ export function AdminMobileAgenda({
     if (dateKey) setAppointmentsDateKey(dateKey);
   }, []);
 
-  const isScrollingFromCodeRef = useRef(true);
-  const isUserTouchingRef = useRef(false);
-  const touchEndTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-
   // Centraliza com precisão o dia selecionado no centro geométrico do carrossel
   const scrollToDay = useCallback((day: Date, behavior: ScrollBehavior = "smooth") => {
     const container = carouselRef.current;
@@ -423,7 +426,6 @@ export function AdminMobileAgenda({
     const el = container.querySelector(`[data-date="${dayKey}"]`) as HTMLElement;
     if (!el) return;
 
-    isScrollingFromCodeRef.current = true;
     const containerWidth = container.offsetWidth;
     const cardLeft = el.offsetLeft;
     const cardWidth = el.offsetWidth;
@@ -431,75 +433,13 @@ export function AdminMobileAgenda({
 
     if (behavior === "auto") {
       container.scrollLeft = Math.max(0, targetScroll);
-      setTimeout(() => {
-        isScrollingFromCodeRef.current = false;
-      }, 50);
     } else {
       container.scrollTo({
         left: Math.max(0, targetScroll),
         behavior,
       });
-
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-      scrollTimeoutRef.current = setTimeout(() => {
-        isScrollingFromCodeRef.current = false;
-      }, 600);
     }
   }, []);
-
-  // Detecta o dia mais próximo ao centro APENAS quando o usuário arrasta manualmente com o dedo
-  useEffect(() => {
-    const container = carouselRef.current;
-    if (!container) return;
-
-    let rafId: number;
-    const handleScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        // NUNCA alterar data se foi rolagem por código, ou antes do scroll inicial assentar,
-        // ou se o usuário NÃO está ativamente tocando/arrastando a barra de dias!
-        if (isScrollingFromCodeRef.current || !isInitialScrollDone.current || !isUserTouchingRef.current) {
-          return;
-        }
-
-        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-        scrollTimeoutRef.current = setTimeout(() => {
-          if (isScrollingFromCodeRef.current || !isInitialScrollDone.current || !isUserTouchingRef.current) {
-            return;
-          }
-          const centerX = container.scrollLeft + container.offsetWidth / 2;
-          const children = container.querySelectorAll("[data-date]");
-          let closestDate: Date | null = null;
-          let minDist = Infinity;
-
-          children.forEach((child) => {
-            const el = child as HTMLElement;
-            const childCenter = el.offsetLeft + el.offsetWidth / 2;
-            const dist = Math.abs(childCenter - centerX);
-            if (dist < minDist) {
-              minDist = dist;
-              const dateStr = el.getAttribute("data-date");
-              if (dateStr) {
-                const [y, m, d] = dateStr.split("-").map(Number);
-                closestDate = new Date(y, m - 1, d);
-              }
-            }
-          });
-
-          if (closestDate && !isSameDay(closestDate, selectedDate)) {
-            setSelectedDate(closestDate);
-          }
-        }, 80);
-      });
-    };
-
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      container.removeEventListener("scroll", handleScroll);
-      cancelAnimationFrame(rafId);
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    };
-  }, [selectedDate]);
 
   // Carregar agendamentos do dia ativo
   const loadAppointments = useCallback(async (
@@ -785,7 +725,6 @@ export function AdminMobileAgenda({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     let cancelled = false;
-    isScrollingFromCodeRef.current = true;
 
     const attemptScroll = (attemptsLeft: number) => {
       if (cancelled) return;
@@ -799,7 +738,6 @@ export function AdminMobileAgenda({
         timer = setTimeout(() => attemptScroll(attemptsLeft - 1), 30);
       } else {
         isInitialScrollDone.current = true;
-        isScrollingFromCodeRef.current = false;
       }
     };
 
@@ -901,32 +839,10 @@ export function AdminMobileAgenda({
         {/* ══════ CARROSSEL DE DATAS FLUIDO (SEM LINHA DIVISÓRIA INFERIOR) ══════ */}
         <div
           ref={carouselRef}
-          onTouchStart={() => {
-            isUserTouchingRef.current = true;
-            if (touchEndTimerRef.current) clearTimeout(touchEndTimerRef.current);
-          }}
-          onTouchEnd={() => {
-            if (touchEndTimerRef.current) clearTimeout(touchEndTimerRef.current);
-            touchEndTimerRef.current = setTimeout(() => {
-              isUserTouchingRef.current = false;
-            }, 300);
-          }}
-          onPointerDown={(e) => {
-            if (e.pointerType === "touch" || e.pointerType === "mouse") {
-              isUserTouchingRef.current = true;
-              if (touchEndTimerRef.current) clearTimeout(touchEndTimerRef.current);
-            }
-          }}
-          onPointerUp={() => {
-            if (touchEndTimerRef.current) clearTimeout(touchEndTimerRef.current);
-            touchEndTimerRef.current = setTimeout(() => {
-              isUserTouchingRef.current = false;
-            }, 300);
-          }}
           className="w-full overflow-x-auto scrollbar-hide py-1 scroll-smooth"
           style={{
             WebkitOverflowScrolling: "touch",
-            scrollSnapType: "x mandatory",
+            scrollSnapType: "x proximity",
           }}
         >
           <div
@@ -951,6 +867,7 @@ export function AdminMobileAgenda({
                   <button
                     type="button"
                     onClick={() => {
+                      if (isSameDay(day, selectedDate)) return;
                       setSelectedDate(day);
                       scrollToDay(day, "smooth");
                     }}

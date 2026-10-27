@@ -133,7 +133,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   useEffect(() => {
     if (location.state?.selectedDate) {
       const parsed = getStoredAgendaDate(location.state.selectedDate);
-      setSelectedDate(parsed);
+      setSelectedDate((prev) => (isSameDay(prev, parsed) ? prev : parsed));
     }
   }, [location.state?.selectedDate]);
 
@@ -257,64 +257,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     return names[date.getDay()];
   };
 
-  // Scroll inicial para o dia selecionado (ou hoje)
-  useEffect(() => {
-    if (isMobile) return;
-    const timer = setTimeout(() => {
-      const el = scrollRef.current;
-      const inner = innerRef.current;
-      if (!el || !inner) return;
-      const targetIdx = allDays.findIndex(d => isSameDay(d, selectedDate));
-      const idxToScroll = targetIdx >= 0 ? targetIdx : todayIndex;
-      const child = inner.children[idxToScroll] as HTMLElement;
-      if (!child) return;
-      el.scrollLeft = child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2;
-      setTimeout(() => { isInitialScrollDone.current = true; }, 100);
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [isMobile, selectedDate, allDays, todayIndex]);
-
-  // Detectar o dia central durante scroll
-  useEffect(() => {
-    if (isMobile) return;
-    const el = scrollRef.current;
-    const inner = innerRef.current;
-    if (!el || !inner) return;
-
-    let rafId: number;
-    const handleScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        if (!isInitialScrollDone.current) return;
-        const centerX = el.scrollLeft + el.offsetWidth / 2;
-        const children = Array.from(inner.children) as HTMLElement[];
-        let closestIdx = 0;
-        let minDist = Infinity;
-        for (let i = 0; i < children.length; i++) {
-          const childCenter = children[i].offsetLeft + children[i].offsetWidth / 2;
-          const dist = Math.abs(childCenter - centerX);
-          if (dist < minDist) {
-            minDist = dist;
-            closestIdx = i;
-          }
-        }
-        if (allDays[closestIdx]) {
-          setSelectedDate(prev => {
-            if (isSameDay(prev, allDays[closestIdx])) return prev;
-            return allDays[closestIdx];
-          });
-        }
-      });
-    };
-
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", handleScroll);
-      cancelAnimationFrame(rafId);
-    };
-  }, [allDays, isMobile]);
-
-  const scrollToDate = useCallback((date: Date) => {
+  const scrollToDate = useCallback((date: Date, behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
     const inner = innerRef.current;
     if (!el || !inner) return;
@@ -322,8 +265,23 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     if (idx < 0) return;
     const child = inner.children[idx] as HTMLElement;
     if (!child) return;
-    el.scrollTo({ left: child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2, behavior: "smooth" });
+    const targetLeft = child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2;
+    if (behavior === "auto") {
+      el.scrollLeft = targetLeft;
+    } else {
+      el.scrollTo({ left: targetLeft, behavior });
+    }
   }, [allDays]);
+
+  // Scroll inicial para o dia selecionado (ou hoje) na montagem
+  useEffect(() => {
+    if (isMobile) return;
+    const timer = setTimeout(() => {
+      scrollToDate(selectedDate, "auto");
+      isInitialScrollDone.current = true;
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check for appointments that need confirmation - ONLY for TODAY
   useEffect(() => {
@@ -446,8 +404,9 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
               <button
                 type="button"
                 onClick={() => {
+                  if (isSameDay(today, selectedDate)) return;
                   setSelectedDate(today);
-                  scrollToDate(today);
+                  scrollToDate(today, "smooth");
                 }}
                 className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
               >
@@ -506,11 +465,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
         <div className="mb-0">
           <button
             onClick={() => {
+              if (isSameDay(today, selectedDate)) return;
               setSelectedDate(today);
-              scrollToDate(today);
+              scrollToDate(today, "smooth");
             }}
             className={cn(
-              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200",
+              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200 cursor-pointer",
               isToday(selectedDate) ? "opacity-0 pointer-events-none" : "opacity-100"
             )}
           >
@@ -520,10 +480,9 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
           <div className="relative">
             <div
               ref={scrollRef}
-              className="overflow-x-auto scrollbar-hide"
+              className="overflow-x-auto scrollbar-hide scroll-smooth"
               style={{
                 WebkitOverflowScrolling: "touch",
-                scrollSnapType: "x mandatory",
               }}
             >
               <div
@@ -539,12 +498,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                     <div
                       key={day.toISOString()}
                       className="flex-shrink-0 w-16"
-                      style={{ scrollSnapAlign: "center" }}
                     >
                       <button
                         onClick={() => {
+                          if (isSameDay(day, selectedDate)) return;
                           setSelectedDate(day);
-                          scrollToDate(day);
+                          scrollToDate(day, "smooth");
                         }}
                         className={cn(
                           "w-full flex flex-col items-center gap-1 py-1 transition-all duration-200 select-none cursor-pointer",
