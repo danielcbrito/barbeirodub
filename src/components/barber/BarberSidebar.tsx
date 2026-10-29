@@ -11,6 +11,7 @@ import { BarberContext } from "@/pages/Barbeiro";
 import { BarberProfileSheet } from "@/components/barber/BarberProfileSheet";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
 import { signOutAndClearDevice } from "@/lib/sessionGuard";
+import { useTheme } from "next-themes";
 
 interface BarberSidebarProps {
   barberContext: BarberContext;
