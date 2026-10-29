@@ -41,6 +41,7 @@ import { AdminDadosEmpresa } from "@/components/admin/AdminDadosEmpresa";
 import { AdminAvaliacoes } from "@/components/admin/AdminAvaliacoes";
 import { BarberAvaliacoes } from "@/components/barber/BarberAvaliacoes";
 import { BarberCortes } from "@/components/barber/BarberCortes";
+import { BarberMeuPlano } from "@/components/barber/BarberMeuPlano";
 import { WhatsAppConnectionPage } from "@/components/whatsapp/WhatsAppConnectionPage";
 import { UnidadeWizardSheet } from "@/components/admin/unidades/wizard/UnidadeWizardSheet";
 import { UnidadeDetailScreen } from "@/components/admin/unidades/UnidadeDetailScreen";
@@ -100,6 +101,7 @@ type HubScreen =
   | "clientes-meus"
   | "todas-unidades"
   | "fotos-banner"
+  | "meu-plano"
   | "excluir-pausar";
 
 const DEFAULT_COMPANY_NAME = "Barbearia DUB";
@@ -126,6 +128,7 @@ export function BarberConfigBarbearia({
   const resolveScreenFromParam = (param: string | null, isAdmin: boolean): HubScreen => {
     if (!param) return "hub";
     const s = param.toLowerCase().trim();
+    if (s === "meu-plano" || s === "meuplano" || s === "assinatura" || s === "plano-barbearia" || s === "planos-barbearia") return "meu-plano";
     if (s === "clientes") return isAdmin ? "clientes-todos" : "clientes-meus";
     if (s === "clientes-todos") return "clientes-todos";
     if (s === "clientes-meus") return "clientes-meus";
@@ -525,6 +528,14 @@ export function BarberConfigBarbearia({
           onClick: () => setActiveScreen("avaliacoes-pessoal"),
         },
         {
+          id: "meu-plano",
+          icon: Crown,
+          label: "Meu Plano",
+          description: "Status da assinatura e plano da barbearia",
+          keywords: ["plano", "assinatura", "mensalidade", "meu plano", "status"],
+          onClick: () => setActiveScreen("meu-plano"),
+        },
+        {
           id: "seguranca",
           icon: ShieldCheck,
           label: "Segurança",
@@ -536,6 +547,14 @@ export function BarberConfigBarbearia({
     }
 
     return [
+      {
+        id: "meu-plano",
+        icon: Crown,
+        label: "Meu Plano",
+        description: "Status da assinatura, vencimento e upgrade",
+        keywords: ["plano", "assinatura", "mensalidade", "upgrade", "solo", "dupla", "equipe", "rede", "enterprise", "vencimento", "trial", "meu plano"],
+        onClick: () => setActiveScreen("meu-plano"),
+      },
       {
         id: "fotos-banner",
         icon: Palette,
@@ -1457,6 +1476,14 @@ export function BarberConfigBarbearia({
               </div>
             </div>
           </div>
+        );
+      case "meu-plano":
+        return (
+          <BarberMeuPlano
+            tenantId={tenantId || resolvedTenantId}
+            tenantNome={tenantInfo?.nome || tenantNome || DEFAULT_COMPANY_NAME}
+            onBack={handleSubScreenBack}
+          />
         );
       default:
         return null;

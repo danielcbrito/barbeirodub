@@ -12,6 +12,8 @@ import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useNotificationPermission } from "@/hooks/useNotificationPermission";
+import { useTenantSubscription } from "@/hooks/useTenantSubscription";
+import { TenantPaywall } from "@/components/tenant/TenantPaywall";
 
 /* ── Abas primárias (bottom nav): eager para navegação instantânea ── */
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
@@ -108,6 +110,7 @@ const Admin = () => {
   const { requestPermission, sendBrowserNotification } = useNotificationPermission();
   const [adminContext, setAdminContext] = useState<AdminContext | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const subscription = useTenantSubscription(adminContext?.tenantId || null);
   
   // Verificação de manutenção
   const { 
@@ -434,6 +437,19 @@ const Admin = () => {
     );
   }
 
+  // ═══════ PAYWALL: Trial expirou ou atraso > 4 dias ═══════
+  if (!subscription.loading && subscription.isBlocked && !subscription.isExempt) {
+    return (
+      <TenantPaywall
+        tenantNome={adminContext.apelido || "Barbearia"}
+        isOverdue={subscription.isOverdue}
+        onLogout={async () => {
+          await supabase.auth.signOut();
+          navigate("/login");
+        }}
+      />
+    );
+  }
 
   // ========== LAYOUT MOBILE ==========
   if (isMobile) {
@@ -495,6 +511,14 @@ const Admin = () => {
                 <Route
                   path="meus-clientes"
                   element={<Navigate to="/admin/config-barbearia?screen=clientes-meus" replace />}
+                />
+                <Route
+                  path="meu-plano"
+                  element={<Navigate to="/admin/config-barbearia?screen=meu-plano" replace />}
+                />
+                <Route
+                  path="assinatura"
+                  element={<Navigate to="/admin/config-barbearia?screen=meu-plano" replace />}
                 />
                 <Route path="config-barbearia" element={
                   adminContext ? (

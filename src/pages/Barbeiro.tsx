@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { BarberSidebar } from "@/components/barber/BarberSidebar";
 import { BarberMobileNavigation } from "@/components/barber/mobile/BarberMobileNavigation";
 import { BarberMobileDrawer } from "@/components/barber/mobile/BarberMobileDrawer";
+import { useTenantSubscription } from "@/hooks/useTenantSubscription";
+import { TenantPaywall } from "@/components/tenant/TenantPaywall";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
@@ -216,6 +218,7 @@ const Barbeiro = () => {
   const { user: authUser, isReady: isAuthReady } = useAuthReady();
   const [isBarberApproved, setIsBarberApproved] = useState<boolean | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const subscription = useTenantSubscription(barberContext?.tenantId || null);
 
   useEffect(() => {
     if (!barberContext) return;
@@ -829,6 +832,20 @@ const Barbeiro = () => {
   /** Redireciona rotas restritas para financeiro no período de graça */
   const GraceRedirect = () => <Navigate to="/barbeiro/financeiro" replace />;
 
+  // ═══════ PAYWALL: Trial expirou ou atraso > 4 dias ═══════
+  if (!subscription.loading && subscription.isBlocked && !subscription.isExempt) {
+    return (
+      <TenantPaywall
+        tenantNome={tenantNome}
+        isOverdue={subscription.isOverdue}
+        onLogout={async () => {
+          await supabase.auth.signOut();
+          navigate("/login");
+        }}
+      />
+    );
+  }
+
   // ========== LAYOUT MOBILE ==========
   if (isMobile) {
     return (
@@ -925,6 +942,8 @@ const Barbeiro = () => {
                     <Route path="horarios" element={<Navigate to="/barbeiro/config-barbearia?screen=horarios" replace />} />
                     <Route path="planos" element={<AdminPlanos tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
                     <Route path="meus-planos" element={<AdminMeusPlanos basePath="/barbeiro" />} />
+                    <Route path="meu-plano" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
+                    <Route path="assinatura" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
                     <Route path="loja" element={barberContext.tenantId ? <AdminLoja tenantId={barberContext.tenantId} readOnly /> : null} />
                     <Route path="cupons" element={<AdminCupons tenantId={barberContext.tenantId || undefined} />} />
                     <Route path="cupons-ativos" element={<BarberCuponsAtivos tenantId={barberContext.tenantId} />} />
@@ -1028,6 +1047,8 @@ const Barbeiro = () => {
                       <Route path="financeiro" element={<BarberFinanceiro barberContext={barberContext} />} />
                       <Route path="horarios" element={<BarberHorarios barberContext={barberContext} />} />
                       <Route path="planos" element={<AdminPlanos tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
+                      <Route path="meu-plano" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
+                      <Route path="assinatura" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
                       <Route path="loja" element={barberContext.tenantId ? <AdminLoja tenantId={barberContext.tenantId} readOnly /> : null} />
                       <Route path="cupons" element={<AdminCupons tenantId={barberContext.tenantId || undefined} />} />
                       <Route path="cupons-ativos" element={<BarberCuponsAtivos tenantId={barberContext.tenantId} />} />

@@ -49,6 +49,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { resolveClienteDisplayName } from "@/lib/walkInName";
 import { NextAppointmentCard, NextAppointmentData } from "@/components/shared/NextAppointmentCard";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
+import { useTenantSubscription } from "@/hooks/useTenantSubscription";
 import { BarbershopSetupFullScreenModal } from "@/components/shared/BarbershopSetupFullScreenModal";
 import { canAutoOpenSetupModal, recordSetupModalDismissal } from "@/lib/modalFrequency";
 
@@ -104,6 +105,7 @@ export function AdminDashboard({
   const { barbeiroId: adminBarbeiroId } = useAdminBarbeiroId(adminContext.userId);
   const effectiveBarbeiroId = adminContext.barbeiroId || adminBarbeiroId;
   const overdueState = useOverdueAppointments(effectiveBarbeiroId);
+  const subscription = useTenantSubscription(adminContext.tenantId || tenantId || null);
 
   const scopeKey = `admin-dashboard:${adminContext.barbeiroId || tenantId || "global"}`;
   const cachedDash = readSyncCache<DashboardData>(scopeKey);
@@ -553,6 +555,51 @@ export function AdminDashboard({
           </button>
         </div>
       </header>
+
+      {/* ─── Aviso Minimalista de Mensalidade em Atraso ou Fim de Teste ─── */}
+      {subscription.showOverdueWarning && (
+        <div 
+          onClick={() => navigate(`${basePath}/config-barbearia?screen=meu-plano`)}
+          className="w-full p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 cursor-pointer hover:bg-amber-500/15 active:scale-[0.99] transition-all shadow-xs"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-semibold text-foreground truncate">
+                Mensalidade em atraso ({subscription.daysOverdue} {subscription.daysOverdue === 1 ? 'dia' : 'dias'})
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Venceu dia 25. Regularize seu plano para evitar o bloqueio automático.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-xl bg-amber-500 text-black font-bold text-[11px] shrink-0">
+            Pagar
+          </span>
+        </div>
+      )}
+
+      {subscription.showTrialWarning && (
+        <div 
+          onClick={() => navigate(`${basePath}/config-barbearia?screen=meu-plano`)}
+          className="w-full p-3 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between gap-3 cursor-pointer hover:bg-blue-500/15 active:scale-[0.99] transition-all shadow-xs"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Sparkles className="w-4 h-4 text-blue-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-semibold text-foreground truncate">
+                Teste grátis: restam {subscription.daysRemaining} {subscription.daysRemaining === 1 ? 'dia' : 'dias'}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Escolha seu plano para continuar aproveitando todas as funções.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-xl bg-blue-500 text-white font-bold text-[11px] shrink-0">
+            Ver planos
+          </span>
+        </div>
+      )}
 
       {/* ─── 2. Barra de Busca Ampla e Confortável ─── */}
       <div

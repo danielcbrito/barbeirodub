@@ -470,17 +470,12 @@ const TenantAdmin = () => {
     );
   }
 
-  // ═══════ PAYWALL: Trial expirou e não assinou ═══════
-  // Rotas sempre acessíveis: barbeiros, dados-empresa, perfil, assinatura
-  const ALWAYS_ALLOWED = ["barbeiros", "dados-empresa", "perfil", "configuracoes-perfil", "config-barbearia", "assinatura", "loja"];
-  const currentSubPath = location.pathname.replace(BASE + "/", "").replace(BASE, "");
-  const isAllowedRoute = ALWAYS_ALLOWED.some((r) => currentSubPath.startsWith(r)) || currentSubPath === "";
-  const isSubscriptionRoute = currentSubPath.startsWith("assinatura");
-
-  if (!subscription.loading && subscription.isExpired && !isAllowedRoute && !isTestTenant) {
+  // ═══════ PAYWALL: Trial expirou ou mensalidade com mais de 4 dias de atraso ═══════
+  if (!subscription.loading && subscription.isBlocked && !subscription.isExempt && !isTestTenant) {
     return (
       <TenantPaywall
         tenantNome={tenantNome}
+        isOverdue={subscription.isOverdue}
         onLogout={async () => {
           await supabase.auth.signOut();
           navigate("/login");
