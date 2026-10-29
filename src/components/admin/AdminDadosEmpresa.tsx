@@ -9,24 +9,52 @@ import { DadosEmpresaUnitSelector } from "./dados-empresa/DadosEmpresaUnitSelect
 interface AdminDadosEmpresaProps {
   basePath?: string;
   tenantId?: string | null;
+  onBack?: () => void;
+  isTenantAdmin?: boolean;
 }
 
 /**
- * Router para Dados da Barbearia.
+ * Router para Dados da Barbearia / Dados Gerais.
  * Hub principal com cards de navegação + sub-páginas individuais por categoria.
  */
-export function AdminDadosEmpresa({ basePath = "/admin", tenantId }: AdminDadosEmpresaProps) {
+export function AdminDadosEmpresa({ basePath = "/admin", tenantId, onBack, isTenantAdmin = true }: AdminDadosEmpresaProps) {
   const [searchParams] = useSearchParams();
   const selectedUnidadeId = searchParams.get("unidade");
 
   return (
     <Routes>
-      <Route index element={<DadosEmpresaHub basePath={basePath} tenantId={tenantId} selectedUnidadeId={selectedUnidadeId} />} />
-      <Route path="identificacao" element={<DadosEmpresaIdentificacaoPage basePath={basePath} tenantId={tenantId} unidadeId={selectedUnidadeId} />} />
-      <Route path="contato" element={<DadosEmpresaContatoPage basePath={basePath} tenantId={tenantId} unidadeId={selectedUnidadeId} />} />
-      <Route path="endereco" element={<DadosEmpresaEnderecoPage basePath={basePath} tenantId={tenantId} unidadeId={selectedUnidadeId} />} />
-      <Route path="online" element={<DadosEmpresaOnlinePage basePath={basePath} tenantId={tenantId} unidadeId={selectedUnidadeId} />} />
-      <Route path="trocar-unidade" element={<DadosEmpresaUnitSelector basePath={basePath} tenantId={tenantId} selectedUnidadeId={selectedUnidadeId} />} />
+      <Route
+        index
+        element={
+          <DadosEmpresaHub
+            basePath={basePath}
+            tenantId={tenantId}
+            selectedUnidadeId={selectedUnidadeId}
+            onBack={onBack}
+            isTenantAdmin={isTenantAdmin}
+          />
+        }
+      />
+      <Route
+        path="identificacao"
+        element={<DadosEmpresaIdentificacaoPage basePath={basePath} tenantId={tenantId} unidadeId={selectedUnidadeId} />}
+      />
+      <Route
+        path="contato"
+        element={<DadosEmpresaContatoPage basePath={basePath} tenantId={tenantId} unidadeId={selectedUnidadeId} />}
+      />
+      <Route
+        path="endereco"
+        element={<DadosEmpresaEnderecoPage basePath={basePath} tenantId={tenantId} unidadeId={selectedUnidadeId} />}
+      />
+      <Route
+        path="online"
+        element={<DadosEmpresaOnlinePage basePath={basePath} tenantId={tenantId} unidadeId={selectedUnidadeId} />}
+      />
+      <Route
+        path="trocar-unidade"
+        element={<DadosEmpresaUnitSelector basePath={basePath} tenantId={tenantId} selectedUnidadeId={selectedUnidadeId} />}
+      />
     </Routes>
   );
 }

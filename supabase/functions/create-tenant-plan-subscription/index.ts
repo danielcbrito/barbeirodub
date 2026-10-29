@@ -121,7 +121,41 @@ Deno.serve(async (req) => {
     const cents = Math.round(Number(plano.preco_mensal) * 100);
     if (!Number.isSafeInteger(cents) || cents < 100) return jsonResponse({ success: false, error: "Plano sem valor definido" }, 400);
 
-    const taxID = digits(tenant.cnpj) || digits(tenant.cpf);
+    // Fallback gracioso: busca dados da unidade (sede), informacoes_empresa e do proprietário antes de recusar
+    const { data: unit } = await admin
+      .from("tenant_unidades")
+      .select("nome, cpf, cnpj, email, telefone, whatsapp, cep, rua, numero, bairro, cidade, estado")
+      .eq("tenant_id", tenantId)
+      .order("is_sede", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: infoRows } = await admin
+      .from("informacoes_empresa")
+      .select("chave, valor")
+      .eq("tenant_id", tenantId);
+    const infoMap: Record<string, string> = {};
+    for (const r of infoRows || []) {
+      if (r.chave && r.valor) infoMap[r.chave] = String(r.valor).trim();
+    }
+
+    const { data: ownerProfile } = await admin
+      .from("profiles")
+      .select("cpf, phone, telefone, full_name, email")
+      .eq("id", tenant.owner_user_id)
+      .maybeSingle();
+
+    const { data: ownerBarber } = await admin
+      .from("barbeiros")
+      .select("cpf, telefone, nome_completo, apelido, email")
+      .eq("user_id", tenant.owner_user_id)
+      .maybeSingle();
+
+    const resolvedName = unit?.nome || tenant.nome || infoMap["nome"] || "Barbearia";
+    const resolvedCnpj = digits(unit?.cnpj || tenant.cnpj || infoMap["cnpj"]);
+    const resolvedCpf = digits(unit?.cpf || tenant.cpf || infoMap["cpf"] || ownerProfile?.cpf || ownerBarber?.cpf);
+    const taxID = resolvedCnpj || resolvedCpf;
+
     if (taxID.length !== 11 && taxID.length !== 14) {
       return jsonResponse({ success: false, error: "Cadastre o CPF ou CNPJ da barbearia antes de assinar." }, 422);
     }
@@ -130,19 +164,34 @@ Deno.serve(async (req) => {
     if (!dubPixKey) return jsonResponse({ success: false, error: "Subconta DUB não encontrada no banco." }, 503);
 
     const correlationID = `dub-${tenantId.slice(0, 8)}-${plano.id.slice(0, 8)}-${Date.now()}`;
-    const phone = digits(tenant.whatsapp || tenant.telefone);
+    const resolvedPhone = digits(
+      unit?.whatsapp || unit?.telefone ||
+      tenant.whatsapp || tenant.telefone ||
+      infoMap["whatsapp"] || infoMap["telefone"] ||
+      ownerProfile?.telefone || ownerProfile?.phone ||
+      ownerBarber?.telefone
+    );
+    const resolvedEmail = unit?.email || tenant.email || infoMap["email"] || ownerProfile?.email || ownerBarber?.email;
+    const resolvedCep = digits(unit?.cep || infoMap["cep"]);
+    const resolvedRua = unit?.rua || tenant.rua || infoMap["rua"] || "Não informado";
+    const resolvedNumero = unit?.numero || tenant.numero || infoMap["numero"] || "S/N";
+    const resolvedBairro = unit?.bairro || tenant.bairro || infoMap["bairro"] || "Centro";
+    const resolvedCidade = unit?.cidade || tenant.cidade || infoMap["cidade"] || "Sao Paulo";
+    const resolvedEstado = unit?.estado || tenant.estado || infoMap["estado"] || "SP";
+
     const customer: Record<string, unknown> = {
-      name: tenant.nome,
+      name: resolvedName,
       taxID,
-      ...(tenant.email ? { email: tenant.email } : {}),
-      ...(phone ? { phone: phone.startsWith("55") ? phone : `55${phone}` } : {}),
+      ...(resolvedEmail ? { email: resolvedEmail } : {}),
+      ...(resolvedPhone ? { phone: resolvedPhone.startsWith("55") ? resolvedPhone : `55${resolvedPhone}` } : {}),
       address: {
-        street: tenant.rua || "Não informado",
-        number: tenant.numero || "S/N",
-        neighborhood: tenant.bairro || "Centro",
-        city: tenant.cidade || "Sao Paulo",
-        state: tenant.estado || "SP",
+        street: resolvedRua,
+        number: resolvedNumero,
+        neighborhood: resolvedBairro,
+        city: resolvedCidade,
+        state: resolvedEstado,
         country: "BR",
+        ...(resolvedCep && resolvedCep.length === 8 ? { zipCode: resolvedCep } : {}),
       },
     };
     const today = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));

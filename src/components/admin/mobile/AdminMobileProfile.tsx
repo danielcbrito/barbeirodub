@@ -18,6 +18,7 @@ import { useAdminBarbeiroId } from "@/hooks/useAdminBarbeiroId";
 import { useAtualizarBannerAdmin } from "@/hooks/useAdminMutations";
 import { resolveOwnerIdentity } from "@/lib/ownerIdentity";
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
+import { useBarbershopPendingFields } from "@/hooks/useBarbershopPendingFields";
 import { ApplyScopeSheet, type ApplyScope } from "@/components/admin/mobile/ApplyScopeSheet";
 import { ThemeSegmentedToggle } from "@/components/profile/ThemeSegmentedToggle";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
@@ -72,6 +73,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
   const [tenantName, setTenantName] = useState<string>(cached?.tenantName ?? "");
   const [unitsCount, setUnitsCount] = useState<number>(cached?.unitsCount ?? 0);
   const [tenantId, setTenantId] = useState<string | null>(cached?.tenantId ?? null);
+  const { totalPendingCount: companyPendingCount } = useBarbershopPendingFields(tenantId);
 
   const [scopeOpen, setScopeOpen] = useState(false);
   const [scopeConfig, setScopeConfig] = useState<{
@@ -512,6 +514,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
             <ProfileMenuItem
               label="Configurações gerais"
               description="Horários, serviços, clientes, equipe e dados"
+              pendingCount={companyPendingCount}
               onClick={handleConfigBarbeariaClick}
             />
             <ProfileMenuItem
@@ -639,11 +642,13 @@ function ProfileMenuItem({
   label,
   description,
   badge,
+  pendingCount,
   onClick,
 }: {
   label: string;
   description: string;
   badge?: string;
+  pendingCount?: number;
   onClick: () => void;
 }) {
   return (
@@ -667,7 +672,14 @@ function ProfileMenuItem({
           {description}
         </p>
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      <div className="flex items-center gap-2 shrink-0">
+        {(pendingCount ?? 0) > 0 && (
+          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white font-bold text-[11px] flex items-center justify-center leading-none shadow-xs">
+            {pendingCount}
+          </span>
+        )}
+        <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      </div>
     </button>
   );
 }

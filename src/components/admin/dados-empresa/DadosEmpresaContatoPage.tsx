@@ -12,8 +12,11 @@ interface Props {
   onBack?: () => void;
 }
 
+const digits = (v?: string | null) => (v ?? "").replace(/\D/g, "");
+
 /**
  * Sub-página: Contato da barbearia (e-mail, telefone, WhatsApp).
+ * Validação de canais oficiais para lembretes e cobranças.
  */
 export function DadosEmpresaContatoPage({ basePath = "/admin", tenantId, unidadeId, onBack }: Props) {
   const isUnitScope = !!tenantId && !!unidadeId && !isTenantRootUnit(unidadeId);
@@ -32,9 +35,15 @@ export function DadosEmpresaContatoPage({ basePath = "/admin", tenantId, unidade
     );
   }
 
+  const cleanTel = digits(data.telefone);
+  const cleanWhats = digits(data.whatsapp);
+  const hasContact = cleanTel.length >= 10 || cleanWhats.length >= 10;
+  const isEmailEmpty = !data.email?.trim();
+
   return (
     <SubPageLayout
       title="Contato"
+      subtitle="Canais oficiais de atendimento da barbearia"
       backPath={backPath}
       hasChanges={hasChanges}
       saving={saving}
@@ -44,13 +53,50 @@ export function DadosEmpresaContatoPage({ basePath = "/admin", tenantId, unidade
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="space-y-3 rounded-2xl bg-card border border-border/20 p-4"
+        transition={{ duration: 0.2 }}
+        className="space-y-4 rounded-2xl bg-card border border-border/40 p-4 shadow-xs"
       >
-        <CompactField label="E-mail" value={data.email} onChange={(v) => update("email", v)} type="email" required hint="Para notificações e recuperação de conta" />
-        <div className="grid grid-cols-2 gap-2.5">
-          <CompactField label="Telefone" value={data.telefone} onChange={(v) => update("telefone", v)} placeholder="(00) 00000-0000" required />
-          <CompactField label="WhatsApp" value={data.whatsapp} onChange={(v) => update("whatsapp", v)} placeholder="(00) 00000-0000" />
+        <CompactField
+          label="E-mail da Barbearia"
+          value={data.email}
+          onChange={(v) => update("email", v)}
+          type="email"
+          placeholder="contato@barbearia.com.br"
+          required
+          isPending={isEmailEmpty}
+          pendingMessage="E-mail necessário para emissão de cobranças e notificações"
+          hint="Usado para comunicações e notificações do sistema"
+        />
+
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              Telefone / WhatsApp (Obrigatório)
+            </span>
+            <span className="text-[10.5px] text-muted-foreground/50">Pelo menos um canal</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <CompactField
+              label="Telefone Principal"
+              value={data.telefone}
+              onChange={(v) => update("telefone", v)}
+              placeholder="(11) 90000-0000"
+              required={!hasContact}
+              isPending={!hasContact && !cleanTel}
+              pendingMessage="Telefone ou WhatsApp oficial é obrigatório"
+            />
+
+            <CompactField
+              label="WhatsApp Oficial"
+              value={data.whatsapp}
+              onChange={(v) => update("whatsapp", v)}
+              placeholder="(11) 90000-0000"
+              required={!hasContact}
+              isPending={!hasContact && !cleanWhats}
+              pendingMessage="Telefone ou WhatsApp oficial é obrigatório"
+            />
+          </div>
         </div>
       </motion.div>
     </SubPageLayout>

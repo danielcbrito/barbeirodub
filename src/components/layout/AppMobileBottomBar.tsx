@@ -10,6 +10,7 @@ import { fetchBarberDashboard } from "@/hooks/useBarberDashboard";
 import { useMonthAppointmentsCount } from "@/hooks/useMonthAppointmentsCount";
 import { supabase } from "@/integrations/supabase/client";
 import { readSyncCache } from "@/lib/syncQueryCache";
+import { useBarbershopPendingFields } from "@/hooks/useBarbershopPendingFields";
 
 interface AppMobileNavProps {
   basePath: string;
@@ -53,6 +54,27 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
   }, [propBarbeiroId]);
 
   const barbeiroId = propBarbeiroId || localBarbeiroId;
+  const [tenantId, setTenantId] = useState<string | null>(() => {
+    return typeof window !== "undefined" ? localStorage.getItem("tenantId") : null;
+  });
+
+  useEffect(() => {
+    if (barbeiroId && !tenantId) {
+      supabase
+        .from("barbeiros")
+        .select("tenant_id")
+        .eq("id", barbeiroId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.tenant_id) {
+            setTenantId(data.tenant_id);
+            try { localStorage.setItem("tenantId", data.tenant_id); } catch {}
+          }
+        });
+    }
+  }, [barbeiroId, tenantId]);
+
+  const { totalPendingCount: companyPendingCount } = useBarbershopPendingFields(tenantId);
 
   // Ocultar completamente a barra de navegação em telas imersivas como disparo de mensagens
   if (location.pathname.includes("/disparo")) {
@@ -155,7 +177,7 @@ export function AppMobileBottomBar({ basePath, barbeiroId: propBarbeiroId }: App
   const getBadgeCount = (countKey?: string) => {
     if (countKey === "agenda") return agendaCount;
     if (countKey === "financeiro") return finPendingCount;
-    if (countKey === "menu") return menuPendingCount;
+    if (countKey === "menu") return companyPendingCount > 0 ? companyPendingCount : menuPendingCount;
     return 0;
   };
 

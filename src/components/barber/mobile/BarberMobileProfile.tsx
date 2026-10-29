@@ -14,6 +14,7 @@ import { SetupCompletionBanner } from "@/components/barber/SetupCompletionBanner
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import { useBarberAvaliacoes } from "@/hooks/useBarberAvaliacoes";
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
+import { useBarbershopPendingFields } from "@/hooks/useBarbershopPendingFields";
 import { useAtualizarBannerAdmin } from "@/hooks/useAdminMutations";
 import { resolveOwnerIdentity } from "@/lib/ownerIdentity";
 import { ThemeSegmentedToggle } from "@/components/profile/ThemeSegmentedToggle";
@@ -91,6 +92,7 @@ export function BarberMobileProfile({
   });
 
   const cached = typeof window !== "undefined" ? readProfileCache(barberContext.barbeiroId) : null;
+  const { totalPendingCount: companyPendingCount } = useBarbershopPendingFields(barberContext.tenantId);
 
   const [loggingOut, setLoggingOut] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -511,6 +513,7 @@ export function BarberMobileProfile({
                   ? "Horários, serviços, clientes, equipe e dados"
                   : "Horários, serviços, clientes, avaliações e perfil"
               }
+              pendingCount={isTenantAdmin ? companyPendingCount : 0}
               onClick={handleConfigBarbeariaClick}
             />
             <ProfileMenuItem
@@ -625,11 +628,13 @@ function ProfileMenuItem({
   label,
   description,
   badge,
+  pendingCount,
   onClick,
 }: {
   label: string;
   description: string;
   badge?: string;
+  pendingCount?: number;
   onClick: () => void;
 }) {
   return (
@@ -653,7 +658,14 @@ function ProfileMenuItem({
           {description}
         </p>
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      <div className="flex items-center gap-2 shrink-0">
+        {(pendingCount ?? 0) > 0 && (
+          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white font-bold text-[11px] flex items-center justify-center leading-none shadow-xs">
+            {pendingCount}
+          </span>
+        )}
+        <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      </div>
     </button>
   );
 }

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isTenantRootUnit } from "./unitSelection";
+import { BARBERSHOP_PENDING_QUERY_KEY } from "@/hooks/useBarbershopPendingFields";
 
 /**
  * Dados completos da empresa — estrutura normalizada
@@ -16,6 +18,7 @@ export interface CompanyData {
   whatsapp: string;
   site: string;
   endereco_completo: string;
+  cep: string;
   rua: string;
   numero: string;
   bairro: string;
@@ -34,6 +37,7 @@ export const FIELD_MAP: { chave: string; categoria: string; field: keyof Company
   { chave: "whatsapp", categoria: "contato", field: "whatsapp" },
   { chave: "site_completo", categoria: "contato", field: "site" },
   { chave: "endereco_completo", categoria: "localizacao", field: "endereco_completo" },
+  { chave: "cep", categoria: "localizacao", field: "cep" },
   { chave: "rua", categoria: "localizacao", field: "rua" },
   { chave: "numero", categoria: "localizacao", field: "numero" },
   { chave: "bairro", categoria: "localizacao", field: "bairro" },
@@ -44,7 +48,7 @@ export const FIELD_MAP: { chave: string; categoria: string; field: keyof Company
 export const INITIAL: CompanyData = {
   nome: "", slogan: "", cnpj: "", cpf: "",
   email: "", telefone: "", whatsapp: "", site: "",
-  endereco_completo: "", rua: "", numero: "", bairro: "", cidade: "", estado: "",
+  endereco_completo: "", cep: "", rua: "", numero: "", bairro: "", cidade: "", estado: "",
 };
 
 /**
@@ -58,6 +62,7 @@ export function useDadosEmpresa(
   scope: "tenant" | "global" | "unit" = "global",
   unidadeId?: string | null,
 ) {
+  const queryClient = useQueryClient();
   const [data, setData] = useState<CompanyData>(INITIAL);
   const [originalData, setOriginalData] = useState<CompanyData>(INITIAL);
   const [loading, setLoading] = useState(true);
@@ -80,14 +85,14 @@ export function useDadosEmpresa(
       if (isUnitScope) {
         const { data: unitRow, error } = await supabase
           .from("tenant_unidades")
-          .select("nome, slogan, cpf, cnpj, telefone, whatsapp, site, email, rua, numero, bairro, cidade, estado")
+          .select("nome, slogan, cpf, cnpj, telefone, whatsapp, site, email, cep, rua, numero, bairro, cidade, estado")
           .eq("tenant_id", tenantId as string)
           .eq("id", unidadeId as string)
           .maybeSingle();
 
         if (error) throw error;
 
-        const unitData = {
+        const unitData: CompanyData = {
           ...INITIAL,
           nome: unitRow?.nome || "",
           slogan: unitRow?.slogan || "",
@@ -97,6 +102,7 @@ export function useDadosEmpresa(
           telefone: unitRow?.telefone || "",
           whatsapp: unitRow?.whatsapp || "",
           site: unitRow?.site || "",
+          cep: unitRow?.cep || "",
           rua: unitRow?.rua || "",
           numero: unitRow?.numero || "",
           bairro: unitRow?.bairro || "",
@@ -125,7 +131,7 @@ export function useDadosEmpresa(
       const { data: rows, error } = await query;
       if (error) throw error;
 
-      const newData = { ...INITIAL };
+      const newData: CompanyData = { ...INITIAL };
 
       // Bootstrap: se não há registros em informacoes_empresa, puxar da tabela tenants
       if (isTenantScope && (!rows || rows.length === 0)) {
@@ -161,6 +167,25 @@ export function useDadosEmpresa(
           newData[mapping.field] = row.valor || "";
         }
       }
+
+      // Se CEP ainda não foi preenchido via informacoes_empresa, busca da unidade sede
+      if (isTenantScope && tenantId && !newData.cep) {
+        const { data: sedeUnit } = await supabase
+          .from("tenant_unidades")
+          .select("cep, rua, numero, bairro, cidade, estado")
+          .eq("tenant_id", tenantId)
+          .order("is_sede", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (sedeUnit?.cep) newData.cep = sedeUnit.cep;
+        if (!newData.rua && sedeUnit?.rua) newData.rua = sedeUnit.rua;
+        if (!newData.numero && sedeUnit?.numero) newData.numero = sedeUnit.numero;
+        if (!newData.bairro && sedeUnit?.bairro) newData.bairro = sedeUnit.bairro;
+        if (!newData.cidade && sedeUnit?.cidade) newData.cidade = sedeUnit.cidade;
+        if (!newData.estado && sedeUnit?.estado) newData.estado = sedeUnit.estado;
+      }
+
       setData(newData);
       setOriginalData(newData);
     } catch (err) {
@@ -199,6 +224,7 @@ export function useDadosEmpresa(
             telefone: updatedData.telefone || null,
             whatsapp: updatedData.whatsapp || null,
             site: updatedData.site || null,
+            cep: updatedData.cep || null,
             rua: updatedData.rua || null,
             numero: updatedData.numero || null,
             bairro: updatedData.bairro || null,
@@ -212,6 +238,7 @@ export function useDadosEmpresa(
 
         setData(updatedData);
         setOriginalData(updatedData);
+        queryClient.invalidateQueries({ queryKey: [BARBERSHOP_PENDING_QUERY_KEY] });
         toast.success("Dados salvos com sucesso");
         return;
       }
@@ -235,7 +262,6 @@ export function useDadosEmpresa(
         const { data: existing } = await existsQuery.maybeSingle();
 
         if (existing) {
-          // Atualizar registro existente
           await supabase
             .from("informacoes_empresa")
             .update({
@@ -244,7 +270,6 @@ export function useDadosEmpresa(
             } as any)
             .eq("id", existing.id);
         } else {
-          // Inserir novo registro
           const row: Record<string, unknown> = {
             chave: mapping.chave,
             categoria: mapping.categoria,
@@ -286,13 +311,33 @@ export function useDadosEmpresa(
           if (Object.keys(tenantPayload).length > 0) {
             await supabase.from("tenants").update(tenantPayload as any).eq("id", tenantId);
           }
+
+          // Sincroniza também na unidade sede para consistência
+          await supabase
+            .from("tenant_unidades")
+            .update({
+              nome: updatedData.nome || undefined,
+              cnpj: updatedData.cnpj || undefined,
+              cpf: updatedData.cpf || undefined,
+              telefone: updatedData.telefone || undefined,
+              whatsapp: updatedData.whatsapp || undefined,
+              cep: updatedData.cep || undefined,
+              rua: updatedData.rua || undefined,
+              numero: updatedData.numero || undefined,
+              bairro: updatedData.bairro || undefined,
+              cidade: updatedData.cidade || undefined,
+              estado: updatedData.estado || undefined,
+            } as any)
+            .eq("tenant_id", tenantId)
+            .eq("is_sede", true);
         } catch (syncErr) {
-          console.warn("[useDadosEmpresa] Erro ao sincronizar tabela tenants:", syncErr);
+          console.warn("[useDadosEmpresa] Erro ao sincronizar tabela tenants/unidades:", syncErr);
         }
       }
 
       setData(updatedData);
       setOriginalData(updatedData);
+      queryClient.invalidateQueries({ queryKey: [BARBERSHOP_PENDING_QUERY_KEY] });
       toast.success("Dados salvos com sucesso");
     } catch (err) {
       console.error("Erro ao salvar:", err);

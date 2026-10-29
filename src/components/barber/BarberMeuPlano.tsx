@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useBarbershopPendingFields } from "@/hooks/useBarbershopPendingFields";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -17,6 +19,9 @@ import {
   Loader2,
   ShieldCheck,
   RefreshCw,
+  AlertCircle,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import { useTenantSubscription } from "@/hooks/useTenantSubscription";
@@ -142,7 +147,10 @@ export const OFFICIAL_PLANS: PlanDefinition[] = [
 type ScreenView = "meu-plano" | "escolha-plano" | "checkout";
 
 export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack }: BarberMeuPlanoProps) {
+  const navigate = useNavigate();
   const subscription = useTenantSubscription(tenantId);
+  const { totalPendingCount, isCompliant, missingFieldNames } = useBarbershopPendingFields(tenantId);
+  const [showPendingModal, setShowPendingModal] = useState(false);
   const [currentView, setCurrentView] = useState<ScreenView>("meu-plano");
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [selectedPlanForCheckout, setSelectedPlanForCheckout] = useState<PlanDefinition | null>(null);
@@ -238,6 +246,10 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
 
   const createPixAutomatico = async () => {
     if (!selectedPlanForCheckout || !tenantId || selectedPlanForCheckout.isCustomPrice) return;
+    if (!isCompliant && totalPendingCount > 0) {
+      setShowPendingModal(true);
+      return;
+    }
     setIsActivating(true);
     setPixError(null);
     setPixEmv("");
@@ -556,6 +568,10 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                   <button
                     type="button"
                     onClick={() => {
+                      if (!isCompliant && totalPendingCount > 0) {
+                        setShowPendingModal(true);
+                        return;
+                      }
                       setSelectedPlanForCheckout(activeCarouselPlan);
                       setCurrentView("checkout");
                     }}
@@ -652,6 +668,84 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ═══ MODAL EXECUTIVO DE BLOQUEIO PROATIVO: DADOS PENDENTES DA BARBEARIA ═══ */}
+      <AnimatePresence>
+        {showPendingModal && (
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm">
+            <div className="absolute inset-0" onClick={() => setShowPendingModal(false)} />
+            <motion.div
+              initial={{ y: "100%", opacity: 0.5 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+              className="relative w-full sm:max-w-md rounded-t-[32px] sm:rounded-3xl border border-border/80 dark:border-white/10 bg-card p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
+            >
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-2 mb-3 sm:hidden shrink-0" />
+
+              <div className="flex items-start justify-between gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-rose-500/15 border border-rose-500/25 flex items-center justify-center text-rose-500 shrink-0">
+                  <AlertCircle className="w-6 h-6 stroke-[2.2]" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPendingModal(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div>
+                <h3 className="text-[19px] font-bold text-foreground tracking-tight leading-tight">
+                  Complete seus dados antes de assinar
+                </h3>
+                <p className="text-[13px] text-muted-foreground mt-2 leading-relaxed">
+                  Para ativar sua assinatura no Pix Automático, preencha os dados obrigatórios da sua barbearia (Documento, Contato e Endereço com CEP).
+                </p>
+              </div>
+
+              {/* Lista dos campos faltantes */}
+              <div className="rounded-2xl border border-rose-500/25 bg-rose-500/[0.05] dark:bg-rose-500/[0.1] p-4 space-y-2.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                  Dados obrigatórios pendentes ({missingFieldNames.length}):
+                </p>
+                <ul className="space-y-1.5">
+                  {missingFieldNames.map((field, idx) => (
+                    <li key={idx} className="flex items-center gap-2 text-[12.5px] text-foreground font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                      <span>{field}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPendingModal(false);
+                    navigate("/barbeiro/dados-empresa");
+                  }}
+                  className="h-[52px] rounded-full w-full bg-foreground text-background font-medium text-[14px] flex items-center justify-center gap-2 active:scale-[0.98] transition-all hover:opacity-90 shadow-md cursor-pointer"
+                >
+                  <span>Preencher dados agora</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPendingModal(false)}
+                  className="w-full h-10 rounded-full text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  Voltar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

@@ -57,6 +57,7 @@ import { resolveOldestOwnedTenant } from "@/lib/tenantOwnership";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
+import { useBarbershopPendingFields } from "@/hooks/useBarbershopPendingFields";
 
 /** Número e link padrão de suporte do app DUB */
 const SUPPORT_WHATSAPP_PHONE = "5511963390043";
@@ -141,7 +142,7 @@ export function BarberConfigBarbearia({
     if (s === "whatsapp" || s === "atendimento") return "whatsapp";
     if (s === "avaliacoes" || s === "feedback") return isAdmin ? "avaliacoes" : "avaliacoes-pessoal";
     if (s === "barbeiros" || s === "equipe") return "barbeiros";
-    if (s === "dados-empresa" || s === "empresa") return "dados-empresa";
+    if (s === "dados-empresa" || s === "empresa" || s === "dados-gerais" || s === "dados") return "dados-empresa";
     if (s === "fotos-banner" || s === "identidade-visual") return "fotos-banner";
     if (s === "excluir-pausar") return "excluir-pausar";
     return "hub";
@@ -224,6 +225,12 @@ export function BarberConfigBarbearia({
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [selectedUnidadeId, setSelectedUnidadeId] = useState<string>("todas");
   const [loadingUnidades, setLoadingUnidades] = useState(true);
+
+  // Detecção de pendências cadastrais da barbearia para o badge de Dados Gerais
+  const { totalPendingCount: companyPendingCount } = useBarbershopPendingFields(
+    effectiveTenantId,
+    selectedUnidadeId !== "todas" ? selectedUnidadeId : undefined
+  );
 
   // Modais
   const [showSelectUnitDrawer, setShowSelectUnitDrawer] = useState(false);
@@ -566,9 +573,10 @@ export function BarberConfigBarbearia({
       {
         id: "dados-empresa",
         icon: Building2,
-        label: "Dados da Barbearia",
-        description: "Nome, WhatsApp, endereço e redes sociais",
-        keywords: ["nome", "whatsapp", "endereco", "contato", "telefone", "instagram", "redes", "cnpj", "localizacao", "dados"],
+        label: "Dados gerais",
+        description: "Dados cadastrais da barbearia e dados pessoais",
+        keywords: ["nome", "whatsapp", "endereco", "contato", "telefone", "instagram", "redes", "cnpj", "localizacao", "dados", "dados gerais", "barbearia"],
+        pendingCount: companyPendingCount,
         onClick: () => setActiveScreen("dados-empresa"),
       },
       {
@@ -665,7 +673,7 @@ export function BarberConfigBarbearia({
         onClick: () => setActiveScreen("excluir-pausar"),
       },
     ];
-  }, [isTenantAdmin, appBasePath, navigate]);
+  }, [isTenantAdmin, appBasePath, navigate, companyPendingCount]);
 
   /** Filtragem inteligente em tempo real */
   const filteredItems = useMemo(() => {
@@ -915,15 +923,12 @@ export function BarberConfigBarbearia({
         );
       case "dados-empresa":
         return (
-          <div className="pb-10">
-            <ScheduleHeader title="Dados da Barbearia" onBack={handleSubScreenBack} />
-            <div className="px-4 pt-3 max-w-md mx-auto">
-              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-4">
-                Configure os dados cadastrais, endereço e formas de contato oficiais da barbearia.
-              </p>
-              <AdminDadosEmpresa basePath={appBasePath} tenantId={tenantId} />
-            </div>
-          </div>
+          <AdminDadosEmpresa
+            basePath={appBasePath}
+            tenantId={tenantId}
+            onBack={handleSubScreenBack}
+            isTenantAdmin={isTenantAdmin}
+          />
         );
       case "whatsapp":
         return (
@@ -1822,6 +1827,7 @@ export function BarberConfigBarbearia({
                 label={item.label}
                 description={item.description}
                 destructive={item.destructive}
+                pendingCount={(item as any).pendingCount}
                 onClick={item.onClick}
               />
             ))}
@@ -1878,6 +1884,7 @@ function ConfigListItem({
   label,
   description,
   badge,
+  pendingCount,
   destructive,
   onClick,
 }: {
@@ -1885,6 +1892,7 @@ function ConfigListItem({
   label: string;
   description: string;
   badge?: string;
+  pendingCount?: number;
   destructive?: boolean;
   onClick: () => void;
 }) {
@@ -1924,14 +1932,21 @@ function ConfigListItem({
           </p>
         </div>
       </div>
-      <ChevronRight
-        className={cn(
-          "w-4 h-4 transition-colors shrink-0",
-          destructive
-            ? "text-destructive/50 group-hover:text-destructive"
-            : "text-muted-foreground/40 group-hover:text-foreground"
+      <div className="flex items-center gap-2 shrink-0">
+        {(pendingCount ?? 0) > 0 && (
+          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white font-bold text-[11px] flex items-center justify-center leading-none shadow-xs">
+            {pendingCount}
+          </span>
         )}
-      />
+        <ChevronRight
+          className={cn(
+            "w-4 h-4 transition-colors shrink-0",
+            destructive
+              ? "text-destructive/50 group-hover:text-destructive"
+              : "text-muted-foreground/40 group-hover:text-foreground"
+          )}
+        />
+      </div>
     </button>
   );
 }
