@@ -179,8 +179,9 @@ export function useBarbershopPendingFields(
   useEffect(() => {
     if (!tenantId) return;
 
+    const channelName = `pending-fields-${tenantId}-${unidadeId || "all"}-${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel(`pending-fields-${tenantId}-${unidadeId || "all"}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tenant_unidades", filter: `tenant_id=eq.${tenantId}` },
