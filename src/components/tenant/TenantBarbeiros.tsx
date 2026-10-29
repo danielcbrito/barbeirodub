@@ -841,7 +841,7 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         currentBarbers={barbeiros.filter((b) => b.ativo).length}
-        isTrial={subscriptionStatus === "trialing"}
+        isTrial={(propStatus ?? (subscription.isTrial ? "trialing" : "")) === "trialing"}
       />
     </div>
   );
