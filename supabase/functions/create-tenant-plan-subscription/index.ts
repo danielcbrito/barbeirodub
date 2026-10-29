@@ -1,149 +1,198 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { wooviFetch, resolveWooviAppId, WooviError } from "../_shared/woovi-client.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { wooviFetch, WooviError, corsHeaders, jsonResponse } from "../_shared/woovi-client.ts";
 
 /**
  * create-tenant-plan-subscription
- * Cria uma cobrança Pix recorrente / assinatura mensal para o plano SaaS da barbearia
- * direcionada à subconta "DUB" com split 100%.
+ * Assinatura SaaS da barbearia via Pix Automático Woovi (PIX_RECURRING, jornada 3:
+ * o primeiro pagamento já autoriza a recorrência mensal). O valor é direcionado à
+ * subconta "DUB". A barbearia só é liberada depois que o banco confirma o pagamento.
+ *
+ * Ações:
+ *  - { action: "create", tenantId, planName } → { emv, correlationID }
+ *  - { action: "status", tenantId, correlationID } → { paid, status }
  */
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+
+type SubResp = {
+  subscription?: {
+    globalID?: string;
+    status?: string;
+    value?: number;
+    correlationID?: string;
+    paymentLinkUrl?: string;
+    pixRecurring?: { emv?: string; status?: string; recurrencyId?: string };
+  };
+};
+
+const PAID_RECURRING = new Set(["APPROVED", "ACTIVE", "AUTHORIZED", "CONFIRMED"]);
+const digits = (v?: string | null) => (v ?? "").replace(/\D/g, "");
+
+async function resolveDubPixKey(admin: any): Promise<string | null> {
+  const { data } = await admin.from("system_config").select("valor").eq("chave", "woovi_dub_pix_key").maybeSingle();
+  if (data?.valor?.trim()) return data.valor.trim();
+  try {
+    const res = await wooviFetch<{ subAccounts?: Array<{ name?: string; pixKey?: string }> }>("/api/v1/subaccount");
+    const dub = res.subAccounts?.find((s) => (s.name ?? "").trim().toUpperCase() === "DUB");
+    return dub?.pixKey ?? null;
+  } catch (e) {
+    console.error("[tenant-plan] Falha ao listar subcontas:", e);
+    return null;
   }
+}
+
+async function fetchSubscription(id: string) {
+  return await wooviFetch<SubResp>(`/api/v1/subscriptions/${encodeURIComponent(id)}`);
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const admin = createClient(supabaseUrl, serviceKey);
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+    const { data: { user } } = await admin.auth.getUser(token);
+    if (!user) return jsonResponse({ success: false, error: "Não autenticado" }, 401);
 
-    // Auth do usuário
-    const authHeader = req.headers.get("Authorization") || "";
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authErr } = await admin.auth.getUser(token);
+    const body = await req.json().catch(() => ({}));
+    const action = body.action === "status" ? "status" : "create";
+    const tenantId = typeof body.tenantId === "string" ? body.tenantId : "";
+    if (!/^[0-9a-f-]{36}$/i.test(tenantId)) return jsonResponse({ success: false, error: "Barbearia inválida" }, 400);
 
-    if (authErr || !user) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Não autenticado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { tenantId, planId, planName, priceMonthly } = await req.json();
-
-    if (!tenantId || !planName || typeof priceMonthly !== "number") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Parâmetros obrigatórios ausentes" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Busca dados do tenant
     const { data: tenant } = await admin
       .from("tenants")
-      .select("id, nome, owner_user_id")
-      .eq("id", tenantId)
-      .maybeSingle();
+      .select("id, nome, owner_user_id, cpf, cnpj, email, telefone, whatsapp, rua, numero, bairro, cidade, estado")
+      .eq("id", tenantId).maybeSingle();
+    if (!tenant) return jsonResponse({ success: false, error: "Barbearia não encontrada" }, 404);
 
-    if (!tenant) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Barbearia não encontrada" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Somente o dono ou admin da barbearia pode assinar.
+    let allowed = tenant.owner_user_id === user.id;
+    if (!allowed) {
+      const { data: m } = await admin.from("tenant_members").select("role")
+        .eq("tenant_id", tenantId).eq("user_id", user.id).maybeSingle();
+      allowed = !!m && ["owner", "admin", "tenant_admin"].includes(String(m.role));
     }
+    if (!allowed) return jsonResponse({ success: false, error: "Sem permissão para esta barbearia" }, 403);
 
-    const cents = Math.round(priceMonthly * 100);
-    const correlationID = `sub-dub-${tenantId}-${planId || planName.toLowerCase()}-${Date.now()}`;
-    const comment = `Assinatura DUB ${planName} - ${tenant.nome}`;
-
-    let brCode = "";
-    let qrCodeImage = "";
-    let chargeId = "";
-
-    // Tenta criar na API Woovi com direcionamento / split para a subconta DUB
-    const appId = await resolveWooviAppId();
-    if (appId) {
-      try {
-        const body: Record<string, unknown> = {
-          correlationID,
-          value: cents,
-          comment,
-          // Split bancário direcionado à subconta DUB
-          splits: [
-            {
-              splitType: "SPLIT_SUB_ACCOUNT",
-              name: "DUB",
-              value: cents,
-            },
-          ],
-        };
-
-        const res = await wooviFetch<any>("/api/v1/charge", {
-          method: "POST",
-          body,
-        });
-
-        if (res?.charge) {
-          chargeId = res.charge.identifier || correlationID;
-          brCode = res.charge.brCode || "";
-          qrCodeImage = res.charge.qrCodeImage || "";
-        }
-      } catch (wooviErr: any) {
-        console.warn("[create-tenant-plan-subscription] Woovi API error, gerando fallback estruturado:", wooviErr);
+    // ───────────── STATUS: confere no banco e libera o plano ─────────────
+    if (action === "status") {
+      const correlationID = String(body.correlationID ?? "");
+      if (!correlationID.startsWith(`dub-${tenantId.slice(0, 8)}`)) {
+        return jsonResponse({ success: false, error: "Assinatura inválida" }, 400);
       }
+      const { data: row } = await admin.from("woovi_charges").select("metadata, status, value_centavos")
+        .eq("correlation_id", correlationID).maybeSingle();
+      if (!row) return jsonResponse({ success: false, error: "Assinatura não encontrada" }, 404);
+      const meta = (row.metadata ?? {}) as Record<string, any>;
+      if (row.status === "paid") return jsonResponse({ success: true, paid: true });
+
+      const remote = await fetchSubscription(meta.globalID || correlationID);
+      const recStatus = String(remote.subscription?.pixRecurring?.status ?? "").toUpperCase();
+      const paid = PAID_RECURRING.has(recStatus);
+      if (!paid) return jsonResponse({ success: true, paid: false, status: recStatus || "PENDING" });
+
+      const now = new Date();
+      const next = new Date(now); next.setMonth(next.getMonth() + 1);
+      await admin.from("woovi_charges").update({ status: "paid", paid_at: now.toISOString(), raw_response: remote })
+        .eq("correlation_id", correlationID);
+      const { error: upErr } = await admin.from("tenant_assinaturas").upsert({
+        tenant_id: tenantId,
+        status: "active",
+        plano_id: meta.planoId,
+        qtd_barbeiros: meta.maxBarbeiros ?? 1,
+        payment_method: "pix_automatico",
+        payment_reference: correlationID,
+        paid_at: now.toISOString(),
+        subscription_start: now.toISOString(),
+        next_billing_date: next.toISOString(),
+        cancelled_at: null,
+        updated_at: now.toISOString(),
+      }, { onConflict: "tenant_id" });
+      if (upErr) {
+        console.error("[tenant-plan] Pago, mas falhou ao liberar:", upErr);
+        return jsonResponse({ success: false, error: "Pagamento confirmado, mas a liberação falhou. Avise o suporte." }, 500);
+      }
+      return jsonResponse({ success: true, paid: true });
     }
 
-    // Se a Woovi não retornou brCode (ex: credencial sandbox ou offline), gera payload Pix padrão
-    if (!brCode) {
-      chargeId = correlationID;
-      // Payload Pix Copia e Cola padrão BACEN estruturado para a conta DUB
-      brCode = `00020126580014br.gov.bcb.pix0136pagamentos@barbeirodub.com.br520400005303986540${priceMonthly.toFixed(2).length}${priceMonthly.toFixed(2)}5802BR5903DUB6009SAO PAULO62140510${correlationID.slice(0, 10)}6304`;
+    // ───────────── CREATE: cria Pix Automático na Woovi ─────────────
+    const planName = String(body.planName ?? "").trim();
+    const { data: plano } = await admin.from("tenant_planos").select("id, nome, preco_mensal, max_barbeiros")
+      .ilike("nome", planName).eq("ativo", true).maybeSingle();
+    if (!plano) return jsonResponse({ success: false, error: "Plano não encontrado" }, 404);
+    const cents = Math.round(Number(plano.preco_mensal) * 100);
+    if (!Number.isSafeInteger(cents) || cents < 100) return jsonResponse({ success: false, error: "Plano sem valor definido" }, 400);
+
+    const taxID = digits(tenant.cnpj) || digits(tenant.cpf);
+    if (taxID.length !== 11 && taxID.length !== 14) {
+      return jsonResponse({ success: false, error: "Cadastre o CPF ou CNPJ da barbearia antes de assinar." }, 422);
     }
 
-    // Atualiza ou insere a assinatura do tenant no banco
-    await admin
-      .from("tenant_assinaturas")
-      .upsert(
-        {
-          tenant_id: tenantId,
-          status: "active",
-          payment_method: "pix_recorrente",
-          payment_reference: chargeId,
-          subscription_start: new Date().toISOString(),
-          next_billing_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "tenant_id" }
-      );
+    const dubPixKey = await resolveDubPixKey(admin);
+    if (!dubPixKey) return jsonResponse({ success: false, error: "Subconta DUB não encontrada no banco." }, 503);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        data: {
-          correlationID,
-          chargeId,
-          brCode,
-          qrCodeImage,
-          amount: priceMonthly,
-          subaccount: "DUB",
-          type: "Cobrança Pix Recorrente / Assinatura Automática",
-          frequency: "Mensal",
-          nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (err: any) {
+    const correlationID = `dub-${tenantId.slice(0, 8)}-${plano.id.slice(0, 8)}-${Date.now()}`;
+    const phone = digits(tenant.whatsapp || tenant.telefone);
+    const customer: Record<string, unknown> = {
+      name: tenant.nome,
+      taxID,
+      ...(tenant.email ? { email: tenant.email } : {}),
+      ...(phone ? { phone: phone.startsWith("55") ? phone : `55${phone}` } : {}),
+      address: {
+        street: tenant.rua || "Não informado",
+        number: tenant.numero || "S/N",
+        neighborhood: tenant.bairro || "Centro",
+        city: tenant.cidade || "Sao Paulo",
+        state: tenant.estado || "SP",
+        country: "BR",
+      },
+    };
+    const today = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+    const subBody: Record<string, unknown> = {
+      name: `DUB ${plano.nome}`,
+      value: cents,
+      customer,
+      correlationID,
+      comment: `DUB ${plano.nome} mensal`.slice(0, 29),
+      frequency: "MONTHLY",
+      type: "PIX_RECURRING",
+      pixRecurringOptions: { journey: "PAYMENT_ON_APPROVAL", retryPolicy: "THREE_RETRIES_7_DAYS" },
+      dayGenerateCharge: today.getDate(),
+      dayDue: 3,
+      splits: [{ splitType: "SPLIT_SUB_ACCOUNT", pixKey: dubPixKey, value: cents }],
+    };
+
+    const { error: intentErr } = await admin.from("woovi_charges").insert({
+      correlation_id: correlationID,
+      user_id: user.id,
+      value_centavos: cents,
+      status: "pending",
+      metadata: { kind: "tenant_plan", tenantId, planoId: plano.id, planName: plano.nome, maxBarbeiros: plano.max_barbeiros },
+    });
+    if (intentErr) throw intentErr;
+
+    let res: SubResp;
+    try {
+      res = await wooviFetch<SubResp>("/api/v1/subscriptions", { method: "POST", body: subBody });
+    } catch (e) {
+      await admin.from("woovi_charges").update({ status: "failed", raw_response: e instanceof WooviError ? (e.body as any) : null })
+        .eq("correlation_id", correlationID);
+      const msg = e instanceof Error ? e.message : "Erro no banco";
+      console.error("[tenant-plan] Woovi recusou:", msg, e instanceof WooviError ? e.body : "");
+      return jsonResponse({ success: false, error: `Banco recusou a assinatura: ${msg}` }, 502);
+    }
+
+    const emv = res.subscription?.pixRecurring?.emv;
+    if (!emv) return jsonResponse({ success: false, error: "O banco não retornou o QR Code do Pix Automático." }, 502);
+
+    await admin.from("woovi_charges").update({
+      br_code: emv,
+      charge_id: res.subscription?.globalID ?? null,
+      raw_response: res,
+      metadata: { kind: "tenant_plan", tenantId, planoId: plano.id, planName: plano.nome, maxBarbeiros: plano.max_barbeiros, globalID: res.subscription?.globalID },
+    }).eq("correlation_id", correlationID);
+
+    return jsonResponse({ success: true, data: { correlationID, emv, amount: cents / 100 } });
+  } catch (err) {
     console.error("[create-tenant-plan-subscription] Erro:", err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message || "Erro interno" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ success: false, error: err instanceof Error ? err.message : "Erro interno" }, 500);
   }
 });
-

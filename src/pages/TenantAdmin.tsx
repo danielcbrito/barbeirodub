@@ -186,6 +186,7 @@ async function resolveTenantOwnerBarber(
 const TenantAdmin = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const isSubscriptionRoute = location.pathname.includes("/assinatura");
   const isMobile = useIsMobile();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);

@@ -5650,6 +5650,8 @@ export type Database = {
           destaque: boolean | null
           funcionalidades: Json | null
           id: string
+          max_barbeiros: number | null
+          max_unidades: number | null
           nome: string
           preco_anual: number | null
           preco_mensal: number
@@ -5662,6 +5664,8 @@ export type Database = {
           destaque?: boolean | null
           funcionalidades?: Json | null
           id?: string
+          max_barbeiros?: number | null
+          max_unidades?: number | null
           nome: string
           preco_anual?: number | null
           preco_mensal?: number
@@ -5674,6 +5678,8 @@ export type Database = {
           destaque?: boolean | null
           funcionalidades?: Json | null
           id?: string
+          max_barbeiros?: number | null
+          max_unidades?: number | null
           nome?: string
           preco_anual?: number | null
           preco_mensal?: number
@@ -7010,6 +7016,49 @@ export type Database = {
           preco_mensal: number
           status: string
           trial_end: string
+        }[]
+      }
+      get_tenant_subscription_v2: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          days_overdue: number
+          days_remaining: number
+          is_active: boolean
+          is_blocked: boolean
+          is_exempt: boolean
+          is_expired: boolean
+          is_overdue: boolean
+          is_trial: boolean
+          next_billing_date: string
+          plano_nome: string
+          preco_mensal: number
+          qtd_barbeiros: number
+          status: string
+          trial_end: string
+          trial_start: string
+        }[]
+      }
+      get_tenant_subscription_v3: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          days_overdue: number
+          days_remaining: number
+          is_active: boolean
+          is_blocked: boolean
+          is_exempt: boolean
+          is_expired: boolean
+          is_overdue: boolean
+          is_trial: boolean
+          max_barbeiros: number
+          max_unidades: number
+          next_billing_date: string
+          plano_id: string
+          plano_nome: string
+          preco_mensal: number
+          qtd_barbeiros: number
+          status: string
+          trial_end: string
+          trial_start: string
         }[]
       }
       get_user_available_credits: {
