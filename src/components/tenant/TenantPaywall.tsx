@@ -90,7 +90,7 @@ export function TenantPaywall({
           {/* Divisor interno */}
           <div className="border-t border-border/40 dark:border-white/[0.08] pt-3.5 space-y-3">
             <p className="text-[14px] font-bold text-foreground">
-              Começa com <span className="text-foreground font-black">R$ 49,90</span> / mês
+              Começa com <span className="text-foreground font-black">R$ 38,90</span> / mês
             </p>
 
             {/* Botão de Selecionar Plano */}
@@ -247,15 +247,28 @@ export function TenantPaywall({
                     </div>
 
                     <div className="text-right shrink-0">
-                      <div className="flex items-baseline gap-0.5 justify-end">
-                        <span className="text-[11px] text-muted-foreground font-semibold">R$</span>
-                        <span className="text-[22px] font-black text-foreground tracking-tight">
-                          {plan.price.toFixed(2).replace(".", ",")}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground font-medium block">
-                        por mês
-                      </span>
+                      {plan.isCustomPrice ? (
+                        <div className="flex flex-col items-end">
+                          <span className="text-[15px] font-black text-foreground tracking-tight">
+                            Sob Consulta
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-medium">
+                            Personalizado
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-baseline gap-0.5 justify-end">
+                            <span className="text-[11px] text-muted-foreground font-semibold">R$</span>
+                            <span className="text-[22px] font-black text-foreground tracking-tight">
+                              {plan.price.toFixed(2).replace(".", ",")}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground font-medium block">
+                            por mês
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -315,8 +328,10 @@ export function TenantPaywall({
                       Assinar DUB {selectedPlanForCheckout.name}
                     </h3>
                     <p className="text-[11.5px] text-muted-foreground">
-                      {selectedPlanForCheckout.label} • R${" "}
-                      {selectedPlanForCheckout.price.toFixed(2).replace(".", ",")}/mês
+                      {selectedPlanForCheckout.label} •{" "}
+                      {selectedPlanForCheckout.isCustomPrice
+                        ? "Sob Consulta"
+                        : `R$ ${selectedPlanForCheckout.price.toFixed(2).replace(".", ",")}/mês`}
                     </p>
                   </div>
                 </div>

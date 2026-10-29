@@ -20,8 +20,13 @@ export interface TenantSubscriptionInfo {
   showTrialWarning: boolean;
   showOverdueWarning: boolean;
   planName: string | null;
+  planId: string | null;
   priceMonthly: number | null;
   barbersAllowed: number;
+  maxBarbers: number;
+  maxUnits: number;
+  canAddBarber: (currentBarbersCount: number) => boolean;
+  canAddUnit: (currentUnitsCount: number) => boolean;
   refetch: () => void;
 }
 
@@ -39,11 +44,14 @@ interface SubscriptionRow {
   is_blocked: boolean;
   is_exempt: boolean;
   plano_nome: string | null;
+  plano_id: string | null;
   preco_mensal: number | null;
   qtd_barbeiros: number | null;
+  max_barbeiros: number | null;
+  max_unidades: number | null;
 }
 
-const DEFAULT_STATE: Omit<TenantSubscriptionInfo, "loading" | "refetch"> = {
+const DEFAULT_STATE: Omit<TenantSubscriptionInfo, "loading" | "refetch" | "canAddBarber" | "canAddUnit"> = {
   status: "loading",
   trialStart: null,
   trialEnd: null,
@@ -59,27 +67,26 @@ const DEFAULT_STATE: Omit<TenantSubscriptionInfo, "loading" | "refetch"> = {
   showTrialWarning: false,
   showOverdueWarning: false,
   planName: null,
+  planId: null,
   priceMonthly: null,
   barbersAllowed: 1,
+  maxBarbers: 1,
+  maxUnits: 1,
 };
 
 /**
- * Hook que verifica o status da assinatura do tenant (trial, ativa, vencida, bloqueada).
- * Utiliza o RPC `get_tenant_subscription_v2` com regras para:
- * - 7 dias de trial para novas contas
- * - Bloqueio após o trial encerrar
- * - Atraso de 1 a 4 dias com aviso minimalista sem bloqueio
- * - Bloqueio após 4 a 5 dias de atraso na mensalidade
- * - Barbearia DUB isenta de mensalidade
+ * Hook que verifica o status da assinatura do tenant (trial, ativa, vencida, bloqueada)
+ * e fornece as regras e limites do plano (maxBarbers, maxUnits, canAddBarber, canAddUnit).
+ * Utiliza o RPC `get_tenant_subscription_v3`.
  */
 export function useTenantSubscription(tenantId: string | null): TenantSubscriptionInfo {
   const queryClient = useQueryClient();
-  const queryKey = ["tenant-subscription-v2", tenantId];
+  const queryKey = ["tenant-subscription-v3", tenantId];
 
   const { data, isLoading } = useQuery({
     queryKey,
-    queryFn: async (): Promise<Omit<TenantSubscriptionInfo, "loading" | "refetch">> => {
-      const { data, error } = await supabase.rpc("get_tenant_subscription_v2" as any, {
+    queryFn: async (): Promise<Omit<TenantSubscriptionInfo, "loading" | "refetch" | "canAddBarber" | "canAddUnit">> => {
+      const { data, error } = await supabase.rpc("get_tenant_subscription_v3" as any, {
         p_tenant_id: tenantId!,
       });
 
@@ -110,6 +117,8 @@ export function useTenantSubscription(tenantId: string | null): TenantSubscripti
       const isExempt = Boolean(row.is_exempt);
       const isActive = Boolean(row.is_active);
       const isExpired = Boolean(row.is_expired);
+      const maxBarbers = isExempt ? 999999 : Number(row.max_barbeiros ?? 1);
+      const maxUnits = isExempt ? 999999 : Number(row.max_unidades ?? 1);
 
       return {
         status: row.status,
@@ -127,8 +136,11 @@ export function useTenantSubscription(tenantId: string | null): TenantSubscripti
         showTrialWarning: isTrial && daysRemaining <= 3,
         showOverdueWarning: isOverdue && !isBlocked,
         planName: row.plano_nome,
+        planId: row.plano_id,
         priceMonthly: row.preco_mensal ? Number(row.preco_mensal) : null,
-        barbersAllowed: row.qtd_barbeiros ? Number(row.qtd_barbeiros) : 1,
+        barbersAllowed: maxBarbers,
+        maxBarbers,
+        maxUnits,
       };
     },
     enabled: !!tenantId,
@@ -144,9 +156,31 @@ export function useTenantSubscription(tenantId: string | null): TenantSubscripti
 
   const resolved = data ?? DEFAULT_STATE;
 
+  const canAddBarber = useCallback(
+    (currentBarbersCount: number): boolean => {
+      // Barbearia DUB e tenants isentos: ilimitado
+      if (resolved.isExempt) return true;
+      if (resolved.isBlocked) return false;
+      return currentBarbersCount < resolved.maxBarbers;
+    },
+    [resolved.isExempt, resolved.isBlocked, resolved.maxBarbers]
+  );
+
+  const canAddUnit = useCallback(
+    (currentUnitsCount: number): boolean => {
+      // Barbearia DUB e tenants isentos: ilimitado
+      if (resolved.isExempt) return true;
+      if (resolved.isBlocked) return false;
+      return currentUnitsCount < resolved.maxUnits;
+    },
+    [resolved.isExempt, resolved.isBlocked, resolved.maxUnits]
+  );
+
   return {
     loading: isLoading,
     ...resolved,
+    canAddBarber,
+    canAddUnit,
     refetch,
   };
 }

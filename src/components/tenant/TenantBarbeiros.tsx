@@ -33,6 +33,7 @@ import { ptBR } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { UpgradePlanModal, getRequiredTier, getPlanLimitByPrice } from "@/components/tenant/UpgradePlanModal";
+import { useTenantSubscription } from "@/hooks/useTenantSubscription";
 
 /* ─── Types ─── */
 interface Barbeiro {
@@ -60,11 +61,12 @@ interface TenantBarbeirosProps {
  * Módulo de gestão de barbeiros do tenant.
  * Design idêntico ao AdminClientes — lista com detalhe full-page.
  */
-export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subscriptionStatus = "active", subscriptionPriceMonthly }: TenantBarbeirosProps) {
+export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subscriptionStatus: propStatus, subscriptionPriceMonthly: propPrice }: TenantBarbeirosProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const viewId = searchParams.get("view");
+  const subscription = useTenantSubscription(tenantId);
 
   const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,30 +101,12 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   /**
-   * Verifica se o tenant pode adicionar mais barbeiros.
-   * Usa o preço do plano para determinar o limite real.
+   * Verifica se o tenant pode adicionar mais barbeiros respeitando o limite do plano.
+   * Barbearia DUB é isenta e ilimitada.
    */
   const canAddBarber = (): boolean => {
     const activeBarbers = barbeiros.filter((b) => b.ativo).length;
-
-    // Trial: máximo 1 barbeiro
-    if (subscriptionStatus === "trialing") {
-      return activeBarbers < 1;
-    }
-
-    // Sem assinatura ou expirada: bloqueia
-    if (subscriptionStatus === "expired" || subscriptionStatus === "no_subscription") {
-      return false;
-    }
-
-    // Ativo: limite baseado no plano pago (preço mensal)
-    if (subscriptionStatus === "active" && subscriptionPriceMonthly) {
-      const paidTier = getPlanLimitByPrice(subscriptionPriceMonthly);
-      return activeBarbers < paidTier;
-    }
-
-    // Fallback: permite se ainda não temos dados do plano
-    return true;
+    return subscription.canAddBarber(activeBarbers);
   };
 
   /** Intercepta o clique de "Novo Barbeiro" */

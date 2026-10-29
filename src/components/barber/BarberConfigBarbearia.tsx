@@ -1480,8 +1480,8 @@ export function BarberConfigBarbearia({
       case "meu-plano":
         return (
           <BarberMeuPlano
-            tenantId={tenantId || resolvedTenantId}
-            tenantNome={tenantInfo?.nome || tenantNome || DEFAULT_COMPANY_NAME}
+            tenantId={effectiveTenantId || ""}
+            tenantNome={tenantNome || DEFAULT_COMPANY_NAME}
             onBack={handleSubScreenBack}
           />
         );
