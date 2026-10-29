@@ -434,6 +434,159 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
               onBack={() => setCurrentView("meu-plano")}
             />
 
+            <div className="flex-1 flex flex-col justify-between max-w-md mx-auto w-full px-4 py-4 space-y-4">
+              {/* Indicador de Páginas / Dots clicáveis */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[11.5px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Plano {carouselIndex + 1} de {OFFICIAL_PLANS.length}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {OFFICIAL_PLANS.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => scrollToIndex(idx)}
+                      className={cn(
+                        "h-1.5 rounded-full transition-all cursor-pointer",
+                        idx === carouselIndex
+                          ? "w-5 bg-foreground"
+                          : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
+                      )}
+                      aria-label={`Ir para plano ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Trilho horizontal com Scroll Snap nativo (passar o dedo no mobile) */}
+              <div
+                ref={carouselRef}
+                onScroll={handleCarouselScroll}
+                className="flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar px-1 py-1 -mx-1"
+                style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}
+              >
+                {OFFICIAL_PLANS.map((plan, idx) => {
+                  const isCurrentInView = idx === carouselIndex;
+                  const isUserActivePlan =
+                    !subscription.isTrial &&
+                    subscription.planName?.toLowerCase() === plan.name.toLowerCase();
+
+                  return (
+                    <div
+                      key={plan.id}
+                      onClick={() => scrollToIndex(idx)}
+                      className={cn(
+                        "w-[85vw] max-w-[340px] shrink-0 snap-center rounded-3xl border p-5 space-y-3.5 transition-all cursor-pointer",
+                        isCurrentInView
+                          ? "border-foreground/40 bg-card shadow-lg ring-1 ring-foreground/15 dark:border-white/20"
+                          : "border-border/60 bg-card/60 opacity-65 hover:opacity-95"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-[19px] font-bold text-foreground">
+                              DUB {plan.name}
+                            </h4>
+                            {isUserActivePlan ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                                Plano Atual
+                              </span>
+                            ) : plan.highlight ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground uppercase tracking-wide">
+                                Recomendado
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[12px] text-muted-foreground mt-0.5">
+                            {plan.label}
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          {plan.isCustomPrice ? (
+                            <div className="text-[16px] font-black text-foreground">
+                              Sob Consulta
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-baseline justify-end gap-0.5">
+                                <span className="text-[11px] text-muted-foreground font-semibold">R$</span>
+                                <span className="text-[24px] font-black text-foreground tracking-tight">
+                                  {plan.price.toFixed(2).replace(".", ",")}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground font-medium block">
+                                por mês
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="text-[12.5px] text-foreground/80 leading-relaxed border-t border-border/20 pt-3">
+                        {plan.description}
+                      </p>
+
+                      {/* Recursos do Plano */}
+                      <div className="space-y-2 py-1">
+                        {plan.features.map((feature, fIdx) => (
+                          <div key={fIdx} className="flex items-center gap-2 text-[12px] text-foreground/90">
+                            <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" strokeWidth={2.5} />
+                            <span className="truncate">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* BOTÃO ASSINAR FIXO NO RODAPÉ DA TELA (SEM SETINHA, MINIMALISTA) */}
+              <div className="pt-3">
+                {isSelectedCurrent ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full h-12 rounded-2xl bg-secondary text-muted-foreground font-semibold text-[14px] flex items-center justify-center cursor-default opacity-80"
+                  >
+                    Seu plano atual
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPlanForCheckout(activeCarouselPlan);
+                      setCurrentView("checkout");
+                    }}
+                    className="w-full h-12 rounded-2xl bg-foreground text-background font-bold text-[14.5px] flex items-center justify-center hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-sm"
+                  >
+                    Assinar
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            TELA 3: ASSINATURA & PIX AUTOMÁTICO (SUBCTA DUB INTEGRADA)
+            ═══════════════════════════════════════════════════════════════════ */}
+        {currentView === "checkout" && selectedPlanForCheckout && (
+          <motion.div
+            key="view-checkout"
+            initial={{ opacity: 0, x: 25 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -25 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="flex-1 flex flex-col justify-between min-h-dvh pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+          >
+            {/* Header oficial */}
+            <ScheduleHeader
+              title="Assinatura DUB"
+              onBack={() => setCurrentView("escolha-plano")}
+            />
+
             <div className="flex-1 flex flex-col max-w-md mx-auto w-full px-4 py-6 space-y-6">
               <div className="flex items-center gap-3">
                 <img src={logoDub} alt="DUB" className="w-11 h-11 rounded-2xl object-cover" />
