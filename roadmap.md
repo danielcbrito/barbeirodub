@@ -1,5 +1,11 @@
 # Payment provider cleanup
 
+## WhatsApp connection investigation
+- [x] Compare phone rejection with provider logs and connection flow; specific phone rejection reason absent from available logs.
+- [x] Correct confirmed pairing lifecycle and error handling defects; 5 regression tests passed, function deployed.
+- [x] Document deployment and real-device verification limits.
+- [ ] Confirm successful pairing on the affected phone — requires phone confirmation; external unmanaged authenticated session and internal Evolution/Baileys logs unavailable.
+
 ## Report and performance consistency
 - [x] Diagnose home/report revenue differences using live data and active callers.
 - [x] Unify revenue and period comparisons for all barber/admin profiles.

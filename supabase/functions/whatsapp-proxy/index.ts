@@ -1,10 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { EvolutionRequestError, normalizePairingPhone, readEvolutionState, resetPairingSession, requestEvolutionPairing } from "./pairing.ts";
 
 const sanitize = (value: string) =>
   value
@@ -75,17 +71,7 @@ async function deleteInstance(apiUrl: string, token: string, name: string) {
  * Retorna `null` quando a instância NÃO existe mais lá (precisa recriar).
  */
 async function getInstanceState(apiUrl: string, token: string, name: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${apiUrl}/instance/connectionState/${name}`, {
-      method: "GET",
-      headers: { apikey: token },
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null);
-    return data?.instance?.state || data?.state || "close";
-  } catch {
-    return null;
-  }
+  return readEvolutionState(apiUrl, token, name);
 }
 
 /** Número conectado (ownerJid) da instância. */
@@ -617,11 +603,9 @@ Deno.serve(async (req) => {
         .eq("barbeiro_id", barbeiro_id)
         .maybeSingle();
 
-      const rawPhone = String(body?.phone || "").replace(/\D/g, "");
-      const fromBody = rawPhone.length >= 10 && rawPhone.length <= 11 ? `55${rawPhone}` : rawPhone;
-      const normalized = fromBody || String(existingRow?.phone_number || "").replace(/\D/g, "");
+      const normalized = normalizePairingPhone(String(body?.phone || existingRow?.phone_number || ""));
 
-      if (normalized.length < 12 || normalized.length > 15) {
+      if (!normalized) {
         return new Response(
           JSON.stringify({ error: "Número inválido", code: "INVALID_PHONE" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -697,7 +681,7 @@ Deno.serve(async (req) => {
           }
 
           instanceApiKey = createData?.hash || createData?.instance?.apikey || createData?.apikey || instanceApiKey;
-          pairingCode = createData?.qrcode?.pairingCode || createData?.pairingCode || null;
+          // Generate via connect after initialization, not from the creation response.
         } catch (e) {
           console.error(`❌ [${action}] erro na criação:`, (e as Error).message);
           return new Response(
@@ -707,29 +691,16 @@ Deno.serve(async (req) => {
         }
       } else {
         // Instância existe mas está desconectada: garante sessão limpa sem apagar a instância
-        try {
-          await fetch(`${EVOLUTION_API_URL}/instance/logout/${finalInstanceName}`, {
-            method: "DELETE",
-            headers: { apikey: EVOLUTION_API_TOKEN },
-          });
-        } catch (_) { /* ignore */ }
-        await new Promise((r) => setTimeout(r, 800));
+        await resetPairingSession(EVOLUTION_API_URL, EVOLUTION_API_TOKEN, finalInstanceName);
       }
+
+      await new Promise((r) => setTimeout(r, 1500));
 
       // Solicitar/renovar o código via /instance/connect?number=
       if (!pairingCode) {
         for (let attempt = 0; attempt < 3 && !pairingCode; attempt++) {
           if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-          try {
-            const connRes = await fetch(
-              `${EVOLUTION_API_URL}/instance/connect/${finalInstanceName}?number=${normalized}`,
-              { method: "GET", headers: { apikey: EVOLUTION_API_TOKEN } }
-            );
-            const connData = await connRes.json().catch(() => null);
-            pairingCode = connData?.pairingCode || connData?.qrcode?.pairingCode || null;
-          } catch (e) {
-            console.error(`❌ [${action}] connect erro:`, (e as Error).message);
-          }
+          pairingCode = await requestEvolutionPairing(EVOLUTION_API_URL, EVOLUTION_API_TOKEN, finalInstanceName, normalized);
         }
       }
 
@@ -759,7 +730,10 @@ Deno.serve(async (req) => {
           { onConflict: "barbeiro_id" }
         );
 
-      if (dbError) console.error(`❌ [${action}] DB upsert error:`, dbError);
+      if (dbError) {
+        console.error(`[${action}] DB upsert failed:`, dbError.code);
+        return new Response(JSON.stringify({ error: "Não foi possível registrar a tentativa de conexão. Tente novamente.", code: "DB_ERROR" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
       console.log(`✅ [${action}] código gerado para ${finalInstanceName}`);
 
@@ -983,6 +957,10 @@ Deno.serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    if (error instanceof EvolutionRequestError) {
+      console.error(`[whatsapp-proxy] ${error.code} provider_status=${error.status}`);
+      return new Response(JSON.stringify({ error: error.message, code: error.code, provider_status: error.status }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const message = error instanceof Error ? error.message : String(error);
     console.error("❌ whatsapp-proxy error:", message, error instanceof Error ? error.stack : undefined);
     return new Response(

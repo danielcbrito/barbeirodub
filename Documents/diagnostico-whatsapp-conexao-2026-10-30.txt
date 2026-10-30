@@ -1,0 +1,63 @@
+DIAGNÓSTICO DA CONEXÃO DO WHATSAPP — 30/10/2026
+
+1. USUÁRIO
+A imagem mostra uma recusa dentro do próprio WhatsApp ao vincular um aparelho
+por código. Não é erro de login no DUB e não é uma notificação push.
+O código da imagem não é reproduzido neste documento.
+
+2. EVIDÊNCIA OBSERVADA
+whatsapp-proxy registrou reconexão às 21:41:44 UTC, geração de código às
+21:41:48 e estado connecting/connected=false até 21:41:57.
+A linha de whatsapp_instances permaneceu connecting, sem connected_at,
+com expiração às 21:44:48. O registro contém número de 13 dígitos;
+isso não comprova que seja o número correto do aparelho.
+Não há motivo detalhado de recusa do WhatsApp nos logs disponíveis.
+Não é possível atribuir a recusa exclusivamente ao número ou ao servidor.
+
+3. FRONTEND — DEFEITOS CORRIGIDOS
+- Uma segunda ação podia competir com geração do código/QR e invalidar
+  a tentativa exibida. Adicionado bloqueio síncrono compartilhado para
+  pareamento, reconexão, criação e atualização de QR na mesma tela.
+- Respostas antigas de consulta de status podiam alterar o estado durante
+  uma nova tentativa. Consultas pausadas durante mutação; respostas antigas
+  descartadas por versão.
+- Erros HTTP da função não eram lidos, escondendo os motivos recuperáveis.
+  A tela agora lê a resposta de erro.
+- Prazo local substituído pela expiração retornada pelo servidor.
+
+4. SERVIDOR / EVOLUTION — DEFEITOS CORRIGIDOS
+- Qualquer falha de consulta era tratada como instância inexistente.
+  Agora somente 404 permite essa interpretação; demais falhas interrompem.
+- Logout tinha erros ignorados; novo código podia ser pedido sem sessão limpa.
+  Agora uma falha impede continuar e informa alternativa por QR.
+- Resposta connect era aceita sem verificar status HTTP.
+  Agora código só é aceito em resposta bem-sucedida e formato válido.
+- Criação de instância agora aguarda inicialização e solicita código em connect.
+- Falha ao salvar tentativa agora retorna erro em vez de sucesso fictício.
+- Logs dos novos caminhos registram categoria/status, não códigos nem tokens.
+
+Fluxo:
+Usuário -> DUB -> consulta Evolution -> sessão existente?
+  conectada: sincroniza estado
+  desconectada: logout confirmado -> aguarda -> connect(número)
+  inexistente (404): cria -> aguarda -> connect(número)
+connect bem-sucedido -> salva tentativa -> exibe código -> consulta status
+status open -> conexão concluída
+falha HTTP/logout/salvamento -> interrompe e mostra erro recuperável
+
+5. BANCO / N8N / SERVIÇOS EXTERNOS
+Nenhuma tabela, política ou rotina N8N foi alterada.
+Integração existente Evolution preservada; não substituída pelo conector Meta.
+A correção não garante serialização entre aparelhos diferentes.
+Logs internos da Evolution/Baileys não estavam disponíveis nestas ferramentas;
+versão/protocolo, número correto e recusa específica no telefone não verificados.
+
+6. VALIDAÇÃO E ENTREGA
+5 testes automatizados passaram (10 verificações).
+Preview: último registro de compilação consultado = build OK.
+whatsapp-proxy implantada com sucesso.
+Não foi realizada nova vinculação real: autenticação externa não gerenciada,
+sem sessão disponível; confirmação exige digitação/escaneamento no telefone.
+Solicitar um NOVO código após abrir a tela atualizada. Se houver nova recusa,
+usar QR Code e comparar os novos logs com os logs internos da Evolution.
+Geração de código não equivale a conexão concluída.
