@@ -1,5 +1,10 @@
 # Payment provider cleanup
 
+## WhatsApp connection investigation
+- [ ] Compare phone rejection with provider logs and connection flow.
+- [ ] Correct confirmed pairing lifecycle and error handling defects; run regression tests.
+- [ ] Document deployment and real-device verification limits.
+
 ## Report and performance consistency
 - [x] Diagnose home/report revenue differences using live data and active callers.
 - [x] Unify revenue and period comparisons for all barber/admin profiles.
