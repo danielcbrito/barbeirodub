@@ -14,6 +14,7 @@ import { resolvePrimaryBarberForUser } from "@/lib/tenantOwnership";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 
 interface WhatsAppConnectionPageProps {
   barbeiroId?: string | null;
@@ -272,6 +273,8 @@ export function WhatsAppConnectionPage({
   const [method, setMethod] = useState<Method>("pairing");
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const connectionMutationRef = useRef(false);
+  const connectionVersionRef = useRef(0);
 
   const [instanceName, setInstanceName] = useState<string | null>(null);
   const [connectedAt, setConnectedAt] = useState<string | null>(null);
@@ -1144,12 +1147,13 @@ export function WhatsAppConnectionPage({
 
   /* ─── sincronização contínua com a Evolution ─── */
   const checkConnectionStatus = useCallback(async () => {
-    if (!instanceName) return;
+    if (!instanceName || connectionMutationRef.current) return;
+    const version = connectionVersionRef.current;
     try {
       const { data, error } = await supabase.functions.invoke("whatsapp-proxy", {
         body: { action: "status", instanceName, barbeiro_id: resolvedBarbeiroId },
       });
-      if (error) return;
+      if (error || version !== connectionVersionRef.current || connectionMutationRef.current) return;
 
       if (data?.connected) {
         setStatus((prev) => {
@@ -1288,11 +1292,16 @@ export function WhatsAppConnectionPage({
 
   /* ─── gerar código de pareamento / reconectar ─── */
   const requestPairing = async (opts?: { reconnect?: boolean }) => {
+    if (connectionMutationRef.current || !resolvedBarbeiroId) return;
     const isReconnect = !!opts?.reconnect;
     if (!isReconnect && !phoneValid) {
       setErrorMessage("Verifique o número informado e tente novamente.");
       return;
     }
+    connectionMutationRef.current = true;
+    connectionVersionRef.current += 1;
+    setPairingCode(null);
+    setExpiresAt(null);
     setActionLoading(true);
     setErrorMessage(null);
     setMethod("pairing");
@@ -1306,9 +1315,12 @@ export function WhatsAppConnectionPage({
       });
 
       if (error || !data?.success) {
-        const code = (data as any)?.code;
+        const failure = error instanceof FunctionsHttpError
+          ? await error.context.json().catch(() => null)
+          : data;
+        const code = failure?.code;
         setErrorMessage(
-          code === "INVALID_PHONE"
+          typeof failure?.error === "string" ? failure.error : code === "INVALID_PHONE"
             ? "Verifique o número informado e tente novamente."
             : code === "EVOLUTION_UNAVAILABLE"
             ? "Não conseguimos conectar ao serviço neste momento. Tente novamente em alguns instantes."
@@ -1332,12 +1344,14 @@ export function WhatsAppConnectionPage({
 
       setPairingCode(data.pairing_code);
       setPhoneNumber(data.phone_number);
-      setExpiresAt(Date.now() + PAIRING_TTL_MS);
+      const serverExpiry = Date.parse(data.expires_at);
+      setExpiresAt(Number.isFinite(serverExpiry) ? serverExpiry : Date.now() + PAIRING_TTL_MS);
       setStatus("connecting");
       setQrCode(null);
     } catch {
       setErrorMessage("Não conseguimos conectar ao serviço neste momento. Tente novamente em alguns instantes.");
     } finally {
+      connectionMutationRef.current = false;
       setActionLoading(false);
     }
   };
@@ -1348,6 +1362,11 @@ export function WhatsAppConnectionPage({
 
   /* ─── alternativa: QR Code ─── */
   const handleUseQrCode = async () => {
+    if (connectionMutationRef.current || !resolvedBarbeiroId) return;
+    connectionMutationRef.current = true;
+    connectionVersionRef.current += 1;
+    setPairingCode(null);
+    setExpiresAt(null);
     setActionLoading(true);
     setErrorMessage(null);
     setMethod("qrcode");
@@ -1370,12 +1389,15 @@ export function WhatsAppConnectionPage({
     } catch {
       setErrorMessage("Não conseguimos conectar ao serviço neste momento. Tente novamente em alguns instantes.");
     } finally {
+      connectionMutationRef.current = false;
       setActionLoading(false);
     }
   };
 
   const handleRefreshQR = async () => {
-    if (!instanceName) return;
+    if (!instanceName || connectionMutationRef.current) return;
+    connectionMutationRef.current = true;
+    connectionVersionRef.current += 1;
     setActionLoading(true);
     setErrorMessage(null);
     try {
@@ -1395,6 +1417,7 @@ export function WhatsAppConnectionPage({
       if (data?.qrcode_base64) setQrCode(data.qrcode_base64);
       else setErrorMessage("QR Code não disponível. Aguarde alguns segundos e tente novamente.");
     } finally {
+      connectionMutationRef.current = false;
       setActionLoading(false);
     }
   };

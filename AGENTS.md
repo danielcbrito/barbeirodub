@@ -20,6 +20,10 @@ Todas as alterações, novos componentes, telas e fluxos no sistema Dub / Barbei
 ## Authenticated client operations
 - Call protected client-management functions through the shared authenticated invocation helper; it sends the current session token, refreshes once on 401, and returns recoverable errors without bypassing permissions.
 
+## WhatsApp connection lifecycle
+- Validate Evolution HTTP status before session mutation or accepting pairing codes; only 404 means a missing instance, and failed logout must stop pairing to avoid reusing stale sessions.
+- Serialize pairing and QR mutations in the connection screen and discard pre-mutation status responses; server expiry is authoritative and provider bodies containing credentials must not be logged.
+
 ## Payment architecture
 - Create online Pix charges through the shared charge helper and settle them through the service-only atomic confirmation function after bank revalidation; this prevents duplicate financial writes and untrusted client prices.
 - Preserve historical provider columns and migrations as audit records, not as active integration paths; removing a provider must not erase financial history.
