@@ -14,9 +14,26 @@ interface Props {
 
 const digits = (v?: string | null) => (v ?? "").replace(/\D/g, "");
 
+const maskCpf = (val: string) => {
+  const d = val.replace(/\D/g, "").slice(0, 11);
+  return d
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+};
+
+const maskCnpj = (val: string) => {
+  const d = val.replace(/\D/g, "").slice(0, 14);
+  return d
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+};
+
 /**
  * Sub-página: Identificação da barbearia (nome, slogan, CNPJ, CPF).
- * Detecção inteligente de pendências fiscais para Pix Automático (Woovi).
+ * CPF do responsável é estritamente obrigatório; CNPJ é opcional.
  */
 export function DadosEmpresaIdentificacaoPage({ basePath = "/admin", tenantId, unidadeId, onBack }: Props) {
   const isUnitScope = !!tenantId && !!unidadeId && !isTenantRootUnit(unidadeId);
@@ -35,9 +52,8 @@ export function DadosEmpresaIdentificacaoPage({ basePath = "/admin", tenantId, u
     );
   }
 
-  const cleanCnpj = digits(data.cnpj);
   const cleanCpf = digits(data.cpf);
-  const hasDoc = cleanCnpj.length === 14 || cleanCpf.length === 11;
+  const isCpfValid = cleanCpf.length === 11;
   const isNameEmpty = !data.nome?.trim();
 
   return (
@@ -77,30 +93,30 @@ export function DadosEmpresaIdentificacaoPage({ basePath = "/admin", tenantId, u
         <div className="space-y-3 pt-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-              Documento Fiscal (Obrigatório)
+              Documentos Fiscais
             </span>
-            <span className="text-[10.5px] text-muted-foreground/50">CNPJ ou CPF</span>
+            <span className="text-[10.5px] text-muted-foreground/50">CPF obrigatório</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <CompactField
-              label="CNPJ"
-              value={data.cnpj}
-              onChange={(v) => update("cnpj", v)}
-              placeholder="00.000.000/0000-00"
-              required={!hasDoc}
-              isPending={!hasDoc && !cleanCnpj}
-              pendingMessage="Informe o CNPJ ou CPF do titular responsável"
-            />
-
+          <div className="space-y-3">
             <CompactField
               label="CPF do Responsável"
               value={data.cpf}
-              onChange={(v) => update("cpf", v)}
+              onChange={(v) => update("cpf", maskCpf(v))}
               placeholder="000.000.000-00"
-              required={!hasDoc}
-              isPending={!hasDoc && !cleanCpf}
-              pendingMessage="Informe o CPF ou CNPJ do titular responsável"
+              required
+              isPending={!isCpfValid}
+              pendingMessage="CPF do responsável é obrigatório (11 dígitos) para assinaturas e cobranças"
+              hint="Documento do titular responsável pela conta e repasses"
+            />
+
+            <CompactField
+              label="CNPJ (opcional)"
+              value={data.cnpj}
+              onChange={(v) => update("cnpj", maskCnpj(v))}
+              placeholder="00.000.000/0000-00"
+              required={false}
+              hint="Opcional se possuir cadastro jurídico (CNPJ)"
             />
           </div>
         </div>

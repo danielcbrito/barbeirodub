@@ -5,6 +5,7 @@ import { DadosEmpresaContatoPage } from "./dados-empresa/DadosEmpresaContatoPage
 import { DadosEmpresaEnderecoPage } from "./dados-empresa/DadosEmpresaEnderecoPage";
 import { DadosEmpresaOnlinePage } from "./dados-empresa/DadosEmpresaOnlinePage";
 import { DadosEmpresaUnitSelector } from "./dados-empresa/DadosEmpresaUnitSelector";
+import { BarberDadosPessoais } from "@/components/barber/BarberDadosPessoais";
 
 interface AdminDadosEmpresaProps {
   basePath?: string;
@@ -54,6 +55,42 @@ export function AdminDadosEmpresa({ basePath = "/admin", tenantId, onBack, isTen
       <Route
         path="trocar-unidade"
         element={<DadosEmpresaUnitSelector basePath={basePath} tenantId={tenantId} selectedUnidadeId={selectedUnidadeId} />}
+      />
+      <Route
+        path="dados-pessoais"
+        element={
+          <BarberDadosPessoais
+            barberContext={{
+              barbeiroId: "",
+              apelido: "",
+              userId: "",
+              deletedAt: null,
+              graceDaysLeft: 0,
+              tenantId: tenantId || null,
+              isTenantAdmin: isTenantAdmin,
+              canManageTenantWideClientBlock: true,
+            }}
+            basePath={basePath}
+          />
+        }
+      />
+      <Route
+        path="meus-dados"
+        element={
+          <BarberDadosPessoais
+            barberContext={{
+              barbeiroId: "",
+              apelido: "",
+              userId: "",
+              deletedAt: null,
+              graceDaysLeft: 0,
+              tenantId: tenantId || null,
+              isTenantAdmin: isTenantAdmin,
+              canManageTenantWideClientBlock: true,
+            }}
+            basePath={basePath}
+          />
+        }
       />
     </Routes>
   );

@@ -53,6 +53,7 @@ const AdminIndicacoes = lazy(() => import("@/components/admin/AdminIndicacoes"))
 const CarteiraPage = lazy(() => import("@/components/barber/CarteiraPage").then(m => ({ default: m.CarteiraPage })));
 const AppointmentDetailsPage = lazy(() => import("@/pages/AppointmentDetailsPage"));
 const BarberConfigBarbearia = lazy(() => import("@/components/barber/BarberConfigBarbearia").then(m => ({ default: m.BarberConfigBarbearia })));
+const BarberDadosPessoais = lazy(() => import("@/components/barber/BarberDadosPessoais").then(m => ({ default: m.BarberDadosPessoais })));
 
 import { cn } from "@/lib/utils";
 import { SupportChatBubble } from "@/components/support/SupportChatBubble";
@@ -573,6 +574,21 @@ const Admin = () => {
                 <Route path="meus-planos" element={<AdminMeusPlanos basePath="/admin" />} />
                 <Route path="configuracoes-perfil" element={<Navigate to="/admin/config-barbearia" replace />} />
                 <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
+                <Route path="meus-dados/*" element={
+                  <BarberDadosPessoais
+                    barberContext={{
+                      barbeiroId: adminContext?.barbeiroId || "",
+                      apelido: adminContext?.apelido || "Admin",
+                      userId: adminContext.userId,
+                      deletedAt: null,
+                      graceDaysLeft: 0,
+                      tenantId: adminContext.tenantId || null,
+                      isTenantAdmin: true,
+                      canManageTenantWideClientBlock: true,
+                    }}
+                    basePath="/admin"
+                  />
+                } />
                 <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath="/admin" tenantId={adminContext?.tenantId} />} />
                 <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath="/admin" tenantNome={adminContext?.apelido} />} />
                 <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} title="Portfólio da Barbearia" showBack onBack={() => navigate("/admin")} /> : null} />
@@ -588,7 +604,7 @@ const Admin = () => {
         </main>
 
         {/* Bottom Navigation Mobile — esconder nas configurações, edição de serviços, horários e disparo */}
-        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("meus-clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("instagram") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
+        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("meus-dados") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("meus-clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("instagram") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
           <div className="lg:hidden">
             <AdminMobileNavigation barbeiroId={adminContext?.barbeiroId} />
           </div>
@@ -678,6 +694,21 @@ const Admin = () => {
                   <Route path="dev" element={<AdminDev />} />
                   <Route path="disparo" element={<AdminDisparo />} />
                   <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
+                <Route path="meus-dados/*" element={
+                  <BarberDadosPessoais
+                    barberContext={{
+                      barbeiroId: adminContext?.barbeiroId || "",
+                      apelido: adminContext?.apelido || "Admin",
+                      userId: adminContext.userId,
+                      deletedAt: null,
+                      graceDaysLeft: 0,
+                      tenantId: adminContext.tenantId || null,
+                      isTenantAdmin: true,
+                      canManageTenantWideClientBlock: true,
+                    }}
+                    basePath="/admin"
+                  />
+                } />
                   <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath="/admin" tenantId={adminContext?.tenantId} />} />
                   <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath="/admin" tenantNome={adminContext?.apelido} />} />
                   <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} title="Portfólio da Barbearia" showBack onBack={() => navigate("/admin")} /> : null} />

@@ -101,17 +101,20 @@ export function DadosEmpresaHub({
   const handleBack = () => {
     if (onBack) {
       onBack();
+    } else if (window.history.length > 1) {
+      navigate(-1);
     } else {
       navigate(`${basePath}/config-barbearia`);
     }
   };
+
+  const personalDataPath = basePath.startsWith("/admin") ? "/admin/meus-dados" : "/barbeiro/meus-dados";
 
   return (
     <div className="pb-20 min-h-app bg-background">
       {/* ── Header Padrão do Sistema ── */}
       <ScheduleHeader
         title="Dados Gerais"
-        subtitle={isTenantAdmin ? "Barbearia e profissional" : "Seus dados pessoais"}
         onBack={handleBack}
       />
 
@@ -248,7 +251,7 @@ export function DadosEmpresaHub({
           <div className="rounded-2xl bg-card border border-border/40 overflow-hidden shadow-xs">
             <button
               type="button"
-              onClick={() => navigate(`${basePath}/meus-dados`)}
+              onClick={() => navigate(personalDataPath)}
               className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/30 active:scale-[0.99] transition-all group cursor-pointer"
             >
               <div className="flex items-center gap-3.5 min-w-0 pr-3 flex-1">

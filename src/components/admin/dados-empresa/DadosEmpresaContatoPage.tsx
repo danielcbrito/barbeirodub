@@ -14,6 +14,18 @@ interface Props {
 
 const digits = (v?: string | null) => (v ?? "").replace(/\D/g, "");
 
+const maskPhone = (val: string) => {
+  const d = val.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 10) {
+    return d
+      .replace(/(\d{2})(\d)/, "($1) $2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  }
+  return d
+    .replace(/(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d)/, "$1-$2");
+};
+
 /**
  * Sub-página: Contato da barbearia (e-mail, telefone, WhatsApp).
  * Validação de canais oficiais para lembretes e cobranças.
@@ -80,7 +92,7 @@ export function DadosEmpresaContatoPage({ basePath = "/admin", tenantId, unidade
             <CompactField
               label="Telefone Principal"
               value={data.telefone}
-              onChange={(v) => update("telefone", v)}
+              onChange={(v) => update("telefone", maskPhone(v))}
               placeholder="(11) 90000-0000"
               required={!hasContact}
               isPending={!hasContact && !cleanTel}
@@ -90,7 +102,7 @@ export function DadosEmpresaContatoPage({ basePath = "/admin", tenantId, unidade
             <CompactField
               label="WhatsApp Oficial"
               value={data.whatsapp}
-              onChange={(v) => update("whatsapp", v)}
+              onChange={(v) => update("whatsapp", maskPhone(v))}
               placeholder="(11) 90000-0000"
               required={!hasContact}
               isPending={!hasContact && !cleanWhats}

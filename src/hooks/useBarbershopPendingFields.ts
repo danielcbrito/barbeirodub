@@ -220,7 +220,8 @@ export function useBarbershopPendingFields(
   const hasNome = Boolean(raw.nome && raw.nome.trim().length > 0);
   const cleanCnpj = digits(raw.cnpj);
   const cleanCpf = digits(raw.cpf);
-  const hasDocument = cleanCnpj.length === 14 || cleanCpf.length === 11;
+  const hasCpf = cleanCpf.length === 11;
+  const hasDocument = hasCpf; // CPF do responsável é estritamente obrigatório; CNPJ é opcional
 
   const cleanTel = digits(raw.telefone);
   const cleanWhats = digits(raw.whatsapp);
@@ -242,9 +243,9 @@ export function useBarbershopPendingFields(
     pendingIdentificacao++;
     missingFieldNames.push("Nome da barbearia");
   }
-  if (!hasDocument) {
+  if (!hasCpf) {
     pendingIdentificacao++;
-    missingFieldNames.push("CNPJ ou CPF do responsável");
+    missingFieldNames.push("CPF do responsável");
   }
 
   // 2. Contato
