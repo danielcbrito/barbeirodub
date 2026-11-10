@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { Loader2, Save } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 
@@ -35,7 +36,7 @@ export function SubPageLayout({
     if (onBack) {
       onBack();
     } else if (backPath) {
-      navigate(backPath);
+      navigate(backPath, { replace: true });
     } else if (window.history.length > 1) {
       navigate(-1);
     }
@@ -50,40 +51,42 @@ export function SubPageLayout({
         onBack={handleBack}
       />
 
-      {/* ── Conteúdo Centralizado ── */}
-      <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
+      {/* ── Conteúdo em largura natural (sem estreitamento excessivo) ── */}
+      <div className="px-4 pt-4 w-full space-y-4">
         {children}
       </div>
 
-      {/* ── Botão Salvar fixo — 100% estilo executivo Apple/Linear ── */}
-      <div
-        className="fixed bottom-4 left-0 right-0 px-4 z-40 pointer-events-none"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="max-w-md mx-auto w-full pointer-events-auto">
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving || !hasChanges}
-            className={cn(
-              "w-full h-12 rounded-2xl text-[13.5px] font-semibold tracking-wide flex items-center justify-center gap-2",
-              "bg-foreground text-background",
-              "active:scale-[0.98] transition-all duration-200",
-              "shadow-lg shadow-black/10 dark:shadow-black/40",
-              hasChanges && !saving
-                ? "opacity-100 hover:opacity-90 cursor-pointer"
-                : "opacity-35 pointer-events-none"
-            )}
+      {/* ── Botão Salvar visível apenas quando houver alterações pendentes ── */}
+      <AnimatePresence>
+        {hasChanges && (
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 18 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="fixed bottom-4 left-0 right-0 px-4 z-40 pointer-events-none"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            <span>Salvar alterações</span>
-          </button>
-        </div>
-      </div>
+            <div className="w-full pointer-events-auto">
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={saving}
+                className={cn(
+                  "w-full h-12 rounded-2xl text-[14px] font-semibold tracking-wide flex items-center justify-center gap-2",
+                  "bg-foreground text-background",
+                  "active:scale-[0.98] transition-all duration-200",
+                  "shadow-lg shadow-black/10 dark:shadow-black/40 cursor-pointer",
+                  saving && "opacity-80 pointer-events-none"
+                )}
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                <span>Salvar alterações</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

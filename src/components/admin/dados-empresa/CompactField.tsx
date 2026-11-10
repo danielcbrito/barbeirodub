@@ -46,13 +46,16 @@ export function CompactField({
   const handleFocus = useCallback(() => {
     setTimeout(() => {
       inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 300);
+    }, 150);
+    setTimeout(() => {
+      inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 380);
   }, []);
 
   return (
     <div className="relative">
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-[11px] text-muted-foreground/70 uppercase tracking-[0.08em] font-semibold block">
+        <label className="text-[13px] text-foreground/80 font-medium block">
           {label}
           {required && (
             <span

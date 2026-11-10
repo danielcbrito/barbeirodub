@@ -12,6 +12,7 @@ export interface BarbershopFieldsData {
   nome: string;
   cnpj: string;
   cpf: string;
+  email: string;
   telefone: string;
   whatsapp: string;
   cep: string;
@@ -75,6 +76,7 @@ export function useBarbershopPendingFields(
         nome: "",
         cnpj: "",
         cpf: "",
+        email: "",
         telefone: "",
         whatsapp: "",
         cep: "",
@@ -90,7 +92,7 @@ export function useBarbershopPendingFields(
         if (tenantId) {
           let unitQuery = supabase
             .from("tenant_unidades")
-            .select("nome, cnpj, cpf, telefone, whatsapp, cep, rua, numero, bairro, cidade, estado, is_sede")
+            .select("nome, cnpj, cpf, email, telefone, whatsapp, cep, rua, numero, bairro, cidade, estado, is_sede")
             .eq("tenant_id", tenantId);
 
           if (unidadeId && unidadeId !== "todas") {
@@ -105,6 +107,7 @@ export function useBarbershopPendingFields(
             resolved.nome = unitData.nome || "";
             resolved.cnpj = unitData.cnpj || "";
             resolved.cpf = unitData.cpf || "";
+            resolved.email = (unitData as any).email || "";
             resolved.telefone = unitData.telefone || "";
             resolved.whatsapp = unitData.whatsapp || "";
             resolved.cep = unitData.cep || "";
@@ -135,6 +138,7 @@ export function useBarbershopPendingFields(
             if (row.chave === "nome" && !resolved.nome) resolved.nome = val;
             if (row.chave === "cnpj" && !resolved.cnpj) resolved.cnpj = val;
             if (row.chave === "cpf" && !resolved.cpf) resolved.cpf = val;
+            if (row.chave === "email" && !resolved.email) resolved.email = val;
             if (row.chave === "telefone" && !resolved.telefone) resolved.telefone = val;
             if (row.chave === "whatsapp" && !resolved.whatsapp) resolved.whatsapp = val;
             if (row.chave === "cep" && !resolved.cep) resolved.cep = val;
@@ -147,10 +151,10 @@ export function useBarbershopPendingFields(
         }
 
         // 3. Fallback / complemento: tabela tenants
-        if (tenantId && (!resolved.nome || (!resolved.cnpj && !resolved.cpf) || !resolved.rua)) {
+        if (tenantId && (!resolved.nome || (!resolved.cnpj && !resolved.cpf) || !resolved.rua || !resolved.email)) {
           const { data: tenantRow } = await supabase
             .from("tenants")
-            .select("nome, cnpj, cpf, telefone, whatsapp, rua, numero, bairro, cidade, estado")
+            .select("nome, cnpj, cpf, email, telefone, whatsapp, rua, numero, bairro, cidade, estado")
             .eq("id", tenantId)
             .maybeSingle();
 
@@ -158,6 +162,7 @@ export function useBarbershopPendingFields(
             if (!resolved.nome && tenantRow.nome) resolved.nome = tenantRow.nome;
             if (!resolved.cnpj && tenantRow.cnpj) resolved.cnpj = tenantRow.cnpj;
             if (!resolved.cpf && tenantRow.cpf) resolved.cpf = tenantRow.cpf;
+            if (!resolved.email && tenantRow.email) resolved.email = tenantRow.email;
             if (!resolved.telefone && tenantRow.telefone) resolved.telefone = tenantRow.telefone;
             if (!resolved.whatsapp && tenantRow.whatsapp) resolved.whatsapp = tenantRow.whatsapp;
             if (!resolved.rua && tenantRow.rua) resolved.rua = tenantRow.rua;
@@ -207,6 +212,7 @@ export function useBarbershopPendingFields(
     nome: "",
     cnpj: "",
     cpf: "",
+    email: "",
     telefone: "",
     whatsapp: "",
     cep: "",
@@ -223,9 +229,10 @@ export function useBarbershopPendingFields(
   const hasCpf = cleanCpf.length === 11;
   const hasDocument = hasCpf; // CPF do responsável é estritamente obrigatório; CNPJ é opcional
 
+  const hasEmail = Boolean(raw.email && raw.email.includes("@"));
   const cleanTel = digits(raw.telefone);
   const cleanWhats = digits(raw.whatsapp);
-  const hasContact = cleanTel.length >= 10 || cleanWhats.length >= 10;
+  const hasContact = hasEmail || cleanTel.length >= 10 || cleanWhats.length >= 10;
 
   const cleanCep = digits(raw.cep);
   const hasCep = cleanCep.length === 8;
@@ -247,12 +254,16 @@ export function useBarbershopPendingFields(
     pendingIdentificacao++;
     missingFieldNames.push("CPF do responsável");
   }
+  if (!hasEmail) {
+    pendingIdentificacao++;
+    missingFieldNames.push("E-mail da barbearia");
+  }
 
   // 2. Contato
   let pendingContato = 0;
   if (!hasContact) {
     pendingContato++;
-    missingFieldNames.push("Telefone ou WhatsApp oficial");
+    missingFieldNames.push("Contato (e-mail ou telefone)");
   }
 
   // 3. Endereço com CEP

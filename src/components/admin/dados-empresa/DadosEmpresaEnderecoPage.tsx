@@ -267,7 +267,6 @@ export function DadosEmpresaEnderecoPage({ basePath = "/admin", tenantId, unidad
   return (
     <SubPageLayout
       title="Endereço"
-      subtitle="Localização oficial da barbearia ou filial"
       backPath={backPath}
       hasChanges={hasChanges}
       saving={saving}

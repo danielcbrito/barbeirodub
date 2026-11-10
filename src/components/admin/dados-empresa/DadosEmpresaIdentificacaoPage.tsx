@@ -59,7 +59,6 @@ export function DadosEmpresaIdentificacaoPage({ basePath = "/admin", tenantId, u
   return (
     <SubPageLayout
       title="Identificação"
-      subtitle="Dados cadastrais e fiscais da barbearia"
       backPath={backPath}
       hasChanges={hasChanges}
       saving={saving}
@@ -70,7 +69,7 @@ export function DadosEmpresaIdentificacaoPage({ basePath = "/admin", tenantId, u
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="space-y-4 rounded-2xl bg-card border border-border/40 p-4 shadow-xs"
+        className="space-y-4"
       >
         <CompactField
           label="Nome da Barbearia"
@@ -90,36 +89,37 @@ export function DadosEmpresaIdentificacaoPage({ basePath = "/admin", tenantId, u
           hint="Aparece no perfil público e no link de agendamento"
         />
 
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-              Documentos Fiscais
-            </span>
-            <span className="text-[10.5px] text-muted-foreground/50">CPF obrigatório</span>
-          </div>
+        <CompactField
+          label="E-mail de Contato"
+          value={data.email}
+          onChange={(v) => update("email", v)}
+          type="email"
+          placeholder="contato@suabarbearia.com.br"
+          required
+          isPending={!data.email || !data.email.includes("@")}
+          pendingMessage="E-mail obrigatório para notificações e emissão de cobranças"
+          hint="E-mail oficial para recebimento de notas e avisos do sistema"
+        />
 
-          <div className="space-y-3">
-            <CompactField
-              label="CPF do Responsável"
-              value={data.cpf}
-              onChange={(v) => update("cpf", maskCpf(v))}
-              placeholder="000.000.000-00"
-              required
-              isPending={!isCpfValid}
-              pendingMessage="CPF do responsável é obrigatório (11 dígitos) para assinaturas e cobranças"
-              hint="Documento do titular responsável pela conta e repasses"
-            />
+        <CompactField
+          label="CPF do Responsável"
+          value={data.cpf}
+          onChange={(v) => update("cpf", maskCpf(v))}
+          placeholder="000.000.000-00"
+          required
+          isPending={!isCpfValid}
+          pendingMessage="CPF do responsável é obrigatório (11 dígitos) para assinaturas e cobranças"
+          hint="Documento do titular responsável pela conta e repasses"
+        />
 
-            <CompactField
-              label="CNPJ (opcional)"
-              value={data.cnpj}
-              onChange={(v) => update("cnpj", maskCnpj(v))}
-              placeholder="00.000.000/0000-00"
-              required={false}
-              hint="Opcional se possuir cadastro jurídico (CNPJ)"
-            />
-          </div>
-        </div>
+        <CompactField
+          label="CNPJ (opcional)"
+          value={data.cnpj}
+          onChange={(v) => update("cnpj", maskCnpj(v))}
+          placeholder="00.000.000/0000-00"
+          required={false}
+          hint="Opcional se possuir cadastro jurídico (CNPJ)"
+        />
       </motion.div>
     </SubPageLayout>
   );

@@ -45,9 +45,15 @@ export function DadosEmpresaOnlinePage({ basePath = "/admin", tenantId, unidadeI
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="space-y-3 rounded-2xl bg-card border border-border/20 p-4"
+        className="space-y-4"
       >
-        <CompactField label="Website" value={data.site} onChange={(v) => update("site", v)} placeholder="https://suabarbearia.com.br" hint="Exibido na página pública" />
+        <CompactField
+          label="Website"
+          value={data.site}
+          onChange={(v) => update("site", v)}
+          placeholder="https://suabarbearia.com.br"
+          hint="Exibido na página pública e no link de agendamento"
+        />
       </motion.div>
     </SubPageLayout>
   );
