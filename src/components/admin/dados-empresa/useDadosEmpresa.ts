@@ -87,7 +87,7 @@ export function useDadosEmpresa(
       if (isUnitScope) {
         const { data: unitRow, error } = await supabase
           .from("tenant_unidades")
-          .select("nome, slogan, cpf, cnpj, telefone, whatsapp, site, email, cep, rua, numero, complemento, bairro, cidade, estado")
+          .select("nome, slogan, cpf, cnpj, telefone, whatsapp, site, email, cep, rua, numero, bairro, cidade, estado")
           .eq("tenant_id", tenantId as string)
           .eq("id", unidadeId as string)
           .maybeSingle();
@@ -107,11 +107,10 @@ export function useDadosEmpresa(
           cep: unitRow?.cep || "",
           rua: unitRow?.rua || "",
           numero: unitRow?.numero || "",
-          complemento: unitRow?.complemento || "",
           bairro: unitRow?.bairro || "",
           cidade: unitRow?.cidade || "",
           estado: unitRow?.estado || "",
-          endereco_completo: [unitRow?.rua, unitRow?.numero, unitRow?.complemento, unitRow?.bairro, unitRow?.cidade, unitRow?.estado]
+          endereco_completo: [unitRow?.rua, unitRow?.numero, unitRow?.bairro, unitRow?.cidade, unitRow?.estado]
             .filter(Boolean)
             .join(" — "),
         };
@@ -140,7 +139,7 @@ export function useDadosEmpresa(
       if (isTenantScope && (!rows || rows.length === 0)) {
         const { data: tenantRow } = await supabase
           .from("tenants")
-          .select("nome, slogan, cpf, cnpj, telefone, whatsapp, site, email, cep, rua, numero, complemento, bairro, cidade, estado, endereco_completo, owner_user_id")
+          .select("nome, slogan, cpf, cnpj, telefone, whatsapp, site, email, rua, numero, bairro, cidade, estado, endereco_completo, owner_user_id")
           .eq("id", tenantId as string)
           .maybeSingle();
 
@@ -153,10 +152,8 @@ export function useDadosEmpresa(
           newData.whatsapp = tenantRow.whatsapp || "";
           newData.site = tenantRow.site || "";
           newData.email = tenantRow.email || "";
-          newData.cep = (tenantRow as any).cep || "";
           newData.rua = tenantRow.rua || "";
           newData.numero = tenantRow.numero || "";
-          newData.complemento = (tenantRow as any).complemento || "";
           newData.bairro = tenantRow.bairro || "";
           newData.cidade = tenantRow.cidade || "";
           newData.estado = tenantRow.estado || "";
@@ -177,7 +174,7 @@ export function useDadosEmpresa(
       if (isTenantScope && tenantId && !newData.cep) {
         const { data: sedeUnit } = await supabase
           .from("tenant_unidades")
-          .select("cep, rua, numero, complemento, bairro, cidade, estado")
+          .select("cep, rua, numero, bairro, cidade, estado")
           .eq("tenant_id", tenantId)
           .order("is_sede", { ascending: false })
           .limit(1)
@@ -186,7 +183,6 @@ export function useDadosEmpresa(
         if (sedeUnit?.cep) newData.cep = sedeUnit.cep;
         if (!newData.rua && sedeUnit?.rua) newData.rua = sedeUnit.rua;
         if (!newData.numero && sedeUnit?.numero) newData.numero = sedeUnit.numero;
-        if (!newData.complemento && (sedeUnit as any)?.complemento) newData.complemento = (sedeUnit as any).complemento;
         if (!newData.bairro && sedeUnit?.bairro) newData.bairro = sedeUnit.bairro;
         if (!newData.cidade && sedeUnit?.cidade) newData.cidade = sedeUnit.cidade;
         if (!newData.estado && sedeUnit?.estado) newData.estado = sedeUnit.estado;
@@ -233,7 +229,6 @@ export function useDadosEmpresa(
             cep: updatedData.cep || null,
             rua: updatedData.rua || null,
             numero: updatedData.numero || null,
-            complemento: updatedData.complemento || null,
             bairro: updatedData.bairro || null,
             cidade: updatedData.cidade || null,
             estado: updatedData.estado || null,
@@ -305,21 +300,14 @@ export function useDadosEmpresa(
           if (updatedData.telefone !== undefined) tenantPayload.telefone = updatedData.telefone;
           if (updatedData.whatsapp !== undefined) tenantPayload.whatsapp = updatedData.whatsapp;
           if (updatedData.site !== undefined) tenantPayload.site = updatedData.site;
-          if (updatedData.cep !== undefined) tenantPayload.cep = updatedData.cep;
           if (updatedData.rua !== undefined) tenantPayload.rua = updatedData.rua;
           if (updatedData.numero !== undefined) tenantPayload.numero = updatedData.numero;
-          if (updatedData.complemento !== undefined) tenantPayload.complemento = updatedData.complemento;
           if (updatedData.bairro !== undefined) tenantPayload.bairro = updatedData.bairro;
           if (updatedData.cidade !== undefined) tenantPayload.cidade = updatedData.cidade;
           if (updatedData.estado !== undefined) tenantPayload.estado = updatedData.estado;
-          const fullAddress = [
-            updatedData.rua,
-            updatedData.numero ? `nº ${updatedData.numero}` : null,
-            updatedData.complemento,
-            updatedData.bairro,
-            updatedData.cidade && updatedData.estado ? `${updatedData.cidade} - ${updatedData.estado}` : updatedData.cidade || updatedData.estado,
-            updatedData.cep ? `CEP ${updatedData.cep}` : null,
-          ].filter(Boolean).join(", ");
+          const fullAddress = [updatedData.rua, updatedData.numero, updatedData.bairro, updatedData.cidade, updatedData.estado]
+            .filter(Boolean)
+            .join(", ");
           if (fullAddress) tenantPayload.endereco_completo = fullAddress;
 
           if (Object.keys(tenantPayload).length > 0) {
@@ -338,7 +326,6 @@ export function useDadosEmpresa(
               cep: updatedData.cep || undefined,
               rua: updatedData.rua || undefined,
               numero: updatedData.numero || undefined,
-              complemento: updatedData.complemento || undefined,
               bairro: updatedData.bairro || undefined,
               cidade: updatedData.cidade || undefined,
               estado: updatedData.estado || undefined,
