@@ -48,3 +48,4 @@ Esta regra estabelece os padrões visuais, tipográficos e de interação para *
   - Tipografia: 14px medium (`text-[14px] font-medium`).
   - Estilo discreto e transparente (`hover:text-foreground`).
 - **Eliminação de redundância:** Evite ter o botão "X" de fechar no topo e o botão "Voltar" no rodapé fazendo exatamente a mesma coisa sem propósito. Prefira o dismiss natural via backdrop e a ação secundária clara no rodapé.
+
