@@ -63,31 +63,31 @@ export function DadosEmpresaHub({
   const cards: NavCard[] = [
     ...(isTenantAdmin
       ? [
-          {
-            id: "identificacao",
-            icon: Building2,
-            title: "Identificação",
-            description: "Nome oficial, slogan, CNPJ, CPF e e-mail",
-            path: `${basePath}/dados-empresa/identificacao${unidadeSearch}`,
-            pendingCount: pendingByCategory.identificacao,
-          },
-          {
-            id: "endereco",
-            icon: MapPin,
-            title: "Endereço",
-            description: "CEP, rua, número, bairro, cidade e estado",
-            path: `${basePath}/dados-empresa/endereco${unidadeSearch}`,
-            pendingCount: pendingByCategory.endereco,
-          },
-          {
-            id: "online",
-            icon: Globe,
-            title: "Presença Online",
-            description: "Website e redes sociais da barbearia",
-            path: `${basePath}/dados-empresa/online${unidadeSearch}`,
-            pendingCount: 0,
-          },
-        ]
+        {
+          id: "identificacao",
+          icon: Building2,
+          title: "Identificação",
+          description: "Nome oficial, slogan, CNPJ, CPF e e-mail",
+          path: `${basePath}/dados-empresa/identificacao${unidadeSearch}`,
+          pendingCount: pendingByCategory.identificacao,
+        },
+        {
+          id: "endereco",
+          icon: MapPin,
+          title: "Endereço",
+          description: "CEP, rua, número, bairro, cidade e estado",
+          path: `${basePath}/dados-empresa/endereco${unidadeSearch}`,
+          pendingCount: pendingByCategory.endereco,
+        },
+        {
+          id: "online",
+          icon: Globe,
+          title: "Presença Online",
+          description: "Website e redes sociais da barbearia",
+          path: `${basePath}/dados-empresa/online${unidadeSearch}`,
+          pendingCount: 0,
+        },
+      ]
       : []),
     {
       id: "dados-pessoais",

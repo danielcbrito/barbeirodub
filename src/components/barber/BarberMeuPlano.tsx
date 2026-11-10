@@ -346,8 +346,8 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                       {subscription.isExempt
                         ? "Barbearia DUB (Vitalício)"
                         : subscription.isTrial
-                        ? "DUB Período Gratuito"
-                        : `DUB ${subscription.planName || currentPlan.name}`}
+                          ? "DUB Período Gratuito"
+                          : `DUB ${subscription.planName || currentPlan.name}`}
                     </span>
                   </div>
 
@@ -358,19 +358,19 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                       subscription.isBlocked
                         ? "text-destructive"
                         : subscription.isOverdue
-                        ? "text-amber-500"
-                        : subscription.isTrial
-                        ? "text-blue-500"
-                        : "text-emerald-600 dark:text-emerald-400"
+                          ? "text-amber-500"
+                          : subscription.isTrial
+                            ? "text-blue-500"
+                            : "text-emerald-600 dark:text-emerald-400"
                     )}
                   >
                     {subscription.isBlocked
                       ? "Bloqueado"
                       : subscription.isOverdue
-                      ? "Em Atraso"
-                      : subscription.isTrial
-                      ? "Período de teste"
-                      : "Ativo"}
+                        ? "Em Atraso"
+                        : subscription.isTrial
+                          ? "Período de teste"
+                          : "Ativo"}
                   </span>
                 </div>
 
@@ -394,11 +394,10 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                     <span className="font-semibold text-foreground">
                       {subscription.isExempt
                         ? "Sem limite de barbeiros"
-                        : `${subscription.barbersAllowed || currentPlan.barbersLimit || 1} ${
-                            (subscription.barbersAllowed || currentPlan.barbersLimit || 1) === 1
-                              ? "barbeiro"
-                              : "barbeiros"
-                          }`}
+                        : `${subscription.barbersAllowed || currentPlan.barbersLimit || 1} ${(subscription.barbersAllowed || currentPlan.barbersLimit || 1) === 1
+                          ? "barbeiro"
+                          : "barbeiros"
+                        }`}
                     </span>
                   </div>
 
@@ -669,7 +668,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
         )}
       </AnimatePresence>
 
-      {/* ═══ MODAL EXECUTIVO DE BLOQUEIO PROATIVO: DADOS PENDENTES DA BARBEARIA ═══ */}
+      {/* ═══ GAVETA EXECUTIVA DE PENDÊNCIAS CADASTRAIS (PADRÃO DUB SYSTEM) ═══ */}
       <AnimatePresence>
         {showPendingModal && (
           <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm">
@@ -679,56 +678,51 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
               transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-              className="relative w-full sm:max-w-md rounded-t-[32px] sm:rounded-3xl border border-border/80 dark:border-white/10 bg-card p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
+              className="relative w-full sm:max-w-md rounded-t-[32px] sm:rounded-3xl border border-border/70 dark:border-white/10 bg-card p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto pb-[calc(1.75rem+env(safe-area-inset-bottom))]"
             >
-              <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-2 mb-3 sm:hidden shrink-0" />
+              {/* Handle sutil de gaveta */}
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/20 mx-auto -mt-2 mb-1 sm:hidden shrink-0" />
 
-              <div className="flex items-start justify-between gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-rose-500/15 border border-rose-500/25 flex items-center justify-center text-rose-500 shrink-0">
-                  <AlertCircle className="w-6 h-6 stroke-[2.2]" />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowPendingModal(false)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
+              {/* Título e Descrição com hierarquia tipográfica precisa (24px bold + 15px regular) */}
               <div>
-                <h3 className="text-[19px] font-bold text-foreground tracking-tight leading-tight">
+                <h3 className="text-[24px] font-bold text-foreground tracking-tight leading-tight">
                   Complete seus dados antes de assinar
                 </h3>
-                <p className="text-[13px] text-muted-foreground mt-2 leading-relaxed">
-                  Para ativar sua assinatura no Pix Automático, preencha os dados obrigatórios da sua barbearia (Documento, Contato e Endereço com CEP).
+                <p className="text-[15px] font-normal text-muted-foreground leading-relaxed mt-2.5">
+                  Para ativar sua assinatura no Pix Automático, precisamos de algumas informações da sua barbearia.
                 </p>
               </div>
 
-              {/* Lista dos campos faltantes */}
-              <div className="rounded-2xl border border-rose-500/25 bg-rose-500/[0.05] dark:bg-rose-500/[0.1] p-4 space-y-2.5">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                  Dados obrigatórios pendentes ({missingFieldNames.length}):
-                </p>
-                <ul className="space-y-1.5">
+              {/* Bloco de informações pendentes refinado (fundo e borda discretos, sem aspecto de erro agressivo) */}
+              <div className="rounded-2xl border border-rose-500/15 bg-rose-500/[0.03] dark:bg-rose-500/[0.06] p-4 sm:p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-foreground/85">
+                    Informações pendentes
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                    {missingFieldNames.length} {missingFieldNames.length === 1 ? "pendente" : "pendentes"}
+                  </span>
+                </div>
+
+                <ul className="space-y-2.5 pt-1">
                   {missingFieldNames.map((field, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-[12.5px] text-foreground font-medium">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                    <li key={idx} className="flex items-center gap-2.5 text-[14px] text-foreground font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500/80 shrink-0" />
                       <span>{field}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              {/* Botões de Ação */}
-              <div className="space-y-2 pt-2">
+              {/* Ações: Botão principal refinado (56px, rounded-28px, 16px semibold) e ação de retorno clara */}
+              <div className="space-y-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => {
                     setShowPendingModal(false);
                     navigate("/barbeiro/dados-empresa");
                   }}
-                  className="h-[52px] rounded-full w-full bg-foreground text-background font-medium text-[14px] flex items-center justify-center gap-2 active:scale-[0.98] transition-all hover:opacity-90 shadow-md cursor-pointer"
+                  className="h-14 rounded-[28px] w-full bg-foreground text-background font-semibold text-[16px] flex items-center justify-center active:scale-[0.98] transition-all hover:opacity-90 shadow-xs cursor-pointer"
                 >
                   <span>Preencher dados agora</span>
                 </button>
@@ -736,7 +730,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                 <button
                   type="button"
                   onClick={() => setShowPendingModal(false)}
-                  className="w-full h-10 rounded-full text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  className="w-full h-11 rounded-full text-[14px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
                   Voltar
                 </button>

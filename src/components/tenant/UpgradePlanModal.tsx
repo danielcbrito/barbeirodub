@@ -136,15 +136,15 @@ export function UpgradePlanModal({
             Limite do Plano Atingido
           </span>
 
-          {/* Título Principal */}
-          <h2 className="text-[19px] sm:text-[20px] font-bold text-foreground text-center tracking-tight leading-snug">
+          {/* Título Principal (24px Bold) */}
+          <h2 className="text-[24px] font-bold text-foreground text-center tracking-tight leading-tight">
             {isUnitsLimit
               ? "Precisa de mais unidades?"
               : "Hora de expandir sua equipe! 🚀"}
           </h2>
 
-          {/* Mensagem Explicativa Clara */}
-          <p className="text-[13px] text-muted-foreground text-center leading-relaxed mt-2 px-1">
+          {/* Mensagem Explicativa Clara (15px Regular) */}
+          <p className="text-[15px] font-normal text-muted-foreground text-center leading-relaxed mt-2.5 px-1">
             {customMessage ? (
               customMessage
             ) : isUnitsLimit ? (
@@ -169,11 +169,11 @@ export function UpgradePlanModal({
           </p>
 
           {/* Card Resumo do Plano Recomendado */}
-          <div className="w-full rounded-2xl border border-border/80 bg-secondary/30 p-4 mt-5 mb-5 space-y-2.5">
+          <div className="w-full rounded-2xl border border-border/70 bg-secondary/30 p-5 mt-5 mb-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-primary" />
-                <span className="text-[14px] font-bold text-foreground">
+                <span className="text-[13px] font-semibold text-foreground/85">
                   Plano Recomendado: DUB {neededTier.name}
                 </span>
               </div>
@@ -189,24 +189,24 @@ export function UpgradePlanModal({
               </div>
             </div>
 
-            <div className="text-[12px] text-muted-foreground space-y-1 pt-1 border-t border-border/30">
+            <div className="text-[13px] text-muted-foreground space-y-2 pt-2 border-t border-border/30">
               {isUnitsLimit ? (
                 <>
-                  <p className="flex items-center gap-1.5 text-foreground/80">
+                  <p className="flex items-center gap-2 text-[14px] text-foreground/90 font-medium">
                     <span className="text-emerald-500 font-bold">✓</span> Até 3 unidades / filiais
                   </p>
-                  <p className="flex items-center gap-1.5 text-foreground/80">
+                  <p className="flex items-center gap-2 text-[14px] text-foreground/90 font-medium">
                     <span className="text-emerald-500 font-bold">✓</span> Até 9 barbeiros na equipe
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="flex items-center gap-1.5 text-foreground/80">
+                  <p className="flex items-center gap-2 text-[14px] text-foreground/90 font-medium">
                     <span className="text-emerald-500 font-bold">✓</span> Suporta até{" "}
                     {neededTier.maxBarbers === 999999 ? "ilimitados" : neededTier.maxBarbers}{" "}
                     barbeiros
                   </p>
-                  <p className="flex items-center gap-1.5 text-foreground/80">
+                  <p className="flex items-center gap-2 text-[14px] text-foreground/90 font-medium">
                     <span className="text-emerald-500 font-bold">✓</span> Gestão de comissões por profissional
                   </p>
                 </>
@@ -214,24 +214,24 @@ export function UpgradePlanModal({
             </div>
           </div>
 
-          {/* Botões de Ação */}
-          <div className="w-full space-y-2">
-            <Button
+          {/* Botões de Ação (56px CTA + 44px ação secundária) */}
+          <div className="w-full space-y-2.5">
+            <button
               onClick={handleNavigateToPlans}
-              className="w-full h-11.5 text-[13.5px] font-bold rounded-xl bg-foreground text-background hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              className="w-full h-14 rounded-[28px] text-[16px] font-semibold bg-foreground text-background hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
             >
               <Zap className="w-4 h-4" />
               <span>Ver Planos & Fazer Upgrade</span>
               <ArrowRight className="w-4 h-4" />
-            </Button>
+            </button>
 
-            <Button
-              variant="ghost"
+            <button
+              type="button"
               onClick={onClose}
-              className="w-full h-9 text-[12.5px] text-muted-foreground hover:text-foreground"
+              className="w-full h-11 rounded-full text-[14px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               Agora não
-            </Button>
+            </button>
           </div>
         </motion.div>
       </div>
