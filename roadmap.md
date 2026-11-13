@@ -1,5 +1,10 @@
 # Payment provider cleanup
 
+## Recorrência com cartão tokenizado — documento enviado
+- [x] Validar na documentação oficial Woovi: a API pública de cartão documenta cobrança avulsa e não documenta card_id/customer_id reutilizável nem o campo para cobrar esse token.
+- [ ] Implementar tokenização e renovação diária — bloqueado até a Woovi fornecer o contrato oficial de cobrança off-session, consentimento e retentativas; nenhum campo ou cron foi criado.
+- [x] Bloquear a implementação baseada em suposição e documentar os requisitos necessários em docs/analise-recorrencia-cartao-woovi-2026-11-13.md.
+
 ## Recorrente Pix/cartão, checkout real e segurança
 - [x] Confirmar na API oficial Woovi os requisitos e a capacidade de recorrência automática por cartão; não simular renovação se o banco não oferecer esse contrato.
 - [x] Exigir e orientar no checkout todos os dados cadastrais necessários para Pix Automático e cartão; CPF/CNPJ tem validação matemática e endereço não usa mais valores inventados.
