@@ -43,18 +43,22 @@ Woovi -> Webhook assinado -> Consulta API Woovi -> RPC transacional
 ### Usuário e Frontend
 Barbeiro e administrador usam a mesma tela de planos. Após escolher o plano, o checkout mostra Pix Automático e cartão. O Pix só é criado quando o usuário confirma; o QR Code e o código copiável vêm da Woovi. Foram removidos os links Cakto, o Pix estático com chave fixa e a confirmação manual que gravava pagamento diretamente no navegador.
 
-Cartão aparece como indisponível para esta assinatura: a documentação da Woovi informa liquidação de vendas em cartão em conta de recebimento externa, não em subconta Woovi. Não há recorrência fictícia nem promessa de depósito na DUB para esse método.
+Pix Automático e cartão estão disponíveis. O Pix é criado somente após confirmação do usuário; QR Code e código copiável vêm da Woovi. O cartão abre a página segura oficial e ativa o plano somente após a cobrança ficar COMPLETED. Foram removidos os links Cakto, o Pix estático com chave fixa e a ativação manual no navegador.
+
+O cartão é pagamento mensal, não recorrência automática: a API documentada pela Woovi oferece cobrança avulsa com CREDIT_CARD. Sua liquidação ocorre na conta de recebimento externa cadastrada na Woovi, não em uma subconta Woovi. Para cobrança automática todo mês, o checkout orienta o uso do Pix Automático.
 
 ### Backend Woovi
-create-tenant-plan-subscription valida sessão, propriedade do tenant, plano e preço oficiais, identidade, contato e CEP. A intenção é registrada antes da chamada bancária. A recorrência usa PAYMENT_ON_APPROVAL, frequência mensal e split para a subconta oficial DUB. A consulta de status exige assinatura ativa, autorização aprovada, correlação e valor exatos.
+create-tenant-plan-subscription valida sessão, propriedade do tenant, plano e preço oficiais, identidade, contato e CEP. A intenção é registrada antes da chamada bancária. O Pix recorrente usa PAYMENT_ON_APPROVAL e frequência mensal, sem splits: o valor das novas assinaturas fica na conta principal Woovi. A política routeTenantPlanToMainAccount remove qualquer split legado e possui teste de regressão. O cartão usa POST /api/v1/charge com CREDIT_CARD e paymentLinkUrl. Ambos exigem correlação e valor exatos na consulta de status.
 
-woovi-webhook trata PIX_AUTOMATIC_APPROVED e PIX_AUTOMATIC_COBR_COMPLETED, revalida na API e só então chama a confirmação. Renovação exige parcela COMPLETED; uma consulta de status nunca altera vencimento.
+woovi-webhook trata PIX_AUTOMATIC_APPROVED, PIX_AUTOMATIC_COBR_COMPLETED e cobranças mensais concluídas. Sempre revalida na API antes da confirmação. Renovação Pix exige parcela COMPLETED; consulta de status nunca altera vencimento.
 
-### Banco Supabase
-confirm_tenant_plan_payment valida a intenção, tenant, plano ativo e valor em centavos, bloqueia os registros e ativa ou renova em uma transação. A primeira autorização e o primeiro evento de parcela são idempotentes. Próximas renovações preservam o ciclo mensal e só avançam perto do vencimento. Execução é exclusiva de service_role; navegador e usuários autenticados não podem chamar essa função.
+### Banco Supabase e Túlio
+confirm_tenant_plan_payment valida a intenção, tenant, plano ativo, método e valor em centavos, bloqueia os registros e ativa ou renova em transação. Cobranças antigas não substituem assinaturas mais recentes. Execução permanece exclusiva de service_role.
+
+A subconta do Túlio estava vinculada no cadastro e recebeu o nome de exibição Tulio. Nenhum valor foi creditado, debitado ou sacado nesta alteração: o saldo bancário atual não estava disponível para uma reconciliação segura. A verificação de liquidez da conta principal no saque agora é independente do saldo da subconta, evitando enviar uma tentativa quando o caixa principal não cobre o valor.
 
 ### Verificação e limites desta etapa
-11 testes focados passaram, cobrindo correlação, valor, autorização aprovada e parcela concluída. A compilação terminou com build OK. As funções foram publicadas e rejeitaram com 401 um token inválido e uma assinatura de webhook inválida. Nenhuma cobrança real foi criada. O fluxo logado não pôde ser exercitado porque o Supabase externo não fornece sessão ao navegador de teste. Eventos PIX_AUTOMATIC_APPROVED e PIX_AUTOMATIC_COBR_COMPLETED precisam estar habilitados no painel Woovi. As migrations atuais reportaram 119 achados de segurança preexistentes, sem interromper esta tarefa.
+13 testes focados passaram, cobrindo destino central sem split, cartão concluído, correlação, valor, autorização e parcela. A compilação terminou com build OK. Nenhuma cobrança real foi criada e nenhum saque foi executado. O fluxo logado não pôde ser exercitado porque o Supabase externo não fornece sessão ao navegador de teste. O cartão precisa estar habilitado e com KYC ativo na Woovi; seus recebimentos seguem a conta externa cadastrada no banco. As migrations reportaram 119 achados de segurança preexistentes, sem interromper esta tarefa.
 
 ## Verificação e limites
 8 testes unitários passaram. Preview abriu em /login sem pageerror; a página autenticada /admin/financeiro NÃO foi verificada, pois a sessão externa não é disponibilizada ao teste automatizado. Último sinal de compilação: build OK.
