@@ -117,7 +117,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   const [availableRedemptions, setAvailableRedemptions] = useState<{ id: string; promocao_id: string }[]>([]);
   const [useRedemption, setUseRedemption] = useState(false);
   const [copied, setCopied] = useState(false);
-  
+
   // Indica se o usuário está usando fluxo de plano (serviço pré-selecionado)
   const [isPlanFlow, setIsPlanFlow] = useState(false);
 
@@ -224,14 +224,14 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
   const totalDuration = selectedServices.reduce((sum, s) => sum + getEffectiveDuration(s), 0);
 
-  const { 
-    slots: availableSlots, 
-    loading: loadingSlots, 
+  const {
+    slots: availableSlots,
+    loading: loadingSlots,
     error: errorSlots,
     refreshSlots,
-    verifySlotAvailability 
+    verifySlotAvailability
   } = useSlotAvailability(
-    selectedDate, 
+    selectedDate,
     totalDuration,
     isRescheduling ? rescheduleAppointmentId : null,
     selectedBarberId
@@ -320,7 +320,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           const debt = await checkClientPendingCancellationDebt(session.user.id);
           if (debt) setCancellationDebt(debt);
         }
-      } catch {}
+      } catch { }
 
       const resolvedTenantId = await resolveClientTenantId({ forcedTenantId: effectiveTenantId });
 
@@ -682,7 +682,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           today.setHours(0, 0, 0, 0);
           const billingDate = new Date(subscription.next_billing_date + 'T12:00:00');
           billingDate.setHours(0, 0, 0, 0);
-          
+
           const isOverdue = today > billingDate;
 
           if (isOverdue) {
@@ -712,7 +712,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
             .select("id, nome, descricao, duracao_minutos, preco")
             .eq("id", planoData.servico_id)
             .maybeSingle();
-          
+
           if (servicoData) {
             servicoVinculado = servicoData;
           }
@@ -736,7 +736,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         setActiveSubscription(activeSubscriptionData);
         return activeSubscriptionData;
       }
-      
+
       return null;
     } catch (error) {
       console.error("Error loading active subscription:", error);
@@ -829,20 +829,20 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     // Normal: step 1 = Serviços, step 2 = Barbeiro, step 3 = Data, step 4 = Horário, step 5 = Pagamento, step 6 = Confirmação
     // Plano:  step 1 = Barbeiro, step 2 = Data, step 3 = Horário, step 4 = Confirmação
     // Remarcação: step 2 = Data, step 3 = Horário, step 5 = Confirmação (mantém barbeiro original)
-    
+
     // Validação de serviços (step 1 para normal)
     if (!isPlanFlow && !isRescheduling && step === 1 && selectedServices.length === 0) {
       toast.error("Selecione pelo menos um serviço");
       return;
     }
-    
+
     // Validação de barbeiro
     const barberStep = isPlanFlow ? 1 : 2;
     if (!isRescheduling && step === barberStep && !selectedBarberId && barbers.length > 1) {
       toast.error("Selecione um barbeiro");
       return;
     }
-    
+
     // Validação de data
     const dateStep = isPlanFlow ? 2 : (isRescheduling ? 2 : 3);
     if (step === dateStep) {
@@ -859,20 +859,20 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         return;
       }
     }
-    
+
     // Validação de horário
     const timeStep = isPlanFlow ? 3 : (isRescheduling ? 3 : 4);
     if (step === timeStep && !selectedTime) {
       toast.error("Selecione um horário");
       return;
     }
-    
+
     // Verificar disponibilidade antes de avançar da etapa de horário
     if (step === timeStep && selectedDate && selectedTime) {
       setLoading(true);
       try {
         const result = await verifySlotAvailability(selectedTime);
-        
+
         if (!result.available) {
           toast.error(result.message || "Este horário acabou de ser reservado. Por favor, escolha outro.");
           refreshSlots();
@@ -880,7 +880,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           setLoading(false);
           return;
         }
-        
+
         setLoading(false);
       } catch (err) {
         console.error('[handleNextStep] Erro:', err);
@@ -889,13 +889,13 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         return;
       }
     }
-    
+
     // Remarcação: vai direto para confirmação após horário (step 3 -> step 5)
     if (isRescheduling && step === 3) {
       setStep(5);
       return;
     }
-    
+
     // Fluxo de plano: após horário (step 3), vai para confirmação (step 4)
     if (isPlanFlow && step === 3) {
       setStep(4);
@@ -919,7 +919,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       setStep(5);
       return;
     }
-    
+
     setStep(step + 1);
   };
 
@@ -985,7 +985,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         toast.error("Você precisa estar logado");
         navigate("/auth");
@@ -1004,8 +1004,8 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         hora: selectedTime,
         duracao: totalDuration,
         preco: finalPrice,
-        observacoes: selectedServices.length > 1 
-          ? `Serviços: ${serviceNames}` 
+        observacoes: selectedServices.length > 1
+          ? `Serviços: ${serviceNames}`
           : undefined,
       };
 
@@ -1049,7 +1049,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       if (paymentMethod === 'cash') {
         sessionStorage.removeItem('isRescheduling');
         sessionStorage.removeItem('rescheduleAppointmentId');
-        
+
         const { data: profile } = await supabase.from('profiles').select('nome, telefone').eq('id', session.user.id).maybeSingle();
         sendNovoAgendamentoEvent({
           agendamento_id: data.appointmentId || '',
@@ -1061,7 +1061,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
           hora: selectedTime,
           preco: finalPrice
         });
-        
+
         toast.success("Agendamento criado! Pague na barbearia.");
         navigate("/cliente");
       } else if (paymentMethod === 'pix' && data.wooviPayment?.pixQrCode) {
@@ -1073,7 +1073,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       } else if (paymentMethod === 'card') {
         sessionStorage.removeItem('isRescheduling');
         sessionStorage.removeItem('rescheduleAppointmentId');
-        
+
         if (data.wooviPayment?.status === 'CONFIRMED') {
           toast.success("Pagamento aprovado! Agendamento confirmado.");
           navigate("/cliente");
@@ -1083,7 +1083,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       }
     } catch (error: any) {
       console.error('Payment error:', error);
-      
+
       if (error.message?.includes('TIME_SLOT_UNAVAILABLE') || error.message?.includes('indisponível') || error.message?.includes('Horário')) {
         toast.error(error.message || "Horário indisponível. Escolha outro horário.");
         setStep(3);
@@ -1210,7 +1210,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       if (isRescheduling && rescheduleAppointmentId) {
         await supabase
           .from("agendamentos")
-          .update({ 
+          .update({
             status: 'cancelled_by_user' as any,
             visivel_para_usuario: false
           } as any)
@@ -1218,7 +1218,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       }
 
       const creditUsedAmount = Math.min(availableCredits, totalPrice);
-      const observacoesText = selectedServices.length > 1 
+      const observacoesText = selectedServices.length > 1
         ? `Serviços: ${serviceNames}. Pago com crédito do app: R$ ${creditUsedAmount.toFixed(2)}`
         : `Pago com crédito do app: R$ ${creditUsedAmount.toFixed(2)}`;
 
@@ -1422,7 +1422,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
   const markRedemptionAsUsed = async (appointmentId: string) => {
     if (!useRedemption || availableRedemptions.length === 0) return;
-    
+
     const redemptionToUse = availableRedemptions[0];
     try {
       const { error } = await supabase
@@ -1435,7 +1435,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         .eq("id", redemptionToUse.id);
 
       if (error) throw error;
-      
+
       setAvailableRedemptions(prev => prev.filter(r => r.id !== redemptionToUse.id));
       setUseRedemption(false);
     } catch (error) {
@@ -1460,7 +1460,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
       const totalDuration = selectedServices.reduce((sum, s) => sum + getEffectiveDuration(s), 0);
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      
+
       const { data: validation, error: validationError } = await supabase.functions.invoke('validate-appointment', {
         body: {
           data: dateStr,
@@ -1483,7 +1483,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
         refreshSlots();
         return;
       }
-      
+
       const { error } = await supabase
         .from("agendamentos")
         .update({
@@ -1529,8 +1529,8 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   };
 
   const getCorteService = () => {
-    return selectedServices.find(s => 
-      s.nome.toLowerCase().includes('corte') && 
+    return selectedServices.find(s =>
+      s.nome.toLowerCase().includes('corte') &&
       !s.nome.toLowerCase().includes('barba')
     );
   };
@@ -1601,7 +1601,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   // Remarcação: 3 etapas (Data, Horário, Confirmação)
   // Normal: 5 etapas (Serviços, Data, Horário, Pagamento, Confirmação)
   const totalSteps = isPlanFlow ? 3 : isRescheduling ? 3 : 5;
-  
+
   // Mapear step interno para step visual
   const currentDisplayStep = (() => {
     if (isPlanFlow) {
@@ -1639,11 +1639,11 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
               <Clock className="w-10 h-10 text-foreground stroke-[1.6]" />
             )}
           </div>
-          
+
           <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-3">
             {isPendingPayment ? "Pagamento Pendente na Barbearia" : "Limite Mensal Atingido"}
           </h1>
-          
+
           <p className="text-muted-foreground text-sm leading-relaxed mb-6">
             {isPendingPayment ? (
               <>
@@ -1651,12 +1651,12 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
               </>
             ) : (
               <>
-                Você já utilizou todos os {activeSubscription?.limite_agendamentos_mes || 4} agendamentos 
+                Você já utilizou todos os {activeSubscription?.limite_agendamentos_mes || 4} agendamentos
                 do seu plano <span className="text-foreground font-semibold">{activeSubscription?.plano_nome}</span> este mês.
               </>
             )}
           </p>
-          
+
           <div className="bg-card border border-border/60 rounded-2xl p-4 mb-6">
             <div className="flex justify-between items-center text-sm">
               <span className="text-muted-foreground">
@@ -1671,7 +1671,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
               </span>
             </div>
           </div>
-          
+
           <button
             onClick={() => navigate("/cliente")}
             className="w-full h-12 bg-foreground text-background font-semibold rounded-full hover:bg-foreground/90 active:scale-[0.99] transition-all shadow-xs"
@@ -2030,13 +2030,13 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                             RESGATE DISPONÍVEL
                           </div>
                         </div>
-                        
+
                         <button
                           onClick={() => setUseRedemption(!useRedemption)}
                           className={cn(
                             "w-full text-left rounded-2xl p-5 transition-all duration-200 border",
-                            useRedemption 
-                              ? "bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/50" 
+                            useRedemption
+                              ? "bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/50"
                               : "bg-gradient-to-br from-orange-500/5 to-yellow-500/5 border-orange-500/30 hover:border-orange-500/50"
                           )}
                         >
@@ -2051,7 +2051,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                             </div>
                             <div className={cn(
                               "flex-shrink-0 w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center mt-0.5",
-                              useRedemption 
+                              useRedemption
                                 ? "bg-green-500 border-green-500"
                                 : "border-orange-500/50"
                             )}>
@@ -2105,7 +2105,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                       R$ {selectedServices.reduce((sum, s) => sum + s.preco, 0).toFixed(2).replace('.', ',')}
                     </span>
                   </div>
-                  
+
                   {useRedemption && getRedemptionDiscount() > 0 && (
                     <div className="flex items-center justify-between text-success font-semibold text-sm">
                       <span>Desconto (resgate)</span>
@@ -2119,7 +2119,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                       <span>-R$ {Math.min(availableCredits, getTotalPrice()).toFixed(2).replace('.', ',')}</span>
                     </div>
                   )}
-                  
+
                   <div className="border-t border-border mt-4 pt-4">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-foreground">Valor a pagar</span>
@@ -2169,28 +2169,28 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
               {/* Card de resumo - Layout limpo para plano */}
               <div className="bg-card border border-border rounded-2xl p-5 space-y-4 mb-6">
-                <SummaryRow 
+                <SummaryRow
                   label="Serviço"
                   value={selectedServices.map(s => s.nome).join(", ")}
                 />
-                
+
                 <div className="border-t border-border" />
-                
-                <SummaryRow 
+
+                <SummaryRow
                   label="Duração"
                   value={`${getTotalDuration()} minutos`}
                 />
-                
+
                 <div className="border-t border-border" />
-                
-                <SummaryRow 
+
+                <SummaryRow
                   label="Data"
                   value={selectedDate ? format(selectedDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : ""}
                 />
-                
+
                 <div className="border-t border-border" />
-                
-                <SummaryRow 
+
+                <SummaryRow
                   label="Horário"
                   value={selectedTime}
                 />
@@ -2209,7 +2209,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="flex justify-between items-center pt-3 border-t border-primary/20">
                   <span className="text-sm text-muted-foreground">Agendamentos este mês</span>
                   <span className="text-sm font-semibold text-foreground">
@@ -2253,36 +2253,36 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
               {/* Card de resumo */}
               <div className="bg-card border border-border rounded-2xl p-5 space-y-4 mb-6">
-                <SummaryRow 
+                <SummaryRow
                   label="Serviço"
                   value={selectedServices.map(s => s.nome).join(", ")}
                 />
-                
+
                 <div className="border-t border-border" />
-                
-                <SummaryRow 
+
+                <SummaryRow
                   label="Data"
                   value={selectedDate ? format(selectedDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : ""}
                 />
-                
+
                 <div className="border-t border-border" />
-                
-                <SummaryRow 
+
+                <SummaryRow
                   label="Horário"
                   value={selectedTime}
                 />
-                
+
                 <div className="border-t border-border" />
-                
-                <SummaryRow 
+
+                <SummaryRow
                   label="Forma de Pagamento"
                   value={
                     hasActivePlanWithUses ? `${activeSubscription?.plano_nome || 'Plano'}` :
-                    useRedemption && getTotalPrice() === 0 ? "Resgate de Fidelidade" :
-                    availableCredits >= getTotalPrice() ? "Créditos do App" :
-                    paymentMethod === 'pix' ? "PIX" :
-                    paymentMethod === 'card' ? "Cartão de Crédito" :
-                    "Pagar na Barbearia"
+                      useRedemption && getTotalPrice() === 0 ? "Resgate de Fidelidade" :
+                        availableCredits >= getTotalPrice() ? "Créditos do App" :
+                          paymentMethod === 'pix' ? "PIX" :
+                            paymentMethod === 'card' ? "Cartão de Crédito" :
+                              "Pagar na Barbearia"
                   }
                 />
 
@@ -2313,7 +2313,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
               {!hasActivePlanWithUses && paymentMethod === 'card' && availableCredits < getTotalPrice() && (
                 <div className="bg-card border border-border rounded-2xl p-5 mb-6 space-y-4">
                   <h3 className="text-base font-semibold text-foreground mb-3">Dados do Cartão</h3>
-                  
+
                   <input
                     type="text"
                     placeholder="Nome no cartão"
@@ -2321,7 +2321,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                     onChange={(e) => setCardHolderName(e.target.value)}
                     className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50"
                   />
-                  
+
                   <input
                     type="text"
                     placeholder="Número do cartão"
@@ -2329,7 +2329,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                     onChange={(e) => setCardNumber(e.target.value)}
                     className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50"
                   />
-                  
+
                   <div className="grid grid-cols-3 gap-3">
                     <input
                       type="text"
@@ -2353,7 +2353,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                       className="px-4 py-3 bg-secondary border border-border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50"
                     />
                   </div>
-                  
+
                   <input
                     type="text"
                     placeholder="CPF do titular"
@@ -2378,11 +2378,11 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                 disabled={processingPayment}
                 className="w-full py-4 bg-primary text-primary-foreground text-base font-semibold rounded-xl hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
               >
-                {processingPayment ? 'Processando...' : 
+                {processingPayment ? 'Processando...' :
                   hasActivePlanWithUses ? 'Confirmar Agendamento' :
-                  availableCredits >= getTotalPrice() ? 'Confirmar (usando créditos)' :
-                  paymentMethod === 'pix' ? 'Gerar QR Code PIX' :
-                  'Confirmar Agendamento'
+                    availableCredits >= getTotalPrice() ? 'Confirmar (usando créditos)' :
+                      paymentMethod === 'pix' ? 'Gerar QR Code PIX' :
+                        'Confirmar Agendamento'
                 }
               </button>
             </div>
@@ -2412,21 +2412,21 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
               </div>
 
               <div className="bg-card border border-border rounded-2xl p-5 space-y-4 mb-6">
-                <SummaryRow 
+                <SummaryRow
                   label="Nova Data"
                   value={selectedDate ? format(selectedDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : ""}
                 />
-                
+
                 <div className="border-t border-border" />
-                
-                <SummaryRow 
+
+                <SummaryRow
                   label="Novo Horário"
                   value={selectedTime}
                 />
-                
+
                 <div className="border-t border-border" />
-                
-                <SummaryRow 
+
+                <SummaryRow
                   label="Serviço"
                   value={selectedServices[0]?.nome || ""}
                 />
@@ -2511,9 +2511,9 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
                   {/* QR Code */}
                   <div className="bg-white rounded-2xl p-6 mb-6 flex justify-center">
-                    <img 
-                      src={pixQrCode.startsWith("https://") || pixQrCode.startsWith("data:") ? pixQrCode : `data:image/png;base64,${pixQrCode}`} 
-                      alt="QR Code PIX" 
+                    <img
+                      src={pixQrCode.startsWith("https://") || pixQrCode.startsWith("data:") ? pixQrCode : `data:image/png;base64,${pixQrCode}`}
+                      alt="QR Code PIX"
                       className="w-52 h-52"
                     />
                   </div>
@@ -2531,7 +2531,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide text-center">
                         Ou copie o código
                       </p>
-                      
+
                       <div className="bg-card rounded-xl p-3 border border-border">
                         <p className="text-xs font-mono text-muted-foreground break-all leading-relaxed">
                           {pixPayload}

@@ -269,7 +269,7 @@ export function BarberConfigBarbearia({
           if (mounted && barbData?.foto_url) {
             setBarberAvatarUrl(barbData.foto_url);
           }
-        } catch {}
+        } catch { }
       }
       if (barberContext.userId) {
         try {
@@ -281,7 +281,7 @@ export function BarberConfigBarbearia({
           if (mounted && profData?.avatar_url) {
             setBarberAvatarUrl((prev) => prev || profData.avatar_url);
           }
-        } catch {}
+        } catch { }
       }
 
       // 1. Buscar em informacoes_empresa (onde Barbearia DUB, banner e logo estão salvos)
@@ -344,7 +344,7 @@ export function BarberConfigBarbearia({
             if (!resolvedLogo && t.logo_url) resolvedLogo = t.logo_url;
             if (!resolvedBanner && t.banner_url) resolvedBanner = t.banner_url;
           }
-        } catch {}
+        } catch { }
       }
 
       // 4. Fallback para dono mais antigo
@@ -363,7 +363,7 @@ export function BarberConfigBarbearia({
             if (!resolvedLogo && ownerTenant.logo_url) resolvedLogo = ownerTenant.logo_url;
             if (!resolvedBanner && ownerTenant.banner_url) resolvedBanner = ownerTenant.banner_url;
           }
-        } catch {}
+        } catch { }
       }
 
       if (mounted) {

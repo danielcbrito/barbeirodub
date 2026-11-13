@@ -563,7 +563,7 @@ export function BarberMobileProfile({
             onClick={() =>
               window.open(
                 "https://wa.me/5511963390043?text=" +
-                  encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"),
+                encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"),
                 "_blank",
                 "noopener,noreferrer"
               )
