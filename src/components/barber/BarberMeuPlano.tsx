@@ -744,21 +744,28 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
           >
             {/* Header oficial do sistema */}
             <ScheduleHeader
-              title="Assinatura DUB"
+              title="Assinatura"
               onBack={() => setCurrentView("escolha-plano")}
             />
 
             <div className="px-4 py-5 max-w-md mx-auto w-full space-y-5">
-              {/* Card Resumo do Plano Contratado (100% idêntico como era antes) */}
+              {/* Card Resumo do Plano Contratado */}
               <div className="rounded-2xl border border-border/70 dark:border-white/10 bg-card p-4 flex items-center justify-between gap-3 shadow-xs">
                 <div className="flex items-center gap-3 min-w-0">
-                  <img src={logoDub} alt="DUB" className="w-11 h-11 rounded-2xl object-cover shrink-0" />
+                  <div className="w-11 h-11 rounded-2xl bg-secondary/80 dark:bg-white/[0.06] border border-border/50 dark:border-white/10 flex items-center justify-center p-1.5 shrink-0">
+                    <img
+                      src="/auth-assets/dub_logo_d.png"
+                      alt="D"
+                      className="w-full h-full object-contain block dark:invert select-none"
+                      draggable={false}
+                    />
+                  </div>
                   <div className="min-w-0">
                     <h4 className="text-[15px] font-bold text-foreground leading-tight">
-                      DUB Oficial
+                      Plano {selectedPlanForCheckout.name}
                     </h4>
                     <p className="text-[12px] text-muted-foreground truncate">
-                      {tenantNome} · Plano {selectedPlanForCheckout.name} · Mensal
+                      {tenantNome} · Mensal
                     </p>
                   </div>
                 </div>
@@ -768,6 +775,11 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                       ? "Sob consulta"
                       : `R$ ${selectedPlanForCheckout.price.toFixed(2).replace(".", ",")}`}
                   </span>
+                  {!selectedPlanForCheckout.isCustomPrice && (
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                      POR MÊS
+                    </span>
+                  )}
                 </div>
               </div>
 
