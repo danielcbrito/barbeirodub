@@ -1,5 +1,11 @@
 # Payment provider cleanup
 
+## Recorrente Pix/cartão, checkout real e segurança
+- [ ] Confirmar na API oficial Woovi os requisitos e a capacidade de recorrência automática por cartão; não simular renovação se o banco não oferecer esse contrato.
+- [ ] Exigir e orientar no checkout todos os dados cadastrais necessários para Pix Automático e cartão.
+- [ ] Criar e autorizar uma cobrança Pix Automática real e testar o checkout de cartão com pagador autenticado, sem ativar plano antes da confirmação bancária.
+- [ ] Executar a varredura de segurança, corrigir as falhas relacionadas ao checkout e registrar qualquer bloqueio externo restante.
+
 ## Central account subscriptions and Túlio subaccount
 - [x] Route new tenant-plan Pix Automatic receipts to the Woovi central account by removing every subaccount split.
 - [x] Confirm Túlio has a configured subaccount and preserve its funds; no transfer was made without a current bank balance and exact verified amount.
