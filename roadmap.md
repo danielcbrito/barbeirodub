@@ -1,5 +1,11 @@
 # Payment provider cleanup
 
+## Tenant plan checkout and recurring billing
+- [ ] Replace external card links and client-side activation with a Woovi-only checkout.
+- [ ] Activate and renew tenant plans only after signed webhook or direct bank revalidation.
+- [ ] Verify build, payment rules tests and checkout UI; real authorization requires a payer and Woovi production events.
+- [ ] Card automatic recurring into the DUB Woovi subaccount — blocked by Woovi's documented card settlement outside Woovi subaccounts; do not simulate it.
+
 ## WhatsApp connection investigation
 - [x] Compare phone rejection with provider logs and connection flow; specific phone rejection reason absent from available logs.
 - [x] Correct confirmed pairing lifecycle and error handling defects; 5 regression tests passed, function deployed.
