@@ -3,6 +3,7 @@ import { corsHeaders, jsonResponse, wooviFetch } from '../_shared/woovi-client.t
 import { serviceClient } from '../_shared/woovi-auth.ts';
 import { assertConfirmedAmount } from '../_shared/woovi-payment-policy.ts';
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/internal-auth.ts';
+import { hasCompletedTenantInstallment, isApprovedTenantSubscription } from '../_shared/tenant-plan-policy.ts';
 
 interface WooviWebhookEvent {
   event?: string;
@@ -84,9 +85,7 @@ Deno.serve(async (req) => {
     const subscription = remote.subscription;
     const confirmedValue = Number(subscription?.value ?? 0);
     const validSubscription = subscription?.globalID === globalID
-      && subscription?.correlationID === correlationId
-      && String(subscription?.status ?? '').toUpperCase() === 'ACTIVE'
-      && String(subscription?.pixRecurring?.status ?? '').toUpperCase() === 'APPROVED';
+      && isApprovedTenantSubscription(subscription, correlationId, confirmedValue);
     if (!validSubscription) {
       return jsonResponse({ ok: true, ignored: true, reason: 'subscription_not_active_at_source' });
     }
@@ -103,11 +102,7 @@ Deno.serve(async (req) => {
         const installments = await wooviFetch<RemoteInstallments>(
           `/api/v1/subscriptions/${encodeURIComponent(globalID)}/installments`,
         );
-        const hasCompletedInstallment = installments.installments?.some(
-          (installment) => String(installment.status ?? '').toUpperCase() === 'COMPLETED'
-            && Number(installment.value) === confirmedValue,
-        );
-        if (!hasCompletedInstallment) {
+        if (!hasCompletedTenantInstallment(installments.installments, confirmedValue)) {
           return jsonResponse({ error: 'COMPLETED_INSTALLMENT_NOT_FOUND' }, 409);
         }
       } catch (error) {

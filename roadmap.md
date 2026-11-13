@@ -1,10 +1,12 @@
 # Payment provider cleanup
 
 ## Tenant plan checkout and recurring billing
-- [ ] Replace external card links and client-side activation with a Woovi-only checkout.
-- [ ] Activate and renew tenant plans only after signed webhook or direct bank revalidation.
-- [ ] Verify build, payment rules tests and checkout UI; real authorization requires a payer and Woovi production events.
-- [ ] Card automatic recurring into the DUB Woovi subaccount — blocked by Woovi's documented card settlement outside Woovi subaccounts; do not simulate it.
+- [x] Replace external card links, hardcoded Pix and client-side activation with a shared Woovi-only checkout for barber and tenant admin.
+- [x] Activate only after approved/active bank revalidation; renew only after a completed installment, through the service-only atomic database function.
+- [x] Add regression tests for exact correlation, amount, approved mandate and completed installment; 11 focused tests passed.
+- [x] Verify the final build, deploy both functions and confirm invalid browser tokens/webhook signatures are rejected; build OK and both checks returned 401.
+- [ ] Complete an authenticated real Pix Automatic authorization and verify the first payment, later installments and webhook events — requires a payer and Woovi production events; this external Supabase session cannot be injected into the browser test.
+- [ ] Card automatic recurring into the DUB Woovi subaccount — blocked by Woovi's documented card settlement outside Woovi subaccounts; the card option explains the limitation instead of simulating support.
 
 ## WhatsApp connection investigation
 - [x] Compare phone rejection with provider logs and connection flow; specific phone rejection reason absent from available logs.

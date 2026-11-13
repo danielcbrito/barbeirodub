@@ -2097,8 +2097,6 @@ export function BarberClientes({
         }}
         barbeiroId={barberContext.barbeiroId}
         barberName={barberContext.apelido}
-        tenantSlug={queryResult?.tenantSlug || null}
-        tenantName={queryResult?.tenantName || ""}
         targetPhone={targetShareClient?.phone}
         targetClientName={targetShareClient?.name}
       />

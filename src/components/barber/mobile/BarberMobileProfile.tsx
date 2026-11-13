@@ -133,7 +133,7 @@ export function BarberMobileProfile({
           supabase.from("profiles").select("avatar_url, banner_url").eq("id", user.id).maybeSingle(),
           supabase
             .from("barbeiros")
-            .select("foto_url, apelido, tenant_id, tenants:tenant_id(id, slug, nome, logo_url, banner_url)")
+            .select("foto_url, apelido, tenant_id, tenants:tenant_id(id, slug, nome, logo_url)")
             .eq("id", barberContext.barbeiroId)
             .maybeSingle(),
           supabase.rpc("get_admin_banner_for_barber", { p_barbeiro_id: barberContext.barbeiroId }),
@@ -148,7 +148,6 @@ export function BarberMobileProfile({
         let nextBanner =
           profileRes.data?.banner_url ||
           ((!bannerRes.error && bannerRes.data) ? (bannerRes.data as string) : null) ||
-          tenant?.banner_url ||
           null;
         let nextTenantSlug = tenant?.slug || null;
         let nextTenantName = tenant?.nome || "";
@@ -161,7 +160,7 @@ export function BarberMobileProfile({
         if (!nextTenantSlug && effectiveTenantId) {
           const { data: directTenant } = await supabase
             .from("tenants")
-            .select("id, slug, nome, logo_url, banner_url")
+            .select("id, slug, nome, logo_url")
             .eq("id", effectiveTenantId)
             .maybeSingle();
 
@@ -169,7 +168,6 @@ export function BarberMobileProfile({
             nextTenantSlug = directTenant.slug;
             if (!nextTenantName) nextTenantName = directTenant.nome;
             if (!nextTenantLogo) nextTenantLogo = directTenant.logo_url;
-            if (!nextBanner && directTenant.banner_url) nextBanner = directTenant.banner_url;
           }
         }
 

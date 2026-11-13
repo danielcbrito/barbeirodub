@@ -83,14 +83,12 @@ async function fetchBarberDados(barbeiroId?: string | null, userId?: string | nu
   if (bId && (!result.nome_completo || !result.telefone || !result.email)) {
     const { data: barberRow } = await supabase
       .from("barbeiros")
-      .select("nome, telefone, email, user_id")
+      .select("apelido, user_id")
       .eq("id", bId)
       .maybeSingle();
 
     if (barberRow) {
-      if (!result.nome_completo && barberRow.nome) result.nome_completo = barberRow.nome;
-      if (!result.telefone && barberRow.telefone) result.telefone = barberRow.telefone;
-      if (!result.email && barberRow.email) result.email = barberRow.email;
+      if (!result.nome_completo && barberRow.apelido) result.nome_completo = barberRow.apelido;
       if (!uId && barberRow.user_id) uId = barberRow.user_id;
     }
   }
@@ -98,14 +96,20 @@ async function fetchBarberDados(barbeiroId?: string | null, userId?: string | nu
   if (uId && (!result.nome_completo || !result.telefone || !result.email)) {
     const { data: profileRow } = await supabase
       .from("profiles")
-      .select("nome, telefone, email")
+      .select("nome, telefone")
       .eq("id", uId)
       .maybeSingle();
 
     if (profileRow) {
       if (!result.nome_completo && profileRow.nome) result.nome_completo = profileRow.nome;
       if (!result.telefone && profileRow.telefone) result.telefone = profileRow.telefone;
-      if (!result.email && (profileRow as any).email) result.email = (profileRow as any).email;
+    }
+  }
+
+  if (!result.email) {
+    const { data: authData } = await supabase.auth.getUser();
+    if (authData.user && (!uId || authData.user.id === uId)) {
+      result.email = authData.user.email || "";
     }
   }
 
@@ -197,14 +201,10 @@ export function useBarberDados(initialBarbeiroId?: string | null, initialUserId?
 
         if (privateErr) throw privateErr;
 
-        // Sincroniza dados com barbeiros
+        // O nome público do barbeiro fica em apelido; contato completo fica no perfil privado.
         await supabase
           .from("barbeiros")
-          .update({
-            nome: current.nome_completo || undefined,
-            telefone: current.telefone || undefined,
-            email: current.email || undefined,
-          } as any)
+          .update({ apelido: current.nome_completo || undefined })
           .eq("id", bId);
       }
 

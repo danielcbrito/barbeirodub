@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { wooviFetch, WooviError, corsHeaders, jsonResponse } from "../_shared/woovi-client.ts";
+import { isApprovedTenantSubscription } from "../_shared/tenant-plan-policy.ts";
 
 type SubscriptionResponse = {
   subscription?: {
@@ -126,10 +127,11 @@ Deno.serve(async (req) => {
       const subscription = remote.subscription;
       const recurringStatus = String(subscription?.pixRecurring?.status ?? "").toUpperCase();
       const subscriptionStatus = String(subscription?.status ?? "").toUpperCase();
-      const validRemote = subscription?.correlationID === correlationID
-        && Number(subscription?.value) === charge.value_centavos
-        && subscriptionStatus === "ACTIVE"
-        && recurringStatus === "APPROVED";
+      const validRemote = isApprovedTenantSubscription(
+        subscription,
+        correlationID,
+        charge.value_centavos,
+      );
 
       if (!validRemote) {
         return jsonResponse({
