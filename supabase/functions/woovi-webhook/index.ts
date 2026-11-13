@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
   try { assertConfirmedAmount(chargeRow.value_centavos, confirmedValue, confirmedStatus); }
   catch { return jsonResponse({ error: 'VALUE_MISMATCH' }, 409); }
 
-  if (chargeRow.metadata?.kind === 'tenant_plan') {
+  if ((chargeRow.metadata as Record<string, unknown> | null)?.kind === 'tenant_plan') {
     const { data, error } = await admin.rpc('confirm_tenant_plan_payment', {
       p_correlation_id: correlationId,
       p_value_centavos: confirmedValue,
