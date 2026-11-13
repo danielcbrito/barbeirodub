@@ -9,7 +9,6 @@ import { ptBR } from "date-fns/locale";
 import {
   Users,
   CreditCard,
-  Building,
   QrCode,
   MessageSquare,
   Clock,
@@ -27,7 +26,7 @@ import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import logoDub from "@/assets/logo-dub.png";
+import pixLogo from "@/assets/pix-logo.png";
 
 interface BarberMeuPlanoProps {
   tenantId: string | null;
@@ -172,7 +171,7 @@ async function invokePlanSubscription(body: Record<string, unknown>) {
   if (error instanceof FunctionsHttpError) {
     const response = await error.context.json().catch(() => null) as PlanFunctionResponse | null;
     throw new PlanCheckoutError(
-      response?.error || "Não foi possível comunicar com a Woovi.",
+      response?.error || "Não foi possível comunicar com o servidor de pagamento.",
       response?.missingFields || [],
     );
   }
@@ -331,7 +330,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
         paymentMethod: "pix_automatico",
       });
       if (!response.data?.emv || !response.data.correlationID) {
-        throw new Error("A Woovi não retornou o QR Code. Tente novamente.");
+        throw new Error("Não foi possível retornar o QR Code Pix. Tente novamente.");
       }
       setPixEmv(response.data.emv);
       setPaymentCorrelation(response.data.correlationID);
@@ -368,7 +367,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
         paymentMethod: "credit_card",
       });
       if (!response.data?.paymentLinkUrl || !response.data.correlationID) {
-        throw new Error("A Woovi não retornou a página de pagamento. Tente novamente.");
+        throw new Error("Não foi possível gerar a página de pagamento. Tente novamente.");
       }
       setCardPaymentUrl(response.data.paymentLinkUrl);
       setPaymentCorrelation(response.data.correlationID);
@@ -440,8 +439,8 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
         handleSuccessActivation();
       } else {
         toast.info(paymentMethodTab === "cartao"
-          ? "A Woovi ainda não confirmou o cartão. Conclua o pagamento e tente novamente."
-          : "A Woovi ainda não confirmou. Autorize o Pix Automático no seu banco e tente novamente.");
+          ? "O pagamento no cartão ainda não foi identificado. Conclua o pagamento e tente novamente."
+          : "Ainda não identificamos a autorização. Autorize o Pix Automático no seu banco e tente novamente.");
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível verificar agora.");
@@ -752,7 +751,14 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
               {/* Card Resumo do Plano Contratado */}
               <div className="rounded-2xl border border-border/70 dark:border-white/10 bg-card p-4 flex items-center justify-between gap-3 shadow-xs">
                 <div className="flex items-center gap-3 min-w-0">
-                  <img src={logoDub} alt="DUB" className="w-11 h-11 rounded-2xl object-cover shrink-0" />
+                  <div className="w-11 h-11 rounded-2xl bg-secondary/60 dark:bg-white/[0.06] border border-border/50 dark:border-white/10 flex items-center justify-center shrink-0">
+                    <img
+                      src="/auth-assets/dub_logo_d.png"
+                      alt="D"
+                      className="h-6 w-auto object-contain block dark:invert select-none"
+                      draggable={false}
+                    />
+                  </div>
                   <div className="min-w-0">
                     <h4 className="text-[15px] font-bold text-foreground leading-tight">
                       DUB Oficial
@@ -787,7 +793,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                       );
                       window.open(`https://wa.me/5511952263002?text=${msg}`, "_blank");
                     }}
-                    className="h-12 px-6 rounded-2xl bg-foreground text-background font-semibold text-[14px] inline-flex items-center justify-center gap-2 hover:opacity-90 active:scale-98 transition-all"
+                    className="h-12 px-6 rounded-2xl bg-foreground text-background font-semibold text-[14px] inline-flex items-center justify-center gap-2 hover:opacity-90 active:scale-98 transition-all cursor-pointer"
                   >
                     <MessageSquare className="w-4 h-4" />
                     <span>Falar com especialista DUB</span>
@@ -795,38 +801,26 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                 </div>
               ) : (
                 <>
-                  <div className="rounded-2xl border border-border/60 bg-card px-4 py-3.5 space-y-2">
-                    <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
-                      <Building className="w-4 h-4 text-muted-foreground" />
-                      <span>Dados exigidos pela Woovi</span>
-                    </div>
-                    <p className="text-[12px] text-muted-foreground leading-relaxed">
-                      Nome, CPF ou CNPJ válido, e-mail, telefone e endereço completo com CEP. Os mesmos dados são usados no Pix Automático e no cartão.
-                    </p>
-                    {!isCompliant && totalPendingCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPendingModal(true)}
-                        className="text-[12px] font-semibold text-foreground underline underline-offset-4"
-                      >
-                        Revisar {totalPendingCount} {totalPendingCount === 1 ? "pendência" : "pendências"}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Seletor de Método de Pagamento: Pix ou Cartão */}
+                  {/* Seletor de Método de Pagamento: Pix Automático (com símbolo do Pix) ou Cartão */}
                   <div className="grid grid-cols-2 p-1 rounded-2xl bg-secondary/50 border border-border/40">
                     <button
                       type="button"
                       onClick={() => setPaymentMethodTab("pix")}
                       className={cn(
-                        "h-10 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer",
+                        "h-10 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer",
                         paymentMethodTab === "pix"
                           ? "bg-foreground text-background shadow-xs font-bold"
                           : "text-muted-foreground hover:text-foreground"
                       )}
                     >
-                      <QrCode className="w-4 h-4" />
+                      <img
+                        src={pixLogo}
+                        alt="Pix"
+                        className={cn(
+                          "w-4 h-4 object-contain shrink-0",
+                          paymentMethodTab === "pix" ? "brightness-0 invert dark:brightness-100 dark:invert-0" : ""
+                        )}
+                      />
                       <span>Pix Automático</span>
                     </button>
                     <button
@@ -860,11 +854,14 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                         </div>
                       ) : !pixEmv ? (
                         <div className="w-full rounded-3xl border border-border/70 bg-card p-5 space-y-4">
-                          <div className="space-y-1.5">
-                            <h4 className="text-[15px] font-bold text-foreground">Mensalidade automática</h4>
-                            <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-                              Ao autorizar, você paga a primeira mensalidade e permite as próximas cobranças mensais na data de vencimento.
-                            </p>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                              <img src={pixLogo} alt="Pix" className="w-5 h-5 object-contain" />
+                            </div>
+                            <div>
+                              <h4 className="text-[15px] font-bold text-foreground">Pix Automático</h4>
+                              <p className="text-[12px] text-muted-foreground">Recorrência mensal automática e segura</p>
+                            </div>
                           </div>
                           <div className="space-y-2 text-[12.5px] text-foreground/85">
                             <div className="flex items-center gap-2">
@@ -873,11 +870,11 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                             </div>
                             <div className="flex items-center gap-2">
                               <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                              <span>Valor direcionado à conta principal DUB na Woovi</span>
+                              <span>Débito mensal automático na data de vencimento</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                              <span>Acesso liberado após confirmação da Woovi</span>
+                              <span>Acesso liberado imediatamente após a confirmação</span>
                             </div>
                           </div>
                           {pixError && (
@@ -889,9 +886,17 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                             type="button"
                             onClick={createPixAutomatico}
                             disabled={isActivating}
-                            className="w-full h-[54px] rounded-full bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60"
+                            className="w-full h-[54px] rounded-full bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2.5 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer shadow-sm"
                           >
-                            {isActivating && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {isActivating ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <img
+                                src={pixLogo}
+                                alt="Pix"
+                                className="w-4 h-4 object-contain brightness-0 invert dark:brightness-100 dark:invert-0"
+                              />
+                            )}
                             <span>{isActivating ? "Gerando assinatura..." : pixError ? "Tentar novamente" : "Gerar Pix Automático"}</span>
                           </button>
                         </div>
@@ -909,19 +914,27 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                             <button
                               type="button"
                               onClick={handleCopyPix}
-                              className="w-full h-[54px] rounded-full bg-foreground text-background font-semibold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all"
+                              className="w-full h-[54px] rounded-full bg-foreground text-background font-semibold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-sm"
                             >
-                              {isCopied ? <Check className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5" />}
+                              {isCopied ? (
+                                <Check className="w-5 h-5 text-emerald-400" />
+                              ) : (
+                                <img
+                                  src={pixLogo}
+                                  alt="Pix"
+                                  className="w-4 h-4 object-contain brightness-0 invert dark:brightness-100 dark:invert-0"
+                                />
+                              )}
                               <span>{isCopied ? "Código copiado!" : "Copiar código Pix"}</span>
                             </button>
                             <button
                               type="button"
                               onClick={handleConfirmManualPayment}
                               disabled={isVerifying}
-                              className="w-full h-11 rounded-full text-[13px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                              className="w-full h-11 rounded-full text-[13px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
                             >
                               <RefreshCw className={cn("w-4 h-4", isVerifying && "animate-spin")} />
-                              <span>{isVerifying ? "Consultando a Woovi..." : "Já autorizei no meu banco"}</span>
+                              <span>{isVerifying ? "Consultando confirmação..." : "Já autorizei no meu banco"}</span>
                             </button>
                           </div>
                         </>
@@ -941,14 +954,14 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                         <div className="w-full py-6 text-center space-y-3">
                           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" strokeWidth={2.2} />
                           <p className="text-[15px] font-bold text-foreground">Plano ativado!</p>
-                          <p className="text-[12px] text-muted-foreground">Pagamento confirmado pela Woovi.</p>
+                          <p className="text-[12px] text-muted-foreground">Pagamento confirmado com sucesso.</p>
                         </div>
                       ) : (
                         <>
                           <div className="space-y-1.5">
                             <h4 className="text-[15px] font-bold text-foreground">Pagamento mensal no cartão</h4>
                             <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-                              O pagamento é concluído na página segura da Woovi e o plano é liberado após a confirmação. Para renovação automática, utilize o Pix Automático.
+                              O pagamento é concluído em ambiente seguro e o plano é liberado após a confirmação. Para renovação automática, utilize o Pix Automático.
                             </p>
                           </div>
                           <div className="flex items-start gap-2 text-[12px] text-muted-foreground leading-relaxed">
@@ -965,7 +978,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                               type="button"
                               onClick={createCardPayment}
                               disabled={isActivating}
-                              className="w-full h-[54px] rounded-full bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60"
+                              className="w-full h-[54px] rounded-full bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
                             >
                               {isActivating && <Loader2 className="w-4 h-4 animate-spin" />}
                               <span>{isActivating ? "Gerando pagamento..." : cardError ? "Tentar novamente" : "Pagar com cartão"}</span>
@@ -985,10 +998,10 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                                 type="button"
                                 onClick={handleConfirmManualPayment}
                                 disabled={isVerifying}
-                                className="w-full h-11 rounded-full text-[13px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                                className="w-full h-11 rounded-full text-[13px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
                               >
                                 <RefreshCw className={cn("w-4 h-4", isVerifying && "animate-spin")} />
-                                <span>{isVerifying ? "Consultando a Woovi..." : "Já concluí o pagamento"}</span>
+                                <span>{isVerifying ? "Consultando confirmação..." : "Já concluí o pagamento"}</span>
                               </button>
                             </div>
                           )}
@@ -1024,7 +1037,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                   Complete seus dados antes de assinar
                 </h3>
                 <p className="text-[15px] font-normal text-muted-foreground leading-relaxed mt-2.5">
-                  Para assinar no Pix Automático ou no cartão, a Woovi exige estes dados válidos da sua barbearia.
+                  Para ativar a assinatura automática do seu plano, precisamos de algumas informações essenciais da sua barbearia.
                 </p>
               </div>
 
