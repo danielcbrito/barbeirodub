@@ -1,5 +1,11 @@
 # Payment provider cleanup
 
+## Central account subscriptions and Túlio subaccount
+- [ ] Route new tenant-plan receipts to the Woovi central account instead of the DUB subaccount.
+- [ ] Verify Túlio's current subaccount and available balance before changing any funds or withdrawal path.
+- [ ] Confirm Woovi-supported card recurrence and central-account settlement before enabling card checkout.
+- [ ] Test payment routing and activation rules; do not claim a real transfer or payment without bank confirmation.
+
 ## Tenant plan checkout and recurring billing
 - [x] Replace external card links, hardcoded Pix and client-side activation with a shared Woovi-only checkout for barber and tenant admin.
 - [x] Activate only after approved/active bank revalidation; renew only after a completed installment, through the service-only atomic database function.

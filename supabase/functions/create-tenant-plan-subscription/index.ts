@@ -1,6 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { wooviFetch, WooviError, corsHeaders, jsonResponse } from "../_shared/woovi-client.ts";
-import { isApprovedTenantSubscription } from "../_shared/tenant-plan-policy.ts";
+import {
+  isApprovedTenantSubscription,
+  isCompletedTenantCharge,
+  routeTenantPlanToMainAccount,
+} from "../_shared/tenant-plan-policy.ts";
 
 type SubscriptionResponse = {
   subscription?: {
@@ -23,24 +27,18 @@ type ChargeRow = {
   metadata: Record<string, unknown> | null;
 };
 
+type ChargeResponse = {
+  charge?: {
+    globalID?: string;
+    correlationID?: string;
+    status?: string;
+    value?: number;
+    brCode?: string;
+    paymentLinkUrl?: string;
+  };
+};
+
 const digits = (value?: string | null) => (value ?? "").replace(/\D/g, "");
-
-async function resolveDubPixKey(admin: any): Promise<string | null> {
-  const { data } = await admin
-    .from("system_config")
-    .select("valor")
-    .eq("chave", "woovi_dub_pix_key")
-    .maybeSingle();
-  if (data?.valor?.trim()) return data.valor.trim();
-
-  const response = await wooviFetch<{
-    subAccounts?: Array<{ name?: string; pixKey?: string }>;
-  }>("/api/v1/subaccount");
-  const dub = response.subAccounts?.find(
-    (account) => (account.name ?? "").trim().toUpperCase() === "DUB",
-  );
-  return dub?.pixKey ?? null;
-}
 
 async function fetchSubscription(id: string) {
   return await wooviFetch<SubscriptionResponse>(
@@ -115,6 +113,44 @@ Deno.serve(async (req) => {
         return jsonResponse({ success: false, error: "Assinatura não pertence a esta barbearia" }, 403);
       }
 
+      if (metadata.paymentMethod === "credit_card") {
+        let remote: ChargeResponse;
+        try {
+          remote = await wooviFetch<ChargeResponse>(
+            `/api/v1/charge/${encodeURIComponent(correlationID)}`,
+          );
+        } catch (error) {
+          console.error("[tenant-plan] Falha ao revalidar cartão:", remoteError(error));
+          return jsonResponse({ success: false, error: "Não foi possível consultar a Woovi agora." }, 502);
+        }
+
+        if (!isCompletedTenantCharge(remote.charge, correlationID, charge.value_centavos)) {
+          return jsonResponse({
+            success: true,
+            paid: false,
+            status: remote.charge?.status || charge.status || "PENDING",
+          });
+        }
+
+        const { data: confirmation, error: confirmError } = await admin.rpc(
+          "confirm_tenant_plan_payment",
+          {
+            p_correlation_id: correlationID,
+            p_value_centavos: charge.value_centavos,
+            p_remote_payload: remote,
+            p_renewal: false,
+          },
+        );
+        if (confirmError) {
+          console.error("[tenant-plan] Cartão confirmado, mas liberação falhou:", confirmError.message);
+          return jsonResponse({
+            success: false,
+            error: "A Woovi confirmou o pagamento, mas a liberação falhou. Tente verificar novamente.",
+          }, 500);
+        }
+        return jsonResponse({ success: true, paid: true, data: confirmation });
+      }
+
       const globalID = typeof metadata.globalID === "string" ? metadata.globalID : correlationID;
       let remote: SubscriptionResponse;
       try {
@@ -162,11 +198,8 @@ Deno.serve(async (req) => {
     }
 
     const paymentMethod = String(body.paymentMethod ?? "pix_automatico");
-    if (paymentMethod !== "pix_automatico") {
-      return jsonResponse({
-        success: false,
-        error: "No momento, a assinatura com destino à subconta DUB está disponível somente pelo Pix Automático.",
-      }, 422);
+    if (!["pix_automatico", "credit_card"].includes(paymentMethod)) {
+      return jsonResponse({ success: false, error: "Forma de pagamento inválida." }, 422);
     }
 
     const planName = String(body.planName ?? "").trim();
@@ -247,17 +280,6 @@ Deno.serve(async (req) => {
       }, 422);
     }
 
-    let dubPixKey: string | null;
-    try {
-      dubPixKey = await resolveDubPixKey(admin);
-    } catch (error) {
-      console.error("[tenant-plan] Falha ao localizar subconta DUB:", remoteError(error));
-      return jsonResponse({ success: false, error: "Não foi possível localizar a subconta DUB." }, 503);
-    }
-    if (!dubPixKey) {
-      return jsonResponse({ success: false, error: "Subconta DUB não encontrada na Woovi." }, 503);
-    }
-
     const correlationID = `dub-${tenantId.slice(0, 8)}-${plan.id.slice(0, 8)}-${Date.now()}`;
     const customer = {
       name: resolvedName || tenant.nome,
@@ -275,7 +297,7 @@ Deno.serve(async (req) => {
       },
     };
     const today = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-    const subscriptionBody = {
+    const subscriptionBody = routeTenantPlanToMainAccount({
       name: `DUB ${plan.nome}`,
       value: cents,
       customer,
@@ -289,16 +311,15 @@ Deno.serve(async (req) => {
       },
       dayGenerateCharge: today.getDate(),
       dayDue: 3,
-      splits: [{ splitType: "SPLIT_SUB_ACCOUNT", pixKey: dubPixKey, value: cents }],
-    };
+    });
     const metadata = {
       kind: "tenant_plan",
       tenantId,
       planoId: plan.id,
       planName: plan.nome,
       maxBarbeiros: plan.max_barbeiros,
-      paymentMethod: "pix_automatico",
-      dubPixKey,
+      paymentMethod,
+      settlementAccount: "woovi_main",
     };
 
     const { error: intentError } = await admin.from("woovi_charges").insert({
@@ -309,6 +330,68 @@ Deno.serve(async (req) => {
       metadata,
     });
     if (intentError) throw intentError;
+
+    if (paymentMethod === "credit_card") {
+      let remote: ChargeResponse;
+      try {
+        remote = await wooviFetch<ChargeResponse>("/api/v1/charge", {
+          method: "POST",
+          body: routeTenantPlanToMainAccount({
+            correlationID,
+            value: cents,
+            type: "CREDIT_CARD",
+            customer,
+          }),
+        });
+      } catch (error) {
+        await admin.from("woovi_charges").update({
+          status: "failed",
+          raw_response: error instanceof WooviError ? error.body : null,
+        }).eq("correlation_id", correlationID);
+        console.error("[tenant-plan] Woovi recusou o cartão:", remoteError(error));
+        return jsonResponse({
+          success: false,
+          error: `A Woovi recusou a cobrança no cartão: ${remoteError(error)}. Verifique se o cartão está habilitado na conta Woovi.`,
+        }, 502);
+      }
+
+      const cardCharge = remote.charge;
+      if (!cardCharge?.paymentLinkUrl
+        || cardCharge.correlationID !== correlationID
+        || Number(cardCharge.value) !== cents) {
+        await admin.from("woovi_charges").update({
+          status: "failed",
+          raw_response: remote,
+        }).eq("correlation_id", correlationID);
+        return jsonResponse({
+          success: false,
+          error: "A resposta da Woovi está inconsistente. Nenhum plano foi ativado.",
+        }, 502);
+      }
+
+      const { error: saveError } = await admin.from("woovi_charges").update({
+        br_code: cardCharge.brCode ?? null,
+        charge_id: cardCharge.globalID ?? null,
+        raw_response: remote,
+        metadata: { ...metadata, globalID: cardCharge.globalID },
+      }).eq("correlation_id", correlationID);
+      if (saveError) {
+        console.error("[tenant-plan] Cartão criado, mas falhou ao salvar:", saveError.message);
+        return jsonResponse({
+          success: false,
+          error: "A cobrança foi criada na Woovi, mas o registro local falhou. Não gere outra; solicite reconciliação.",
+        }, 500);
+      }
+
+      return jsonResponse({
+        success: true,
+        data: {
+          correlationID,
+          paymentLinkUrl: cardCharge.paymentLinkUrl,
+          amount: cents / 100,
+        },
+      });
+    }
 
     let remote: SubscriptionResponse;
     try {

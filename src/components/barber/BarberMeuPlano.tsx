@@ -149,7 +149,7 @@ type PlanFunctionResponse = {
   paid?: boolean;
   status?: string;
   error?: string;
-  data?: { correlationID?: string; emv?: string; amount?: number };
+  data?: { correlationID?: string; emv?: string; paymentLinkUrl?: string; amount?: number };
 };
 
 async function invokePlanSubscription(body: Record<string, unknown>) {
@@ -263,8 +263,10 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
   // O checkout só cria uma cobrança depois que o usuário escolhe e confirma o método.
   const [paymentMethodTab, setPaymentMethodTab] = useState<"pix" | "cartao">("pix");
   const [pixEmv, setPixEmv] = useState("");
-  const [pixCorrelation, setPixCorrelation] = useState("");
+  const [paymentCorrelation, setPaymentCorrelation] = useState("");
   const [pixError, setPixError] = useState<string | null>(null);
+  const [cardPaymentUrl, setCardPaymentUrl] = useState("");
+  const [cardError, setCardError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -280,7 +282,8 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
     successTimerRef.current = setTimeout(() => {
       setActivationSuccess(false);
       setPixEmv("");
-      setPixCorrelation("");
+      setCardPaymentUrl("");
+      setPaymentCorrelation("");
       setCurrentView("meu-plano");
     }, 1800);
   };
@@ -294,8 +297,10 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
 
     setIsActivating(true);
     setPixError(null);
+    setCardError(null);
     setPixEmv("");
-    setPixCorrelation("");
+    setCardPaymentUrl("");
+    setPaymentCorrelation("");
     try {
       const response = await invokePlanSubscription({
         action: "create",
@@ -307,7 +312,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
         throw new Error("A Woovi não retornou o QR Code. Tente novamente.");
       }
       setPixEmv(response.data.emv);
-      setPixCorrelation(response.data.correlationID);
+      setPaymentCorrelation(response.data.correlationID);
     } catch (error) {
       setPixError(error instanceof Error ? error.message : "Não foi possível gerar o Pix Automático.");
     } finally {
@@ -315,9 +320,41 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
     }
   };
 
+  const createCardPayment = async () => {
+    if (!selectedPlanForCheckout || !tenantId || selectedPlanForCheckout.isCustomPrice) return;
+    if (!isCompliant && totalPendingCount > 0) {
+      setShowPendingModal(true);
+      return;
+    }
+
+    setIsActivating(true);
+    setCardError(null);
+    setPixError(null);
+    setPixEmv("");
+    setCardPaymentUrl("");
+    setPaymentCorrelation("");
+    try {
+      const response = await invokePlanSubscription({
+        action: "create",
+        tenantId,
+        planName: selectedPlanForCheckout.name,
+        paymentMethod: "credit_card",
+      });
+      if (!response.data?.paymentLinkUrl || !response.data.correlationID) {
+        throw new Error("A Woovi não retornou a página de pagamento. Tente novamente.");
+      }
+      setCardPaymentUrl(response.data.paymentLinkUrl);
+      setPaymentCorrelation(response.data.correlationID);
+    } catch (error) {
+      setCardError(error instanceof Error ? error.message : "Não foi possível gerar o pagamento no cartão.");
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
   // A tela apenas consulta: a liberação acontece no serviço após revalidação na Woovi.
   useEffect(() => {
-    if (!pixCorrelation || !tenantId || activationSuccess) return;
+    if (!paymentCorrelation || !tenantId || activationSuccess) return;
     let stopped = false;
     let checking = false;
 
@@ -328,7 +365,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
         const response = await invokePlanSubscription({
           action: "status",
           tenantId,
-          correlationID: pixCorrelation,
+          correlationID: paymentCorrelation,
         });
         if (!stopped && response.paid) handleSuccessActivation();
       } catch {
@@ -345,7 +382,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
       clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pixCorrelation, tenantId, activationSuccess]);
+  }, [paymentCorrelation, tenantId, activationSuccess]);
 
   const handleCopyPix = async () => {
     if (!pixEmv) return;
@@ -360,18 +397,20 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
   };
 
   const handleConfirmManualPayment = async () => {
-    if (!tenantId || !pixCorrelation) return;
+    if (!tenantId || !paymentCorrelation) return;
     setIsVerifying(true);
     try {
       const response = await invokePlanSubscription({
         action: "status",
         tenantId,
-        correlationID: pixCorrelation,
+        correlationID: paymentCorrelation,
       });
       if (response.paid) {
         handleSuccessActivation();
       } else {
-        toast.info("A Woovi ainda não confirmou. Autorize o Pix Automático no seu banco e tente novamente.");
+        toast.info(paymentMethodTab === "cartao"
+          ? "A Woovi ainda não confirmou o cartão. Conclua o pagamento e tente novamente."
+          : "A Woovi ainda não confirmou. Autorize o Pix Automático no seu banco e tente novamente.");
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível verificar agora.");
@@ -778,7 +817,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                             </div>
                             <div className="flex items-center gap-2">
                               <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                              <span>Valor direcionado à subconta oficial DUB</span>
+                              <span>Valor direcionado à conta principal DUB na Woovi</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Check className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -834,7 +873,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                     </motion.div>
                   )}
 
-                  {/* A Woovi liquida cartão fora das subcontas Woovi; não prometer destino DUB. */}
+                  {/* Cartão usa a página segura da Woovi e confirmação bancária real. */}
                   {paymentMethodTab === "cartao" && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
@@ -842,22 +881,63 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                       transition={{ duration: 0.18 }}
                       className="rounded-3xl border border-border/70 bg-card p-5 space-y-4"
                     >
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
-                        <div className="space-y-1.5">
-                          <h4 className="text-[15px] font-bold text-foreground">Cartão indisponível para esta assinatura</h4>
-                          <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-                            A Woovi não direciona vendas no cartão para uma subconta Woovi. Para garantir que toda a mensalidade chegue à subconta DUB, utilize o Pix Automático.
-                          </p>
+                      {activationSuccess ? (
+                        <div className="w-full py-6 text-center space-y-3">
+                          <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" strokeWidth={2.2} />
+                          <p className="text-[15px] font-bold text-foreground">Plano ativado!</p>
+                          <p className="text-[12px] text-muted-foreground">Pagamento confirmado pela Woovi.</p>
                         </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodTab("pix")}
-                        className="w-full h-[52px] rounded-full bg-foreground text-background font-bold text-[15px] hover:opacity-90 active:scale-[0.98] transition-all"
-                      >
-                        Assinar com Pix Automático
-                      </button>
+                      ) : (
+                        <>
+                          <div className="space-y-1.5">
+                            <h4 className="text-[15px] font-bold text-foreground">Pagamento mensal no cartão</h4>
+                            <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+                              O pagamento é concluído na página segura da Woovi e o plano é liberado após a confirmação. Para renovação automática, utilize o Pix Automático.
+                            </p>
+                          </div>
+                          <div className="flex items-start gap-2 text-[12px] text-muted-foreground leading-relaxed">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>No cartão, cada mensalidade exige um novo pagamento.</span>
+                          </div>
+                          {cardError && (
+                            <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3 text-[12px] text-destructive leading-relaxed" role="alert">
+                              {cardError}
+                            </div>
+                          )}
+                          {!cardPaymentUrl ? (
+                            <button
+                              type="button"
+                              onClick={createCardPayment}
+                              disabled={isActivating}
+                              className="w-full h-[54px] rounded-full bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60"
+                            >
+                              {isActivating && <Loader2 className="w-4 h-4 animate-spin" />}
+                              <span>{isActivating ? "Gerando pagamento..." : cardError ? "Tentar novamente" : "Pagar com cartão"}</span>
+                            </button>
+                          ) : (
+                            <div className="space-y-2.5">
+                              <a
+                                href={cardPaymentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full h-[54px] rounded-full bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all"
+                              >
+                                <CreditCard className="w-5 h-5" />
+                                <span>Abrir pagamento seguro</span>
+                              </a>
+                              <button
+                                type="button"
+                                onClick={handleConfirmManualPayment}
+                                disabled={isVerifying}
+                                className="w-full h-11 rounded-full text-[13px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                              >
+                                <RefreshCw className={cn("w-4 h-4", isVerifying && "animate-spin")} />
+                                <span>{isVerifying ? "Consultando a Woovi..." : "Já concluí o pagamento"}</span>
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </motion.div>
                   )}
                 </>

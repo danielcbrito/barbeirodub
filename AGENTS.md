@@ -28,7 +28,7 @@ Todas as alterações, novos componentes, telas e fluxos no sistema Dub / Barbei
 - Create online Pix charges through the shared charge helper and settle them through the service-only atomic confirmation function after bank revalidation; this prevents duplicate financial writes and untrusted client prices.
 - Preserve historical provider columns and migrations as audit records, not as active integration paths; removing a provider must not erase financial history.
 - Wallet balance shown to barbers/admins must be the raw Woovi subaccount balance (woovi-wallet and store-api woovi_get_balance); main-account liquidity may only gate withdrawals, never reduce the displayed balance — prevents app/bank divergence.
-- Tenant-plan checkout must use server-created Woovi Pix Automatic subscriptions to the DUB subaccount; only bank revalidation plus the service-only atomic confirmation function may activate or renew access, and a status check must never advance the due date. Card remains disabled while Woovi settles card sales outside Woovi subaccounts.
+- Tenant-plan receipts must go to the Woovi main account without subaccount splits; only bank revalidation plus the service-only atomic confirmation function may activate or renew access, and a status check must never advance the due date. Pix Automatic recurs monthly; Woovi card checkout is a confirmed monthly payment, not a simulated card recurrence, and settles to the external receiving account configured by Woovi.
 
 ## Reports architecture
 - Use `useBarberReportData` and `barberReportMetrics` for live home/report revenue and comparisons; shared scoped pagination prevents divergent totals and PostgREST truncation.

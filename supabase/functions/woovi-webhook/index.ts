@@ -3,7 +3,7 @@ import { corsHeaders, jsonResponse, wooviFetch } from '../_shared/woovi-client.t
 import { serviceClient } from '../_shared/woovi-auth.ts';
 import { assertConfirmedAmount } from '../_shared/woovi-payment-policy.ts';
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/internal-auth.ts';
-import { hasCompletedTenantInstallment, isApprovedTenantSubscription } from '../_shared/tenant-plan-policy.ts';
+import { hasCompletedTenantInstallment, isApprovedTenantSubscription, isCompletedTenantCharge } from '../_shared/tenant-plan-policy.ts';
 
 interface WooviWebhookEvent {
   event?: string;
@@ -130,8 +130,9 @@ Deno.serve(async (req) => {
 
   let confirmedValue = 0;
   let confirmedStatus = '';
+  let remote: { charge?: { correlationID?: string; status?: string; value?: number } };
   try {
-    const remote = await wooviFetch<{ charge?: { status?: string; value?: number } }>(
+    remote = await wooviFetch<{ charge?: { correlationID?: string; status?: string; value?: number } }>(
       `/api/v1/charge/${encodeURIComponent(correlationId)}`,
     );
     confirmedStatus = String(remote.charge?.status ?? '');
@@ -141,17 +142,31 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'REVALIDATION_FAILED' }, 502);
   }
 
-  if (confirmedStatus !== 'COMPLETED') {
+  if (!isCompletedTenantCharge(remote.charge, correlationId, confirmedValue)) {
     console.warn('[woovi-webhook] Cobrança ainda não concluída — ignorando', { correlationId, confirmedStatus });
     return jsonResponse({ ok: true, ignored: true, reason: 'not_completed_at_source' });
   }
 
   const { data: chargeRow, error: lookupError } = await admin.from('woovi_charges')
-    .select('value_centavos').eq('correlation_id', correlationId).maybeSingle();
+    .select('value_centavos, metadata').eq('correlation_id', correlationId).maybeSingle();
   if (lookupError) return jsonResponse({ error: 'DB_ERROR' }, 500);
   if (!chargeRow) return jsonResponse({ error: 'UNKNOWN_CHARGE' }, 404);
   try { assertConfirmedAmount(chargeRow.value_centavos, confirmedValue, confirmedStatus); }
   catch { return jsonResponse({ error: 'VALUE_MISMATCH' }, 409); }
+
+  if (chargeRow.metadata?.kind === 'tenant_plan') {
+    const { data, error } = await admin.rpc('confirm_tenant_plan_payment', {
+      p_correlation_id: correlationId,
+      p_value_centavos: confirmedValue,
+      p_remote_payload: remote,
+      p_renewal: false,
+    });
+    if (error) {
+      console.error('[woovi-webhook] Falha ao liberar plano por cobrança mensal:', error.message);
+      return jsonResponse({ error: 'RECONCILIATION_REQUIRED', message: error.message }, 409);
+    }
+    return jsonResponse({ ok: true, result: data });
+  }
 
   const { data, error } = await admin.rpc('confirm_woovi_payment', {
     p_correlation_id: correlationId,

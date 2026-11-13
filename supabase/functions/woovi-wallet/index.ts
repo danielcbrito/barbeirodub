@@ -746,14 +746,19 @@ async function handleWithdraw(req: Request, body: Record<string, unknown>): Prom
       );
     }
 
+    // A liquidez da conta principal é uma trava independente: ter saldo na
+    // subconta não basta se a conta principal não tiver o dinheiro físico.
+    if (balance.master_available_centavos !== null
+      && balance.master_available_centavos !== undefined
+      && valueCentavos > balance.master_available_centavos) {
+      return fail(
+        "INSUFFICIENT_MASTER_BALANCE",
+        `O limite disponível em caixa na conta da barbearia para saque imediato é de R$ ${(balance.master_available_centavos / 100).toFixed(2)}. Ajuste o valor para até R$ ${(balance.master_available_centavos / 100).toFixed(2)}.`,
+        200,
+      );
+    }
+
     if (valueCentavos > balance.available_centavos) {
-      if (balance.master_available_centavos !== null && balance.master_available_centavos !== undefined && valueCentavos > balance.master_available_centavos) {
-        return fail(
-          "INSUFFICIENT_MASTER_BALANCE",
-          `O limite disponível em caixa na conta da barbearia para saque imediato é de R$ ${(balance.master_available_centavos / 100).toFixed(2)}. Ajuste o valor para até R$ ${(balance.master_available_centavos / 100).toFixed(2)}.`,
-          200,
-        );
-      }
       return fail(
         "INSUFFICIENT_BALANCE",
         `Saldo disponível R$ ${(balance.available_centavos / 100).toFixed(2)} (R$ ${(balance.blocked_centavos / 100).toFixed(2)} aguardando finalização do corte)`,

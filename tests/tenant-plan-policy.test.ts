@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import {
   hasCompletedTenantInstallment,
   isApprovedTenantSubscription,
+  isCompletedTenantCharge,
+  routeTenantPlanToMainAccount,
 } from '../supabase/functions/_shared/tenant-plan-policy';
 
 const approved = {
@@ -28,5 +30,22 @@ describe('Tenant plan bank confirmation', () => {
     expect(hasCompletedTenantInstallment([{ status: 'ACTIVE', value: 6990 }], 6990)).toBe(false);
     expect(hasCompletedTenantInstallment([{ status: 'COMPLETED', value: 6990 }], 12990)).toBe(false);
     expect(hasCompletedTenantInstallment([], 6990)).toBe(false);
+  });
+
+  test('routes every new tenant-plan payment to the main account without subaccount splits', () => {
+    const routed = routeTenantPlanToMainAccount({
+      value: 6990,
+      splits: [{ splitType: 'SPLIT_SUB_ACCOUNT', pixKey: 'legacy-dub', value: 6990 }],
+    });
+    expect(routed.value).toBe(6990);
+    expect('splits' in routed).toBe(false);
+  });
+
+  test('activates a card payment only after the exact charge is completed', () => {
+    const charge = { correlationID: 'dub-card-1', status: 'COMPLETED', value: 6990 };
+    expect(isCompletedTenantCharge(charge, 'dub-card-1', 6990)).toBe(true);
+    expect(isCompletedTenantCharge({ ...charge, status: 'ACTIVE' }, 'dub-card-1', 6990)).toBe(false);
+    expect(isCompletedTenantCharge(charge, 'another-id', 6990)).toBe(false);
+    expect(isCompletedTenantCharge(charge, 'dub-card-1', 12990)).toBe(false);
   });
 });
