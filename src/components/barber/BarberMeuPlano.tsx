@@ -739,7 +739,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -25 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="flex-1 flex flex-col justify-between min-h-dvh pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+            className="flex-1 flex flex-col min-h-dvh pb-12"
           >
             {/* Header oficial do sistema */}
             <ScheduleHeader
@@ -747,9 +747,9 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
               onBack={() => setCurrentView("escolha-plano")}
             />
 
-            <div className="flex-1 flex flex-col justify-between max-w-md mx-auto w-full px-4 sm:px-5 py-4 space-y-4">
+            <div className="px-4 py-5 max-w-md mx-auto w-full space-y-4">
               {/* Card Resumo do Plano Contratado */}
-              <div className="rounded-3xl border border-border/70 dark:border-white/10 bg-card/90 dark:bg-card/75 backdrop-blur-xl p-4.5 sm:p-5 flex items-center justify-between gap-3.5 shadow-[0_4px_24px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgb(0,0,0,0.25)] transition-all">
+              <div className="rounded-3xl border border-border/70 dark:border-white/10 bg-card/90 dark:bg-card/75 backdrop-blur-xl p-4.5 sm:p-5 flex items-center justify-between gap-3.5 shadow-[0_4px_24px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgb(0,0,0,0.25)]">
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-12 h-12 rounded-2xl bg-secondary/80 dark:bg-white/[0.06] border border-border/50 dark:border-white/10 flex items-center justify-center shrink-0 shadow-xs">
                     <img
@@ -793,177 +793,145 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                       );
                       window.open(`https://wa.me/5511952263002?text=${msg}`, "_blank");
                     }}
-                    className="h-14 px-6 rounded-2xl bg-foreground text-background font-semibold text-[15px] inline-flex items-center justify-center gap-2 hover:opacity-90 active:scale-98 transition-all cursor-pointer shadow-sm"
+                    className="h-12 px-6 rounded-2xl bg-foreground text-background font-semibold text-[14px] inline-flex items-center justify-center gap-2 hover:opacity-90 active:scale-98 transition-all cursor-pointer shadow-sm"
                   >
                     <MessageSquare className="w-4 h-4" />
                     <span>Falar com especialista DUB</span>
                   </button>
                 </div>
               ) : (
-                <div className="flex-1 flex flex-col justify-between space-y-4">
-                  {/* Seletor de Método de Pagamento: Segmented Control moderno */}
-                  <div className="grid grid-cols-2 p-1.5 rounded-2xl bg-secondary/60 dark:bg-white/[0.04] border border-border/50 dark:border-white/10 gap-1 shrink-0">
+                <>
+                  {/* Seletor de Método de Pagamento: APENAS TEXTO, SEM ÍCONES DO LADO */}
+                  <div className="grid grid-cols-2 p-1.5 rounded-2xl bg-secondary/60 dark:bg-white/[0.04] border border-border/50 dark:border-white/10 gap-1">
                     <button
                       type="button"
                       onClick={() => setPaymentMethodTab("pix")}
                       className={cn(
-                        "h-11 rounded-xl text-[13.5px] flex items-center justify-center gap-2 transition-all cursor-pointer select-none",
+                        "h-11 rounded-xl text-[13.5px] flex items-center justify-center transition-all cursor-pointer select-none",
                         paymentMethodTab === "pix"
                           ? "bg-foreground text-background shadow-xs font-bold"
                           : "text-muted-foreground hover:text-foreground hover:bg-secondary/40 font-medium"
                       )}
                     >
-                      <img
-                        src={pixLogo}
-                        alt="Pix"
-                        className={cn(
-                          "w-4 h-4 object-contain shrink-0 transition-opacity",
-                          paymentMethodTab === "pix"
-                            ? "brightness-0 invert dark:brightness-100 dark:invert-0 opacity-100"
-                            : "opacity-60"
-                        )}
-                      />
-                      <span>Pix Automático</span>
+                      Pix Automático
                     </button>
                     <button
                       type="button"
                       onClick={() => setPaymentMethodTab("cartao")}
                       className={cn(
-                        "h-11 rounded-xl text-[13.5px] flex items-center justify-center gap-2 transition-all cursor-pointer select-none",
+                        "h-11 rounded-xl text-[13.5px] flex items-center justify-center transition-all cursor-pointer select-none",
                         paymentMethodTab === "cartao"
                           ? "bg-foreground text-background shadow-xs font-bold"
                           : "text-muted-foreground hover:text-foreground hover:bg-secondary/40 font-medium"
                       )}
                     >
-                      <CreditCard
-                        className={cn(
-                          "w-4 h-4 shrink-0 transition-opacity",
-                          paymentMethodTab === "cartao" ? "opacity-100" : "opacity-60"
-                        )}
-                      />
-                      <span>Cartão de Crédito</span>
+                      Cartão de Crédito
                     </button>
                   </div>
 
-                  {/* ─── PIX AUTOMÁTICO: autorização + primeiro pagamento ─── */}
+                  {/* ─── PIX AUTOMÁTICO: O QUADRADINHO NORMAL COM BOTÃO DENTRO ─── */}
                   {paymentMethodTab === "pix" && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.18 }}
-                      className="flex-1 flex flex-col justify-between"
+                      className="space-y-4"
                     >
                       {activationSuccess ? (
-                        <div className="w-full rounded-3xl border border-border/70 bg-card p-8 text-center space-y-3 my-auto">
+                        <div className="w-full rounded-3xl border border-border/70 bg-card p-8 text-center space-y-3">
                           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" strokeWidth={2.2} />
                           <p className="text-[17px] font-bold text-foreground">Assinatura ativada!</p>
                           <p className="text-[13px] text-muted-foreground">Seu acesso já foi liberado.</p>
                         </div>
                       ) : !pixEmv ? (
-                        <div className="flex-1 flex flex-col justify-between">
-                          {/* Card Refinado de Informações e Benefícios */}
-                          <div className="w-full rounded-3xl border border-border/70 dark:border-white/10 bg-card/90 dark:bg-card/75 p-5 sm:p-6 shadow-[0_4px_20px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgb(0,0,0,0.25)] space-y-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                                <img src={pixLogo} alt="Pix" className="w-5 h-5 object-contain" />
-                              </div>
-                              <div>
-                                <h4 className="text-[17px] font-bold text-foreground tracking-tight leading-tight">
-                                  Pix Automático
-                                </h4>
-                                <p className="text-[12px] text-muted-foreground font-medium mt-0.5">
-                                  Cobrança mensal automatizada
-                                </p>
-                              </div>
-                            </div>
-
-                            <p className="text-[14px] text-muted-foreground leading-relaxed">
-                              Autorize uma vez e realize seus pagamentos mensalmente de forma automática.
-                            </p>
-
-                            {/* Benefícios com alinhamento e indicadores consistentes */}
-                            <div className="space-y-3 pt-2 border-t border-border/30 dark:border-white/[0.06]">
-                              <div className="flex items-center gap-3 text-[14px] text-foreground/90 font-medium">
-                                <div className="w-5 h-5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                                  <Check className="w-3.5 h-3.5 stroke-[2.6]" />
-                                </div>
-                                <span>Autorização pelo aplicativo do seu banco.</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 text-[14px] text-foreground/90 font-medium">
-                                <div className="w-5 h-5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                                  <Check className="w-3.5 h-3.5 stroke-[2.6]" />
-                                </div>
-                                <span>Cobrança recorrente na data de vencimento.</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 text-[14px] text-foreground/90 font-medium">
-                                <div className="w-5 h-5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                                  <Check className="w-3.5 h-3.5 stroke-[2.6]" />
-                                </div>
-                                <span>Acesso liberado após a confirmação do pagamento.</span>
-                              </div>
+                        <div className="w-full rounded-3xl border border-border/70 dark:border-white/10 bg-card/90 dark:bg-card/75 p-5 sm:p-6 shadow-[0_4px_20px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgb(0,0,0,0.25)] space-y-4">
+                          {/* Topo do card: Logo do Pix bem grande, SEM NADA POR TRÁS (sem quadrado, sem fundo verde) */}
+                          <div className="flex items-center gap-3.5">
+                            <img
+                              src={pixLogo}
+                              alt="Pix"
+                              className="w-11 h-11 object-contain shrink-0 select-none"
+                              draggable={false}
+                            />
+                            <div>
+                              <h4 className="text-[17px] font-bold text-foreground tracking-tight leading-tight">
+                                Pix Automático
+                              </h4>
+                              <p className="text-[12px] text-muted-foreground font-medium mt-0.5">
+                                Cobrança mensal automatizada
+                              </p>
                             </div>
                           </div>
 
-                          {/* Botão de Ação Principal no Rodapé com Espaçamento Equilibrado */}
-                          <div className="mt-auto pt-4 space-y-2">
-                            {pixError && (
-                              <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3.5 text-[13px] text-destructive leading-relaxed" role="alert">
-                                {pixError}
+                          <p className="text-[14px] text-muted-foreground leading-relaxed">
+                            Autorize uma vez e realize seus pagamentos mensalmente de forma automática.
+                          </p>
+
+                          {/* Benefícios */}
+                          <div className="space-y-3 pt-2 border-t border-border/30 dark:border-white/[0.06]">
+                            <div className="flex items-center gap-3 text-[14px] text-foreground/90 font-medium">
+                              <div className="w-5 h-5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                <Check className="w-3.5 h-3.5 stroke-[2.6]" />
                               </div>
-                            )}
-                            <button
-                              type="button"
-                              onClick={createPixAutomatico}
-                              disabled={isActivating}
-                              className="w-full h-14 rounded-2xl bg-foreground text-background font-semibold text-[15.5px] flex items-center justify-center gap-2.5 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-sm select-none"
-                            >
-                              {isActivating ? (
-                                <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                              ) : (
-                                <img
-                                  src={pixLogo}
-                                  alt="Pix"
-                                  className="w-4.5 h-4.5 object-contain brightness-0 invert dark:brightness-100 dark:invert-0"
-                                />
-                              )}
-                              <span>{isActivating ? "Gerando assinatura..." : pixError ? "Tentar novamente" : "Gerar Pix Automático"}</span>
-                            </button>
+                              <span>Autorização pelo aplicativo do seu banco.</span>
+                            </div>
+
+                            <div className="flex items-center gap-3 text-[14px] text-foreground/90 font-medium">
+                              <div className="w-5 h-5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                <Check className="w-3.5 h-3.5 stroke-[2.6]" />
+                              </div>
+                              <span>Cobrança recorrente na data de vencimento.</span>
+                            </div>
+
+                            <div className="flex items-center gap-3 text-[14px] text-foreground/90 font-medium">
+                              <div className="w-5 h-5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                <Check className="w-3.5 h-3.5 stroke-[2.6]" />
+                              </div>
+                              <span>Acesso liberado após a confirmação do pagamento.</span>
+                            </div>
                           </div>
+
+                          {pixError && (
+                            <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3.5 text-[13px] text-destructive leading-relaxed" role="alert">
+                              {pixError}
+                            </div>
+                          )}
+
+                          {/* Botão DENTRO DO CARD, como era antes */}
+                          <button
+                            type="button"
+                            onClick={createPixAutomatico}
+                            disabled={isActivating}
+                            className="w-full h-12 rounded-2xl bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer shadow-sm select-none"
+                          >
+                            {isActivating && <Loader2 className="w-4 h-4 animate-spin" />}
+                            <span>{isActivating ? "Gerando assinatura..." : pixError ? "Tentar novamente" : "Gerar Pix Automático"}</span>
+                          </button>
                         </div>
                       ) : (
-                        <div className="flex-1 flex flex-col items-center justify-between py-1 space-y-4">
-                          <div className="w-full aspect-square max-w-[270px] rounded-3xl border border-border/70 dark:border-white/10 bg-card p-4 sm:p-5 flex items-center justify-center shadow-sm mx-auto">
-                            <div className="w-full h-full rounded-2xl bg-white p-3 flex items-center justify-center">
-                              <QRCodeSVG value={pixEmv} size={256} level="M" className="w-full h-full" />
-                            </div>
+                        <div className="w-full rounded-3xl border border-border/70 dark:border-white/10 bg-card p-5 space-y-4 flex flex-col items-center shadow-sm">
+                          <div className="w-full aspect-square max-w-[260px] rounded-2xl border border-border/60 bg-white p-3 flex items-center justify-center shadow-xs">
+                            <QRCodeSVG value={pixEmv} size={240} level="M" className="w-full h-full" />
                           </div>
-                          <p className="text-[13.5px] text-muted-foreground text-center leading-relaxed max-w-xs mx-auto">
+
+                          <p className="text-[12.5px] text-muted-foreground text-center leading-relaxed">
                             Abra o app do seu banco e autorize o Pix Automático. A primeira mensalidade será paga nessa autorização.
                           </p>
-                          <div className="w-full space-y-2.5 pt-2 mt-auto">
+
+                          <div className="w-full space-y-2.5 pt-1">
                             <button
                               type="button"
                               onClick={handleCopyPix}
-                              className="w-full h-14 rounded-2xl bg-foreground text-background font-semibold text-[15.5px] flex items-center justify-center gap-2.5 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-sm select-none"
+                              className="w-full h-12 rounded-2xl bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-sm select-none"
                             >
-                              {isCopied ? (
-                                <Check className="w-5 h-5 text-emerald-400" />
-                              ) : (
-                                <img
-                                  src={pixLogo}
-                                  alt="Pix"
-                                  className="w-4.5 h-4.5 object-contain brightness-0 invert dark:brightness-100 dark:invert-0"
-                                />
-                              )}
+                              {isCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                               <span>{isCopied ? "Código copiado!" : "Copiar código Pix"}</span>
                             </button>
                             <button
                               type="button"
                               onClick={handleConfirmManualPayment}
                               disabled={isVerifying}
-                              className="w-full h-11 rounded-2xl text-[13.5px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                              className="w-full h-11 rounded-2xl text-[13px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
                             >
                               <RefreshCw className={cn("w-4 h-4", isVerifying && "animate-spin")} />
                               <span>{isVerifying ? "Consultando confirmação..." : "Já autorizei no meu banco"}</span>
@@ -974,92 +942,86 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                     </motion.div>
                   )}
 
-                  {/* Cartão usa a página segura e confirmação real */}
+                  {/* ─── CARTÃO DE CRÉDITO: O QUADRADINHO NORMAL COM BOTÃO DENTRO ─── */}
                   {paymentMethodTab === "cartao" && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.18 }}
-                      className="flex-1 flex flex-col justify-between"
+                      className="space-y-4"
                     >
                       {activationSuccess ? (
-                        <div className="w-full py-8 text-center space-y-3 my-auto rounded-3xl border border-border/70 bg-card">
+                        <div className="w-full py-8 text-center space-y-3 rounded-3xl border border-border/70 bg-card">
                           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" strokeWidth={2.2} />
                           <p className="text-[17px] font-bold text-foreground">Plano ativado!</p>
                           <p className="text-[13px] text-muted-foreground">Pagamento confirmado com sucesso.</p>
                         </div>
                       ) : (
-                        <div className="flex-1 flex flex-col justify-between">
-                          <div className="w-full rounded-3xl border border-border/70 dark:border-white/10 bg-card/90 dark:bg-card/75 p-5 sm:p-6 shadow-[0_4px_20px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgb(0,0,0,0.25)] space-y-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-2xl bg-secondary/80 dark:bg-white/[0.06] border border-border/40 flex items-center justify-center shrink-0">
-                                <CreditCard className="w-5 h-5 text-foreground" />
-                              </div>
-                              <div>
-                                <h4 className="text-[17px] font-bold text-foreground tracking-tight leading-tight">
-                                  Cartão de Crédito
-                                </h4>
-                                <p className="text-[12px] text-muted-foreground font-medium mt-0.5">
-                                  Pagamento mensal avulso
-                                </p>
-                              </div>
-                            </div>
-
-                            <p className="text-[14px] text-muted-foreground leading-relaxed">
-                              O pagamento é concluído em ambiente seguro e o plano é liberado após a confirmação. Para renovação automática, utilize o Pix Automático.
-                            </p>
-
-                            <div className="flex items-center gap-2.5 pt-2 text-[13px] text-muted-foreground border-t border-border/30 dark:border-white/[0.06]">
-                              <AlertCircle className="w-4 h-4 shrink-0 text-muted-foreground/80" />
-                              <span>No cartão, cada mensalidade exige um novo pagamento.</span>
+                        <div className="w-full rounded-3xl border border-border/70 dark:border-white/10 bg-card/90 dark:bg-card/75 p-5 sm:p-6 shadow-[0_4px_20px_rgb(0,0,0,0.04)] dark:shadow-[0_4px_20px_rgb(0,0,0,0.25)] space-y-4">
+                          <div className="flex items-center gap-3.5">
+                            <CreditCard className="w-10 h-10 text-foreground shrink-0 stroke-[1.8]" />
+                            <div>
+                              <h4 className="text-[17px] font-bold text-foreground tracking-tight leading-tight">
+                                Cartão de Crédito
+                              </h4>
+                              <p className="text-[12px] text-muted-foreground font-medium mt-0.5">
+                                Pagamento mensal avulso
+                              </p>
                             </div>
                           </div>
 
-                          <div className="mt-auto pt-4 space-y-2">
-                            {cardError && (
-                              <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3.5 text-[13px] text-destructive leading-relaxed" role="alert">
-                                {cardError}
-                              </div>
-                            )}
-                            {!cardPaymentUrl ? (
+                          <p className="text-[14px] text-muted-foreground leading-relaxed">
+                            O pagamento é concluído em ambiente seguro e o plano é liberado após a confirmação. Para renovação automática, utilize o Pix Automático.
+                          </p>
+
+                          <div className="flex items-center gap-2.5 pt-2 text-[13px] text-muted-foreground border-t border-border/30 dark:border-white/[0.06]">
+                            <AlertCircle className="w-4 h-4 shrink-0 text-muted-foreground/80" />
+                            <span>No cartão, cada mensalidade exige um novo pagamento.</span>
+                          </div>
+
+                          {cardError && (
+                            <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3.5 text-[13px] text-destructive leading-relaxed" role="alert">
+                              {cardError}
+                            </div>
+                          )}
+
+                          {!cardPaymentUrl ? (
+                            <button
+                              type="button"
+                              onClick={createCardPayment}
+                              disabled={isActivating}
+                              className="w-full h-12 rounded-2xl bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer shadow-sm select-none"
+                            >
+                              {isActivating && <Loader2 className="w-4 h-4 animate-spin" />}
+                              <span>{isActivating ? "Gerando pagamento..." : cardError ? "Tentar novamente" : "Pagar com cartão"}</span>
+                            </button>
+                          ) : (
+                            <div className="space-y-2.5">
+                              <a
+                                href={cardPaymentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full h-12 rounded-2xl bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-sm select-none"
+                              >
+                                <CreditCard className="w-4 h-4" />
+                                <span>Abrir pagamento seguro</span>
+                              </a>
                               <button
                                 type="button"
-                                onClick={createCardPayment}
-                                disabled={isActivating}
-                                className="w-full h-14 rounded-2xl bg-foreground text-background font-semibold text-[15.5px] flex items-center justify-center gap-2.5 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer shadow-sm select-none"
+                                onClick={handleConfirmManualPayment}
+                                disabled={isVerifying}
+                                className="w-full h-11 rounded-2xl text-[13px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
                               >
-                                {isActivating && <Loader2 className="w-4.5 h-4.5 animate-spin" />}
-                                <CreditCard className="w-4.5 h-4.5" />
-                                <span>{isActivating ? "Gerando pagamento..." : cardError ? "Tentar novamente" : "Pagar com cartão"}</span>
+                                <RefreshCw className={cn("w-4 h-4", isVerifying && "animate-spin")} />
+                                <span>{isVerifying ? "Consultando confirmação..." : "Já concluí o pagamento"}</span>
                               </button>
-                            ) : (
-                              <div className="space-y-2.5">
-                                <a
-                                  href={cardPaymentUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="w-full h-14 rounded-2xl bg-foreground text-background font-semibold text-[15.5px] flex items-center justify-center gap-2.5 hover:opacity-90 active:scale-[0.98] transition-all shadow-sm select-none"
-                                >
-                                  <CreditCard className="w-4.5 h-4.5" />
-                                  <span>Abrir pagamento seguro</span>
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={handleConfirmManualPayment}
-                                  disabled={isVerifying}
-                                  className="w-full h-11 rounded-2xl text-[13.5px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-                                >
-                                  <RefreshCw className={cn("w-4 h-4", isVerifying && "animate-spin")} />
-                                  <span>{isVerifying ? "Consultando confirmação..." : "Já concluí o pagamento"}</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </motion.div>
                   )}
-                </div>
+                </>
               )}
             </div>
           </motion.div>
