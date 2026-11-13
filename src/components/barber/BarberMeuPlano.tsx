@@ -17,17 +17,13 @@ import {
   CheckCircle2,
   Copy,
   Loader2,
-  ShieldCheck,
   RefreshCw,
   AlertCircle,
-  AlertTriangle,
-  X,
-  ExternalLink,
-  Zap,
 } from "lucide-react";
 import { ScheduleHeader } from "@/components/shared/ScheduleHeader";
 import { useTenantSubscription } from "@/hooks/useTenantSubscription";
-import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/supabase-js";
+import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -146,98 +142,30 @@ export const OFFICIAL_PLANS: PlanDefinition[] = [
   },
 ];
 
-// ═══════════════════════════════════════════════════════════════════════
-// CONSTANTES E GERADOR OFICIAL DE PIX & ASSINATURAS (SUBCONTA DUB)
-// ═══════════════════════════════════════════════════════════════════════
+type ScreenView = "meu-plano" | "escolha-plano" | "checkout";
 
-/** Chave Pix da subconta oficial DUB cadastrada na Woovi / OpenPix */
-const DUB_SUBCONTA_PIX_KEY = "+5511952263002";
-const DUB_MERCHANT_NAME = "DUB OFICIAL";
-const DUB_MERCHANT_CITY = "SAO PAULO";
-
-/** Links de checkout de cartão de crédito com cobrança mensal recorrente */
-const CREDIT_CARD_CHECKOUT_URLS: Record<string, string> = {
-  solo: "https://pay.cakto.com.br/3fu4u7q_789875",
-  dupla: "https://pay.cakto.com.br/3aie3q5",
-  equipe: "https://pay.cakto.com.br/abri2ap",
-  rede: "https://pay.cakto.com.br/35fj7fi",
+type PlanFunctionResponse = {
+  success: boolean;
+  paid?: boolean;
+  status?: string;
+  error?: string;
+  data?: { correlationID?: string; emv?: string; amount?: number };
 };
 
-function formatEMV(id: string, val: string): string {
-  const len = String(val.length).padStart(2, "0");
-  return id + len + val;
-}
-
-function calculateCRC16(str: string): string {
-  let crc = 0xffff;
-  for (let c = 0; c < str.length; c++) {
-    crc ^= str.charCodeAt(c) << 8;
-    for (let i = 0; i < 8; i++) {
-      if ((crc & 0x8000) !== 0) {
-        crc = ((crc << 1) ^ 0x1021) & 0xffff;
-      } else {
-        crc = (crc << 1) & 0xffff;
-      }
-    }
-  }
-  return crc.toString(16).toUpperCase().padStart(4, "0");
-}
-
-/** Gera payload Pix EMV oficial em conformidade com o Banco Central do Brasil */
-function buildPixPayload({
-  key,
-  name,
-  city,
-  amount,
-  txid,
-}: {
-  key: string;
-  name: string;
-  city: string;
-  amount: number;
-  txid: string;
-}): string {
-  const payloadFormat = formatEMV("00", "01");
-  const pointOfInit = formatEMV("01", "12");
-  const merchantAccount = formatEMV(
-    "26",
-    formatEMV("00", "br.gov.bcb.pix") + formatEMV("01", key)
+async function invokePlanSubscription(body: Record<string, unknown>) {
+  const { data, error } = await invokeAuthenticatedFunction<PlanFunctionResponse>(
+    "create-tenant-plan-subscription",
+    { body },
   );
-  const mcc = formatEMV("52", "0000");
-  const currency = formatEMV("53", "986");
-  const amt = formatEMV("54", Number(amount).toFixed(2));
-  const country = formatEMV("58", "BR");
-  const cleanName = name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .slice(0, 25)
-    .toUpperCase();
-  const merchant = formatEMV("59", cleanName);
-  const cleanCity = city
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .slice(0, 15)
-    .toUpperCase();
-  const cty = formatEMV("60", cleanCity);
-  const cleanTxid = txid.replace(/[^a-zA-Z0-9]/g, "").slice(0, 25) || "DUB";
-  const additional = formatEMV("62", formatEMV("05", cleanTxid));
 
-  const raw =
-    payloadFormat +
-    pointOfInit +
-    merchantAccount +
-    mcc +
-    currency +
-    amt +
-    country +
-    merchant +
-    cty +
-    additional +
-    "6304";
-  return raw + calculateCRC16(raw);
+  if (error instanceof FunctionsHttpError) {
+    const response = await error.context.json().catch(() => null) as PlanFunctionResponse | null;
+    throw new Error(response?.error || "Não foi possível comunicar com a Woovi.");
+  }
+  if (error) throw error;
+  if (!data?.success) throw new Error(data?.error || "Não foi possível processar a assinatura.");
+  return data;
 }
-
-type ScreenView = "meu-plano" | "escolha-plano" | "checkout";
 
 export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack }: BarberMeuPlanoProps) {
   const navigate = useNavigate();
@@ -332,19 +260,24 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
     }
   }, [currentView, carouselIndex]);
 
-  // Estados da assinatura e métodos de pagamento (Pix & Cartão)
+  // O checkout só cria uma cobrança depois que o usuário escolhe e confirma o método.
   const [paymentMethodTab, setPaymentMethodTab] = useState<"pix" | "cartao">("pix");
   const [pixEmv, setPixEmv] = useState("");
   const [pixCorrelation, setPixCorrelation] = useState("");
   const [pixError, setPixError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Liberação com feedback positivo e transição suave
+  useEffect(() => () => {
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+  }, []);
+
   const handleSuccessActivation = () => {
     setActivationSuccess(true);
     subscription.refetch();
-    toast.success("Pagamento confirmado! Seu plano foi ativado com sucesso.");
-    setTimeout(() => {
+    toast.success("Assinatura confirmada! Seu plano foi ativado.");
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    successTimerRef.current = setTimeout(() => {
       setActivationSuccess(false);
       setPixEmv("");
       setPixCorrelation("");
@@ -358,158 +291,93 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
       setShowPendingModal(true);
       return;
     }
+
     setIsActivating(true);
     setPixError(null);
     setPixEmv("");
-
-    // 1. Tenta acionar a edge function se estiver disponível
+    setPixCorrelation("");
     try {
-      const { data, error } = await supabase.functions.invoke("create-tenant-plan-subscription", {
-        body: { action: "create", tenantId, planName: selectedPlanForCheckout.name },
+      const response = await invokePlanSubscription({
+        action: "create",
+        tenantId,
+        planName: selectedPlanForCheckout.name,
+        paymentMethod: "pix_automatico",
       });
-      if (!error && data?.success && data?.data?.emv) {
-        setPixEmv(data.data.emv);
-        setPixCorrelation(data.data.correlationID || "");
-        setIsActivating(false);
-        return;
+      if (!response.data?.emv || !response.data.correlationID) {
+        throw new Error("A Woovi não retornou o QR Code. Tente novamente.");
       }
-    } catch {
-      // Falha graciosa: segue para o gerador de Pix oficial da subconta DUB
-    }
-
-    // 2. Geração instantânea e resiliente de Pix oficial da subconta DUB
-    try {
-      const txid = `DUB${(tenantId || "").replace(/-/g, "").slice(0, 8)}${Date.now().toString().slice(-8)}`;
-      const emv = buildPixPayload({
-        key: DUB_SUBCONTA_PIX_KEY,
-        name: DUB_MERCHANT_NAME,
-        city: DUB_MERCHANT_CITY,
-        amount: selectedPlanForCheckout.price,
-        txid,
-      });
-
-      setPixEmv(emv);
-      setPixCorrelation(txid);
-
-      // Registra a intenção de assinatura na tabela tenant_assinaturas do Supabase
-      try {
-        await supabase.from("tenant_assinaturas").upsert(
-          {
-            tenant_id: tenantId,
-            payment_reference: txid,
-            payment_method: "pix_automatico",
-            qtd_barbeiros: selectedPlanForCheckout.barbersLimit,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "tenant_id" }
-        );
-      } catch (dbErr) {
-        console.warn("[BarberMeuPlano] Registro de intenção de assinatura:", dbErr);
-      }
-    } catch (err: any) {
-      setPixError(err?.message || "Não foi possível gerar o código Pix. Tente novamente.");
+      setPixEmv(response.data.emv);
+      setPixCorrelation(response.data.correlationID);
+    } catch (error) {
+      setPixError(error instanceof Error ? error.message : "Não foi possível gerar o Pix Automático.");
     } finally {
       setIsActivating(false);
     }
   };
 
-  useEffect(() => {
-    if (currentView === "checkout" && selectedPlanForCheckout) {
-      createPixAutomatico();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentView, selectedPlanForCheckout?.id]);
-
-  // Confere o pagamento no banco e libera o plano automaticamente
+  // A tela apenas consulta: a liberação acontece no serviço após revalidação na Woovi.
   useEffect(() => {
     if (!pixCorrelation || !tenantId || activationSuccess) return;
-    const timer = setInterval(async () => {
-      // 1. Tenta verificar via edge function
+    let stopped = false;
+    let checking = false;
+
+    const check = async () => {
+      if (checking) return;
+      checking = true;
       try {
-        const { data } = await supabase.functions.invoke("create-tenant-plan-subscription", {
-          body: { action: "status", tenantId, correlationID: pixCorrelation },
+        const response = await invokePlanSubscription({
+          action: "status",
+          tenantId,
+          correlationID: pixCorrelation,
         });
-        if (data?.paid) {
-          clearInterval(timer);
-          handleSuccessActivation();
-          return;
-        }
+        if (!stopped && response.paid) handleSuccessActivation();
       } catch {
-        // Silencioso
+        // O webhook pode liberar primeiro; a próxima consulta tenta novamente.
+      } finally {
+        checking = false;
       }
+    };
 
-      // 2. Verifica direto no banco de dados se a assinatura já foi ativada
-      try {
-        const { data: ass } = await supabase
-          .from("tenant_assinaturas")
-          .select("status, paid_at")
-          .eq("tenant_id", tenantId)
-          .maybeSingle();
-
-        if (ass && ass.status === "active" && ass.paid_at) {
-          clearInterval(timer);
-          handleSuccessActivation();
-        }
-      } catch {
-        // Silencioso
-      }
-    }, 4500);
-
-    return () => clearInterval(timer);
+    void check();
+    const timer = setInterval(() => void check(), 4500);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pixCorrelation, tenantId, activationSuccess]);
 
-  const handleCopyPix = () => {
+  const handleCopyPix = async () => {
     if (!pixEmv) return;
-    navigator.clipboard.writeText(pixEmv);
-    setIsCopied(true);
-    toast.success("Código Pix copiado! Cole no aplicativo do seu banco.");
-    setTimeout(() => setIsCopied(false), 2500);
-  };
-
-  // Verificação ou confirmação manual do pagamento via Pix
-  const handleConfirmManualPayment = async () => {
-    if (!selectedPlanForCheckout || !tenantId) return;
-    setIsVerifying(true);
     try {
-      const now = new Date();
-      const next = new Date(now);
-      next.setMonth(next.getMonth() + 1);
-
-      const { error } = await supabase.from("tenant_assinaturas").upsert(
-        {
-          tenant_id: tenantId,
-          status: "active",
-          qtd_barbeiros: selectedPlanForCheckout.barbersLimit,
-          payment_method: paymentMethodTab === "pix" ? "pix_automatico" : "credit_card",
-          payment_reference: pixCorrelation || `ref-${Date.now()}`,
-          paid_at: now.toISOString(),
-          subscription_start: now.toISOString(),
-          next_billing_date: next.toISOString(),
-          cancelled_at: null,
-          updated_at: now.toISOString(),
-        },
-        { onConflict: "tenant_id" }
-      );
-
-      if (error) throw error;
-      handleSuccessActivation();
-    } catch (err: any) {
-      toast.error(err?.message || "Erro ao verificar pagamento. Tente novamente.");
-    } finally {
-      setIsVerifying(false);
+      await navigator.clipboard.writeText(pixEmv);
+      setIsCopied(true);
+      toast.success("Código Pix copiado! Cole no aplicativo do seu banco.");
+      setTimeout(() => setIsCopied(false), 2500);
+    } catch {
+      toast.error("Não foi possível copiar. Selecione o código manualmente.");
     }
   };
 
-  // Abre checkout seguro para assinatura via Cartão de Crédito
-  const handleOpenCardCheckout = () => {
-    if (!selectedPlanForCheckout) return;
-    const checkoutUrl =
-      CREDIT_CARD_CHECKOUT_URLS[selectedPlanForCheckout.id] ||
-      CREDIT_CARD_CHECKOUT_URLS.dupla ||
-      CREDIT_CARD_CHECKOUT_URLS.solo;
-    window.open(checkoutUrl, "_blank", "noopener,noreferrer");
-    toast.info("Abrindo checkout seguro de cartão de crédito...");
+  const handleConfirmManualPayment = async () => {
+    if (!tenantId || !pixCorrelation) return;
+    setIsVerifying(true);
+    try {
+      const response = await invokePlanSubscription({
+        action: "status",
+        tenantId,
+        correlationID: pixCorrelation,
+      });
+      if (response.paid) {
+        handleSuccessActivation();
+      } else {
+        toast.info("A Woovi ainda não confirmou. Autorize o Pix Automático no seu banco e tente novamente.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível verificar agora.");
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -864,7 +732,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                       )}
                     >
                       <QrCode className="w-4 h-4" />
-                      <span>Pix Instantâneo</span>
+                      <span>Pix Automático</span>
                     </button>
                     <button
                       type="button"
@@ -881,7 +749,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                     </button>
                   </div>
 
-                  {/* ─── ABA 1: PIX INSTANTÂNEO & AUTOMÁTICO ─── */}
+                  {/* ─── PIX AUTOMÁTICO: autorização + primeiro pagamento ─── */}
                   {paymentMethodTab === "pix" && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
@@ -889,140 +757,107 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                       transition={{ duration: 0.18 }}
                       className="flex flex-col items-center gap-4"
                     >
-                      {/* Container do QR Code */}
-                      <div className="w-full aspect-square max-w-[280px] rounded-3xl border border-border/70 dark:border-white/10 bg-card p-5 flex flex-col items-center justify-center shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.25)] relative overflow-hidden">
-                        {activationSuccess ? (
-                          <div className="text-center space-y-3">
-                            <CheckCircle2 className="w-20 h-20 text-emerald-500 mx-auto" strokeWidth={2.2} />
-                            <p className="text-[14px] font-bold text-foreground">
-                              Pagamento confirmado!
+                      {activationSuccess ? (
+                        <div className="w-full rounded-3xl border border-border/70 bg-card p-8 text-center space-y-3">
+                          <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" strokeWidth={2.2} />
+                          <p className="text-[15px] font-bold text-foreground">Assinatura ativada!</p>
+                          <p className="text-[12px] text-muted-foreground">Seu acesso já foi liberado.</p>
+                        </div>
+                      ) : !pixEmv ? (
+                        <div className="w-full rounded-3xl border border-border/70 bg-card p-5 space-y-4">
+                          <div className="space-y-1.5">
+                            <h4 className="text-[15px] font-bold text-foreground">Mensalidade automática</h4>
+                            <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+                              Ao autorizar, você paga a primeira mensalidade e permite as próximas cobranças mensais na data de vencimento.
                             </p>
                           </div>
-                        ) : pixEmv ? (
-                          <div className="w-full h-full rounded-2xl bg-white p-3 flex items-center justify-center">
-                            <QRCodeSVG
-                              value={pixEmv}
-                              size={256}
-                              level="M"
-                              className="w-full h-full"
-                            />
+                          <div className="space-y-2 text-[12.5px] text-foreground/85">
+                            <div className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                              <span>Primeiro pagamento e autorização no mesmo QR Code</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                              <span>Valor direcionado à subconta oficial DUB</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                              <span>Acesso liberado após confirmação da Woovi</span>
+                            </div>
                           </div>
-                        ) : pixError ? (
-                          <div className="text-center space-y-3 px-2">
-                            <p className="text-[13px] text-muted-foreground">{pixError}</p>
-                            <button
-                              type="button"
-                              onClick={createPixAutomatico}
-                              className="h-10 px-5 rounded-full border border-border text-[13px] font-semibold text-foreground inline-flex items-center gap-2"
-                            >
-                              <RefreshCw className="w-4 h-4" /> Tentar novamente
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-center space-y-2.5">
-                            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
-                            <p className="text-[12px] text-muted-foreground font-medium">
-                              Gerando Pix oficial...
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      <p className="text-[12px] text-muted-foreground text-center leading-relaxed">
-                        Abra o app do seu banco, escolha <strong>Pagar via Pix</strong> e escaneie o QR Code ou copie o código abaixo.
-                      </p>
-
-                      {/* Ações Pix: Botão Principal 56px + Botão Secundário 44px */}
-                      <div className="w-full space-y-2.5 pt-1">
-                        {pixEmv && !activationSuccess && (
+                          {pixError && (
+                            <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3 text-[12px] text-destructive leading-relaxed" role="alert">
+                              {pixError}
+                            </div>
+                          )}
                           <button
                             type="button"
-                            onClick={handleCopyPix}
-                            className="w-full h-14 rounded-[28px] bg-foreground text-background font-semibold text-[16px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+                            onClick={createPixAutomatico}
+                            disabled={isActivating}
+                            className="w-full h-[54px] rounded-full bg-foreground text-background font-bold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60"
                           >
-                            {isCopied ? <Check className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5" />}
-                            <span>{isCopied ? "Código copiado!" : "Copiar código Pix"}</span>
+                            {isActivating && <Loader2 className="w-4 h-4 animate-spin" />}
+                            <span>{isActivating ? "Gerando assinatura..." : pixError ? "Tentar novamente" : "Gerar Pix Automático"}</span>
                           </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={handleConfirmManualPayment}
-                          disabled={isVerifying || activationSuccess}
-                          className="w-full h-11 rounded-full text-[14px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                        >
-                          <RefreshCw className={cn("w-4 h-4", isVerifying ? "animate-spin" : "")} />
-                          <span>{isVerifying ? "Verificando no banco..." : "Já realizei o pagamento via Pix"}</span>
-                        </button>
-                      </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="w-full aspect-square max-w-[280px] rounded-3xl border border-border/70 bg-card p-5 flex items-center justify-center shadow-sm">
+                            <div className="w-full h-full rounded-2xl bg-white p-3 flex items-center justify-center">
+                              <QRCodeSVG value={pixEmv} size={256} level="M" className="w-full h-full" />
+                            </div>
+                          </div>
+                          <p className="text-[12px] text-muted-foreground text-center leading-relaxed">
+                            Abra o app do seu banco e autorize o Pix Automático. A primeira mensalidade será paga nessa autorização.
+                          </p>
+                          <div className="w-full space-y-2.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={handleCopyPix}
+                              className="w-full h-[54px] rounded-full bg-foreground text-background font-semibold text-[15px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all"
+                            >
+                              {isCopied ? <Check className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5" />}
+                              <span>{isCopied ? "Código copiado!" : "Copiar código Pix"}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleConfirmManualPayment}
+                              disabled={isVerifying}
+                              className="w-full h-11 rounded-full text-[13px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                            >
+                              <RefreshCw className={cn("w-4 h-4", isVerifying && "animate-spin")} />
+                              <span>{isVerifying ? "Consultando a Woovi..." : "Já autorizei no meu banco"}</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </motion.div>
                   )}
 
-                  {/* ─── ABA 2: CARTÃO DE CRÉDITO RECORRENTE ─── */}
+                  {/* A Woovi liquida cartão fora das subcontas Woovi; não prometer destino DUB. */}
                   {paymentMethodTab === "cartao" && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.18 }}
-                      className="space-y-4"
+                      className="rounded-3xl border border-border/70 bg-card p-5 space-y-4"
                     >
-                      <div className="rounded-3xl border border-border/70 dark:border-white/10 bg-card p-5 space-y-4 shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                            <CreditCard className="w-5 h-5 text-primary" />
-                          </div>
-                          <div>
-                            <h4 className="text-[15px] font-bold text-foreground">
-                              Assinatura Mensal no Cartão
-                            </h4>
-                            <p className="text-[12px] text-muted-foreground">
-                              Cobrança recorrente automática todo mês
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="rounded-2xl bg-secondary/30 border border-border/30 p-3.5 space-y-2 text-[12.5px] text-foreground/85">
-                          <div className="flex items-center gap-2">
-                            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                            <span>Não compromete o limite total do cartão</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                            <span>Cobrança mensal no valor de R$ {selectedPlanForCheckout.price.toFixed(2).replace(".", ",")}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                            <span>Valores repassados à subconta oficial DUB</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                            <span>Cancele quando quiser diretamente no painel</span>
-                          </div>
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+                        <div className="space-y-1.5">
+                          <h4 className="text-[15px] font-bold text-foreground">Cartão indisponível para esta assinatura</h4>
+                          <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+                            A Woovi não direciona vendas no cartão para uma subconta Woovi. Para garantir que toda a mensalidade chegue à subconta DUB, utilize o Pix Automático.
+                          </p>
                         </div>
                       </div>
-
-                      {/* Ações Cartão: Botão Principal 56px + Botão Secundário 44px */}
-                      <div className="w-full space-y-2.5 pt-1">
-                        <button
-                          type="button"
-                          onClick={handleOpenCardCheckout}
-                          className="w-full h-14 rounded-[28px] bg-foreground text-background font-semibold text-[16px] flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-xs cursor-pointer"
-                        >
-                          <Zap className="w-4 h-4 text-amber-300" />
-                          <span>Assinar no Cartão de Crédito</span>
-                          <ExternalLink className="w-4 h-4 opacity-75" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleConfirmManualPayment}
-                          disabled={isVerifying || activationSuccess}
-                          className="w-full h-11 rounded-full text-[14px] font-medium text-foreground hover:bg-secondary/40 border border-border/50 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                        >
-                          <RefreshCw className={cn("w-4 h-4", isVerifying ? "animate-spin" : "")} />
-                          <span>{isVerifying ? "Verificando..." : "Já concluí a assinatura no Cartão"}</span>
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethodTab("pix")}
+                        className="w-full h-[52px] rounded-full bg-foreground text-background font-bold text-[15px] hover:opacity-90 active:scale-[0.98] transition-all"
+                      >
+                        Assinar com Pix Automático
+                      </button>
                     </motion.div>
                   )}
                 </>

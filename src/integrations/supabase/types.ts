@@ -6739,6 +6739,15 @@ export type Database = {
           table_name: string
         }[]
       }
+      confirm_tenant_plan_payment: {
+        Args: {
+          p_correlation_id: string
+          p_remote_payload?: Json
+          p_renewal?: boolean
+          p_value_centavos: number
+        }
+        Returns: Json
+      }
       confirm_woovi_payment: {
         Args: { p_correlation_id: string; p_value_centavos: number }
         Returns: Json
