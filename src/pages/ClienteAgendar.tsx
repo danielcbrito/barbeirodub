@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { invokeAuthenticatedFunction } from '@/lib/invokeAuthenticatedFunction';
 import { isConfirmedWooviPayment } from '../../supabase/functions/_shared/woovi-payment-policy';
 import { supabase } from "@/integrations/supabase/client";
@@ -79,6 +79,8 @@ interface ClienteAgendarProps {
 const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const urlBarberId = searchParams.get("barbeiro") || searchParams.get("barber") || ((location.state as any)?.barbeiro_id ?? null);
   const tenantFromRouteState = ((location.state as { tenant_id?: string } | null)?.tenant_id) ?? null;
   const effectiveTenantId = forcedTenantId ?? tenantFromRouteState ?? null;
   const [services, setServices] = useState<Service[]>([]);
@@ -598,8 +600,12 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
     setBarbers(filteredBarbers);
 
-    // Se só tem 1 barbeiro NESTA barbearia, seleciona automaticamente
-    if (filteredBarbers.length === 1) {
+    // Prioridade de seleção do barbeiro:
+    // 1) Link direto recebido do barbeiro (?barbeiro=ID ou ?barber=ID)
+    // 2) Único barbeiro ativo da barbearia
+    if (urlBarberId && filteredBarbers.some((b) => b.id === urlBarberId)) {
+      setSelectedBarberId(urlBarberId);
+    } else if (filteredBarbers.length === 1) {
       setSelectedBarberId(filteredBarbers[0].id);
     }
   };

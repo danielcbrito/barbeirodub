@@ -10,6 +10,7 @@ import {
   Send, Star, MessageSquare, ArrowRight,
 } from "lucide-react";
 import { CopyCode } from "@/components/ui/copy-code-button";
+import { BarberShareLinkCard } from "@/components/barber/BarberShareLinkModal";
 import { SetupCompletionBanner } from "@/components/barber/SetupCompletionBanner";
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import { useBarberAvaliacoes } from "@/hooks/useBarberAvaliacoes";
@@ -143,16 +144,34 @@ export function BarberMobileProfile({
         const barbData = barbeiroRes.data as any;
         const tenant = barbData?.tenants ?? null;
 
-        const nextAvatar = profileRes.data?.avatar_url || barbData?.foto_url || null;
-        const nextBanner =
+        let nextAvatar = profileRes.data?.avatar_url || barbData?.foto_url || null;
+        let nextBanner =
           profileRes.data?.banner_url ||
           ((!bannerRes.error && bannerRes.data) ? (bannerRes.data as string) : null) ||
           tenant?.banner_url ||
           null;
-        const nextTenantSlug = tenant?.slug || null;
-        const nextTenantName = tenant?.nome || "";
-        const nextTenantLogo = tenant?.logo_url || null;
+        let nextTenantSlug = tenant?.slug || null;
+        let nextTenantName = tenant?.nome || "";
+        let nextTenantLogo = tenant?.logo_url || null;
         const nextProfileName = barberContext.apelido || barbData?.apelido || identity.displayName || "Barbeiro";
+
+        const effectiveTenantId = barberContext.tenantId || barbData?.tenant_id || tenant?.id;
+
+        // Fallback direto na tabela tenants caso a junção nested não traga o slug
+        if (!nextTenantSlug && effectiveTenantId) {
+          const { data: directTenant } = await supabase
+            .from("tenants")
+            .select("id, slug, nome, logo_url, banner_url")
+            .eq("id", effectiveTenantId)
+            .maybeSingle();
+
+          if (directTenant?.slug) {
+            nextTenantSlug = directTenant.slug;
+            if (!nextTenantName) nextTenantName = directTenant.nome;
+            if (!nextTenantLogo) nextTenantLogo = directTenant.logo_url;
+            if (!nextBanner && directTenant.banner_url) nextBanner = directTenant.banner_url;
+          }
+        }
 
         setAvatarUrl(nextAvatar);
         setBannerUrl(nextBanner);
@@ -162,7 +181,6 @@ export function BarberMobileProfile({
         setProfileName(nextProfileName);
 
         let nextUnits = 0;
-        const effectiveTenantId = barberContext.tenantId || barbData?.tenant_id || tenant?.id;
         if (effectiveTenantId) {
           const { count } = await supabase
             .from("tenant_unidades")
@@ -401,12 +419,15 @@ export function BarberMobileProfile({
             </div>
           </div>
 
-          {/* Link de copiar — compacto e elegante */}
-          {tenantSlug && (
-            <div className="mt-4">
-              <CopyCode code={fullLink} label={displayLink} />
-            </div>
-          )}
+          {/* Link de agendamento do barbeiro com 1-click Copiar & WhatsApp */}
+          <div className="mt-4">
+            <BarberShareLinkCard
+              barbeiroId={barberContext.barbeiroId}
+              barberName={profileName || barberContext.apelido}
+              tenantSlug={tenantSlug}
+              tenantName={tenantName}
+            />
+          </div>
         </div>
 
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />

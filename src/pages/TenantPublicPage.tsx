@@ -92,7 +92,9 @@ export default function TenantPublicPage() {
           return;
         }
 
-        navigate(`/${tenantByBarber.slug}`, { replace: true });
+        const resolvedBarberId = barberById?.id || barberByNickname?.id || (isUuid ? slug : null);
+        const queryParam = resolvedBarberId ? `?barbeiro=${resolvedBarberId}` : "";
+        navigate(`/${tenantByBarber.slug}${queryParam}`, { replace: true });
       } catch {
         setErrorMessage("Erro ao resolver o link da barbearia.");
       }

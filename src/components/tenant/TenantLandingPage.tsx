@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -52,6 +52,7 @@ interface EmpresaInfo {
  */
 export function TenantLandingPage({ tenantId, tenantName, tenantSlug }: TenantLandingPageProps) {
   const navigate = useNavigate();
+  const routeLocation = useLocation();
   const [loading, setLoading] = useState(true);
   const [tenant, setTenant] = useState<TenantDetails | null>(null);
   const [empresaInfo, setEmpresaInfo] = useState<EmpresaInfo>({});
@@ -217,8 +218,9 @@ export function TenantLandingPage({ tenantId, tenantName, tenantSlug }: TenantLa
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`
       : null;
 
-  const handleLogin = () => navigate("/login", { state: { redirect: `/${tenantSlug}` } });
-  const handleRegister = () => navigate("/cadastro", { state: { redirect: `/${tenantSlug}` } });
+  const redirectTarget = `/${tenantSlug}${routeLocation.search || ""}`;
+  const handleLogin = () => navigate("/login", { state: { redirect: redirectTarget } });
+  const handleRegister = () => navigate("/cadastro", { state: { redirect: redirectTarget } });
 
   if (loading) {
     return (

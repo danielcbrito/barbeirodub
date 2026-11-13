@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   CreditCard,
   User,
+  Link2,
 } from "lucide-react";
 import { BarberFormasPagamento } from "@/components/barber/BarberFormasPagamento";
 import { BarberContext } from "@/pages/Barbeiro";
@@ -42,6 +43,7 @@ import { AdminAvaliacoes } from "@/components/admin/AdminAvaliacoes";
 import { BarberAvaliacoes } from "@/components/barber/BarberAvaliacoes";
 import { BarberCortes } from "@/components/barber/BarberCortes";
 import { BarberMeuPlano } from "@/components/barber/BarberMeuPlano";
+import { BarberShareLinkView } from "@/components/barber/BarberShareLinkView";
 import { WhatsAppConnectionPage } from "@/components/whatsapp/WhatsAppConnectionPage";
 import { UnidadeWizardSheet } from "@/components/admin/unidades/wizard/UnidadeWizardSheet";
 import { UnidadeDetailScreen } from "@/components/admin/unidades/UnidadeDetailScreen";
@@ -471,6 +473,14 @@ export function BarberConfigBarbearia({
     if (!isTenantAdmin) {
       return [
         {
+          id: "link-agendamento",
+          icon: Link2,
+          label: "Link de Agendamento",
+          description: "Seu link exclusivo e QR Code para clientes agendarem horários com você",
+          keywords: ["link", "agendamento", "compartilhar", "whatsapp", "qr code", "divulgar", "clientes", "bio"],
+          onClick: () => setActiveScreen("link-agendamento"),
+        },
+        {
           id: "fotos-banner",
           icon: Palette,
           label: "Foto de perfil",
@@ -554,6 +564,14 @@ export function BarberConfigBarbearia({
     }
 
     return [
+      {
+        id: "link-agendamento",
+        icon: Link2,
+        label: "Link de Agendamento",
+        description: "Link exclusivo e QR Code da barbearia para divulgação no WhatsApp e redes",
+        keywords: ["link", "agendamento", "compartilhar", "whatsapp", "qr code", "divulgar", "clientes", "bio"],
+        onClick: () => setActiveScreen("link-agendamento"),
+      },
       {
         id: "meu-plano",
         icon: Crown,
@@ -912,6 +930,13 @@ export function BarberConfigBarbearia({
   const renderSubScreen = () => {
     const tenantId = resolvedTenantId || barberContext.tenantId || undefined;
     switch (activeScreen) {
+      case "link-agendamento":
+        return (
+          <BarberShareLinkView
+            barberContext={barberContext}
+            onBack={handleSubScreenBack}
+          />
+        );
       case "formas-pagamento":
         return (
           <BarberFormasPagamento
