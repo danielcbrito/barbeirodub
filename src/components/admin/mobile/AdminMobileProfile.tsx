@@ -11,6 +11,7 @@ import {
   Send, Star, MessageSquare, BarChart3, ArrowRight,
 } from "lucide-react";
 import { CopyCode } from "@/components/ui/copy-code-button";
+import { BarberShareLinkCard } from "@/components/barber/BarberShareLinkModal";
 
 import { SetupCompletionBanner } from "@/components/barber/SetupCompletionBanner";
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
@@ -406,10 +407,14 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
             </div>
           </div>
 
-          {/* Link de copiar — lugar estratégico e compacto logo abaixo */}
+          {/* Link de agendamento — 100% idêntico entre Admin e Barbeiro */}
           {tenantSlug && (
             <div className="mt-4">
-              <CopyCode code={fullLink} label={displayLink} />
+              <BarberShareLinkCard
+                tenantSlug={tenantSlug}
+                tenantName={tenantName}
+                barberName={profileName}
+              />
             </div>
           )}
         </div>
