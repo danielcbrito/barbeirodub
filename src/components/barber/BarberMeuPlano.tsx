@@ -149,8 +149,19 @@ type PlanFunctionResponse = {
   paid?: boolean;
   status?: string;
   error?: string;
+  missingFields?: string[];
   data?: { correlationID?: string; emv?: string; paymentLinkUrl?: string; amount?: number };
 };
+
+class PlanCheckoutError extends Error {
+  missingFields: string[];
+
+  constructor(message: string, missingFields: string[] = []) {
+    super(message);
+    this.name = "PlanCheckoutError";
+    this.missingFields = missingFields;
+  }
+}
 
 async function invokePlanSubscription(body: Record<string, unknown>) {
   const { data, error } = await invokeAuthenticatedFunction<PlanFunctionResponse>(
@@ -160,10 +171,18 @@ async function invokePlanSubscription(body: Record<string, unknown>) {
 
   if (error instanceof FunctionsHttpError) {
     const response = await error.context.json().catch(() => null) as PlanFunctionResponse | null;
-    throw new Error(response?.error || "Não foi possível comunicar com a Woovi.");
+    throw new PlanCheckoutError(
+      response?.error || "Não foi possível comunicar com a Woovi.",
+      response?.missingFields || [],
+    );
   }
   if (error) throw error;
-  if (!data?.success) throw new Error(data?.error || "Não foi possível processar a assinatura.");
+  if (!data?.success) {
+    throw new PlanCheckoutError(
+      data?.error || "Não foi possível processar a assinatura.",
+      data?.missingFields || [],
+    );
+  }
   return data;
 }
 
@@ -172,6 +191,8 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
   const subscription = useTenantSubscription(tenantId);
   const { totalPendingCount, isCompliant, missingFieldNames } = useBarbershopPendingFields(tenantId);
   const [showPendingModal, setShowPendingModal] = useState(false);
+  const [serverMissingFields, setServerMissingFields] = useState<string[]>([]);
+  const displayedMissingFields = serverMissingFields.length > 0 ? serverMissingFields : missingFieldNames;
   const [currentView, setCurrentView] = useState<ScreenView>("meu-plano");
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [selectedPlanForCheckout, setSelectedPlanForCheckout] = useState<PlanDefinition | null>(null);
@@ -296,6 +317,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
     }
 
     setIsActivating(true);
+    setServerMissingFields([]);
     setPixError(null);
     setCardError(null);
     setPixEmv("");
@@ -314,6 +336,10 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
       setPixEmv(response.data.emv);
       setPaymentCorrelation(response.data.correlationID);
     } catch (error) {
+      if (error instanceof PlanCheckoutError && error.missingFields.length > 0) {
+        setServerMissingFields(error.missingFields);
+        setShowPendingModal(true);
+      }
       setPixError(error instanceof Error ? error.message : "Não foi possível gerar o Pix Automático.");
     } finally {
       setIsActivating(false);
@@ -328,6 +354,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
     }
 
     setIsActivating(true);
+    setServerMissingFields([]);
     setCardError(null);
     setPixError(null);
     setPixEmv("");
@@ -346,6 +373,10 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
       setCardPaymentUrl(response.data.paymentLinkUrl);
       setPaymentCorrelation(response.data.correlationID);
     } catch (error) {
+      if (error instanceof PlanCheckoutError && error.missingFields.length > 0) {
+        setServerMissingFields(error.missingFields);
+        setShowPendingModal(true);
+      }
       setCardError(error instanceof Error ? error.message : "Não foi possível gerar o pagamento no cartão.");
     } finally {
       setIsActivating(false);
@@ -681,6 +712,12 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                         return;
                       }
                       setSelectedPlanForCheckout(activeCarouselPlan);
+                      setServerMissingFields([]);
+                      setPixEmv("");
+                      setCardPaymentUrl("");
+                      setPaymentCorrelation("");
+                      setPixError(null);
+                      setCardError(null);
                       setCurrentView("checkout");
                     }}
                     className="w-full h-12 rounded-2xl bg-foreground text-background font-bold text-[14.5px] flex items-center justify-center hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-sm"
@@ -758,6 +795,25 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                 </div>
               ) : (
                 <>
+                  <div className="rounded-2xl border border-border/60 bg-card px-4 py-3.5 space-y-2">
+                    <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
+                      <Building className="w-4 h-4 text-muted-foreground" />
+                      <span>Dados exigidos pela Woovi</span>
+                    </div>
+                    <p className="text-[12px] text-muted-foreground leading-relaxed">
+                      Nome, CPF ou CNPJ válido, e-mail, telefone e endereço completo com CEP. Os mesmos dados são usados no Pix Automático e no cartão.
+                    </p>
+                    {!isCompliant && totalPendingCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowPendingModal(true)}
+                        className="text-[12px] font-semibold text-foreground underline underline-offset-4"
+                      >
+                        Revisar {totalPendingCount} {totalPendingCount === 1 ? "pendência" : "pendências"}
+                      </button>
+                    )}
+                  </div>
+
                   {/* Seletor de Método de Pagamento: Pix ou Cartão */}
                   <div className="grid grid-cols-2 p-1 rounded-2xl bg-secondary/50 border border-border/40">
                     <button
@@ -968,7 +1024,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                   Complete seus dados antes de assinar
                 </h3>
                 <p className="text-[15px] font-normal text-muted-foreground leading-relaxed mt-2.5">
-                  Para ativar sua assinatura no Pix Automático, precisamos de algumas informações da sua barbearia.
+                  Para assinar no Pix Automático ou no cartão, a Woovi exige estes dados válidos da sua barbearia.
                 </p>
               </div>
 
@@ -979,12 +1035,12 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                     Informações pendentes
                   </span>
                   <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-rose-500/10 text-rose-600 dark:text-rose-400">
-                    {missingFieldNames.length} {missingFieldNames.length === 1 ? "pendente" : "pendentes"}
+                    {displayedMissingFields.length} {displayedMissingFields.length === 1 ? "pendente" : "pendentes"}
                   </span>
                 </div>
 
                 <ul className="space-y-2.5 pt-1">
-                  {missingFieldNames.map((field, idx) => (
+                  {displayedMissingFields.map((field, idx) => (
                     <li key={idx} className="flex items-center gap-2.5 text-[14px] text-foreground font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-500/80 shrink-0" />
                       <span>{field}</span>
@@ -999,6 +1055,7 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
                   type="button"
                   onClick={() => {
                     setShowPendingModal(false);
+                    setServerMissingFields([]);
                     navigate("/barbeiro/dados-empresa");
                   }}
                   className="h-14 rounded-[28px] w-full bg-foreground text-background font-semibold text-[16px] flex items-center justify-center active:scale-[0.98] transition-all hover:opacity-90 shadow-xs cursor-pointer"

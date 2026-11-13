@@ -60,6 +60,19 @@ A subconta do Túlio estava vinculada no cadastro e recebeu o nome de exibição
 ### Verificação e limites desta etapa
 13 testes focados passaram, cobrindo destino central sem split, cartão concluído, correlação, valor, autorização e parcela. A compilação terminou com build OK. Nenhuma cobrança real foi criada e nenhum saque foi executado. O fluxo logado não pôde ser exercitado porque o Supabase externo não fornece sessão ao navegador de teste. O cartão precisa estar habilitado e com KYC ativo na Woovi; seus recebimentos seguem a conta externa cadastrada no banco. As migrations reportaram 119 achados de segurança preexistentes, sem interromper esta tarefa.
 
+## Checkout, recorrência e segurança — atualização em 13/11/2026 às 19:20 UTC
+
+### Requisitos bancários
+A tela e a função agora exigem nome, CPF ou CNPJ matematicamente válido, e-mail, telefone e endereço completo (rua, número, bairro, cidade, UF e CEP). A tela apresenta esses requisitos antes dos métodos de pagamento e mostra a lista retornada pelo serviço quando algo falta. Foram removidos os valores fictícios de rua, número, bairro, cidade e UF.
+
+O Pix Automático usa a jornada PAYMENT_ON_APPROVAL, tipo PIX_RECURRING e frequência MONTHLY. O primeiro pagamento e a autorização acontecem no QR Code; as renovações exigem parcela concluída. A API oficial de cartão documenta CREDIT_CARD como cobrança avulsa e não oferece mandato recorrente/tokenização para débito mensal automático. Portanto, o cartão continua sem recorrência simulada e sem armazenamento de cartão no DUB. Referências: https://developers.woovi.com/docs/pix-automatic/pix-automatic-how-to-create e https://developers.woovi.com/docs/card/card-how-to-create-charge-using-api.
+
+### Segurança
+A primeira varredura encontrou 5 erros e 8 avisos. Foram corrigidos: RLS ausente em n8n_chat_histories, leitura irrestrita de agente_webhook_global, gestão irrestrita de discount_coupons, escrita/exclusão irrestritas no bucket avatars e search_path mutável em quatro funções. A segunda varredura encontrou zero erros; restaram três avisos de leitura pública em dados operacionais (configuracoes_horario, plano_servicos e tenant_plano_faixas) e 20 informações preexistentes. Não se revogou em massa o acesso a outras funções porque isso exige revisão de cada fluxo para não interromper agenda e relatórios.
+
+### Verificação
+19 testes focados passaram, incluindo CPF/CNPJ, endereço completo, contato, payload mensal Pix, ausência de splits, cartão sem falsa recorrência e recuperação de sessão. A verificação TypeScript passou. A função create-tenant-plan-subscription foi implantada. Não houve autorização Pix ou pagamento real: o Supabase externo não disponibiliza sessão ao navegador de teste, a autorização depende do aplicativo bancário do pagador e o cartão depende de habilitação/KYC da Woovi.
+
 ## Verificação e limites
 8 testes unitários passaram. Preview abriu em /login sem pageerror; a página autenticada /admin/financeiro NÃO foi verificada, pois a sessão externa não é disponibilizada ao teste automatizado. Último sinal de compilação: build OK.
 Consulta às funções públicas não encontrou referência Asaas. Única referência operacional restante no frontend é alias de coluna de taxas históricas; não realiza chamada bancária.

@@ -150,11 +150,11 @@ export function useBarbershopPendingFields(
           }
         }
 
-        // 3. Fallback / complemento: tabela tenants
-        if (tenantId && (!resolved.nome || (!resolved.cnpj && !resolved.cpf) || !resolved.rua || !resolved.email)) {
+        // 3. Fallback / complemento: tenant e responsável, na mesma ordem usada pelo checkout.
+        if (tenantId) {
           const { data: tenantRow } = await supabase
             .from("tenants")
-            .select("nome, cnpj, cpf, email, telefone, whatsapp, rua, numero, bairro, cidade, estado")
+            .select("nome, cnpj, cpf, email, telefone, whatsapp, rua, numero, bairro, cidade, estado, owner_user_id")
             .eq("id", tenantId)
             .maybeSingle();
 
@@ -170,6 +170,35 @@ export function useBarbershopPendingFields(
             if (!resolved.bairro && tenantRow.bairro) resolved.bairro = tenantRow.bairro;
             if (!resolved.cidade && tenantRow.cidade) resolved.cidade = tenantRow.cidade;
             if (!resolved.estado && tenantRow.estado) resolved.estado = tenantRow.estado;
+
+            if (tenantRow.owner_user_id) {
+              const [{ data: ownerProfile }, { data: ownerBarber }, { data: authData }] = await Promise.all([
+                supabase
+                  .from("profiles")
+                  .select("cpf, telefone, nome, cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_uf")
+                  .eq("id", tenantRow.owner_user_id)
+                  .maybeSingle(),
+                supabase
+                  .from("barbeiros")
+                  .select("apelido")
+                  .eq("user_id", tenantRow.owner_user_id)
+                  .maybeSingle(),
+                supabase.auth.getUser(),
+              ]);
+
+              if (!resolved.cpf) resolved.cpf = ownerProfile?.cpf || "";
+              if (!resolved.email && authData.user?.id === tenantRow.owner_user_id) {
+                resolved.email = authData.user.email || "";
+              }
+              if (!resolved.telefone) resolved.telefone = ownerProfile?.telefone || "";
+              if (!resolved.nome) resolved.nome = ownerProfile?.nome || ownerBarber?.apelido || "";
+              if (!resolved.cep) resolved.cep = ownerProfile?.cep || "";
+              if (!resolved.rua) resolved.rua = ownerProfile?.endereco_rua || "";
+              if (!resolved.numero) resolved.numero = ownerProfile?.endereco_numero || "";
+              if (!resolved.bairro) resolved.bairro = ownerProfile?.endereco_bairro || "";
+              if (!resolved.cidade) resolved.cidade = ownerProfile?.endereco_cidade || "";
+              if (!resolved.estado) resolved.estado = ownerProfile?.endereco_uf || "";
+            }
           }
         }
       } catch (err) {
@@ -227,12 +256,13 @@ export function useBarbershopPendingFields(
   const cleanCnpj = digits(raw.cnpj);
   const cleanCpf = digits(raw.cpf);
   const hasCpf = cleanCpf.length === 11;
-  const hasDocument = hasCpf; // CPF do responsável é estritamente obrigatório; CNPJ é opcional
+  const hasCnpj = cleanCnpj.length === 14;
+  const hasDocument = hasCpf || hasCnpj;
 
-  const hasEmail = Boolean(raw.email && raw.email.includes("@"));
+  const hasEmail = Boolean(raw.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.email.trim()));
   const cleanTel = digits(raw.telefone);
   const cleanWhats = digits(raw.whatsapp);
-  const hasContact = hasEmail || cleanTel.length >= 10 || cleanWhats.length >= 10;
+  const hasContact = cleanTel.length >= 10 || cleanWhats.length >= 10;
 
   const cleanCep = digits(raw.cep);
   const hasCep = cleanCep.length === 8;
@@ -250,20 +280,20 @@ export function useBarbershopPendingFields(
     pendingIdentificacao++;
     missingFieldNames.push("Nome da barbearia");
   }
-  if (!hasCpf) {
+  if (!hasDocument) {
     pendingIdentificacao++;
-    missingFieldNames.push("CPF do responsável");
+    missingFieldNames.push("CPF ou CNPJ válido");
   }
   if (!hasEmail) {
     pendingIdentificacao++;
-    missingFieldNames.push("E-mail da barbearia");
+    missingFieldNames.push("E-mail válido");
   }
 
   // 2. Contato
   let pendingContato = 0;
   if (!hasContact) {
     pendingContato++;
-    missingFieldNames.push("Contato (e-mail ou telefone)");
+    missingFieldNames.push("Telefone ou WhatsApp válido");
   }
 
   // 3. Endereço com CEP
@@ -279,6 +309,10 @@ export function useBarbershopPendingFields(
   if (!hasNumero) {
     pendingEndereco++;
     missingFieldNames.push("Número do endereço");
+  }
+  if (!hasBairro) {
+    pendingEndereco++;
+    missingFieldNames.push("Bairro");
   }
   if (!hasCidade) {
     pendingEndereco++;

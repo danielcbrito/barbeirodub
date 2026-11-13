@@ -3,8 +3,15 @@ import { wooviFetch, WooviError, corsHeaders, jsonResponse } from "../_shared/wo
 import {
   isApprovedTenantSubscription,
   isCompletedTenantCharge,
-  routeTenantPlanToMainAccount,
 } from "../_shared/tenant-plan-policy.ts";
+import {
+  getMissingTenantCheckoutFields,
+  isValidCustomerDocument,
+} from "../_shared/tenant-checkout-requirements.ts";
+import {
+  buildTenantPlanCardPayload,
+  buildTenantPlanPixAutomaticPayload,
+} from "../_shared/tenant-plan-payload.ts";
 
 type SubscriptionResponse = {
   subscription?: {
@@ -235,82 +242,63 @@ Deno.serve(async (req) => {
 
     const { data: ownerProfile } = await admin
       .from("profiles")
-      .select("cpf, phone, telefone, full_name, email")
+      .select("cpf, telefone, nome, cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_uf")
       .eq("id", tenant.owner_user_id)
       .maybeSingle();
     const { data: ownerBarber } = await admin
       .from("barbeiros")
-      .select("cpf, telefone, nome_completo, apelido, email")
+      .select("apelido")
       .eq("user_id", tenant.owner_user_id)
       .maybeSingle();
 
     const resolvedCnpj = digits(unit?.cnpj || tenant.cnpj || infoMap.cnpj);
     const resolvedCpf = digits(
-      unit?.cpf || tenant.cpf || infoMap.cpf || ownerProfile?.cpf || ownerBarber?.cpf,
+      unit?.cpf || tenant.cpf || infoMap.cpf || ownerProfile?.cpf,
     );
-    const taxID = resolvedCnpj || resolvedCpf;
-    if (taxID.length !== 11 && taxID.length !== 14) {
-      return jsonResponse({
-        success: false,
-        error: "Cadastre o CPF ou CNPJ da barbearia antes de assinar.",
-      }, 422);
-    }
-
-    const resolvedName = resolvedCnpj
+    const hasValidCnpj = isValidCustomerDocument(resolvedCnpj) && resolvedCnpj.length === 14;
+    const taxID = hasValidCnpj ? resolvedCnpj : resolvedCpf;
+    const resolvedName = hasValidCnpj
       ? unit?.nome || tenant.nome || infoMap.nome
-      : ownerProfile?.full_name || ownerBarber?.nome_completo || ownerBarber?.apelido || tenant.nome;
+      : ownerProfile?.nome || ownerBarber?.apelido || tenant.nome;
     const resolvedPhone = digits(
       unit?.whatsapp || unit?.telefone || tenant.whatsapp || tenant.telefone
-      || infoMap.whatsapp || infoMap.telefone || ownerProfile?.telefone
-      || ownerProfile?.phone || ownerBarber?.telefone,
+      || infoMap.whatsapp || infoMap.telefone || ownerProfile?.telefone,
     );
-    const resolvedEmail = unit?.email || tenant.email || infoMap.email
-      || ownerProfile?.email || ownerBarber?.email || user.email;
-    const resolvedCep = digits(unit?.cep || infoMap.cep);
-    if (resolvedPhone.length < 10) {
-      return jsonResponse({
-        success: false,
-        error: "Cadastre um telefone válido da barbearia antes de assinar.",
-      }, 422);
-    }
-    if (resolvedCep.length !== 8) {
-      return jsonResponse({
-        success: false,
-        error: "Cadastre um CEP válido da barbearia antes de assinar.",
-      }, 422);
-    }
-
+    const resolvedEmail = unit?.email || tenant.email || infoMap.email || user.email;
+    const resolvedCep = digits(unit?.cep || infoMap.cep || ownerProfile?.cep);
     const correlationID = `dub-${tenantId.slice(0, 8)}-${plan.id.slice(0, 8)}-${Date.now()}`;
     const customer = {
-      name: resolvedName || tenant.nome,
+      name: String(resolvedName || "").trim(),
       taxID,
-      ...(resolvedEmail ? { email: resolvedEmail } : {}),
+      email: String(resolvedEmail || "").trim(),
       phone: resolvedPhone.startsWith("55") ? resolvedPhone : `55${resolvedPhone}`,
       address: {
-        street: unit?.rua || tenant.rua || infoMap.rua || "Não informado",
-        number: unit?.numero || tenant.numero || infoMap.numero || "S/N",
-        neighborhood: unit?.bairro || tenant.bairro || infoMap.bairro || "Centro",
-        city: unit?.cidade || tenant.cidade || infoMap.cidade || "Sao Paulo",
-        state: unit?.estado || tenant.estado || infoMap.estado || "SP",
+        street: String(unit?.rua || tenant.rua || infoMap.rua || ownerProfile?.endereco_rua || "").trim(),
+        number: String(unit?.numero || tenant.numero || infoMap.numero || ownerProfile?.endereco_numero || "").trim(),
+        neighborhood: String(unit?.bairro || tenant.bairro || infoMap.bairro || ownerProfile?.endereco_bairro || "").trim(),
+        city: String(unit?.cidade || tenant.cidade || infoMap.cidade || ownerProfile?.endereco_cidade || "").trim(),
+        state: String(unit?.estado || tenant.estado || infoMap.estado || ownerProfile?.endereco_uf || "").trim().toUpperCase(),
         country: "BR",
         zipcode: resolvedCep,
       },
     };
+    const missingFields = getMissingTenantCheckoutFields(customer);
+    if (missingFields.length > 0) {
+      return jsonResponse({
+        success: false,
+        code: "CHECKOUT_DATA_INCOMPLETE",
+        error: "Complete os dados obrigatórios da barbearia antes de assinar.",
+        missingFields,
+      }, 422);
+    }
+
     const today = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-    const subscriptionBody = routeTenantPlanToMainAccount({
-      name: `DUB ${plan.nome}`,
+    const subscriptionBody = buildTenantPlanPixAutomaticPayload({
+      planName: plan.nome,
       value: cents,
       customer,
       correlationID,
-      comment: `DUB ${plan.nome} mensal`.slice(0, 29),
-      frequency: "MONTHLY",
-      type: "PIX_RECURRING",
-      pixRecurringOptions: {
-        journey: "PAYMENT_ON_APPROVAL",
-        retryPolicy: "THREE_RETRIES_7_DAYS",
-      },
-      dayGenerateCharge: today.getDate(),
-      dayDue: 3,
+      chargeDay: today.getDate(),
     });
     const metadata = {
       kind: "tenant_plan",
@@ -336,10 +324,10 @@ Deno.serve(async (req) => {
       try {
         remote = await wooviFetch<ChargeResponse>("/api/v1/charge", {
           method: "POST",
-          body: routeTenantPlanToMainAccount({
+          body: buildTenantPlanCardPayload({
+            planName: plan.nome,
             correlationID,
             value: cents,
-            type: "CREDIT_CARD",
             customer,
           }),
         });
