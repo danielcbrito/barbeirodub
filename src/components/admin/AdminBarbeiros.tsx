@@ -97,6 +97,7 @@ export function AdminBarbeiros({
 
   const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -122,34 +123,42 @@ export function AdminBarbeiros({
     }
 
     const resolveAdminTenant = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.user) return;
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.user) {
+          setAdminTenantId(null);
+          return;
+        }
 
-      const { data: tenant } = await resolveOldestOwnedTenant<{ id: string }>(
-        session.user.id,
-        "id"
-      );
+        const { data: tenant } = await resolveOldestOwnedTenant<{ id: string }>(
+          session.user.id,
+          "id"
+        );
 
-      if (tenant?.id) {
-        setAdminTenantId(tenant.id);
-        return;
+        if (tenant?.id) {
+          setAdminTenantId(tenant.id);
+          return;
+        }
+
+        const { data: barber } = await supabase
+          .from("barbeiros")
+          .select("tenant_id")
+          .eq("user_id", session.user.id)
+          .not("tenant_id", "is", null)
+          .maybeSingle();
+
+        if (barber?.tenant_id) {
+          setAdminTenantId(barber.tenant_id);
+          return;
+        }
+
+        setAdminTenantId(null);
+      } catch (err) {
+        console.error("Erro ao resolver tenant para barbeiros:", err);
+        setAdminTenantId(null);
       }
-
-      const { data: barber } = await supabase
-        .from("barbeiros")
-        .select("tenant_id")
-        .eq("user_id", session.user.id)
-        .not("tenant_id", "is", null)
-        .maybeSingle();
-
-      if (barber?.tenant_id) {
-        setAdminTenantId(barber.tenant_id);
-        return;
-      }
-
-      setAdminTenantId(null);
     };
 
     resolveAdminTenant();
@@ -176,6 +185,7 @@ export function AdminBarbeiros({
   const loadBarbeiros = async () => {
     if (adminTenantId === undefined) return;
 
+    setLoadError(null);
     try {
       let query = supabase
         .from("barbeiros")
@@ -244,6 +254,7 @@ export function AdminBarbeiros({
     } catch (error) {
       console.error("Erro ao carregar barbeiros:", error);
       toast.error("Erro ao carregar equipe");
+      setLoadError("Não foi possível carregar a lista de profissionais da barbearia.");
     } finally {
       setLoading(false);
     }
@@ -438,6 +449,30 @@ export function AdminBarbeiros({
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center space-y-4">
+        <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">{loadError}</p>
+          <p className="text-xs text-muted-foreground">Verifique sua conexão e tente novamente.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            loadBarbeiros();
+          }}
+          className="h-10 px-4 rounded-xl bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
+        >
+          Tentar novamente
+        </button>
       </div>
     );
   }
@@ -720,7 +755,7 @@ export function AdminBarbeiros({
       {!hideHeader && (
         <ScheduleHeader
           title="Barbeiros & Equipe"
-          onBack={onBack ? onBack : () => navigate(`${basePath}/configuracoes-perfil`)}
+          onBack={onBack ? onBack : () => navigate(`${basePath}/config-barbearia`)}
           right={
             <span className="text-[11px] text-muted-foreground/60 font-medium tabular-nums">
               {activeBarbeiros.length} {activeBarbeiros.length === 1 ? "ativo" : "ativos"}

@@ -50,7 +50,7 @@ function SegurancaHub({ basePath }: { basePath: string }) {
       <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
         <div className="flex items-center gap-2.5 px-4 h-14">
           <button
-            onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
+            onClick={() => navigate(`${basePath}/config-barbearia`)}
             className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
             aria-label="Voltar"
           >

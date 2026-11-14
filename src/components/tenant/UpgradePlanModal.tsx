@@ -1,201 +1,240 @@
-import { motion } from "framer-motion";
-import { Crown, Users, Zap, ArrowRight, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Crown, Users, Zap, ArrowRight, X, Store, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
-/**
- * Mapeamento de faixa de barbeiros → checkout Cakto + nome do plano.
- */
-interface PlanTier {
+export interface PlanTier {
+  id: string;
   name: string;
   maxBarbers: number;
+  maxUnits: number;
   price: number;
-  checkoutUrl: string;
+  isCustomPrice?: boolean;
 }
 
-const PLAN_TIERS: PlanTier[] = [
-  { name: "DUB Solo",    maxBarbers: 1, price: 49.90,  checkoutUrl: "https://pay.cakto.com.br/3fu4u7q_789875" },
-  { name: "DUB Dupla",   maxBarbers: 2, price: 79.90,  checkoutUrl: "https://pay.cakto.com.br/3aie3q5" },
-  { name: "DUB Equipe",  maxBarbers: 3, price: 109.90, checkoutUrl: "https://pay.cakto.com.br/abri2ap" },
-  { name: "DUB Pro",     maxBarbers: 4, price: 129.90, checkoutUrl: "https://pay.cakto.com.br/3epmyy9" },
-  { name: "DUB Premium", maxBarbers: 5, price: 149.90, checkoutUrl: "https://pay.cakto.com.br/35fj7fi" },
+export const PLAN_TIERS: PlanTier[] = [
+  { id: "solo", name: "Solo", maxBarbers: 1, maxUnits: 1, price: 38.9 },
+  { id: "dupla", name: "Dupla", maxBarbers: 2, maxUnits: 1, price: 69.9 },
+  { id: "equipe", name: "Equipe", maxBarbers: 5, maxUnits: 1, price: 129.9 },
+  { id: "rede", name: "Rede", maxBarbers: 9, maxUnits: 3, price: 249.9 },
+  { id: "enterprise", name: "Enterprise", maxBarbers: 999999, maxUnits: 999999, price: 0, isCustomPrice: true },
 ];
 
 /**
  * Retorna o plano necessário para suportar N barbeiros.
- * Se já está no máximo (Premium), retorna o Premium mesmo.
  */
 export function getRequiredTier(barberCount: number): PlanTier {
   if (barberCount <= 1) return PLAN_TIERS[0];
-  if (barberCount === 2) return PLAN_TIERS[1];
-  if (barberCount === 3) return PLAN_TIERS[2];
-  if (barberCount === 4) return PLAN_TIERS[3];
+  if (barberCount <= 2) return PLAN_TIERS[1];
+  if (barberCount <= 5) return PLAN_TIERS[2];
+  if (barberCount <= 9) return PLAN_TIERS[3];
   return PLAN_TIERS[4];
+}
+
+/**
+ * Retorna o plano necessário para suportar N unidades.
+ */
+export function getRequiredUnitTier(unitCount: number): PlanTier {
+  if (unitCount <= 1) return PLAN_TIERS[0];
+  if (unitCount <= 3) return PLAN_TIERS[3]; // Rede (até 3 unidades)
+  return PLAN_TIERS[4]; // Enterprise
 }
 
 /**
  * Retorna o limite de barbeiros baseado no preço mensal do plano.
  */
 export function getPlanLimitByPrice(price: number): number {
-  if (price >= 149.9) return 999; // Premium: ilimitado (5+)
-  if (price >= 129.9) return 4;
-  if (price >= 109.9) return 3;
-  if (price >= 79.9) return 2;
+  if (price >= 249.9) return 9;
+  if (price >= 129.9) return 5;
+  if (price >= 69.9) return 2;
   return 1;
 }
 
- /**
- * Durante trial, permite apenas 1 barbeiro (forçar conversão).
- */
 export function getMaxBarbersForStatus(
   subscriptionStatus: string,
   currentBarberCount: number
 ): number {
   if (subscriptionStatus === "trialing") return 1;
   if (subscriptionStatus === "active") {
-    // Plano ativo: limite baseado na faixa atual
     return getRequiredTier(currentBarberCount).maxBarbers;
   }
-  // Expirado / sem assinatura → bloqueia
   return 0;
 }
 
-interface UpgradePlanModalProps {
+export interface UpgradePlanModalProps {
   open: boolean;
   onClose: () => void;
-  currentBarbers: number;
-  isTrial: boolean;
+  limitType?: "barbers" | "units";
+  currentBarbers?: number;
+  currentUnits?: number;
+  isTrial?: boolean;
+  currentPlanName?: string;
+  customMessage?: string;
 }
 
 /**
- * Modal full-screen que recomenda o upgrade de plano quando o tenant
- * tenta adicionar mais barbeiros do que o plano atual permite.
+ * Modal profissional exibido quando uma ação do tenant ultrapassa o limite do plano.
+ * Oferece explicação cristalina do motivo e redireciona direto para a página de Meu Plano.
  */
-export function UpgradePlanModal({ open, onClose, currentBarbers, isTrial }: UpgradePlanModalProps) {
+export function UpgradePlanModal({
+  open,
+  onClose,
+  limitType = "barbers",
+  currentBarbers = 1,
+  currentUnits = 1,
+  isTrial = false,
+  currentPlanName,
+  customMessage,
+}: UpgradePlanModalProps) {
+  const navigate = useNavigate();
+
   if (!open) return null;
 
-  // O plano que o tenant precisa para ter (currentBarbers + 1)
-  const neededTier = getRequiredTier(currentBarbers + 1);
+  const isUnitsLimit = limitType === "units";
+  const neededTier = isUnitsLimit
+    ? getRequiredUnitTier(currentUnits + 1)
+    : getRequiredTier(currentBarbers + 1);
 
-  const handleSubscribe = () => {
-    window.open(neededTier.checkoutUrl, "_blank");
+  const displayPlanName = currentPlanName || (isTrial ? "Solo (Trial)" : "Solo");
+
+  const handleNavigateToPlans = () => {
+    onClose();
+    // Redireciona naturalmente para a tela de Meu Plano em Configurações
+    navigate("/barbeiro/config-barbearia?screen=meu-plano");
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-background flex flex-col pt-[env(safe-area-inset-top)]"
-    >
-      {/* Close button */}
-      <div className="flex justify-end p-4">
-        <button
-          onClick={onClose}
-          className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all"
-          aria-label="Fechar"
-        >
-          <X className="w-5 h-5 text-muted-foreground" />
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-10 max-w-md mx-auto w-full">
-        {/* Icon */}
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
         <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-          className="w-20 h-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6"
+          initial={{ opacity: 0, scale: 0.95, y: 15 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 15 }}
+          transition={{ duration: 0.22 }}
+          className="w-full max-w-md rounded-3xl bg-card border border-border/80 shadow-[0_16px_50px_rgb(0,0,0,0.35)] p-6 flex flex-col items-center relative overflow-hidden"
         >
-          <Crown className="w-10 h-10 text-primary" />
-        </motion.div>
-
-        {/* Title */}
-        <motion.h1
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.15 }}
-          className="text-[22px] font-bold text-foreground text-center leading-tight mb-2"
-        >
-          {isTrial
-            ? "Assine para expandir sua equipe"
-            : "Hora de crescer! 🚀"}
-        </motion.h1>
-
-        <motion.p
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="text-[13px] text-muted-foreground text-center leading-relaxed mb-8"
-        >
-          {isTrial
-            ? "Durante o período de teste, você pode cadastrar 1 barbeiro. Assine um plano para adicionar mais profissionais à sua equipe."
-            : `Para adicionar mais barbeiros, faça o upgrade para o plano ${neededTier.name} e tenha até ${neededTier.maxBarbers === 5 ? "5+" : neededTier.maxBarbers} profissionais na sua barbearia.`}
-        </motion.p>
-
-        {/* Plan card */}
-        <motion.div
-          initial={{ y: 12, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.25 }}
-          className="w-full rounded-2xl border border-primary/20 p-5 mb-6"
-          style={{
-            background: "linear-gradient(150deg, hsl(var(--card)) 0%, hsl(var(--primary) / 0.06) 100%)",
-          }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Crown className="w-4 h-4 text-primary" />
-            <span className="text-[14px] font-semibold text-foreground">{neededTier.name}</span>
-          </div>
-
-          <div className="flex items-baseline gap-1 mb-4">
-            <span className="text-[10px] text-muted-foreground">R$</span>
-            <span className="text-[28px] font-bold text-primary leading-none">
-              {neededTier.price.toFixed(2).replace(".", ",")}
-            </span>
-            <span className="text-[11px] text-muted-foreground">/mês</span>
-          </div>
-
-          <div className="space-y-2.5 mb-1">
-            <BenefitRow icon={Users} text={`Até ${neededTier.maxBarbers === 5 ? "5+" : neededTier.maxBarbers} barbeiros na equipe`} />
-            <BenefitRow icon={Zap} text="Agenda inteligente + disparos WhatsApp" />
-            <BenefitRow icon={Crown} text="Financeiro completo com comissões" />
-          </div>
-        </motion.div>
-
-        {/* CTA */}
-        <motion.div
-          initial={{ y: 12, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="w-full space-y-3"
-        >
-          <Button
-            onClick={handleSubscribe}
-            className="w-full h-13 text-[14px] font-semibold rounded-xl bg-primary hover:bg-primary/90 transition-all duration-300 group"
+          {/* Botão de Fechar discreto */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary active:scale-95 transition-all cursor-pointer"
+            aria-label="Fechar"
           >
-            <Zap className="w-4 h-4 mr-2" />
-            {isTrial ? "Assinar agora" : `Fazer upgrade — ${neededTier.name}`}
-            <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-0.5" />
-          </Button>
+            <X className="w-4 h-4" />
+          </button>
 
-          <p className="text-center text-[10px] text-muted-foreground">
-            Sem taxa de adesão • Cancele quando quiser
+          {/* Ícone com aura suave */}
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4 mt-1">
+            {isUnitsLimit ? (
+              <Store className="w-8 h-8 text-amber-500" />
+            ) : (
+              <Crown className="w-8 h-8 text-amber-500" />
+            )}
+          </div>
+
+          {/* Tag de Limite de Plano */}
+          <span className="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 mb-2">
+            Limite do Plano Atingido
+          </span>
+
+          {/* Título Principal (24px Bold) */}
+          <h2 className="text-[24px] font-bold text-foreground text-center tracking-tight leading-tight">
+            {isUnitsLimit
+              ? "Precisa de mais unidades?"
+              : "Hora de expandir sua equipe! 🚀"}
+          </h2>
+
+          {/* Mensagem Explicativa Clara (15px Regular) */}
+          <p className="text-[15px] font-normal text-muted-foreground text-center leading-relaxed mt-2.5 px-1">
+            {customMessage ? (
+              customMessage
+            ) : isUnitsLimit ? (
+              <>
+                Seu plano atual (<strong className="text-foreground">{displayPlanName}</strong>)
+                permite gerenciar apenas <strong className="text-foreground">1 unidade</strong>.
+                Para abrir novas filiais, faça upgrade para o plano{" "}
+                <strong className="text-foreground">Rede</strong> (até 3 unidades) ou{" "}
+                <strong className="text-foreground">Enterprise</strong>.
+              </>
+            ) : (
+              <>
+                Seu plano atual (<strong className="text-foreground">{displayPlanName}</strong>)
+                permite até{" "}
+                <strong className="text-foreground">
+                  {currentBarbers} {currentBarbers === 1 ? "barbeiro" : "barbeiros"}
+                </strong>
+                . Para adicionar novos profissionais, faça upgrade para o plano{" "}
+                <strong className="text-foreground">{neededTier.name}</strong>.
+              </>
+            )}
           </p>
+
+          {/* Card Resumo do Plano Recomendado */}
+          <div className="w-full rounded-2xl border border-border/70 bg-secondary/30 p-5 mt-5 mb-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <span className="text-[13px] font-semibold text-foreground/85">
+                  Plano Recomendado: DUB {neededTier.name}
+                </span>
+              </div>
+              <div className="text-right">
+                {neededTier.isCustomPrice ? (
+                  <span className="text-[13px] font-bold text-foreground">Sob Consulta</span>
+                ) : (
+                  <span className="text-[14px] font-black text-foreground">
+                    R$ {neededTier.price.toFixed(2).replace(".", ",")}{" "}
+                    <span className="text-[10px] font-normal text-muted-foreground">/mês</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="text-[13px] text-muted-foreground space-y-2 pt-2 border-t border-border/30">
+              {isUnitsLimit ? (
+                <>
+                  <p className="flex items-center gap-2 text-[14px] text-foreground/90 font-medium">
+                    <span className="text-emerald-500 font-bold">✓</span> Até 3 unidades / filiais
+                  </p>
+                  <p className="flex items-center gap-2 text-[14px] text-foreground/90 font-medium">
+                    <span className="text-emerald-500 font-bold">✓</span> Até 9 barbeiros na equipe
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="flex items-center gap-2 text-[14px] text-foreground/90 font-medium">
+                    <span className="text-emerald-500 font-bold">✓</span> Suporta até{" "}
+                    {neededTier.maxBarbers === 999999 ? "ilimitados" : neededTier.maxBarbers}{" "}
+                    barbeiros
+                  </p>
+                  <p className="flex items-center gap-2 text-[14px] text-foreground/90 font-medium">
+                    <span className="text-emerald-500 font-bold">✓</span> Gestão de comissões por profissional
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Botões de Ação (56px CTA + 44px ação secundária) */}
+          <div className="w-full space-y-2.5">
+            <button
+              onClick={handleNavigateToPlans}
+              className="w-full h-14 rounded-[28px] text-[16px] font-semibold bg-foreground text-background hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            >
+              <Zap className="w-4 h-4" />
+              <span>Ver Planos & Fazer Upgrade</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full h-11 rounded-full text-[14px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              Agora não
+            </button>
+          </div>
         </motion.div>
       </div>
-    </motion.div>
-  );
-}
-
-/* ─── Subcomponent ─── */
-function BenefitRow({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <Icon className="w-3.5 h-3.5 text-primary" />
-      </div>
-      <span className="text-[12px] text-foreground/80">{text}</span>
-    </div>
+    </AnimatePresence>
   );
 }

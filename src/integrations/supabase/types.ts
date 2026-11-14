@@ -152,6 +152,7 @@ export type Database = {
           barbeiro_id: string | null
           cancelado_em: string | null
           cliente_confirmou: boolean | null
+          cliente_nome: string | null
           created_at: string | null
           criado_por: string | null
           cupom_id: string | null
@@ -184,6 +185,7 @@ export type Database = {
           barbeiro_id?: string | null
           cancelado_em?: string | null
           cliente_confirmou?: boolean | null
+          cliente_nome?: string | null
           created_at?: string | null
           criado_por?: string | null
           cupom_id?: string | null
@@ -216,6 +218,7 @@ export type Database = {
           barbeiro_id?: string | null
           cancelado_em?: string | null
           cliente_confirmou?: boolean | null
+          cliente_nome?: string | null
           created_at?: string | null
           criado_por?: string | null
           cupom_id?: string | null
@@ -1104,6 +1107,7 @@ export type Database = {
           asaas_account_id: string | null
           asaas_wallet_id: string | null
           ativo: boolean | null
+          banco_nome: string | null
           comissao_pct: number | null
           conta_configurada: boolean
           conta_financeira_id: string | null
@@ -1129,6 +1133,7 @@ export type Database = {
           asaas_account_id?: string | null
           asaas_wallet_id?: string | null
           ativo?: boolean | null
+          banco_nome?: string | null
           comissao_pct?: number | null
           conta_configurada?: boolean
           conta_financeira_id?: string | null
@@ -1154,6 +1159,7 @@ export type Database = {
           asaas_account_id?: string | null
           asaas_wallet_id?: string | null
           ativo?: boolean | null
+          banco_nome?: string | null
           comissao_pct?: number | null
           conta_configurada?: boolean
           conta_financeira_id?: string | null
@@ -1687,6 +1693,71 @@ export type Database = {
             columns: ["vencedor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_booking_blocks: {
+        Row: {
+          barbeiro_id: string | null
+          blocked_by_user_id: string
+          client_user_id: string
+          created_at: string
+          id: string
+          scope: string
+          tenant_id: string
+          unidade_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          barbeiro_id?: string | null
+          blocked_by_user_id: string
+          client_user_id: string
+          created_at?: string
+          id?: string
+          scope: string
+          tenant_id: string
+          unidade_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          barbeiro_id?: string | null
+          blocked_by_user_id?: string
+          client_user_id?: string
+          created_at?: string
+          id?: string
+          scope?: string
+          tenant_id?: string
+          unidade_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_booking_blocks_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: false
+            referencedRelation: "barbeiros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_booking_blocks_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: false
+            referencedRelation: "barbeiros_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_booking_blocks_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_booking_blocks_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_unidades"
             referencedColumns: ["id"]
           },
         ]
@@ -2327,6 +2398,50 @@ export type Database = {
             columns: ["barbeiro_id"]
             isOneToOne: false
             referencedRelation: "barbeiros_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      discount_coupons: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          nome: string | null
+          percent: number
+          starts_at: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          nome?: string | null
+          percent: number
+          starts_at?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          nome?: string | null
+          percent?: number
+          starts_at?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discount_coupons_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -4926,42 +5041,51 @@ export type Database = {
       }
       saques: {
         Row: {
+          banco_destino: string | null
           barbeiro_id: string | null
           chave_pix_id: string | null
           chave_pix_tipo: string
           chave_pix_valor: string
           created_at: string
+          end_to_end_id: string | null
           id: string
           motivo_cancelamento: string | null
           processado_em: string | null
+          raw_response: Json | null
           status: string
           updated_at: string
           user_id: string
           valor: number
         }
         Insert: {
+          banco_destino?: string | null
           barbeiro_id?: string | null
           chave_pix_id?: string | null
           chave_pix_tipo: string
           chave_pix_valor: string
           created_at?: string
+          end_to_end_id?: string | null
           id?: string
           motivo_cancelamento?: string | null
           processado_em?: string | null
+          raw_response?: Json | null
           status?: string
           updated_at?: string
           user_id: string
           valor: number
         }
         Update: {
+          banco_destino?: string | null
           barbeiro_id?: string | null
           chave_pix_id?: string | null
           chave_pix_tipo?: string
           chave_pix_valor?: string
           created_at?: string
+          end_to_end_id?: string | null
           id?: string
           motivo_cancelamento?: string | null
           processado_em?: string | null
+          raw_response?: Json | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -5526,6 +5650,8 @@ export type Database = {
           destaque: boolean | null
           funcionalidades: Json | null
           id: string
+          max_barbeiros: number | null
+          max_unidades: number | null
           nome: string
           preco_anual: number | null
           preco_mensal: number
@@ -5538,6 +5664,8 @@ export type Database = {
           destaque?: boolean | null
           funcionalidades?: Json | null
           id?: string
+          max_barbeiros?: number | null
+          max_unidades?: number | null
           nome: string
           preco_anual?: number | null
           preco_mensal?: number
@@ -5550,6 +5678,8 @@ export type Database = {
           destaque?: boolean | null
           funcionalidades?: Json | null
           id?: string
+          max_barbeiros?: number | null
+          max_unidades?: number | null
           nome?: string
           preco_anual?: number | null
           preco_mensal?: number
@@ -6237,6 +6367,39 @@ export type Database = {
           },
         ]
       }
+      whatsapp_signup_otp: {
+        Row: {
+          attempts: number
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          phone: string
+          verification_token: string | null
+          verified_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          code: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          phone: string
+          verification_token?: string | null
+          verified_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          phone?: string
+          verification_token?: string | null
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       whatsapp_verification_codes: {
         Row: {
           attempts: number | null
@@ -6540,6 +6703,26 @@ export type Database = {
           total_saques: number
         }[]
       }
+      cancellation_fee_amount:
+        | {
+            Args: {
+              p_config: Json
+              p_now: string
+              p_price: number
+              p_start: string
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              p_config: Json
+              p_is_no_show?: boolean
+              p_now: string
+              p_price: number
+              p_start: string
+            }
+            Returns: number
+          }
       check_barbeiro_email_exists: {
         Args: { p_email: string }
         Returns: boolean
@@ -6555,6 +6738,15 @@ export type Database = {
           rows_deleted: number
           table_name: string
         }[]
+      }
+      confirm_tenant_plan_payment: {
+        Args: {
+          p_correlation_id: string
+          p_remote_payload?: Json
+          p_renewal?: boolean
+          p_value_centavos: number
+        }
+        Returns: Json
       }
       confirm_woovi_payment: {
         Args: { p_correlation_id: string; p_value_centavos: number }
@@ -6645,6 +6837,10 @@ export type Database = {
           transacao_id: string
         }[]
       }
+      dispensar_debito_cliente: {
+        Args: { p_cliente_id: string; p_item_id?: string; p_motivo?: string }
+        Returns: Json
+      }
       ensure_default_loyalty_promotion: {
         Args: { p_tenant_id: string }
         Returns: undefined
@@ -6681,6 +6877,10 @@ export type Database = {
         Returns: Json
       }
       get_barber_home_bundle: { Args: { p_barbeiro_id: string }; Returns: Json }
+      get_barber_pending_debts: {
+        Args: { p_barbeiro_id: string }
+        Returns: Json
+      }
       get_blocked_barber_ids: { Args: { p_user_id: string }; Returns: string[] }
       get_client_campaigns: { Args: { p_tenant_id?: string }; Returns: Json }
       get_client_home_bundle: { Args: never; Returns: Json }
@@ -6743,6 +6943,7 @@ export type Database = {
         }[]
       }
       get_meus_pedidos_loja: { Args: { p_cliente_id: string }; Returns: Json }
+      get_my_cancellation_debts: { Args: never; Returns: Json }
       get_next_available_date: {
         Args: {
           p_barbeiro_id: string
@@ -6826,6 +7027,49 @@ export type Database = {
           trial_end: string
         }[]
       }
+      get_tenant_subscription_v2: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          days_overdue: number
+          days_remaining: number
+          is_active: boolean
+          is_blocked: boolean
+          is_exempt: boolean
+          is_expired: boolean
+          is_overdue: boolean
+          is_trial: boolean
+          next_billing_date: string
+          plano_nome: string
+          preco_mensal: number
+          qtd_barbeiros: number
+          status: string
+          trial_end: string
+          trial_start: string
+        }[]
+      }
+      get_tenant_subscription_v3: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          days_overdue: number
+          days_remaining: number
+          is_active: boolean
+          is_blocked: boolean
+          is_exempt: boolean
+          is_expired: boolean
+          is_overdue: boolean
+          is_trial: boolean
+          max_barbeiros: number
+          max_unidades: number
+          next_billing_date: string
+          plano_id: string
+          plano_nome: string
+          preco_mensal: number
+          qtd_barbeiros: number
+          status: string
+          trial_end: string
+          trial_start: string
+        }[]
+      }
       get_user_available_credits: {
         Args: { p_user_id: string }
         Returns: number
@@ -6874,11 +7118,19 @@ export type Database = {
         Args: { p_tenant_id: string }
         Returns: boolean
       }
+      is_tenant_staff: {
+        Args: { _tenant_id: string; _user_id?: string }
+        Returns: boolean
+      }
       mark_available_redemption_as_used: {
         Args: { p_appointment_id: string; p_reason?: string; p_user_id: string }
         Returns: Json
       }
       normalize_br_phone: { Args: { p_phone: string }; Returns: string }
+      owns_cancellation_debt: {
+        Args: { p_barber: string; p_client: string; p_tenant: string }
+        Returns: boolean
+      }
       pix_signal_bank_opened: {
         Args: { p_charge_id: string }
         Returns: undefined
@@ -6890,6 +7142,10 @@ export type Database = {
       profile_visible_to_tenant_admin: {
         Args: { p_profile_id: string }
         Returns: boolean
+      }
+      quote_client_cancellation: {
+        Args: { p_appointment: string; p_user: string }
+        Returns: Json
       }
       refresh_barber_home_snapshot: {
         Args: { p_barbeiro_id: string }
@@ -6927,6 +7183,14 @@ export type Database = {
         Args: { p_current_pin?: string; p_new_pin: string }
         Returns: boolean
       }
+      settle_cancellation_debt: {
+        Args: { p_cents: number; p_correlation: string }
+        Returns: Json
+      }
+      settle_client_debts: {
+        Args: { p_client_id: string; p_correlation?: string }
+        Returns: Json
+      }
       store_create_order_with_reservations: {
         Args: {
           p_items: Json
@@ -6951,6 +7215,10 @@ export type Database = {
           produto_id: string
           sold_qty: number
         }[]
+      }
+      update_agendamento_cliente_nome: {
+        Args: { p_agendamento_id: string; p_cliente_nome: string }
+        Returns: boolean
       }
       use_credits_atomic: {
         Args: { p_amount: number; p_appointment_id: string; p_user_id: string }

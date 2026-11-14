@@ -10,10 +10,12 @@ import {
   Send, Star, MessageSquare, ArrowRight,
 } from "lucide-react";
 import { CopyCode } from "@/components/ui/copy-code-button";
+import { BarberShareLinkCard } from "@/components/barber/BarberShareLinkModal";
 import { SetupCompletionBanner } from "@/components/barber/SetupCompletionBanner";
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import { useBarberAvaliacoes } from "@/hooks/useBarberAvaliacoes";
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
+import { useBarbershopPendingFields } from "@/hooks/useBarbershopPendingFields";
 import { useAtualizarBannerAdmin } from "@/hooks/useAdminMutations";
 import { resolveOwnerIdentity } from "@/lib/ownerIdentity";
 import { ThemeSegmentedToggle } from "@/components/profile/ThemeSegmentedToggle";
@@ -21,6 +23,7 @@ import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
 import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
 import { ProfileInstagramBanner } from "@/components/profile/ProfileInstagramBanner";
 import { ProfilePortfolioCarousel } from "@/components/profile/ProfilePortfolioCarousel";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 interface BarberMobileProfileProps {
   barberContext: BarberContext;
@@ -90,6 +93,7 @@ export function BarberMobileProfile({
   });
 
   const cached = typeof window !== "undefined" ? readProfileCache(barberContext.barbeiroId) : null;
+  const { totalPendingCount: companyPendingCount } = useBarbershopPendingFields(barberContext.tenantId);
 
   const [loggingOut, setLoggingOut] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -129,7 +133,7 @@ export function BarberMobileProfile({
           supabase.from("profiles").select("avatar_url, banner_url").eq("id", user.id).maybeSingle(),
           supabase
             .from("barbeiros")
-            .select("foto_url, apelido, tenant_id, tenants:tenant_id(id, slug, nome, logo_url, banner_url)")
+            .select("foto_url, apelido, tenant_id, tenants:tenant_id(id, slug, nome, logo_url)")
             .eq("id", barberContext.barbeiroId)
             .maybeSingle(),
           supabase.rpc("get_admin_banner_for_barber", { p_barbeiro_id: barberContext.barbeiroId }),
@@ -140,16 +144,32 @@ export function BarberMobileProfile({
         const barbData = barbeiroRes.data as any;
         const tenant = barbData?.tenants ?? null;
 
-        const nextAvatar = profileRes.data?.avatar_url || barbData?.foto_url || null;
-        const nextBanner =
+        let nextAvatar = profileRes.data?.avatar_url || barbData?.foto_url || null;
+        let nextBanner =
           profileRes.data?.banner_url ||
           ((!bannerRes.error && bannerRes.data) ? (bannerRes.data as string) : null) ||
-          tenant?.banner_url ||
           null;
-        const nextTenantSlug = tenant?.slug || null;
-        const nextTenantName = tenant?.nome || "";
-        const nextTenantLogo = tenant?.logo_url || null;
+        let nextTenantSlug = tenant?.slug || null;
+        let nextTenantName = tenant?.nome || "";
+        let nextTenantLogo = tenant?.logo_url || null;
         const nextProfileName = barberContext.apelido || barbData?.apelido || identity.displayName || "Barbeiro";
+
+        const effectiveTenantId = barberContext.tenantId || barbData?.tenant_id || tenant?.id;
+
+        // Fallback direto na tabela tenants caso a junção nested não traga o slug
+        if (!nextTenantSlug && effectiveTenantId) {
+          const { data: directTenant } = await supabase
+            .from("tenants")
+            .select("id, slug, nome, logo_url")
+            .eq("id", effectiveTenantId)
+            .maybeSingle();
+
+          if (directTenant?.slug) {
+            nextTenantSlug = directTenant.slug;
+            if (!nextTenantName) nextTenantName = directTenant.nome;
+            if (!nextTenantLogo) nextTenantLogo = directTenant.logo_url;
+          }
+        }
 
         setAvatarUrl(nextAvatar);
         setBannerUrl(nextBanner);
@@ -159,7 +179,6 @@ export function BarberMobileProfile({
         setProfileName(nextProfileName);
 
         let nextUnits = 0;
-        const effectiveTenantId = barberContext.tenantId || barbData?.tenant_id || tenant?.id;
         if (effectiveTenantId) {
           const { count } = await supabase
             .from("tenant_unidades")
@@ -398,12 +417,15 @@ export function BarberMobileProfile({
             </div>
           </div>
 
-          {/* Link de copiar — compacto e elegante */}
-          {tenantSlug && (
-            <div className="mt-4">
-              <CopyCode code={fullLink} label={displayLink} />
-            </div>
-          )}
+          {/* Link de agendamento do barbeiro com 1-click Copiar & WhatsApp */}
+          <div className="mt-4">
+            <BarberShareLinkCard
+              barbeiroId={barberContext.barbeiroId}
+              barberName={profileName || barberContext.apelido}
+              tenantSlug={tenantSlug}
+              tenantName={tenantName}
+            />
+          </div>
         </div>
 
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
@@ -510,6 +532,7 @@ export function BarberMobileProfile({
                   ? "Horários, serviços, clientes, equipe e dados"
                   : "Horários, serviços, clientes, avaliações e perfil"
               }
+              pendingCount={isTenantAdmin ? companyPendingCount : 0}
               onClick={handleConfigBarbeariaClick}
             />
             <ProfileMenuItem
@@ -538,7 +561,7 @@ export function BarberMobileProfile({
             onClick={() =>
               window.open(
                 "https://wa.me/5511963390043?text=" +
-                  encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"),
+                encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"),
                 "_blank",
                 "noopener,noreferrer"
               )
@@ -568,11 +591,8 @@ export function BarberMobileProfile({
                 if (loggingOut) return;
                 setLoggingOut(true);
                 try {
-                  await supabase.auth.signOut();
-                  localStorage.removeItem("userRole");
-                  localStorage.removeItem("barbeiroId");
+                  await signOutAndClearDevice();
                   toast.success("Sessão encerrada");
-                  window.location.href = "/login";
                 } catch {
                   toast.error("Erro ao sair");
                   setLoggingOut(false);
@@ -627,11 +647,13 @@ function ProfileMenuItem({
   label,
   description,
   badge,
+  pendingCount,
   onClick,
 }: {
   label: string;
   description: string;
   badge?: string;
+  pendingCount?: number;
   onClick: () => void;
 }) {
   return (
@@ -655,7 +677,14 @@ function ProfileMenuItem({
           {description}
         </p>
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      <div className="flex items-center gap-2 shrink-0">
+        {(pendingCount ?? 0) > 0 && (
+          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white font-bold text-[11px] flex items-center justify-center leading-none shadow-xs">
+            {pendingCount}
+          </span>
+        )}
+        <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      </div>
     </button>
   );
 }

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { TimelineAppointment } from "../AdminAgenda";
 import { supabase } from "@/integrations/supabase/client";
 import { Scissors } from "lucide-react";
-import { isWhatsAppAppointment } from "@/lib/walkInName";
+import { isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 
 interface PremiumWeekViewProps {
@@ -249,7 +249,7 @@ export function PremiumWeekView({
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-[9px] text-foreground/70 truncate block">
-                      {apt.profile?.nome?.split(' ')[0] || "Cliente"}
+                      {resolveClienteDisplayName(apt.observacoes, apt.profile?.nome, "Cliente", apt.cliente_nome).split(' ')[0]}
                     </span>
                     {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge size="sm" showLabel={false} />}
                   </div>

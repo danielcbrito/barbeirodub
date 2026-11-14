@@ -1,0 +1,33 @@
+CORREÇÃO: SALDO DA CARTEIRA PASSA A VIR DA SUBCONTA WOOVI (23/10/2026)
+
+Caso: barbeiro Jose Jailson Moreira Dos Santos Junior (0ee2c3be-9ef4-4933-83c7-bded1141e5c5,
+chave josejuniorjjj1997@gmail.com). App mostrava R$ 41,60, diferente da subconta Woovi.
+
+Causa raiz (Backend / Edge store-api, ação woovi_get_balance):
+- O saldo era CALCULADO localmente (cobranças pagas em woovi_charges - saques no banco),
+  sem consultar a Woovi. Qualquer movimento fora do app (taxas, saques manuais, ajustes)
+  deixava o valor divergente.
+
+Correção:
+- woovi_get_balance agora consulta GET /api/v1/subaccount/{pixKey} na Woovi (fonte de verdade).
+- Retido (aguardando corte) continua vindo de woovi_blocked_centavos e é subtraído só do disponível.
+- Se a Woovi falhar, cai no cálculo local (source = "local_fallback") e registra o erro no log.
+- Campo "source" na resposta: "woovi_subaccount" ou "local_fallback".
+
+Vale para todos os barbeiros. Função publicada: store-api.
+Não verificado: valor exibido com login do José (sem sessão de teste disponível).
+
+ATUALIZAÇÃO 10:40 — CAUSA REAL (função woovi-wallet, a que a tela usa)
+- A tela chama woovi-wallet (não store-api). Ela lia a subconta (R$ 60,40), mas limitava o saldo a
+  "caixa da conta matriz - saldo das outras subcontas", reduzindo para R$ 41,60.
+- Corrigido: balance_centavos = saldo bruto da subconta; disponível = subconta - retido (aguardando corte).
+- A liquidez da matriz continua sendo checada só no saque (master_available_centavos), com mensagem clara
+  se o caixa da matriz não cobrir o valor pedido.
+
+ATUALIZAÇÃO 10:45 — ABRANGÊNCIA (TODOS OS BARBEIROS E ADMINS)
+- Barbeiro (/barbeiro/carteira) e Admin (/admin/financeiro) usam a mesma tela (CarteiraPage) e a mesma
+  função (woovi-wallet) — a correção vale para todos, sem ajuste individual.
+- Tela secundária (WooviWalletSheet / store-api) também corrigida para ler a subconta.
+- Telas legadas do módulo Efí (FinancialModule/carteiras.saldo_disponivel) não estão montadas em nenhuma rota.
+- Regra registrada em AGENTS.md: o saldo exibido é sempre o bruto da subconta Woovi; a liquidez da matriz
+  só trava o saque.

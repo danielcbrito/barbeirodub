@@ -26,13 +26,14 @@ import {
   Plus, Search, Eye, EyeOff, Users, UserX,
   Loader2, Scissors, Mail, Phone, Lock, Trash2,
   AlertTriangle, Inbox, ChevronRight, Calendar, CreditCard,
-  Percent, CheckCircle, XCircle,
+  Percent, CheckCircle, XCircle, RotateCcw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { UpgradePlanModal, getRequiredTier, getPlanLimitByPrice } from "@/components/tenant/UpgradePlanModal";
+import { useTenantSubscription } from "@/hooks/useTenantSubscription";
 
 /* ─── Types ─── */
 interface Barbeiro {
@@ -60,14 +61,16 @@ interface TenantBarbeirosProps {
  * Módulo de gestão de barbeiros do tenant.
  * Design idêntico ao AdminClientes — lista com detalhe full-page.
  */
-export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subscriptionStatus = "active", subscriptionPriceMonthly }: TenantBarbeirosProps) {
+export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subscriptionStatus: propStatus, subscriptionPriceMonthly: propPrice }: TenantBarbeirosProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const viewId = searchParams.get("view");
+  const subscription = useTenantSubscription(tenantId);
 
   const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -98,30 +101,12 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   /**
-   * Verifica se o tenant pode adicionar mais barbeiros.
-   * Usa o preço do plano para determinar o limite real.
+   * Verifica se o tenant pode adicionar mais barbeiros respeitando o limite do plano.
+   * Barbearia DUB é isenta e ilimitada.
    */
   const canAddBarber = (): boolean => {
     const activeBarbers = barbeiros.filter((b) => b.ativo).length;
-
-    // Trial: máximo 1 barbeiro
-    if (subscriptionStatus === "trialing") {
-      return activeBarbers < 1;
-    }
-
-    // Sem assinatura ou expirada: bloqueia
-    if (subscriptionStatus === "expired" || subscriptionStatus === "no_subscription") {
-      return false;
-    }
-
-    // Ativo: limite baseado no plano pago (preço mensal)
-    if (subscriptionStatus === "active" && subscriptionPriceMonthly) {
-      const paidTier = getPlanLimitByPrice(subscriptionPriceMonthly);
-      return activeBarbers < paidTier;
-    }
-
-    // Fallback: permite se ainda não temos dados do plano
-    return true;
+    return subscription.canAddBarber(activeBarbers);
   };
 
   /** Intercepta o clique de "Novo Barbeiro" */
@@ -148,6 +133,13 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
 
   /* ─── Data loading ─── */
   const loadBarbeiros = async () => {
+    if (!tenantId) {
+      setBarbeiros([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setLoadError(null);
     try {
       const { data, error } = await supabase
         .from("barbeiros")
@@ -182,6 +174,7 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
       setBarbeiros(enriched);
     } catch (error) {
       console.error("Erro ao carregar barbeiros:", error);
+      setLoadError("Não foi possível carregar os barbeiros da barbearia.");
       toast.error("Erro ao carregar barbeiros");
     } finally {
       setLoading(false);
@@ -345,6 +338,22 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError && barbeiros.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 px-4 text-center">
+        <AlertTriangle className="w-10 h-10 text-amber-500/80" strokeWidth={1.5} />
+        <p className="text-sm text-muted-foreground">{loadError}</p>
+        <button
+          onClick={() => loadBarbeiros()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Tentar novamente
+        </button>
       </div>
     );
   }
@@ -524,7 +533,7 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
           <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/30">
             <div className="flex items-center gap-2 px-4 h-16">
               <button
-                onClick={() => navigate(`${basePath}/configuracoes-perfil`)}
+                onClick={() => navigate(`${basePath}/config-barbearia`)}
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all lg:hidden"
                 aria-label="Voltar"
               >
@@ -832,7 +841,7 @@ export function TenantBarbeiros({ tenantId, basePath = "/minha-barbearia", subsc
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         currentBarbers={barbeiros.filter((b) => b.ativo).length}
-        isTrial={subscriptionStatus === "trialing"}
+        isTrial={(propStatus ?? (subscription.isTrial ? "trialing" : "")) === "trialing"}
       />
     </div>
   );

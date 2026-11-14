@@ -52,28 +52,31 @@ export default function TenantPublicPage() {
 
         // 2) Compatibilidade: resolver como barbeiro legado (id UUID ou apelido)
         let barberTenantId: string | null = null;
+        let resolvedBarberId: string | null = null;
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
 
         if (isUuid) {
           const { data: barberById } = await supabase
             .from("barbeiros")
-            .select("tenant_id")
+            .select("id, tenant_id")
             .eq("id", slug)
             .eq("ativo", true)
             .is("deleted_at", null)
             .maybeSingle();
           barberTenantId = barberById?.tenant_id ?? null;
+          resolvedBarberId = barberById?.id ?? null;
         }
 
         if (!barberTenantId) {
           const { data: barberByNickname } = await supabase
             .from("barbeiros")
-            .select("tenant_id")
+            .select("id, tenant_id")
             .ilike("apelido", slug)
             .eq("ativo", true)
             .is("deleted_at", null)
             .maybeSingle();
           barberTenantId = barberByNickname?.tenant_id ?? null;
+          resolvedBarberId = barberByNickname?.id ?? null;
         }
 
         if (!barberTenantId) {
@@ -92,7 +95,8 @@ export default function TenantPublicPage() {
           return;
         }
 
-        navigate(`/${tenantByBarber.slug}`, { replace: true });
+        const queryParam = resolvedBarberId ? `?barbeiro=${resolvedBarberId}` : "";
+        navigate(`/${tenantByBarber.slug}${queryParam}`, { replace: true });
       } catch {
         setErrorMessage("Erro ao resolver o link da barbearia.");
       }

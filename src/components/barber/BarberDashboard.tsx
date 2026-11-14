@@ -1,7 +1,7 @@
 // @ts-nocheck — tipos do banco desatualizados para este arquivo; comportamento em produção validado.
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -38,11 +38,13 @@ import { BarberHomeCarousel } from "@/components/barber/BarberHomeCarousel";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { QUERY_KEYS } from "@/lib/queryKeys";
-import { STALE_TIMES } from "@/lib/queryConstants";
+import { useBarberReportData } from "@/hooks/useBarberReportData";
+import { monthRevenue, revenueComparison } from "@/lib/barberReportMetrics";
 import { useBarberDashboard, type DashboardData } from "@/hooks/useBarberDashboard";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
 import type { BarberContext } from "@/pages/Barbeiro";
+import { useTenantSubscription } from "@/hooks/useTenantSubscription";
 import { NotificationBell } from "@/components/NotificationBell";
 import { NextAppointmentCard } from "@/components/shared/NextAppointmentCard";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
@@ -99,6 +101,7 @@ export function BarberDashboard({
   const queryClient = useQueryClient();
   const { data: dashboardData } = useBarberDashboard(barberContext.barbeiroId);
   const data = dashboardData ?? EMPTY_DASHBOARD;
+  const subscription = useTenantSubscription(barberContext.tenantId || null);
 
   const [revenueVisible, setRevenueVisible] = useState(true);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
@@ -261,108 +264,16 @@ export function BarberDashboard({
     return list;
   }, [now]);
 
-  const sixMonthsStart = useMemo(
-    () => format(subMonths(startOfMonth(now), 5), "yyyy-MM-01"),
-    [now]
-  );
-  const currentMonthEnd = useMemo(
-    () => format(endOfMonth(now), "yyyy-MM-dd"),
-    [now]
-  );
-
-  const { data: historicalAppointments = [] } = useQuery({
-    queryKey: ["barber-chart-appointments", barberContext.barbeiroId],
-    queryFn: async () => {
-      if (!barberContext.barbeiroId) return [];
-      const { data: apts } = await supabase
-        .from("agendamentos")
-        .select("id, preco, data, status, is_free, servico:servicos(preco)")
-        .eq("barbeiro_id", barberContext.barbeiroId)
-        .gte("data", sixMonthsStart)
-        .lte("data", currentMonthEnd)
-        .in("status", ["completed", "confirmed"])
-        .limit(3000);
-      return apts || [];
-    },
-    staleTime: STALE_TIMES.AGENDA,
-  });
-
-  const { data: historicalPlans = [] } = useQuery({
-    queryKey: ["barber-chart-plans", barberContext.barbeiroId],
-    queryFn: async () => {
-      if (!barberContext.barbeiroId) return [];
-      const { data: cash } = await supabase
-        .from("pagamentos_plano_barbearia")
-        .select("valor, created_at")
-        .eq("barbeiro_id", barberContext.barbeiroId)
-        .gte("created_at", `${sixMonthsStart}T00:00:00`)
-        .lte("created_at", `${currentMonthEnd}T23:59:59`);
-      return cash || [];
-    },
-    staleTime: STALE_TIMES.AGENDA,
-  });
+  const { data: reportData, isLoading: reportLoading, isError: reportError } = useBarberReportData(barberContext.barbeiroId, barberContext.tenantId);
 
   const chartData = useMemo(() => {
-    // 1. Calcula o total real de cada um dos 6 meses
-    const rawRevenues = availableMonths.map((m, idx) => {
-      const mStr = format(m.date, "yyyy-MM");
-      const isCur = idx === 5;
-      const isPrev = idx === 4;
-
-      const aptSum = historicalAppointments
-        .filter((a) => a.data?.startsWith(mStr))
-        .reduce((acc, a) => {
-          if (a.is_free) return acc;
-          const p = a.preco != null && Number(a.preco) > 0 ? Number(a.preco) : Number((a.servico as any)?.preco || 0);
-          return acc + p;
-        }, 0);
-
-      const planSum = historicalPlans
-        .filter((p) => p.created_at?.startsWith(mStr))
-        .reduce((acc, p) => acc + Number(p.valor || 0), 0);
-
-      const totalSum = aptSum + planSum;
-
-      if (isCur && data.monthRevenue > 0) {
-        return Math.max(data.monthRevenue, totalSum);
-      }
-      if (isPrev && data.lastMonthRevenue > 0) {
-        return Math.max(data.lastMonthRevenue, totalSum);
-      }
-
-      return totalSum;
-    });
-
-    const activeBaseRev = rawRevenues[5] > 0 ? rawRevenues[5] : (data.monthRevenue > 0 ? data.monthRevenue : 0);
-
-    // 2. Preenche meses anteriores progressivos se for barbearia recente com faturamento no mês
-    const monthRevenues = rawRevenues.map((val, idx) => {
-      if (val > 0) return val;
-      if (activeBaseRev > 0) {
-        const progressionFactors = [0.65, 0.72, 0.80, 0.88, 0.94, 1.0];
-        return Math.round(activeBaseRev * progressionFactors[idx]);
-      }
-      return 0;
-    });
-
-    const currentRev = monthRevenues[selectedMonthIndex] ?? monthRevenues[5];
-    const prevRev = selectedMonthIndex > 0
-      ? monthRevenues[selectedMonthIndex - 1]
-      : (monthRevenues[0] > 0 ? Math.round(monthRevenues[0] * 0.88) : 0);
-
-    let diff = currentRev - prevRev;
-    let growthPercent = 0;
-
-    if (prevRev > 0) {
-      growthPercent = Number(((diff / prevRev) * 100).toFixed(1));
-    } else if (currentRev > 0) {
-      const estimatedPrev = Math.round(currentRev * 0.86);
-      diff = currentRev - estimatedPrev;
-      growthPercent = Number(((diff / estimatedPrev) * 100).toFixed(1));
-    } else {
-      diff = 0;
-      growthPercent = 0;
-    }
+    const monthRevenues = availableMonths.map(m => monthRevenue(reportData, m.key).total);
+    const currentRev = monthRevenues[selectedMonthIndex] ?? 0;
+    const selectedDate = availableMonths[selectedMonthIndex]?.date ?? now;
+    const prevRev = monthRevenue(reportData, format(subMonths(selectedDate, 1), "yyyy-MM")).total;
+    const comparison = revenueComparison(currentRev, prevRev);
+    const diff = comparison.delta;
+    const growthPercent = comparison.percent;
 
     const width = 340;
     const height = 74;
@@ -429,7 +340,7 @@ export function BarberDashboard({
       growthPercent,
       monthRevenues,
     };
-  }, [availableMonths, selectedMonthIndex, data.monthRevenue, data.lastMonthRevenue, historicalAppointments, metaMensal]);
+  }, [availableMonths, selectedMonthIndex, reportData, now]);
 
   return (
     <div
@@ -478,6 +389,51 @@ export function BarberDashboard({
         </div>
       </header>
 
+      {/* ─── Aviso Minimalista de Mensalidade em Atraso ou Fim de Teste ─── */}
+      {subscription.showOverdueWarning && (
+        <div 
+          onClick={() => navigate(`${basePath}/config-barbearia?screen=meu-plano`)}
+          className="w-full p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 cursor-pointer hover:bg-amber-500/15 active:scale-[0.99] transition-all shadow-xs"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-semibold text-foreground truncate">
+                Mensalidade em atraso ({subscription.daysOverdue} {subscription.daysOverdue === 1 ? 'dia' : 'dias'})
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Venceu dia 25. Regularize seu plano para evitar o bloqueio automático.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-xl bg-amber-500 text-black font-bold text-[11px] shrink-0">
+            Pagar
+          </span>
+        </div>
+      )}
+
+      {subscription.showTrialWarning && (
+        <div 
+          onClick={() => navigate(`${basePath}/config-barbearia?screen=meu-plano`)}
+          className="w-full p-3 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between gap-3 cursor-pointer hover:bg-blue-500/15 active:scale-[0.99] transition-all shadow-xs"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Sparkles className="w-4 h-4 text-blue-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-semibold text-foreground truncate">
+                Teste grátis: restam {subscription.daysRemaining} {subscription.daysRemaining === 1 ? 'dia' : 'dias'}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Escolha seu plano para continuar aproveitando todas as funções.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-xl bg-blue-500 text-white font-bold text-[11px] shrink-0">
+            Ver planos
+          </span>
+        </div>
+      )}
+
       {/* ─── 2. Barra de Busca Ampla e Confortável ─── */}
       <div
         onClick={() => setIsGlobalSearchOpen(true)}
@@ -494,7 +450,7 @@ export function BarberDashboard({
         <div className="grid grid-cols-4 gap-2 sm:gap-4">
           <button
             type="button"
-            onClick={() => navigate(`${basePath}/horarios`)}
+            onClick={() => navigate(`${basePath}/config-barbearia?screen=horarios`)}
             className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
           >
             <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
@@ -507,7 +463,7 @@ export function BarberDashboard({
 
           <button
             type="button"
-            onClick={() => navigate(`${basePath}/clientes`)}
+            onClick={() => navigate(`${basePath}/config-barbearia?screen=clientes`)}
             className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
           >
             <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
@@ -520,7 +476,7 @@ export function BarberDashboard({
 
           <button
             type="button"
-            onClick={() => navigate(`${basePath}/servicos`)}
+            onClick={() => navigate(`${basePath}/config-barbearia?screen=servicos`)}
             className="flex flex-col items-center justify-center gap-1.5 p-1 active:scale-90 transition-transform touch-manipulation cursor-pointer group"
           >
             <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-transform group-hover:scale-105">
@@ -568,7 +524,7 @@ export function BarberDashboard({
       <BarberHomeCarousel basePath={basePath} />
 
       {/* ─── 6. Faturamento do Mês (Para acompanhar de forma limpa e estratégica) ─── */}
-      <section className="w-full text-left">
+      <section className="w-full text-left" aria-label="Faturamento mensal">
         <div className="w-full rounded-2xl sm:rounded-3xl bg-card/75 dark:bg-white/[0.035] border border-border/50 dark:border-white/[0.08] p-4 sm:p-5 shadow-xs space-y-2.5">
           {/* Topo do Faturamento */}
           <div className="flex items-center justify-between">
@@ -607,7 +563,7 @@ export function BarberDashboard({
           <div className="pt-0.5">
             <div className="flex items-center gap-2.5">
               <span className="text-[32px] sm:text-[38px] font-bold text-foreground tabular-nums tracking-tight leading-none">
-                {revenueVisible ? formatMoney(chartData.currentRev) : "R$\u00A0•••••"}
+                {revenueVisible ? (reportLoading ? "…" : reportError ? "Indisponível" : formatMoney(chartData.currentRev)) : "R$\u00A0•••••"}
               </span>
 
               <span
@@ -615,17 +571,17 @@ export function BarberDashboard({
                   "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums text-white shadow-xs transition-colors",
                   !revenueVisible
                     ? "bg-muted-foreground/40 text-background"
-                    : chartData.growthPercent > 0
+                    : (chartData.growthPercent ?? 0) > 0
                       ? "bg-[#34C759]"
-                      : chartData.growthPercent < 0
+                      : (chartData.growthPercent ?? 0) < 0
                         ? "bg-[#FF3B30]"
                         : "bg-muted-foreground/30 text-foreground"
                 )}
               >
                 {revenueVisible
-                  ? chartData.growthPercent > 0
+                  ? (chartData.growthPercent ?? 0) > 0
                     ? `+${chartData.growthPercent}%`
-                    : `${chartData.growthPercent}%`
+                    : chartData.growthPercent === null ? "Sem base" : `${chartData.growthPercent}%`
                   : "••%"}
               </span>
             </div>

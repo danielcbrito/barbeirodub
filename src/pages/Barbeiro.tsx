@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { BarberSidebar } from "@/components/barber/BarberSidebar";
 import { BarberMobileNavigation } from "@/components/barber/mobile/BarberMobileNavigation";
 import { BarberMobileDrawer } from "@/components/barber/mobile/BarberMobileDrawer";
+import { useTenantSubscription } from "@/hooks/useTenantSubscription";
+import { TenantPaywall } from "@/components/tenant/TenantPaywall";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
@@ -53,7 +55,7 @@ const AdminLoja = lazy(() => import("@/components/admin/loja/AdminLoja").then(m 
 const CarteiraPage = lazy(() => import("@/components/barber/CarteiraPage").then(m => ({ default: m.CarteiraPage })));
 const AppointmentDetailsPage = lazy(() => import("@/pages/AppointmentDetailsPage"));
 
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Clock, Loader2 } from "lucide-react";
 const WhatsAppConnectionPage = lazy(() => import("@/components/whatsapp/WhatsAppConnectionPage").then(m => ({ default: m.WhatsAppConnectionPage })));
 const InstagramConnectionPage = lazy(() => import("@/components/instagram/InstagramConnectionPage").then(m => ({ default: m.InstagramConnectionPage })));
 const InstagramCallbackHandler = lazy(() => import("@/components/barber/InstagramCallbackHandler").then(m => ({ default: m.InstagramCallbackHandler })));
@@ -153,11 +155,18 @@ const readCachedBarberSnapshot = (): CachedBarberSnapshot | null => {
   if (typeof window === "undefined") return null;
   // Segurança: sem sessão Supabase válida no dispositivo, não hidrata cache.
   if (!hasStoredSupabaseSession()) return null;
+  const currentUserId = getStoredSupabaseUserId();
+  if (!currentUserId) return null;
   try {
     const raw = window.localStorage.getItem(BARBER_CONTEXT_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.barberContext?.barbeiroId) return null;
+    // Previne vazamento entre contas: só hidrata se o cache pertencer ao usuário autenticado atual
+    if (parsed.barberContext.userId && parsed.barberContext.userId !== currentUserId) {
+      window.localStorage.removeItem(BARBER_CONTEXT_CACHE_KEY);
+      return null;
+    }
     return parsed as CachedBarberSnapshot;
   } catch {
     return null;
@@ -208,6 +217,8 @@ const Barbeiro = () => {
   const [pendingSetupOpen, setPendingSetupOpen] = useState(false);
   const { user: authUser, isReady: isAuthReady } = useAuthReady();
   const [isBarberApproved, setIsBarberApproved] = useState<boolean | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const subscription = useTenantSubscription(barberContext?.tenantId || null);
 
   useEffect(() => {
     if (!barberContext) return;
@@ -549,8 +560,14 @@ const Barbeiro = () => {
   }, [navigate]);
 
   const checkAuth = useCallback(async (userId: string) => {
+    setAuthError(null);
     try {
-      const { data: bootData, error: contextError } = await supabase.rpc("get_barber_boot_bundle");
+      const bootPromise = supabase.rpc("get_barber_boot_bundle");
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
+        setTimeout(() => reject(new Error("Tempo limite ao carregar dados do barbeiro")), 10000)
+      );
+
+      const { data: bootData, error: contextError } = await Promise.race([bootPromise, timeoutPromise]);
 
       if (contextError) {
         throw contextError;
@@ -564,18 +581,17 @@ const Barbeiro = () => {
       }
 
       applyValidatedBarberContext(userId, appContext);
-
-      /* Prefetch: NÃO chamamos aqui — o useEffect abaixo (dependente de
-       * barberContext) já dispara o mesmo cascade em requestIdleCallback
-       * assim que o contexto está disponível (inclusive vindo do cache
-       * localStorage, antes mesmo desta RPC responder). Duplicar aqui
-       * dobrava a carga de rede no cold start. */
     } catch (error) {
       console.error("[Barbeiro] Falha ao validar sessão:", error);
 
       try {
         // Fallback leve: valida só contexto/role sem depender do snapshot do início.
-        const { data: appContext, error: fallbackError } = await supabase.rpc("get_barber_app_context_fast");
+        const fastPromise = supabase.rpc("get_barber_app_context_fast");
+        const fastTimeout = new Promise<{ data: null; error: Error }>((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout no fallback rápido")), 6000)
+        );
+        const { data: appContext, error: fallbackError } = await Promise.race([fastPromise, fastTimeout]);
+
         if (!fallbackError && appContext) {
           applyValidatedBarberContext(userId, appContext);
           authCheckRef.current = false;
@@ -597,10 +613,10 @@ const Barbeiro = () => {
         return;
       }
 
-      toast.error("Não foi possível validar sua sessão. Tente novamente.");
-      navigate("/", { replace: true });
+      setAuthError("Não foi possível carregar as informações da sua conta. Verifique sua conexão e tente novamente.");
+      setAuthChecked(true);
     }
-  }, [applyValidatedBarberContext, barberContext, cachedSnapshot, navigate, queryClient]);
+  }, [applyValidatedBarberContext, barberContext, cachedSnapshot, queryClient]);
 
   // Pré-aquecimento agressivo: assim que existe contexto (até vindo do cache),
   // dashboard/agenda/perfil/disparo são hidratados em background. A UI nunca
@@ -694,13 +710,53 @@ const Barbeiro = () => {
   const handleCloseDrawer = () => setIsDrawerOpen(false);
 
   // Layout Loading
-  const LoadingFallback = () => <div className="min-h-[40vh] bg-background" />;
+  const LoadingFallback = () => (
+    <div className="flex flex-col items-center justify-center min-h-[40vh] w-full gap-3 py-12">
+      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      <p className="text-xs text-muted-foreground animate-pulse font-medium">Carregando...</p>
+    </div>
+  );
 
-  // Loading state: só bloqueamos se ainda não temos contexto (nem via cache
-  // nem via revalidação). A verificação de manutenção roda em background e
-  // pode assumir a tela depois — não deve atrasar o primeiro paint.
+  if (authError && !barberContext) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm space-y-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <p className="text-sm text-muted-foreground">{authError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthError(null);
+              authCheckRef.current = false;
+              if (authUser) void checkAuth(authUser.id);
+              else window.location.reload();
+            }}
+            className="h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
+          >
+            Tentar novamente
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/", { replace: true })}
+            className="h-11 w-full rounded-xl border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted transition-all cursor-pointer"
+          >
+            Voltar para o início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state: se ainda não temos contexto (nem via cache nem via revalidação)
   if (!barberContext) {
-    return <div className="min-h-app bg-background" />;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-app w-full bg-background gap-3 py-20">
+        <Loader2 className="w-9 h-9 text-primary animate-spin" />
+        <p className="text-sm text-muted-foreground animate-pulse font-medium">Carregando painel...</p>
+      </div>
+    );
   }
 
   // Setup incompleto: se ainda não foi dispensado pelo usuário nesta sessão
@@ -775,6 +831,20 @@ const Barbeiro = () => {
 
   /** Redireciona rotas restritas para financeiro no período de graça */
   const GraceRedirect = () => <Navigate to="/barbeiro/financeiro" replace />;
+
+  // ═══════ PAYWALL: Trial expirou ou atraso > 4 dias ═══════
+  if (!subscription.loading && subscription.isBlocked && !subscription.isExempt) {
+    return (
+      <TenantPaywall
+        tenantNome={tenantNome}
+        isOverdue={subscription.isOverdue}
+        onLogout={async () => {
+          await supabase.auth.signOut();
+          navigate("/login");
+        }}
+      />
+    );
+  }
 
   // ========== LAYOUT MOBILE ==========
   if (isMobile) {
@@ -865,13 +935,15 @@ const Barbeiro = () => {
                     <Route path="confirmacoes" element={<BarberConfirmacoesPendentes barberContext={barberContext} />} />
                     <Route path="agenda" element={<BarberAgenda barberContext={barberContext} />} />
                     <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/barbeiro" />} />
-                    <Route path="clientes" element={<BarberClientes barberContext={barberContext} />} />
-                    <Route path="servicos" element={<BarberCortes barberContext={barberContext} />} />
+                    <Route path="clientes" element={<Navigate to="/barbeiro/config-barbearia?screen=clientes" replace />} />
+                    <Route path="servicos" element={<Navigate to="/barbeiro/config-barbearia?screen=servicos" replace />} />
                     <Route path="relatorios" element={<EstatisticasRelatorios barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} basePath="/barbeiro/perfil" />} />
                     <Route path="financeiro" element={<BarberFinanceiro barberContext={barberContext} />} />
-                    <Route path="horarios" element={<BarberMobileHorarios barberContext={barberContext} />} />
+                    <Route path="horarios" element={<Navigate to="/barbeiro/config-barbearia?screen=horarios" replace />} />
                     <Route path="planos" element={<AdminPlanos tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
                     <Route path="meus-planos" element={<AdminMeusPlanos basePath="/barbeiro" />} />
+                    <Route path="meu-plano" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
+                    <Route path="assinatura" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
                     <Route path="loja" element={barberContext.tenantId ? <AdminLoja tenantId={barberContext.tenantId} readOnly /> : null} />
                     <Route path="cupons" element={<AdminCupons tenantId={barberContext.tenantId || undefined} />} />
                     <Route path="cupons-ativos" element={<BarberCuponsAtivos tenantId={barberContext.tenantId} />} />
@@ -882,7 +954,7 @@ const Barbeiro = () => {
                     <Route path="seguranca/*" element={<BarberSeguranca />} />
                     <Route path="perfil" element={<BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} />} />
                     <Route path="carteira" element={<CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" />} />
-                    <Route path="configuracoes-perfil" element={<BarberSettingsPage />} />
+                    <Route path="configuracoes-perfil" element={<Navigate to="/barbeiro/config-barbearia" replace />} />
                     <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} hideAgent={!barberContext.isTenantAdmin} />} />
                     <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                     <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
@@ -893,6 +965,7 @@ const Barbeiro = () => {
                     <Route path="barbeiros" element={<AdminBarbeiros basePath="/barbeiro" />} />
                     <Route path="configuracoes" element={<AdminConfiguracoes />} />
                     <Route path="unidades" element={<AdminUnidades basePath="/barbeiro" />} />
+                    <Route path="*" element={<Navigate to="/barbeiro" replace />} />
                   </>
                 )}
               </Routes>
@@ -974,6 +1047,8 @@ const Barbeiro = () => {
                       <Route path="financeiro" element={<BarberFinanceiro barberContext={barberContext} />} />
                       <Route path="horarios" element={<BarberHorarios barberContext={barberContext} />} />
                       <Route path="planos" element={<AdminPlanos tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
+                      <Route path="meu-plano" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
+                      <Route path="assinatura" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
                       <Route path="loja" element={barberContext.tenantId ? <AdminLoja tenantId={barberContext.tenantId} readOnly /> : null} />
                       <Route path="cupons" element={<AdminCupons tenantId={barberContext.tenantId || undefined} />} />
                       <Route path="cupons-ativos" element={<BarberCuponsAtivos tenantId={barberContext.tenantId} />} />
@@ -995,6 +1070,7 @@ const Barbeiro = () => {
                       <Route path="barbeiros" element={<AdminBarbeiros basePath="/barbeiro" />} />
                       <Route path="configuracoes" element={<AdminConfiguracoes />} />
                       <Route path="unidades" element={<AdminUnidades basePath="/barbeiro" />} />
+                      <Route path="*" element={<Navigate to="/barbeiro" replace />} />
                     </>
                   )}
                 </Routes>

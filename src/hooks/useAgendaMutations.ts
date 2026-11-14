@@ -110,43 +110,57 @@ export function useCompleteAppointment() {
         throw error;
       }
 
-      // 2. Garantir registro de pagamento (se não pré-pago)
-      if (!isPrepaid) {
-        const { data: existingPayment } = await supabase
-          .from("pagamentos")
-          .select("id")
-          .eq("agendamento_id", appointmentId)
-          .single();
-
-        if (existingPayment) {
-          await supabase
+      // 2. Garantir registro de pagamento (se não for pré-pago e não for plano/cortesia)
+      const isPlan = paymentMethod === "plano" || paymentMethod === "assinatura";
+      if (!isPrepaid && !isPlan && userId) {
+        try {
+          const { data: existingPayment } = await supabase
             .from("pagamentos")
-            .update({
+            .select("id")
+            .eq("agendamento_id", appointmentId)
+            .limit(1)
+            .maybeSingle();
+
+          const finalPreco = typeof preco === "number" && !isNaN(preco) ? preco : 0;
+
+          if (existingPayment) {
+            await supabase
+              .from("pagamentos")
+              .update({
+                status: "paid" as any,
+                data_pagamento: new Date().toISOString(),
+              })
+              .eq("id", existingPayment.id);
+          } else {
+            await supabase.from("pagamentos").insert({
+              user_id: userId,
+              agendamento_id: appointmentId,
+              valor: finalPreco,
+              metodo: (paymentMethod === "pix" || paymentMethod === "card" ? paymentMethod : "cash") as any,
               status: "paid" as any,
               data_pagamento: new Date().toISOString(),
-            })
-            .eq("id", existingPayment.id);
-        } else {
-          await supabase.from("pagamentos").insert({
-            user_id: userId,
-            agendamento_id: appointmentId,
-            valor: preco,
-            metodo: (paymentMethod === "pix" || paymentMethod === "card" ? paymentMethod : "cash") as any,
-            status: "paid" as any,
-            data_pagamento: new Date().toISOString(),
-          });
+            });
+          }
+        } catch (payErr) {
+          console.warn("[useCompleteAppointment] Erro não-impeditivo no registro de pagamento:", payErr);
         }
       }
 
-      // 3. Notificação ao cliente
-      await supabase.from("notificacoes").insert({
-        user_id: userId,
-        agendamento_id: appointmentId,
-        titulo: "Atendimento Concluído ✓",
-        mensagem: `Seu atendimento de ${serviceName} foi finalizado. Obrigado pela preferência!`,
-        tipo: "geral",
-        lida: false,
-      });
+      // 3. Notificação ao cliente (se cadastrado, não-impeditivo)
+      if (userId) {
+        try {
+          await supabase.from("notificacoes").insert({
+            user_id: userId,
+            agendamento_id: appointmentId,
+            titulo: "Atendimento Concluído ✓",
+            mensagem: `Seu atendimento de ${serviceName} foi finalizado. Obrigado pela preferência!`,
+            tipo: "geral",
+            lida: false,
+          });
+        } catch (notifErr) {
+          console.warn("[useCompleteAppointment] Erro não-impeditivo ao criar notificação:", notifErr);
+        }
+      }
     },
 
     onMutate: async ({ appointmentId, barbeiroId, date }) => {
@@ -205,7 +219,10 @@ export function useCancelAppointment() {
     mutationFn: async ({ appointmentId }) => {
       const { error } = await supabase
         .from("agendamentos")
-        .update({ status: "cancelled_by_admin" as any } as any)
+        .update({ 
+          status: "cancelled_by_admin" as any,
+          cancelado_em: new Date().toISOString(),
+        } as any)
         .eq("id", appointmentId);
       if (error) throw error;
     },
@@ -233,7 +250,7 @@ export function useCancelAppointment() {
       if (context?.snapshot) {
         queryClient.setQueryData(agendaKey(barbeiroId, date), context.snapshot);
       }
-      toast.error("Erro ao cancelar agendamento.");
+      toast.error(err.message || "Erro ao cancelar agendamento.");
     },
   });
 }
@@ -301,7 +318,7 @@ export function useNoShowAppointment() {
       if (context?.snapshot) {
         queryClient.setQueryData(agendaKey(barbeiroId, date), context.snapshot);
       }
-      toast.error("Erro ao registrar falta.");
+      toast.error(err.message || "Erro ao registrar falta.");
     },
   });
 }

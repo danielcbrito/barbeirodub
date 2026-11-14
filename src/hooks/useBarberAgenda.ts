@@ -18,6 +18,7 @@ export interface TimelineAppointment {
   status: string;
   preco: number;
   observacoes: string | null;
+  cliente_nome?: string | null;
   barbeiro_confirmou: boolean | null;
   cliente_confirmou: boolean | null;
   ponto_liberado: boolean | null;

@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 interface BarberSettingsPageProps {
   basePath?: string;
@@ -35,11 +36,8 @@ export function BarberSettingsPage({ basePath = "/barbeiro" }: BarberSettingsPag
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
-      await supabase.auth.signOut();
-      localStorage.removeItem("userRole");
-      localStorage.removeItem("barbeiroId");
+      await signOutAndClearDevice();
       toast.success("Sessão encerrada");
-      window.location.href = "/login";
     } catch {
       toast.error("Erro ao sair");
       setLoggingOut(false);

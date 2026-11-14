@@ -97,7 +97,7 @@ export function useOverdueAppointments(
       const { data, error } = await supabase
         .from("agendamentos")
         .select(`
-          id, data, hora, duracao, status, preco, observacoes,
+          id, data, hora, duracao, status, preco, observacoes, cliente_nome,
           payment_method, tipo_agendamento, is_free, user_id, servico_id, barbeiro_id
         `)
         .eq("barbeiro_id", targetBarbeiroId)
@@ -160,7 +160,7 @@ export function useOverdueAppointments(
         const srv = servicosMap[apt.servico_id];
         const dur = apt.duracao || srv?.duracao_minutos || 30;
         const rawClientName = profileMap[apt.user_id] || "Cliente";
-        const clientName = resolveClienteDisplayName(apt.observacoes, rawClientName, "Cliente");
+        const clientName = resolveClienteDisplayName(apt.observacoes, rawClientName, "Cliente", (apt as any).cliente_nome);
         const serviceName = srv?.nome || "Serviço";
 
         let displayDateLabel = "Ontem";

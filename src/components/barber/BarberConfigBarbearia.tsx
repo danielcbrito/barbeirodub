@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   CreditCard,
   User,
+  Link2,
 } from "lucide-react";
 import { BarberFormasPagamento } from "@/components/barber/BarberFormasPagamento";
 import { BarberContext } from "@/pages/Barbeiro";
@@ -41,6 +42,8 @@ import { AdminDadosEmpresa } from "@/components/admin/AdminDadosEmpresa";
 import { AdminAvaliacoes } from "@/components/admin/AdminAvaliacoes";
 import { BarberAvaliacoes } from "@/components/barber/BarberAvaliacoes";
 import { BarberCortes } from "@/components/barber/BarberCortes";
+import { BarberMeuPlano } from "@/components/barber/BarberMeuPlano";
+import { BarberShareLinkView } from "@/components/barber/BarberShareLinkView";
 import { WhatsAppConnectionPage } from "@/components/whatsapp/WhatsAppConnectionPage";
 import { UnidadeWizardSheet } from "@/components/admin/unidades/wizard/UnidadeWizardSheet";
 import { UnidadeDetailScreen } from "@/components/admin/unidades/UnidadeDetailScreen";
@@ -56,6 +59,17 @@ import { resolveOldestOwnedTenant } from "@/lib/tenantOwnership";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
+import { useBarbershopPendingFields } from "@/hooks/useBarbershopPendingFields";
+
+/** Número e link padrão de suporte do app DUB */
+const SUPPORT_WHATSAPP_PHONE = "5511963390043";
+
+const getWhatsAppSupportUrl = (unitName?: string) => {
+  const msg = unitName
+    ? `Olá! Preciso de suporte no app DUB para solicitar a exclusão permanente da barbearia (${unitName}) 🙏`
+    : "Olá! Preciso de suporte no app DUB 🙏";
+  return `https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`;
+};
 
 /**
  * Hub de Configurações da Barbearia — exclusivo do Administrador / Dono.
@@ -90,6 +104,7 @@ type HubScreen =
   | "clientes-meus"
   | "todas-unidades"
   | "fotos-banner"
+  | "meu-plano"
   | "excluir-pausar";
 
 const DEFAULT_COMPANY_NAME = "Barbearia DUB";
@@ -108,24 +123,66 @@ export function BarberConfigBarbearia({
 }: BarberConfigBarbeariaProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isTenantAdmin = !!barberContext.isTenantAdmin;
   const urlUnidadeId = searchParams.get("unidade");
+  const urlScreen = searchParams.get("screen") || searchParams.get("secao") || searchParams.get("tab");
   const urlViewId = searchParams.get("view");
 
+  const resolveScreenFromParam = (param: string | null, isAdmin: boolean): HubScreen => {
+    if (!param) return "hub";
+    const s = param.toLowerCase().trim();
+    if (s === "meu-plano" || s === "meuplano" || s === "assinatura" || s === "plano-barbearia" || s === "planos-barbearia") return "meu-plano";
+    if (s === "clientes") return isAdmin ? "clientes-todos" : "clientes-meus";
+    if (s === "clientes-todos") return "clientes-todos";
+    if (s === "clientes-meus") return "clientes-meus";
+    if (s === "servicos" || s === "cortes" || s === "servicos-planos") return "servicos";
+    if (s === "planos") return "planos";
+    if (s === "horarios" || s === "horario") return isAdmin ? "horarios" : "horarios-pessoal";
+    if (s === "horarios-pessoal") return "horarios-pessoal";
+    if (s === "horarios-barbearia") return "horarios-barbearia";
+    if (s === "formas-pagamento" || s === "pagamento") return "formas-pagamento";
+    if (s === "whatsapp" || s === "atendimento") return "whatsapp";
+    if (s === "avaliacoes" || s === "feedback") return isAdmin ? "avaliacoes" : "avaliacoes-pessoal";
+    if (s === "barbeiros" || s === "equipe") return "barbeiros";
+    if (s === "dados-empresa" || s === "empresa" || s === "dados-gerais" || s === "dados") return "dados-empresa";
+    if (s === "fotos-banner" || s === "identidade-visual") return "fotos-banner";
+    if (s === "excluir-pausar") return "excluir-pausar";
+    return "hub";
+  };
+
   const [activeScreen, setActiveScreen] = useState<HubScreen>(() => {
+    if (urlScreen) return resolveScreenFromParam(urlScreen, isTenantAdmin);
     if (urlViewId === "formas-pagamento") return "formas-pagamento";
-    if (urlViewId) return "clientes-todos";
+    if (urlViewId) return isTenantAdmin ? "clientes-todos" : "clientes-meus";
     return "hub";
   });
 
+  const handleSubScreenBack = () => {
+    if (urlScreen || urlViewId) {
+      if (window.history.length > 1) {
+        navigate(-1);
+      } else {
+        navigate(appBasePath);
+      }
+    } else {
+      setActiveScreen("hub");
+    }
+  };
+
   useEffect(() => {
-    if (urlViewId && activeScreen === "hub") {
+    if (urlScreen) {
+      const target = resolveScreenFromParam(urlScreen, isTenantAdmin);
+      if (target !== "hub") {
+        setActiveScreen(target);
+      }
+    } else if (urlViewId && activeScreen === "hub") {
       if (urlViewId === "formas-pagamento") {
         setActiveScreen("formas-pagamento");
       } else {
-        setActiveScreen("clientes-todos");
+        setActiveScreen(isTenantAdmin ? "clientes-todos" : "clientes-meus");
       }
     }
-  }, [urlViewId]);
+  }, [urlScreen, urlViewId, isTenantAdmin]);
   const [tenantNome, setTenantNome] = useState<string>(DEFAULT_COMPANY_NAME);
   const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(DEFAULT_COMPANY_LOGO);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -166,12 +223,16 @@ export function BarberConfigBarbearia({
   const [uploadingBarberAvatar, setUploadingBarberAvatar] = useState(false);
   const barberAvatarInputRef = useRef<HTMLInputElement>(null);
 
-  const isTenantAdmin = !!barberContext.isTenantAdmin;
-
   // Unidades da Barbearia
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [selectedUnidadeId, setSelectedUnidadeId] = useState<string>("todas");
   const [loadingUnidades, setLoadingUnidades] = useState(true);
+
+  // Detecção de pendências cadastrais da barbearia para o badge de Dados Gerais
+  const { totalPendingCount: companyPendingCount } = useBarbershopPendingFields(
+    effectiveTenantId,
+    selectedUnidadeId !== "todas" ? selectedUnidadeId : undefined
+  );
 
   // Modais
   const [showSelectUnitDrawer, setShowSelectUnitDrawer] = useState(false);
@@ -184,9 +245,7 @@ export function BarberConfigBarbearia({
   // Estados para Gerenciamento Operacional da Barbearia (Pausar / Excluir)
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isPausing, setIsPausing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   useStatusBarColor("app-background");
 
@@ -210,7 +269,7 @@ export function BarberConfigBarbearia({
           if (mounted && barbData?.foto_url) {
             setBarberAvatarUrl(barbData.foto_url);
           }
-        } catch {}
+        } catch { }
       }
       if (barberContext.userId) {
         try {
@@ -222,7 +281,7 @@ export function BarberConfigBarbearia({
           if (mounted && profData?.avatar_url) {
             setBarberAvatarUrl((prev) => prev || profData.avatar_url);
           }
-        } catch {}
+        } catch { }
       }
 
       // 1. Buscar em informacoes_empresa (onde Barbearia DUB, banner e logo estão salvos)
@@ -285,7 +344,7 @@ export function BarberConfigBarbearia({
             if (!resolvedLogo && t.logo_url) resolvedLogo = t.logo_url;
             if (!resolvedBanner && t.banner_url) resolvedBanner = t.banner_url;
           }
-        } catch {}
+        } catch { }
       }
 
       // 4. Fallback para dono mais antigo
@@ -304,7 +363,7 @@ export function BarberConfigBarbearia({
             if (!resolvedLogo && ownerTenant.logo_url) resolvedLogo = ownerTenant.logo_url;
             if (!resolvedBanner && ownerTenant.banner_url) resolvedBanner = ownerTenant.banner_url;
           }
-        } catch {}
+        } catch { }
       }
 
       if (mounted) {
@@ -414,6 +473,14 @@ export function BarberConfigBarbearia({
     if (!isTenantAdmin) {
       return [
         {
+          id: "link-agendamento",
+          icon: Link2,
+          label: "Link de Agendamento",
+          description: "Seu link exclusivo e QR Code para clientes agendarem horários com você",
+          keywords: ["link", "agendamento", "compartilhar", "whatsapp", "qr code", "divulgar", "clientes", "bio"],
+          onClick: () => setActiveScreen("link-agendamento"),
+        },
+        {
           id: "fotos-banner",
           icon: Palette,
           label: "Foto de perfil",
@@ -478,6 +545,14 @@ export function BarberConfigBarbearia({
           onClick: () => setActiveScreen("avaliacoes-pessoal"),
         },
         {
+          id: "meu-plano",
+          icon: Crown,
+          label: "Meu Plano",
+          description: "Status da assinatura e plano da barbearia",
+          keywords: ["plano", "assinatura", "mensalidade", "meu plano", "status"],
+          onClick: () => setActiveScreen("meu-plano"),
+        },
+        {
           id: "seguranca",
           icon: ShieldCheck,
           label: "Segurança",
@@ -490,6 +565,22 @@ export function BarberConfigBarbearia({
 
     return [
       {
+        id: "link-agendamento",
+        icon: Link2,
+        label: "Link de Agendamento",
+        description: "Link exclusivo e QR Code da barbearia para divulgação no WhatsApp e redes",
+        keywords: ["link", "agendamento", "compartilhar", "whatsapp", "qr code", "divulgar", "clientes", "bio"],
+        onClick: () => setActiveScreen("link-agendamento"),
+      },
+      {
+        id: "meu-plano",
+        icon: Crown,
+        label: "Meu Plano",
+        description: "Status da assinatura, vencimento e upgrade",
+        keywords: ["plano", "assinatura", "mensalidade", "upgrade", "solo", "dupla", "equipe", "rede", "enterprise", "vencimento", "trial", "meu plano"],
+        onClick: () => setActiveScreen("meu-plano"),
+      },
+      {
         id: "fotos-banner",
         icon: Palette,
         label: "Identidade Visual",
@@ -500,9 +591,10 @@ export function BarberConfigBarbearia({
       {
         id: "dados-empresa",
         icon: Building2,
-        label: "Dados da Barbearia",
-        description: "Nome, WhatsApp, endereço e redes sociais",
-        keywords: ["nome", "whatsapp", "endereco", "contato", "telefone", "instagram", "redes", "cnpj", "localizacao", "dados"],
+        label: "Dados gerais",
+        description: "Dados cadastrais da barbearia e dados pessoais",
+        keywords: ["nome", "whatsapp", "endereco", "contato", "telefone", "instagram", "redes", "cnpj", "localizacao", "dados", "dados gerais", "barbearia"],
+        pendingCount: companyPendingCount,
         onClick: () => setActiveScreen("dados-empresa"),
       },
       {
@@ -593,13 +685,13 @@ export function BarberConfigBarbearia({
         id: "excluir-pausar",
         icon: AlertTriangle,
         label: "Excluir e pausar",
-        description: "Pausar agendamentos temporariamente ou excluir esta barbearia",
+        description: "Pausar agendamentos temporariamente ou solicitar exclusão da barbearia",
         destructive: true,
-        keywords: ["excluir", "pausar", "reativar", "apagar", "deletar", "suspender", "fechar"],
+        keywords: ["excluir", "pausar", "reativar", "apagar", "deletar", "suspender", "fechar", "suporte", "whatsapp"],
         onClick: () => setActiveScreen("excluir-pausar"),
       },
     ];
-  }, [isTenantAdmin, appBasePath, navigate]);
+  }, [isTenantAdmin, appBasePath, navigate, companyPendingCount]);
 
   /** Filtragem inteligente em tempo real */
   const filteredItems = useMemo(() => {
@@ -655,83 +747,6 @@ export function BarberConfigBarbearia({
     }
   };
 
-  /** Excluir barbearia permanentemente com confirmação rigorosa e cascade seguro */
-  const handleDeleteUnit = async () => {
-    if (!activeUnit?.id) return;
-    if (deleteConfirmText.trim().toUpperCase() !== "EXCLUIR") {
-      toast.error('Digite "EXCLUIR" em maiúsculas para confirmar a exclusão.');
-      return;
-    }
-
-    const unitIdToDelete = activeUnit.id;
-    const unitNameToDelete = activeUnit.nome || "Barbearia";
-    setIsDeleting(true);
-
-    try {
-      // 1. Tenta invocar a Edge Function atômica delete-unit
-      let deletedViaEdge = false;
-      try {
-        const { data, error } = await supabase.functions.invoke("delete-unit", {
-          body: { unidadeId: unitIdToDelete },
-        });
-        if (!error && !data?.error) {
-          deletedViaEdge = true;
-        }
-      } catch (edgeErr) {
-        console.warn("[handleDeleteUnit] Edge function falhou ou inacessível, aplicando cascade direto:", edgeErr);
-      }
-
-      // 2. Se a Edge Function não concluiu, executa fallback seguro direto
-      if (!deletedViaEdge) {
-        await supabase.from("barbeiro_unidades").delete().eq("unidade_id", unitIdToDelete);
-        await supabase.from("agendamentos").update({ unidade_id: null }).eq("unidade_id", unitIdToDelete);
-        await supabase.from("barbeiros").update({ unidade_id: null }).eq("unidade_id", unitIdToDelete);
-
-        try {
-          await supabase.from("configuracoes_horario_unidade").delete().eq("unidade_id", unitIdToDelete);
-          await supabase.from("horarios_excepcionais").delete().eq("unidade_id", unitIdToDelete);
-          await supabase.from("client_booking_blocks").delete().eq("unidade_id", unitIdToDelete);
-          await supabase.from("barber_unit_roles").delete().eq("unidade_id", unitIdToDelete);
-        } catch {
-          // limpeza não-fatal
-        }
-
-        const { error: delError } = await supabase
-          .from("tenant_unidades")
-          .delete()
-          .eq("id", unitIdToDelete);
-
-        if (delError) throw delError;
-      }
-
-      toast.success(`Barbearia "${unitNameToDelete}" excluída com sucesso.`);
-      setShowDeleteModal(false);
-      setDeleteConfirmText("");
-
-      const remainingUnits = unidades.filter((u) => u.id !== unitIdToDelete);
-      setUnidades(remainingUnits);
-
-      if (remainingUnits.length > 0) {
-        setSelectedUnidadeId(remainingUnits[0].id);
-        if (remainingUnits[0].nome) setTenantNome(remainingUnits[0].nome);
-        if (remainingUnits[0].logo_url) setTenantLogoUrl(remainingUnits[0].logo_url);
-      } else {
-        setSelectedUnidadeId(null);
-      }
-
-      await loadUnidades();
-      setActiveScreen("hub");
-    } catch (err: any) {
-      console.error("[handleDeleteUnit]", err);
-      toast.error(
-        err?.message?.includes("foreign")
-          ? "Não foi possível excluir: existem registros vinculados a esta unidade."
-          : "Erro ao excluir a barbearia. Tente novamente."
-      );
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
   /** Upload da Logo da Barbearia */
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -915,26 +930,30 @@ export function BarberConfigBarbearia({
   const renderSubScreen = () => {
     const tenantId = resolvedTenantId || barberContext.tenantId || undefined;
     switch (activeScreen) {
+      case "link-agendamento":
+        return (
+          <BarberShareLinkView
+            barberContext={barberContext}
+            onBack={handleSubScreenBack}
+          />
+        );
       case "formas-pagamento":
         return (
           <BarberFormasPagamento
             barbeiroId={effectiveBarbeiroId}
             userId={barberContext.userId}
             tenantId={resolvedTenantId || barberContext.tenantId}
-            onBack={() => setActiveScreen("hub")}
+            onBack={handleSubScreenBack}
           />
         );
       case "dados-empresa":
         return (
-          <div className="pb-10">
-            <ScheduleHeader title="Dados da Barbearia" onBack={() => setActiveScreen("hub")} />
-            <div className="px-4 pt-3 max-w-md mx-auto">
-              <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-4">
-                Configure os dados cadastrais, endereço e formas de contato oficiais da barbearia.
-              </p>
-              <AdminDadosEmpresa basePath={appBasePath} tenantId={tenantId} />
-            </div>
-          </div>
+          <AdminDadosEmpresa
+            basePath={appBasePath}
+            tenantId={tenantId}
+            onBack={handleSubScreenBack}
+            isTenantAdmin={isTenantAdmin}
+          />
         );
       case "whatsapp":
         return (
@@ -947,7 +966,7 @@ export function BarberConfigBarbearia({
               unidadeNome={activeUnit?.nome}
               tenantNome={activeUnit?.nome || tenantNome}
               barberName={barberContext.apelido}
-              onBackProp={() => setActiveScreen("hub")}
+              onBackProp={handleSubScreenBack}
               hideAgent={!isTenantAdmin}
             />
           </div>
@@ -957,11 +976,11 @@ export function BarberConfigBarbearia({
           // Apenas um barbeiro: exibe uma ÚNICA configuração de horário unificada!
           // Atualiza tanto o horário pessoal do barbeiro quanto o da barbearia no backend.
           return (
-            <div className="pb-10 min-h-app bg-background">
+            <div className="pb-10 min-h-app bg-background flex flex-col flex-1">
               {scheduleViewMode === 'list' && (
-                <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
+                <ScheduleHeader title="Horário de Funcionamento" onBack={handleSubScreenBack} />
               )}
-              <div className="px-4 pt-3 max-w-md mx-auto">
+              <div className="px-4 pt-3 max-w-md mx-auto w-full flex-1 flex flex-col">
                 <AdminHorarios
                   hideTitle
                   unifiedMode={true}
@@ -969,6 +988,7 @@ export function BarberConfigBarbearia({
                   tenantId={tenantId}
                   unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
                   onViewModeChange={setScheduleViewMode}
+                  dayFloatingBottomButton={true}
                 />
               </div>
             </div>
@@ -978,7 +998,7 @@ export function BarberConfigBarbearia({
         // Dois ou mais barbeiros: exibe as duas opções separadamente
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Horário de Funcionamento" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Horário de Funcionamento" onBack={handleSubScreenBack} />
             <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
                 Escolha o horário que deseja configurar:
@@ -1028,11 +1048,11 @@ export function BarberConfigBarbearia({
       }
       case "horarios-barbearia":
         return (
-          <div className="pb-10 min-h-app bg-background">
+          <div className="pb-10 min-h-app bg-background flex flex-col flex-1">
             {scheduleViewMode === 'list' && (
               <ScheduleHeader title="Horário da Barbearia" onBack={() => setActiveScreen("horarios")} />
             )}
-            <div className="px-4 pt-3 max-w-md mx-auto">
+            <div className="px-4 pt-3 max-w-md mx-auto w-full flex-1 flex flex-col">
               <AdminHorarios
                 hideTitle
                 companyMode
@@ -1040,20 +1060,27 @@ export function BarberConfigBarbearia({
                 tenantId={tenantId}
                 unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
                 onViewModeChange={setScheduleViewMode}
+                dayFloatingBottomButton={true}
               />
             </div>
           </div>
         );
       case "horarios-pessoal":
         return (
-          <div className="pb-10 min-h-app bg-background">
+          <div className="pb-10 min-h-app bg-background flex flex-col flex-1">
             {scheduleViewMode === 'list' && (
               <ScheduleHeader
                 title={isTenantAdmin ? "Seu Horário Pessoal" : "Horário de Funcionamento"}
-                onBack={() => setActiveScreen(isTenantAdmin ? (hasMultipleBarbers ? "horarios" : "hub") : "hub")}
+                onBack={() => {
+                  if (hasMultipleBarbers && isTenantAdmin) {
+                    setActiveScreen("horarios");
+                  } else {
+                    handleSubScreenBack();
+                  }
+                }}
               />
             )}
-            <div className="px-4 pt-3 max-w-md mx-auto">
+            <div className="px-4 pt-3 max-w-md mx-auto w-full flex-1 flex flex-col">
               <AdminHorarios
                 hideTitle
                 unifiedMode={!hasMultipleBarbers}
@@ -1061,6 +1088,7 @@ export function BarberConfigBarbearia({
                 tenantId={tenantId}
                 unidadeId={activeUnit?.id !== "todas" ? activeUnit?.id : undefined}
                 onViewModeChange={setScheduleViewMode}
+                dayFloatingBottomButton={true}
               />
             </div>
           </div>
@@ -1074,7 +1102,7 @@ export function BarberConfigBarbearia({
           <BarberServicosPlanos
             tenantId={tenantId}
             appBasePath={appBasePath}
-            onBack={() => setActiveScreen("hub")}
+            onBack={handleSubScreenBack}
             defaultTab={activeScreen === "planos" ? "planos" : "servicos"}
             barberContext={barberContext}
           />
@@ -1082,12 +1110,12 @@ export function BarberConfigBarbearia({
       case "avaliacoes":
         return (
           <div className="pb-10">
-            <ScheduleHeader title="Avaliações da Barbearia" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Avaliações da Barbearia" onBack={handleSubScreenBack} />
             <div className="px-4 pt-3 max-w-md mx-auto">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-4">
                 Acompanhe o feedback, notas e comentários deixados pelos clientes sobre a barbearia.
               </p>
-              <AdminAvaliacoes tenantId={tenantId} basePath={appBasePath} hideHeader onBack={() => setActiveScreen("hub")} />
+              <AdminAvaliacoes tenantId={tenantId} basePath={appBasePath} hideHeader onBack={handleSubScreenBack} />
             </div>
           </div>
         );
@@ -1098,7 +1126,7 @@ export function BarberConfigBarbearia({
               <BarberAvaliacoes
                 barberContext={barberContext}
                 basePath={appBasePath}
-                onBack={() => setActiveScreen("hub")}
+                onBack={handleSubScreenBack}
               />
             </div>
           </div>
@@ -1110,7 +1138,7 @@ export function BarberConfigBarbearia({
               <AdminBarbeiros
                 basePath={appBasePath}
                 tenantId={tenantId || resolvedTenantId}
-                onBack={() => setActiveScreen("hub")}
+                onBack={handleSubScreenBack}
               />
             </div>
           </div>
@@ -1118,7 +1146,7 @@ export function BarberConfigBarbearia({
       case "clientes":
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Clientes" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Clientes" onBack={handleSubScreenBack} />
             <div className="px-4 pt-3 max-w-md mx-auto space-y-4">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
                 Escolha a base de clientes que deseja visualizar:
@@ -1167,7 +1195,7 @@ export function BarberConfigBarbearia({
                 barberContext={barberContext}
                 forceViewMode="todos"
                 initialUnitId={selectedUnidadeId === "todas" ? undefined : selectedUnidadeId}
-                onBack={() => setActiveScreen("hub")}
+                onBack={handleSubScreenBack}
               />
             </div>
           </div>
@@ -1179,7 +1207,7 @@ export function BarberConfigBarbearia({
               <BarberClientes
                 barberContext={barberContext}
                 forceViewMode="meus"
-                onBack={() => setActiveScreen("hub")}
+                onBack={handleSubScreenBack}
               />
             </div>
           </div>
@@ -1188,7 +1216,7 @@ export function BarberConfigBarbearia({
         if (!isTenantAdmin) {
           return (
             <div className="pb-10 min-h-app bg-background">
-              <ScheduleHeader title="Foto de Perfil" onBack={() => setActiveScreen("hub")} />
+              <ScheduleHeader title="Foto de Perfil" onBack={handleSubScreenBack} />
               <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
                 <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
                   Personalize sua foto de exibição para seus clientes nos agendamentos e no perfil da barbearia.
@@ -1255,7 +1283,7 @@ export function BarberConfigBarbearia({
 
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Foto e Banner" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Foto e Banner" onBack={handleSubScreenBack} />
             <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
                 Personalize a identidade visual da barbearia atualizando o banner de capa e a foto de perfil.
@@ -1376,7 +1404,7 @@ export function BarberConfigBarbearia({
       case "excluir-pausar":
         return (
           <div className="pb-10 min-h-app bg-background">
-            <ScheduleHeader title="Excluir e Pausar" onBack={() => setActiveScreen("hub")} />
+            <ScheduleHeader title="Excluir e Pausar" onBack={handleSubScreenBack} />
 
             <div className="px-4 pt-4 max-w-md mx-auto space-y-4">
               <p className="text-sm text-muted-foreground/60 leading-relaxed font-light mb-1">
@@ -1462,10 +1490,7 @@ export function BarberConfigBarbearia({
                 {/* Excluir Barbearia */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setDeleteConfirmText("");
-                    setShowDeleteModal(true);
-                  }}
+                  onClick={() => setShowDeleteModal(true)}
                   className="w-full flex items-center justify-between py-4 text-left hover:opacity-80 active:scale-[0.99] transition-all group"
                 >
                   <div className="min-w-0 pr-3">
@@ -1473,7 +1498,7 @@ export function BarberConfigBarbearia({
                       Excluir barbearia permanentemente
                     </p>
                     <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                      Remove esta filial e desvincula os dados operacionais permanentemente.
+                      Entre em contato com nossa equipe de atendimento para solicitar a exclusão definitiva.
                     </p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-destructive/50 group-hover:text-destructive transition-colors shrink-0" />
@@ -1481,6 +1506,14 @@ export function BarberConfigBarbearia({
               </div>
             </div>
           </div>
+        );
+      case "meu-plano":
+        return (
+          <BarberMeuPlano
+            tenantId={effectiveTenantId || ""}
+            tenantNome={tenantNome || DEFAULT_COMPANY_NAME}
+            onBack={handleSubScreenBack}
+          />
         );
       default:
         return null;
@@ -1565,111 +1598,100 @@ export function BarberConfigBarbearia({
         )}
       </AnimatePresence>
 
-      {/* ═══ MODAL DE EXCLUIR BARBEARIA (AÇÃO CRÍTICA DE ALTA SEGURANÇA) ═══ */}
+      {/* ═══ MODAL DE EXCLUIR BARBEARIA (SOLICITAÇÃO DE SUPORTE VIA WHATSAPP) ═══ */}
       <AnimatePresence>
         {showDeleteModal && (
           <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm">
-            <div className="absolute inset-0" onClick={() => !isDeleting && setShowDeleteModal(false)} />
+            <div className="absolute inset-0" onClick={() => setShowDeleteModal(false)} />
             <motion.div
               initial={{ y: "100%", opacity: 0.5 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
               transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-destructive/40 bg-card p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
+              className="relative w-full sm:max-w-md rounded-t-[28px] sm:rounded-2xl border border-border/80 dark:border-white/[0.1] bg-card p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto pb-[calc(2rem+env(safe-area-inset-bottom))]"
             >
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30 mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
 
               <div className="flex items-start gap-3.5">
                 <div className="w-10 h-10 rounded-xl bg-destructive/15 border border-destructive/25 flex items-center justify-center shrink-0 text-destructive">
-                  <AlertTriangle className="w-5 h-5" />
+                  <Trash2 className="w-5 h-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-[16px] font-bold text-foreground leading-tight">
-                    Excluir barbearia definitivamente?
+                    Solicitar exclusão da barbearia
                   </h3>
                   <p className="text-[12px] text-muted-foreground mt-1">
-                    Unidade: <strong className="text-destructive font-semibold">{activeUnit?.nome || tenantNome}</strong>
+                    Unidade: <strong className="text-foreground font-semibold">{activeUnit?.nome || tenantNome}</strong>
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => !isDeleting && setShowDeleteModal(false)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Alerta de Perigo Crítico */}
-              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 space-y-2 text-[12px]">
-                <p className="font-semibold text-destructive flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>Atenção: Ação permanente e irreversível!</span>
+              {/* Informação sobre exigência de contato com o suporte */}
+              <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-4 space-y-2 text-[12px]">
+                <p className="font-semibold text-foreground flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+                  <span>Exclusão permanente requer suporte da equipe</span>
                 </p>
                 <p className="text-muted-foreground leading-relaxed">
-                  Esta operação apagará todos os dados exclusivos vinculados a esta unidade (<strong className="text-foreground">{activeUnit?.nome || tenantNome}</strong>) do banco de dados:
+                  Para garantir a segurança dos seus dados, o cancelamento de eventuais assinaturas ativas, a conferência de saldos e repasses pendentes e o encerramento seguro da conta, a exclusão permanente deve ser solicitada à nossa equipe de atendimento.
                 </p>
-                <ul className="space-y-1 list-disc list-inside text-muted-foreground">
-                  <li>Os vínculos de barbeiros com esta unidade serão desfeitos.</li>
-                  <li>As referências de agendamentos desta filial serão desvinculadas.</li>
-                  <li>A unidade será apagada permanentemente do cadastro.</li>
-                  <li><strong>As outras barbearias e filiais não serão afetadas.</strong></li>
-                </ul>
               </div>
 
-              {/* Dica estratégica antes da exclusão */}
-              <div className="rounded-xl border border-border/60 bg-secondary/30 p-3 flex items-start gap-2.5">
-                <Store className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+              {/* Dica da Pausa como alternativa rápida pelo próprio usuário */}
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3.5 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <PauseCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                  <p className="text-[12.5px] font-medium text-foreground">
+                    Deseja apenas suspender os agendamentos?
+                  </p>
+                </div>
                 <p className="text-[11.5px] text-muted-foreground leading-relaxed">
-                  Se você quer apenas suspender a unidade temporariamente sem perder seus dados, use a opção <strong className="text-foreground">Pausar barbearia</strong>.
+                  Você mesmo pode <strong>Pausar a barbearia</strong> diretamente pelo sistema a qualquer momento, sem precisar falar com ninguém e mantendo todos os seus dados, clientes e histórico salvos.
                 </p>
-              </div>
-
-              {/* Confirmação por digitação */}
-              <div className="space-y-2 pt-1">
-                <label className="text-[12px] font-medium text-foreground block">
-                  Para confirmar, digite <span className="font-mono font-bold text-destructive">EXCLUIR</span> no campo abaixo:
-                </label>
-                <input
-                  type="text"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  placeholder="Digite EXCLUIR"
-                  disabled={isDeleting}
-                  className="w-full h-11 px-3.5 rounded-xl border border-border/80 bg-background text-foreground text-[13px] placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-destructive/40 focus:border-destructive transition-all"
-                  autoCapitalize="characters"
-                  autoCorrect="off"
-                  spellCheck={false}
-                />
               </div>
 
               {/* Botões de Ação */}
-              <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = getWhatsAppSupportUrl(activeUnit?.nome || tenantNome);
+                    window.open(url, "_blank", "noopener,noreferrer");
+                    setShowDeleteModal(false);
+                  }}
+                  className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-semibold text-[13.5px] transition-all flex items-center justify-center gap-2.5 shadow-md shadow-emerald-600/20 cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4 stroke-[2.5]" />
+                  <span>Falar com suporte no WhatsApp</span>
+                </button>
+
+                {activeUnit?.ativo !== false && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeleteModal(false);
+                      setShowPauseModal(true);
+                    }}
+                    className="w-full h-11 rounded-xl border border-amber-500/35 bg-amber-500/10 hover:bg-amber-500/15 active:scale-[0.98] text-amber-600 dark:text-amber-400 font-medium text-[13px] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <PauseCircle className="w-4 h-4" />
+                    <span>Pausar barbearia pelo sistema</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setShowDeleteModal(false)}
-                  disabled={isDeleting}
-                  className="h-11 rounded-xl border border-border/80 bg-secondary/60 hover:bg-secondary text-foreground text-[13px] font-medium transition-all active:scale-[0.98]"
+                  className="w-full h-11 rounded-xl border border-border/80 bg-secondary/60 hover:bg-secondary text-foreground text-[13px] font-medium transition-all active:scale-[0.98] cursor-pointer"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteUnit}
-                  disabled={isDeleting || deleteConfirmText.trim().toUpperCase() !== "EXCLUIR"}
-                  className={cn(
-                    "h-11 rounded-xl text-white font-semibold text-[13px] transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xs",
-                    deleteConfirmText.trim().toUpperCase() === "EXCLUIR" && !isDeleting
-                      ? "bg-destructive hover:bg-destructive/90 cursor-pointer"
-                      : "bg-destructive/40 text-white/50 cursor-not-allowed opacity-60"
-                  )}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  <span>{isDeleting ? "Excluindo..." : "Excluir Definitivamente"}</span>
+                  Voltar
                 </button>
               </div>
             </motion.div>
@@ -1830,6 +1852,7 @@ export function BarberConfigBarbearia({
                 label={item.label}
                 description={item.description}
                 destructive={item.destructive}
+                pendingCount={(item as any).pendingCount}
                 onClick={item.onClick}
               />
             ))}
@@ -1886,6 +1909,7 @@ function ConfigListItem({
   label,
   description,
   badge,
+  pendingCount,
   destructive,
   onClick,
 }: {
@@ -1893,6 +1917,7 @@ function ConfigListItem({
   label: string;
   description: string;
   badge?: string;
+  pendingCount?: number;
   destructive?: boolean;
   onClick: () => void;
 }) {
@@ -1932,14 +1957,21 @@ function ConfigListItem({
           </p>
         </div>
       </div>
-      <ChevronRight
-        className={cn(
-          "w-4 h-4 transition-colors shrink-0",
-          destructive
-            ? "text-destructive/50 group-hover:text-destructive"
-            : "text-muted-foreground/40 group-hover:text-foreground"
+      <div className="flex items-center gap-2 shrink-0">
+        {(pendingCount ?? 0) > 0 && (
+          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white font-bold text-[11px] flex items-center justify-center leading-none shadow-xs">
+            {pendingCount}
+          </span>
         )}
-      />
+        <ChevronRight
+          className={cn(
+            "w-4 h-4 transition-colors shrink-0",
+            destructive
+              ? "text-destructive/50 group-hover:text-destructive"
+              : "text-muted-foreground/40 group-hover:text-foreground"
+          )}
+        />
+      </div>
     </button>
   );
 }

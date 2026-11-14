@@ -1440,6 +1440,9 @@ interface ManualBookingPayload {
   preco: number;
   observacoes: string | null;
   barbeiroId: string;
+  clienteNome?: string | null;
+  paymentMethod?: string;
+  isFree?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1611,6 +1614,7 @@ export function useManualBooking() {
 
   return useMutation({
     mutationFn: async (params: ManualBookingPayload) => {
+      const isPlano = params.paymentMethod === "plano" || params.isFree === true;
       const { error } = await supabase
         .from("agendamentos")
         .insert({
@@ -1619,15 +1623,17 @@ export function useManualBooking() {
           data: params.data,
           hora: params.hora + ":00",
           duracao: params.duracao,
-          preco: params.preco,
+          preco: isPlano ? 0 : params.preco,
           status: "confirmed" as any,
           barbeiro_confirmou: true,
           cliente_confirmou: true,
           observacoes: params.observacoes,
           tipo_agendamento: "encaixe_manual",
           criado_por: "barbeiro",
-          payment_method: "cash",
+          payment_method: params.paymentMethod || "cash",
+          is_free: params.isFree ?? isPlano,
           barbeiro_id: params.barbeiroId,
+          cliente_nome: params.clienteNome || null,
         });
       if (error) throw error;
     },
@@ -1641,7 +1647,11 @@ export function useManualBooking() {
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.admin.timeline(params.data),
       });
-      toast.success("✅ Encaixe criado com sucesso!");
+      // Invalida planos e clientes
+      queryClient.invalidateQueries({ queryKey: ["barber-clientes"] });
+      queryClient.invalidateQueries({ queryKey: ["assinatura-status"] });
+      queryClient.invalidateQueries({ queryKey: ["client-active-subscription"] });
+      toast.success(params.paymentMethod === "plano" ? "✅ Encaixe registrado no plano!" : "✅ Encaixe criado com sucesso!");
     },
 
     onError: (err: any) => {

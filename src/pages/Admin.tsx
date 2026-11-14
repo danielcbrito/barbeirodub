@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { useEffect, Suspense, useState, useRef, lazy } from "react";
 import { useNavigate, Routes, Route, useLocation, Navigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,8 @@ import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useNotificationPermission } from "@/hooks/useNotificationPermission";
+import { useTenantSubscription } from "@/hooks/useTenantSubscription";
+import { TenantPaywall } from "@/components/tenant/TenantPaywall";
 
 /* ── Abas primárias (bottom nav): eager para navegação instantânea ── */
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
@@ -51,9 +53,11 @@ const AdminIndicacoes = lazy(() => import("@/components/admin/AdminIndicacoes"))
 const CarteiraPage = lazy(() => import("@/components/barber/CarteiraPage").then(m => ({ default: m.CarteiraPage })));
 const AppointmentDetailsPage = lazy(() => import("@/pages/AppointmentDetailsPage"));
 const BarberConfigBarbearia = lazy(() => import("@/components/barber/BarberConfigBarbearia").then(m => ({ default: m.BarberConfigBarbearia })));
+const BarberDadosPessoais = lazy(() => import("@/components/barber/BarberDadosPessoais").then(m => ({ default: m.BarberDadosPessoais })));
 
 import { cn } from "@/lib/utils";
 import { SupportChatBubble } from "@/components/support/SupportChatBubble";
+import { hasStoredSupabaseSession, getStoredSupabaseUserId } from "@/lib/sessionGuard";
 
 // Mapeamento de rotas para títulos
 const routeTitles: Record<string, string> = {
@@ -106,13 +110,15 @@ const Admin = () => {
   const { playNotificationSound } = useNotificationSound();
   const { requestPermission, sendBrowserNotification } = useNotificationPermission();
   const [adminContext, setAdminContext] = useState<AdminContext | null>(null);
-  
+  const [authError, setAuthError] = useState<string | null>(null);
+  const subscription = useTenantSubscription(adminContext?.tenantId || null);
+
   // Verificação de manutenção
-  const { 
-    isMaintenanceMode, 
-    maintenanceMessage, 
-    isLoading: maintenanceLoading, 
-    isAllowedUser 
+  const {
+    isMaintenanceMode,
+    maintenanceMessage,
+    isLoading: maintenanceLoading,
+    isAllowedUser
   } = useMaintenanceMode();
 
   // Carregar contagem de pendentes (filtrado por barbeiro se aplicável)
@@ -125,11 +131,11 @@ const Admin = () => {
         .select('*', { count: 'exact', head: true })
         .eq('payment_method', 'cash')
         .or('status.in.(suspended,pending_cash),and(status.eq.active,cash_payment_confirmed.eq.false)');
-      
+
       if (adminContext.barbeiroId) {
         query = query.eq('barbeiro_id', adminContext.barbeiroId);
       }
-      
+
       const { count } = await query;
       setPendingCount(count || 0);
     };
@@ -143,29 +149,29 @@ const Admin = () => {
     try {
       channel = adminContext.barbeiroId
         ? supabase
-            .channel(uniqueChannelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos', filter: `barbeiro_id=eq.${adminContext.barbeiroId}` } as const, (payload) => {
-              loadPendingCount();
-              if (payload.eventType === 'INSERT') {
-                playNotificationSound();
-                sendBrowserNotification("Novo Agendamento!", {
-                  body: "Um novo cliente agendou. Verifique as confirmações pendentes.",
-                  tag: "new-appointment",
-                });
-              }
-            })
+          .channel(uniqueChannelName)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos', filter: `barbeiro_id=eq.${adminContext.barbeiroId}` } as const, (payload) => {
+            loadPendingCount();
+            if (payload.eventType === 'INSERT') {
+              playNotificationSound();
+              sendBrowserNotification("Novo Agendamento!", {
+                body: "Um novo cliente agendou. Verifique as confirmações pendentes.",
+                tag: "new-appointment",
+              });
+            }
+          })
         : supabase
-            .channel(uniqueChannelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' } as const, (payload) => {
-              loadPendingCount();
-              if (payload.eventType === 'INSERT') {
-                playNotificationSound();
-                sendBrowserNotification("Novo Agendamento!", {
-                  body: "Um novo cliente agendou. Verifique as confirmações pendentes.",
-                  tag: "new-appointment",
-                });
-              }
-            });
+          .channel(uniqueChannelName)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' } as const, (payload) => {
+            loadPendingCount();
+            if (payload.eventType === 'INSERT') {
+              playNotificationSound();
+              sendBrowserNotification("Novo Agendamento!", {
+                body: "Um novo cliente agendou. Verifique as confirmações pendentes.",
+                tag: "new-appointment",
+              });
+            }
+          });
 
       channel.subscribe();
     } catch (err) {
@@ -176,7 +182,7 @@ const Admin = () => {
       if (channel) {
         try {
           supabase.removeChannel(channel);
-        } catch {}
+        } catch { }
       }
     };
   }, [adminContext, playNotificationSound, sendBrowserNotification]);
@@ -228,10 +234,18 @@ const Admin = () => {
    */
   useEffect(() => {
     try {
+      if (!hasStoredSupabaseSession()) return;
+      const currentUserId = getStoredSupabaseUserId();
+      if (!currentUserId) return;
+
       const raw = localStorage.getItem(ADMIN_CTX_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as AdminContext;
       if (parsed?.userId) {
+        if (parsed.userId !== currentUserId) {
+          localStorage.removeItem(ADMIN_CTX_KEY);
+          return;
+        }
         setAdminContext(parsed);
         setAuthChecked(true);
       }
@@ -239,93 +253,104 @@ const Admin = () => {
   }, []);
 
   const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    setAuthError(null);
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
 
-    if (!session) {
-      try { localStorage.removeItem(ADMIN_CTX_KEY); } catch { /* ignore */ }
-      navigate("/login");
-      return;
-    }
-
-    // Uma única ida ao banco em paralelo: roles + perfil de barbeiro
-    const [{ data: roles }, { data: ownBarber }] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", session.user.id),
-      supabase
-        .from("barbeiros")
-        .select("id, apelido, tenant_id")
-        .eq("user_id", session.user.id)
-        .eq("ativo", true)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
-    ]);
-
-    const roleList = (roles || []).map((r) => r.role as string);
-    const isAdminRole = roleList.includes("admin");
-    const isTenantAdminRole = roleList.includes("tenant_admin");
-    const isBarberRole = roleList.includes("barber");
-
-    if (isAdminRole || isTenantAdminRole) {
-      let tenantId: string | null = ownBarber?.tenant_id || null;
-      if (!tenantId) {
-        const { data: tm } = await supabase
-          .from("tenant_members")
-          .select("tenant_id")
-          .eq("user_id", session.user.id)
-          .limit(1)
-          .maybeSingle();
-        tenantId = tm?.tenant_id || null;
+      if (!session) {
+        try { localStorage.removeItem(ADMIN_CTX_KEY); } catch { /* ignore */ }
+        navigate("/login");
+        return;
       }
-      if (!tenantId) {
-        const { data: ownedTenant } = await supabase
-          .from("tenants")
-          .select("id")
-          .eq("owner_user_id", session.user.id)
+
+      // Uma única ida ao banco em paralelo: roles + perfil de barbeiro
+      const [{ data: roles, error: rolesError }, { data: ownBarber, error: barberError }] = await Promise.all([
+        supabase.from("user_roles").select("role").eq("user_id", session.user.id),
+        supabase
+          .from("barbeiros")
+          .select("id, apelido, tenant_id")
+          .eq("user_id", session.user.id)
+          .eq("ativo", true)
+          .is("deleted_at", null)
           .order("created_at", { ascending: true })
           .limit(1)
-          .maybeSingle();
-        tenantId = ownedTenant?.id || null;
+          .maybeSingle(),
+      ]);
+
+      if (rolesError) throw rolesError;
+      if (barberError) throw barberError;
+
+      const roleList = (roles || []).map((r) => r.role as string);
+      const isAdminRole = roleList.includes("admin");
+      const isTenantAdminRole = roleList.includes("tenant_admin");
+      const isBarberRole = roleList.includes("barber");
+
+      if (isAdminRole || isTenantAdminRole) {
+        let tenantId: string | null = ownBarber?.tenant_id || null;
+        if (!tenantId) {
+          const { data: tm } = await supabase
+            .from("tenant_members")
+            .select("tenant_id")
+            .eq("user_id", session.user.id)
+            .limit(1)
+            .maybeSingle();
+          tenantId = tm?.tenant_id || null;
+        }
+        if (!tenantId) {
+          const { data: ownedTenant } = await supabase
+            .from("tenants")
+            .select("id")
+            .eq("owner_user_id", session.user.id)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          tenantId = ownedTenant?.id || null;
+        }
+        const ctx: AdminContext = {
+          barbeiroId: ownBarber?.id || null,
+          apelido: ownBarber?.apelido || null,
+          userId: session.user.id,
+          isAdmin: true,
+          tenantId,
+        };
+
+        setAdminContext(ctx);
+        cacheAdminContext(ctx);
+
+        localStorage.setItem("userRole", "admin");
+        if (ownBarber?.id) {
+          localStorage.setItem("barbeiroId", ownBarber.id);
+        } else {
+          localStorage.removeItem("barbeiroId");
+        }
+        setAuthChecked(true);
+        return;
       }
-      const ctx: AdminContext = {
-        barbeiroId: ownBarber?.id || null,
-        apelido: ownBarber?.apelido || null,
-        userId: session.user.id,
-        isAdmin: true,
-        tenantId,
-      };
 
-      setAdminContext(ctx);
-      cacheAdminContext(ctx);
+      try { localStorage.removeItem(ADMIN_CTX_KEY); } catch { /* ignore */ }
 
-
-      localStorage.setItem("userRole", "admin");
-      if (ownBarber?.id) {
-        localStorage.setItem("barbeiroId", ownBarber.id);
-      } else {
-        localStorage.removeItem("barbeiroId");
+      if (isBarberRole) {
+        navigate("/barbeiro");
+        return;
       }
-      setAuthChecked(true);
-      return;
+
+      // Não é admin, barbeiro ou tenant_admin
+      toast.error("Você não tem permissão para acessar este sistema.");
+      navigate("/");
+    } catch (err: any) {
+      console.error("[Admin checkAuth error]", err);
+      if (!adminContext) {
+        setAuthError(err?.message || "Não foi possível carregar as informações da sua conta.");
+      }
     }
-
-    try { localStorage.removeItem(ADMIN_CTX_KEY); } catch { /* ignore */ }
-
-    if (isBarberRole) {
-      navigate("/barbeiro");
-      return;
-    }
-
-    // Não é admin, barbeiro ou tenant_admin
-    toast.error("Você não tem permissão para acessar este sistema.");
-    navigate("/");
   };
 
 
   // Se está em manutenção e o usuário NÃO está na lista de permitidos
   if (!maintenanceLoading && authChecked && isMaintenanceMode && !isAllowedUser) {
     return (
-      <MaintenanceScreen 
+      <MaintenanceScreen
         message={maintenanceMessage || undefined}
         onExit={() => navigate("/")}
       />
@@ -374,6 +399,36 @@ const Admin = () => {
     </div>
   );
 
+  if (authError && !adminContext) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm space-y-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <p className="text-sm text-muted-foreground">{authError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              authCheckRef.current = false;
+              checkAuth();
+            }}
+            className="h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
+          >
+            Tentar novamente
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/", { replace: true })}
+            className="h-11 w-full rounded-xl border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted transition-all cursor-pointer"
+          >
+            Voltar para o início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Só bloqueia a tela quando ainda não há contexto (cache local já hidrata em ~0ms)
   if (!adminContext) {
     return (
@@ -383,6 +438,19 @@ const Admin = () => {
     );
   }
 
+  // ═══════ PAYWALL: Trial expirou ou atraso > 4 dias ═══════
+  if (!subscription.loading && subscription.isBlocked && !subscription.isExempt) {
+    return (
+      <TenantPaywall
+        tenantNome={adminContext.apelido || "Barbearia"}
+        isOverdue={subscription.isOverdue}
+        onLogout={async () => {
+          await supabase.auth.signOut();
+          navigate("/login");
+        }}
+      />
+    );
+  }
 
   // ========== LAYOUT MOBILE ==========
   if (isMobile) {
@@ -391,7 +459,7 @@ const Admin = () => {
         {/* Background limpo */}
 
         {/* Drawer Menu */}
-        <AdminMobileDrawer 
+        <AdminMobileDrawer
           isOpen={isDrawerOpen}
           onClose={handleCloseDrawer}
           pendingCount={pendingCount}
@@ -431,52 +499,27 @@ const Admin = () => {
           >
 
             <Suspense fallback={<LoadingFallback />}>
-                <Routes>
-                  <Route index element={<AdminDashboard adminContext={adminContext} />} />
-                  <Route path="agenda" element={<AdminAgenda adminContext={adminContext} />} />
-                  <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/admin" />} />
-                  <Route path="confirmacoes-pendentes" element={<AdminConfirmacoesPendentes adminContext={adminContext} />} />
+              <Routes>
+                <Route index element={<AdminDashboard adminContext={adminContext} />} />
+                <Route path="agenda" element={<AdminAgenda adminContext={adminContext} />} />
+                <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/admin" />} />
+                <Route path="confirmacoes-pendentes" element={<AdminConfirmacoesPendentes adminContext={adminContext} />} />
                 <Route path="barbeiros" element={<AdminBarbeiros />} />
                 <Route
                   path="clientes"
-                  element={
-                    adminContext ? (
-                      <BarberClientes
-                        barberContext={{
-                          barbeiroId: adminContext.barbeiroId || "",
-                          apelido: adminContext.apelido || "Admin",
-                          userId: adminContext.userId,
-                          tenantId: adminContext.tenantId || null,
-                          isTenantAdmin: true,
-                          deletedAt: null,
-                          graceDaysLeft: 0,
-                          canManageTenantWideClientBlock: true,
-                        }}
-                        basePath="/admin"
-                      />
-                    ) : null
-                  }
+                  element={<Navigate to="/admin/config-barbearia?screen=clientes" replace />}
                 />
                 <Route
                   path="meus-clientes"
-                  element={
-                    adminContext?.barbeiroId ? (
-                      <BarberClientes
-                        barberContext={{
-                          barbeiroId: adminContext.barbeiroId,
-                          apelido: adminContext.apelido || "",
-                          userId: adminContext.userId,
-                          tenantId: adminContext.tenantId || null,
-                          isTenantAdmin: true,
-                          deletedAt: null,
-                          graceDaysLeft: 0,
-                          canManageTenantWideClientBlock: true,
-                        }}
-                        basePath="/admin"
-                        forceViewMode="meus"
-                      />
-                    ) : null
-                  }
+                  element={<Navigate to="/admin/config-barbearia?screen=clientes-meus" replace />}
+                />
+                <Route
+                  path="meu-plano"
+                  element={<Navigate to="/admin/config-barbearia?screen=meu-plano" replace />}
+                />
+                <Route
+                  path="assinatura"
+                  element={<Navigate to="/admin/config-barbearia?screen=meu-plano" replace />}
                 />
                 <Route path="config-barbearia" element={
                   adminContext ? (
@@ -502,7 +545,7 @@ const Admin = () => {
                 } />
                 <Route path="avaliacoes" element={<AdminAvaliacoes />} />
                 <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId || (adminContext?.tenantBarberIds && adminContext.tenantBarberIds.length > 0 ? adminContext.tenantBarberIds[0] : null)} userName={adminContext?.apelido || "Admin"} basePath="/admin" />} />
-                <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext?.barbeiroId ?? null} basePath="/admin/perfil" />} />
+                <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext?.barbeiroId ?? null} tenantId={adminContext?.tenantId} basePath="/admin/perfil" />} />
                 <Route path="servicos/*" element={<AdminServicos />} />
                 <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />
                 <Route path="promocoes" element={<AdminCampanhas basePath="/admin" />} />
@@ -511,7 +554,7 @@ const Admin = () => {
                 <Route path="configuracoes" element={<AdminConfiguracoes />} />
                 <Route path="apis" element={<AdminAPIs />} />
                 <Route path="seguranca/*" element={<AdminSeguranca />} />
-                <Route path="horarios" element={<AdminMobileHorariosRoute barbeiroId={adminContext?.barbeiroId || undefined} tenantId={adminContext?.tenantId || undefined} />} />
+                <Route path="horarios" element={<Navigate to="/admin/config-barbearia?screen=horarios" replace />} />
                 <Route path="dev" element={<AdminDev />} />
                 <Route path="disparo" element={<AdminDisparo />} />
                 <Route path="perfil" element={<AdminMobileProfile />} />
@@ -529,8 +572,23 @@ const Admin = () => {
                   )
                 } />
                 <Route path="meus-planos" element={<AdminMeusPlanos basePath="/admin" />} />
-                <Route path="configuracoes-perfil" element={<ProfileSettingsPage />} />
+                <Route path="configuracoes-perfil" element={<Navigate to="/admin/config-barbearia" replace />} />
                 <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
+                <Route path="meus-dados/*" element={
+                  <BarberDadosPessoais
+                    barberContext={{
+                      barbeiroId: adminContext?.barbeiroId || "",
+                      apelido: adminContext?.apelido || "Admin",
+                      userId: adminContext.userId,
+                      deletedAt: null,
+                      graceDaysLeft: 0,
+                      tenantId: adminContext.tenantId || null,
+                      isTenantAdmin: true,
+                      canManageTenantWideClientBlock: true,
+                    }}
+                    basePath="/admin"
+                  />
+                } />
                 <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath="/admin" tenantId={adminContext?.tenantId} />} />
                 <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath="/admin" tenantNome={adminContext?.apelido} />} />
                 <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} title="Portfólio da Barbearia" showBack onBack={() => navigate("/admin")} /> : null} />
@@ -539,13 +597,14 @@ const Admin = () => {
                 <Route path="efi-credenciais" element={<AdminEfiCredenciais />} />
                 <Route path="indicacoes" element={<AdminIndicacoes />} />
                 <Route path="minhas-indicacoes" element={<AdminIndicacoes />} />
+                <Route path="*" element={<Navigate to="/admin" replace />} />
               </Routes>
             </Suspense>
           </div>
         </main>
 
         {/* Bottom Navigation Mobile — esconder nas configurações, edição de serviços, horários e disparo */}
-        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("meus-clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("instagram") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
+        {!location.pathname.includes("configuracoes-perfil") && !location.pathname.includes("config-barbearia") && !location.pathname.includes("servicos/cortes") && !location.pathname.includes("servicos/planos") && !location.pathname.includes("horarios") && !location.pathname.includes("dados-empresa") && !location.pathname.includes("meus-dados") && !location.pathname.includes("seguranca") && !location.pathname.includes("clientes") && !location.pathname.includes("meus-clientes") && !location.pathname.includes("barbeiros") && !location.pathname.includes("avaliacoes") && !location.pathname.includes("promocoes") && !location.pathname.includes("relatorios") && !location.pathname.includes("whatsapp") && !location.pathname.includes("instagram") && !location.pathname.includes("portfolio") && !location.pathname.includes("unidades") && !location.pathname.includes("agendamento") && !location.pathname.includes("disparo") && (
           <div className="lg:hidden">
             <AdminMobileNavigation barbeiroId={adminContext?.barbeiroId} />
           </div>
@@ -558,128 +617,144 @@ const Admin = () => {
   // ========== LAYOUT DESKTOP ==========
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-background">
-        {/* Background limpo */}
-        
-        {/* Sidebar fixa à esquerda */}
-        <AdminSidebar />
-        
-        {/* Conteúdo principal */}
-        <main className="relative z-10 flex-1 flex flex-col h-screen overflow-hidden transition-all duration-300">
-          <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-            <div className={cn(
-              "max-w-[1600px] mx-auto",
-              (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/relatorios") || location.pathname.includes("/carteira") || location.pathname.includes("/financeiro"))
-                ? "p-0"
-                : "p-6 lg:p-8"
-            )}>
-              <Suspense fallback={<LoadingFallback />}>
-                <Routes>
-                  <Route index element={<AdminDashboard adminContext={adminContext} />} />
-                  <Route path="agenda" element={<AdminAgenda adminContext={adminContext} />} />
-                  <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/admin" />} />
-                  <Route path="confirmacoes-pendentes" element={<AdminConfirmacoesPendentes adminContext={adminContext} />} />
-                  <Route path="barbeiros" element={<AdminBarbeiros />} />
-                  <Route
-                    path="clientes"
-                    element={
-                      adminContext ? (
-                        <BarberClientes
-                          barberContext={{
-                            barbeiroId: adminContext.barbeiroId || "",
-                            apelido: adminContext.apelido || "Admin",
-                            userId: adminContext.userId,
-                            tenantId: adminContext.tenantId || null,
-                            isTenantAdmin: true,
-                            deletedAt: null,
-                            graceDaysLeft: 0,
-                            canManageTenantWideClientBlock: true,
-                          }}
-                          basePath="/admin"
-                        />
-                      ) : null
-                    }
-                  />
-                  <Route
-                    path="meus-clientes"
-                    element={
-                      adminContext.barbeiroId ? (
-                        <BarberClientes
-                          barberContext={{
-                            barbeiroId: adminContext.barbeiroId,
-                            apelido: adminContext.apelido || "",
-                            userId: adminContext.userId,
-                            tenantId: adminContext.tenantId || null,
-                            isTenantAdmin: true,
-                            deletedAt: null,
-                            graceDaysLeft: 0,
-                            canManageTenantWideClientBlock: true,
-                          }}
-                          basePath="/admin"
-                          forceViewMode="meus"
-                        />
-                      ) : null
-                    }
-                  />
-                  <Route path="avaliacoes" element={<AdminAvaliacoes />} />
-                  <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId} userName={adminContext?.apelido || "Admin"} />} />
-                  <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} basePath="/admin/perfil" />} />
-                  <Route path="servicos/*" element={<AdminServicos />} />
-                  <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />
-                  <Route path="promocoes" element={<AdminCampanhas basePath="/admin" />} />
-                  <Route path="suporte" element={<AdminSuportePanel />} />
-                  <Route path="suporte-config" element={<AdminSuporteConfig />} />
-                  <Route path="configuracoes" element={<AdminConfiguracoes />} />
-                  <Route path="apis" element={<AdminAPIs />} />
-                  <Route path="seguranca/*" element={<AdminSeguranca />} />
-                  <Route path="horarios" element={<AdminDesktopHorariosRoute barbeiroId={adminContext?.barbeiroId || undefined} tenantId={adminContext?.tenantId || undefined} />} />
-                  <Route path="dev" element={<AdminDev />} />
-                  <Route path="disparo" element={<AdminDisparo />} />
-                  <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
-                  <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath="/admin" tenantId={adminContext?.tenantId} />} />
-                  <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath="/admin" tenantNome={adminContext?.apelido} />} />
-                  <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} title="Portfólio da Barbearia" showBack onBack={() => navigate("/admin")} /> : null} />
-                  <Route path="unidades" element={<AdminUnidades basePath="/admin" />} />
-                  <Route path="meus-planos" element={<AdminMeusPlanos basePath="/admin" />} />
-                  <Route path="loja/*" element={<AdminLojaGlobal />} />
-                  <Route path="efi-credenciais" element={<AdminEfiCredenciais />} />
-                  <Route path="indicacoes" element={<AdminIndicacoes />} />
-                  <Route path="minhas-indicacoes" element={<AdminIndicacoes />} />
-                  <Route path="perfil" element={<div className="max-w-2xl mx-auto"><AdminMobileProfile /></div>} />
-                  <Route path="carteira" element={adminContext.barbeiroId ? (
-                    <div className="max-w-2xl mx-auto">
-                      <CarteiraPage barbeiroId={adminContext.barbeiroId} barbeiroNome={adminContext.apelido || "Admin"} basePath="/admin" />
-                    </div>
-                  ) : (
-                    <div className="max-w-2xl mx-auto px-5 py-10 text-center text-sm text-muted-foreground">
-                      Sua conta de administrador não está vinculada a um barbeiro, então não há carteira disponível.
-                    </div>
-                  )} />
-                  <Route path="config-barbearia" element={
+      {/* Background limpo */}
+
+      {/* Sidebar fixa à esquerda */}
+      <AdminSidebar />
+
+      {/* Conteúdo principal */}
+      <main className="relative z-10 flex-1 flex flex-col h-screen overflow-hidden transition-all duration-300">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
+          <div className={cn(
+            "max-w-[1600px] mx-auto",
+            (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/relatorios") || location.pathname.includes("/carteira") || location.pathname.includes("/financeiro"))
+              ? "p-0"
+              : "p-6 lg:p-8"
+          )}>
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+                <Route index element={<AdminDashboard adminContext={adminContext} />} />
+                <Route path="agenda" element={<AdminAgenda adminContext={adminContext} />} />
+                <Route path="agendamento/:appointmentId" element={<AppointmentDetailsPage basePath="/admin" />} />
+                <Route path="confirmacoes-pendentes" element={<AdminConfirmacoesPendentes adminContext={adminContext} />} />
+                <Route path="barbeiros" element={<AdminBarbeiros />} />
+                <Route
+                  path="clientes"
+                  element={
                     adminContext ? (
-                      <BarberConfigBarbearia
+                      <BarberClientes
                         barberContext={{
                           barbeiroId: adminContext.barbeiroId || "",
                           apelido: adminContext.apelido || "Admin",
                           userId: adminContext.userId,
-                          deletedAt: null,
-                          graceDaysLeft: 0,
                           tenantId: adminContext.tenantId || null,
                           isTenantAdmin: true,
+                          deletedAt: null,
+                          graceDaysLeft: 0,
                           canManageTenantWideClientBlock: true,
                         }}
-                        basePath="/admin/config-barbearia"
-                        appBasePath="/admin"
+                        basePath="/admin"
                       />
-                    ) : (
-                      <div className="flex items-center justify-center min-h-[60vh]">
-                        <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
-                      </div>
-                    )
-                  } />
-                </Routes>
-              </Suspense>
-            </div>
+                    ) : null
+                  }
+                />
+                <Route
+                  path="meus-clientes"
+                  element={
+                    adminContext.barbeiroId ? (
+                      <BarberClientes
+                        barberContext={{
+                          barbeiroId: adminContext.barbeiroId,
+                          apelido: adminContext.apelido || "",
+                          userId: adminContext.userId,
+                          tenantId: adminContext.tenantId || null,
+                          isTenantAdmin: true,
+                          deletedAt: null,
+                          graceDaysLeft: 0,
+                          canManageTenantWideClientBlock: true,
+                        }}
+                        basePath="/admin"
+                        forceViewMode="meus"
+                      />
+                    ) : null
+                  }
+                />
+                <Route path="avaliacoes" element={<AdminAvaliacoes />} />
+                <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId} userName={adminContext?.apelido || "Admin"} />} />
+                <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} tenantId={adminContext.tenantId} basePath="/admin/perfil" />} />
+                <Route path="servicos/*" element={<AdminServicos />} />
+                <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />
+                <Route path="promocoes" element={<AdminCampanhas basePath="/admin" />} />
+                <Route path="suporte" element={<AdminSuportePanel />} />
+                <Route path="suporte-config" element={<AdminSuporteConfig />} />
+                <Route path="configuracoes" element={<AdminConfiguracoes />} />
+                <Route path="apis" element={<AdminAPIs />} />
+                <Route path="seguranca/*" element={<AdminSeguranca />} />
+                <Route path="horarios" element={<AdminDesktopHorariosRoute barbeiroId={adminContext?.barbeiroId || undefined} tenantId={adminContext?.tenantId || undefined} />} />
+                <Route path="dev" element={<AdminDev />} />
+                <Route path="disparo" element={<AdminDisparo />} />
+                <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
+                <Route path="meus-dados/*" element={
+                  <BarberDadosPessoais
+                    barberContext={{
+                      barbeiroId: adminContext?.barbeiroId || "",
+                      apelido: adminContext?.apelido || "Admin",
+                      userId: adminContext.userId,
+                      deletedAt: null,
+                      graceDaysLeft: 0,
+                      tenantId: adminContext.tenantId || null,
+                      isTenantAdmin: true,
+                      canManageTenantWideClientBlock: true,
+                    }}
+                    basePath="/admin"
+                  />
+                } />
+                <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath="/admin" tenantId={adminContext?.tenantId} />} />
+                <Route path="instagram" element={<InstagramConnectionPage barbeiroId={adminContext?.barbeiroId} basePath="/admin" tenantNome={adminContext?.apelido} />} />
+                <Route path="portfolio" element={adminContext?.barbeiroId ? <PortfolioManager barbeiroId={adminContext.barbeiroId} title="Portfólio da Barbearia" showBack onBack={() => navigate("/admin")} /> : null} />
+                <Route path="unidades" element={<AdminUnidades basePath="/admin" />} />
+                <Route path="meus-planos" element={<AdminMeusPlanos basePath="/admin" />} />
+                <Route path="loja/*" element={<AdminLojaGlobal />} />
+                <Route path="efi-credenciais" element={<AdminEfiCredenciais />} />
+                <Route path="indicacoes" element={<AdminIndicacoes />} />
+                <Route path="minhas-indicacoes" element={<AdminIndicacoes />} />
+                <Route path="perfil" element={<div className="max-w-2xl mx-auto"><AdminMobileProfile /></div>} />
+                <Route path="carteira" element={adminContext.barbeiroId ? (
+                  <div className="max-w-2xl mx-auto">
+                    <CarteiraPage barbeiroId={adminContext.barbeiroId} barbeiroNome={adminContext.apelido || "Admin"} basePath="/admin" />
+                  </div>
+                ) : (
+                  <div className="max-w-2xl mx-auto px-5 py-10 text-center text-sm text-muted-foreground">
+                    Sua conta de administrador não está vinculada a um barbeiro, então não há carteira disponível.
+                  </div>
+                )} />
+                <Route path="config-barbearia" element={
+                  adminContext ? (
+                    <BarberConfigBarbearia
+                      barberContext={{
+                        barbeiroId: adminContext.barbeiroId || "",
+                        apelido: adminContext.apelido || "Admin",
+                        userId: adminContext.userId,
+                        deletedAt: null,
+                        graceDaysLeft: 0,
+                        tenantId: adminContext.tenantId || null,
+                        isTenantAdmin: true,
+                        canManageTenantWideClientBlock: true,
+                      }}
+                      basePath="/admin/config-barbearia"
+                      appBasePath="/admin"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center min-h-[60vh]">
+                      <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
+                    </div>
+                  )
+                } />
+                <Route path="*" element={<Navigate to="/admin" replace />} />
+              </Routes>
+            </Suspense>
           </div>
+        </div>
       </main>
       <SupportChatBubble />
     </div>

@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import { resolveOwnerIdentity } from "@/lib/ownerIdentity";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 interface AdminMobileDrawerProps {
   isOpen: boolean;
@@ -88,10 +89,9 @@ export function AdminMobileDrawer({ isOpen, onClose, pendingCount, basePath = "/
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      toast.success("Logout realizado com sucesso");
       onClose();
-      window.location.href = "/login";
+      await signOutAndClearDevice();
+      toast.success("Logout realizado com sucesso");
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
       toast.error("Erro ao fazer logout");

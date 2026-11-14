@@ -6,6 +6,7 @@ import { Bell, Calendar, ChevronRight, CreditCard, Gift, History, Loader2, LogOu
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -328,7 +329,7 @@ const Cliente = () => {
       .from("profiles")
       .select("id, nome, telefone, avatar_url, banner_url, barbearia_preferida_id")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
     
     if (!mountedRef.current) return;
     setProfile(profileData);
@@ -452,9 +453,12 @@ const Cliente = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    toast.success("Logout realizado");
-    navigate("/");
+    try {
+      await signOutAndClearDevice((url) => navigate(url));
+      toast.success("Logout realizado");
+    } catch {
+      toast.error("Erro ao sair");
+    }
   };
 
   const handleResumePayment = (bookingId: string) => {
@@ -494,7 +498,7 @@ const Cliente = () => {
       .from("agendamentos")
       .select("barbeiro_confirmou, ponto_liberado")
       .eq("id", appointmentId)
-      .single();
+      .maybeSingle();
 
     const barberConfirmed = (appointmentRow as any)?.barbeiro_confirmou;
     const pointReleased = (appointmentRow as any)?.ponto_liberado;

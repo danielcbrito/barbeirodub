@@ -444,15 +444,14 @@ async function getWooviBalance(admin: SupabaseAdminClient, barber: WooviBarberRo
   const theoreticalAvailable = Math.max(0, wooviBalance - blocked);
   // O valor líquido sacável do barbeiro respeita o dinheiro físico da matriz menos o saldo de outros barbeiros
   const liquidAccountAvailable = masterTotal !== null ? Math.max(0, masterTotal - otherSubsTotal) : theoreticalAvailable;
-  const realWithdrawable = Math.min(theoreticalAvailable, liquidAccountAvailable);
-  const realBalance = realWithdrawable + blocked;
-
+  // Saldo exibido = 100% do saldo real da subconta Woovi (fonte de verdade).
+  // A liquidez da conta matriz só é usada como trava no momento do saque.
   return {
-    balance_centavos: realBalance,
+    balance_centavos: wooviBalance,
     raw_subaccount_balance_centavos: wooviBalance,
-    blocked_centavos: blocked,
-    available_centavos: realWithdrawable,
-    master_available_centavos: realWithdrawable,
+    blocked_centavos: Math.min(blocked, wooviBalance),
+    available_centavos: theoreticalAvailable,
+    master_available_centavos: masterTotal !== null ? liquidAccountAvailable : null,
     pix_key: sub?.pixKey ?? barber.woovi_pix_key,
     withdraw_blocked: Boolean(sub?.withdrawBlocked),
     configured: true,
@@ -747,14 +746,19 @@ async function handleWithdraw(req: Request, body: Record<string, unknown>): Prom
       );
     }
 
+    // A liquidez da conta principal é uma trava independente: ter saldo na
+    // subconta não basta se a conta principal não tiver o dinheiro físico.
+    if (balance.master_available_centavos !== null
+      && balance.master_available_centavos !== undefined
+      && valueCentavos > balance.master_available_centavos) {
+      return fail(
+        "INSUFFICIENT_MASTER_BALANCE",
+        `O limite disponível em caixa na conta da barbearia para saque imediato é de R$ ${(balance.master_available_centavos / 100).toFixed(2)}. Ajuste o valor para até R$ ${(balance.master_available_centavos / 100).toFixed(2)}.`,
+        200,
+      );
+    }
+
     if (valueCentavos > balance.available_centavos) {
-      if (balance.master_available_centavos !== null && balance.master_available_centavos !== undefined && valueCentavos > balance.master_available_centavos) {
-        return fail(
-          "INSUFFICIENT_MASTER_BALANCE",
-          `O limite disponível em caixa na conta da barbearia para saque imediato é de R$ ${(balance.master_available_centavos / 100).toFixed(2)}. Ajuste o valor para até R$ ${(balance.master_available_centavos / 100).toFixed(2)}.`,
-          200,
-        );
-      }
       return fail(
         "INSUFFICIENT_BALANCE",
         `Saldo disponível R$ ${(balance.available_centavos / 100).toFixed(2)} (R$ ${(balance.blocked_centavos / 100).toFixed(2)} aguardando finalização do corte)`,

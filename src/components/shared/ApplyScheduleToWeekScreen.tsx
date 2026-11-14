@@ -1,4 +1,4 @@
-import { Loader2, CheckCheck, X, Check } from 'lucide-react';
+import { Loader2, CheckCheck, X, Check, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { motion } from 'framer-motion';
@@ -7,19 +7,6 @@ const DIAS_SEMANA = [
   'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
   'Quinta-feira', 'Sexta-feira', 'Sábado',
 ];
-
-function CurvedBackArrow({ className }: { className?: string }) {
-  return (
-    <svg
-      width="24" height="24" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M9 14L4 9l5-5" />
-      <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-    </svg>
-  );
-}
 
 interface Props {
   horaAbertura: string;
@@ -126,10 +113,10 @@ export function ApplyScheduleToWeekScreen({
           <button
             type="button"
             onClick={onBack}
-            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all -ml-1 shrink-0"
+            className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all shrink-0 text-foreground flex items-center justify-center border border-border/30"
             aria-label="Voltar"
           >
-            <CurvedBackArrow className="text-foreground" />
+            <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
           </button>
         )}
         <div className="flex-1 min-w-0">

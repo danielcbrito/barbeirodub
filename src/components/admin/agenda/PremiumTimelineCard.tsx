@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TimelineAppointment } from "../AdminAgenda";
 import { usePlanPaymentInfo } from "@/hooks/usePlanPaymentInfo";
-import { isWhatsAppAppointment } from "@/lib/walkInName";
+import { isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 
 interface PremiumTimelineCardProps {
@@ -167,7 +167,7 @@ export const PremiumTimelineCard = memo(function PremiumTimelineCard({
               {/* Client Name */}
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <User className="w-3.5 h-3.5" />
-                <span className="truncate">{appointment.profile?.nome || "Cliente"}</span>
+                <span className="truncate">{resolveClienteDisplayName(appointment.observacoes, appointment.profile?.nome, "Cliente", appointment.cliente_nome)}</span>
                 {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
               </div>
             </div>

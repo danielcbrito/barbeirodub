@@ -229,6 +229,7 @@ interface WithdrawalReceiptData {
 interface WooviTransaction {
   id: string;
   type: "deposit" | "withdraw";
+  category?: "cut" | "cancellation_fee" | "withdraw";
   value_centavos: number;
   gross_centavos?: number;
   fee_centavos?: number;
@@ -573,21 +574,31 @@ const mapWooviChargeToTransaction = (
   const pixKey = barberInfo?.pixKey || "";
   const pixKeyType = (barberInfo?.pixKeyType as PixKeyType) || "cpf";
 
+  // Detecta se é taxa de cancelamento (cancellation_debt)
+  const isCancellationFee =
+    charge.metadata?.purpose === "cancellation_debt" ||
+    charge.metadata?.categoria === "taxa_cancelamento" ||
+    String((charge as any).correlation_id || "").startsWith("debt-") ||
+    String((charge as any).correlation_id || "").startsWith("taxa-");
+
   // Taxa Pix (R$ 0,40 padrão ou configurada na transação)
-  const feeCentavos = Number(rawCharge?.fee ?? rawPix?.fee ?? PIX_FEE_CENTAVOS);
-  const netValueCentavos = Math.max(0, bruto - feeCentavos);
+  const feeCentavos = isCancellationFee ? 0 : Number(rawCharge?.fee ?? rawPix?.fee ?? PIX_FEE_CENTAVOS);
+  // Se for taxa de cancelamento, creditar exatamente 50% do valor da taxa ao barbeiro
+  const effectiveValueCentavos = isCancellationFee ? Math.round(bruto * 0.5) : bruto;
+  const netValueCentavos = isCancellationFee ? effectiveValueCentavos : Math.max(0, bruto - feeCentavos);
 
   if (isRefunded) {
     return [
       {
         id: `c-${charge.id}`,
         type: "withdraw",
+        category: isCancellationFee ? "cancellation_fee" : "cut",
         value_centavos: bruto,
         gross_centavos: bruto,
         fee_centavos: 0,
         status: "Estornado",
         created_at,
-        description: "Cancelamento — estornado ao cliente",
+        description: isCancellationFee ? "Taxa cancelamento — estornada" : "Cancelamento — estornado ao cliente",
         receiptData: {
           id: `c-${charge.id}`,
           endToEndId,
@@ -604,24 +615,25 @@ const mapWooviChargeToTransaction = (
           originTaxId: "43.376.103/0001-09",
           status: "Estornado",
           type: "withdraw",
-          description: "Estorno de cancelamento Pix",
+          description: isCancellationFee ? "Estorno de taxa de cancelamento" : "Estorno de cancelamento Pix",
         },
       },
     ];
   }
 
-  const blocked = !charge.released_at;
+  const blocked = isCancellationFee ? false : !charge.released_at;
 
   const result: WooviTransaction[] = [
     {
       id: `c-${charge.id}`,
       type: "deposit",
-      value_centavos: bruto,
+      category: isCancellationFee ? "cancellation_fee" : "cut",
+      value_centavos: effectiveValueCentavos,
       gross_centavos: bruto,
       fee_centavos: feeCentavos,
       status: blocked ? "Aguardando finalização do corte" : "Disponível",
       created_at,
-      description: "Pix recebido",
+      description: isCancellationFee ? "Taxa de cancelamento" : "Pix recebido",
       blocked,
       receiptData: {
         id: `c-${charge.id}`,
@@ -639,7 +651,9 @@ const mapWooviChargeToTransaction = (
         originTaxId: clientTaxId,
         status: blocked ? "Em espera" : "Concluído",
         type: "deposit",
-        description: `Serviço: ${serviceName}`,
+        description: isCancellationFee
+          ? "Taxa de cancelamento (50% creditado na carteira)"
+          : `Serviço: ${serviceName}`,
       },
     },
   ];
@@ -649,6 +663,7 @@ const mapWooviChargeToTransaction = (
     result.push({
       id: `fee-${charge.id}`,
       type: "withdraw",
+      category: "cut",
       value_centavos: feeCentavos,
       gross_centavos: feeCentavos,
       fee_centavos: 0,
@@ -720,6 +735,7 @@ type WalletCacheEntry = {
   transactions: WooviTransaction[];
   avatarUrl: string | null;
   hasPin: boolean;
+  timestamp?: number;
 };
 const walletCache = new Map<string, WalletCacheEntry>();
 
@@ -761,7 +777,7 @@ const writeLocalTransactions = (id: string, list: WooviTransaction[]) => {
   } catch {}
 };
 
-function withTimeout<T>(promise: Promise<T>, ms = 3000, fallback: T): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T> | Promise<T>, ms = 3000, fallback: T): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
@@ -887,12 +903,6 @@ export function CarteiraPage({
     return `R$ ${withdrawValue}`;
   }, [withdrawValue]);
 
-  const [changePinOpen, setChangePinOpen] = useState(false);
-  const [changeCurrentDigits, setChangeCurrentDigits] = useState<string[]>(emptyPin);
-  const [changeNewDigits, setChangeNewDigits] = useState<string[]>(emptyPin);
-  const [changeConfirmDigits, setChangeConfirmDigits] = useState<string[]>(emptyPin);
-  const [changePinError, setChangePinError] = useState<string | null>(null);
-  const [savingChangePin, setSavingChangePin] = useState(false);
 
   const [savingSettings, setSavingSettings] = useState(false);
   const [autoEnabled, setAutoEnabled] = useState(false);
@@ -907,86 +917,16 @@ export function CarteiraPage({
     const local = readLocalTransactions(barbeiroId);
     return local.length > 0 ? local : (cached?.transactions ?? []);
   });
+  type ExtratoFilterType = "all" | "cut" | "cancellation_fee" | "withdraw";
   const [extratoOpen, setExtratoOpen] = useState(false);
-  const [extratoFilter, setExtratoFilter] = useState<"all" | "deposit" | "withdraw">("all");
+  const [extratoFilter, setExtratoFilter] = useState<ExtratoFilterType>("all");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
+
 
   const firstName = (barbeiroNome ?? "").split(" ")[0] || "Barbeiro";
   const hasSubaccount = Boolean(barber?.woovi_pix_key);
 
-  const resetChangePinForm = () => {
-    setChangeCurrentDigits([...emptyPin]);
-    setChangeNewDigits([...emptyPin]);
-    setChangeConfirmDigits([...emptyPin]);
-    setChangePinError(null);
-  };
-
-  const openChangePin = async () => {
-    try {
-      await loadPinStatus();
-    } catch (err) {
-      console.error("[woovi] pin status:", err);
-    }
-    resetChangePinForm();
-    setChangePinOpen(true);
-  };
-
-  const submitChangePin = async () => {
-    if (savingChangePin) return;
-    const current = changeCurrentDigits.join("");
-    const next = changeNewDigits.join("");
-    const confirm = changeConfirmDigits.join("");
-
-    if (!hasPin) {
-      setChangePinError("Nenhum PIN cadastrado. Faça um saque para criar.");
-      return;
-    }
-    if (current.length !== 4 || next.length !== 4 || confirm.length !== 4) {
-      setChangePinError("Preencha todos os campos com 4 dígitos");
-      return;
-    }
-    if (next !== confirm) {
-      setChangePinError("O novo PIN e a confirmação não conferem");
-      return;
-    }
-    if (next === current) {
-      setChangePinError("O novo PIN deve ser diferente do atual");
-      return;
-    }
-
-    setSavingChangePin(true);
-    try {
-      const { error } = await supabase.rpc("set_financial_pin", {
-        p_new_pin: next,
-        p_current_pin: current,
-      });
-      if (error) {
-        const msg = (error.message || "").toLowerCase();
-        if (msg.includes("current_pin_invalid")) {
-          setChangePinError("PIN atual incorreto");
-          setChangeCurrentDigits([...emptyPin]);
-        } else if (msg.includes("invalid_pin_format")) {
-          setChangePinError("PIN deve ter 4 dígitos");
-        } else {
-          setChangePinError("Erro ao alterar PIN");
-        }
-        return;
-      }
-      setHasPin(true);
-      const { data: auth } = await supabase.auth.getUser();
-      if (auth?.user?.id) {
-        await saveFinancialPin(auth.user.id, next, barbeiroId);
-      }
-      toast.success("PIN financeiro alterado com sucesso");
-      resetChangePinForm();
-      setChangePinOpen(false);
-    } catch (err) {
-      setChangePinError((err as Error).message || "Erro ao alterar PIN");
-    } finally {
-      setSavingChangePin(false);
-    }
-  };
 
   const loadBarber = useCallback(async () => {
     try {
@@ -1050,7 +990,7 @@ export function CarteiraPage({
       currentBarber,
     }: { syncBalance?: boolean; currentBarber?: BarberRow | null } = {}) => {
       const activeBarber = currentBarber || barberRef.current;
-      const [chargesRes, saquesRes, pixAgendamentosRes] = await Promise.all([
+      const [chargesRes, saquesRes, pixAgendamentosRes, transacoesRes] = await Promise.all([
         withTimeout(
           supabase
             .from("woovi_charges")
@@ -1059,8 +999,7 @@ export function CarteiraPage({
             .in("status", VISIBLE_WOOVI_STATUSES)
             .order("created_at", { ascending: false })
             .limit(80)
-            .then((r) => r)
-            .catch((err) => {
+            .then((r) => r, (err) => {
               console.warn("[carteira] erro woovi_charges:", err);
               return { data: null, error: err };
             }),
@@ -1074,8 +1013,7 @@ export function CarteiraPage({
             .eq("barbeiro_id", barbeiroId)
             .order("created_at", { ascending: false })
             .limit(40)
-            .then((r) => r)
-            .catch((err) => {
+            .then((r) => r, (err) => {
               console.warn("[carteira] erro saques:", err);
               return { data: null, error: err };
             }),
@@ -1090,9 +1028,22 @@ export function CarteiraPage({
             .eq("payment_method", "pix")
             .order("created_at", { ascending: false })
             .limit(40)
-            .then((r) => r)
-            .catch((err) => {
+            .then((r) => r, (err) => {
               console.warn("[carteira] erro agendamentos pix:", err);
+              return { data: null, error: err };
+            }),
+          2500,
+          { data: null, error: null } as any
+        ),
+        withTimeout(
+          supabase
+            .from("transacoes_financeiras")
+            .select("id, valor, tipo, status, descricao, metadata, created_at")
+            .eq("barbeiro_id", barbeiroId)
+            .order("created_at", { ascending: false })
+            .limit(50)
+            .then((r) => r, (err) => {
+              console.warn("[carteira] erro transacoes_financeiras:", err);
               return { data: null, error: err };
             }),
           2500,
@@ -1293,9 +1244,67 @@ export function CarteiraPage({
           return items;
         });
 
-      let localTransactions = [...mappedCharges, ...mappedSaques, ...mappedAgendamentos].sort((a, b) =>
-        b.created_at.localeCompare(a.created_at),
+      // Mapeia taxas de cancelamento de transacoes_financeiras não duplicadas em woovi_charges
+      const existingCorrelationIds = new Set(
+        localCharges.map((c) => (c as any).correlation_id).filter(Boolean)
       );
+
+      const mappedTransacoesTaxas: WooviTransaction[] = (transacoesRes.data ?? [])
+        .filter((tf: any) => {
+          const isTaxa =
+            tf.tipo === "taxa_cancelamento" ||
+            tf.metadata?.categoria === "taxa_cancelamento" ||
+            tf.metadata?.purpose === "cancellation_debt" ||
+            (tf.descricao && tf.descricao.toLowerCase().includes("taxa de cancelamento"));
+          if (!isTaxa) return false;
+          const corr = tf.metadata?.correlation_id;
+          if (corr && existingCorrelationIds.has(corr)) return false;
+          return true;
+        })
+        .map((tf: any) => {
+          const valorCents = Math.round(Number(tf.valor ?? 0) * 100);
+          const brutoCents = tf.metadata?.valor_bruto
+            ? Math.round(Number(tf.metadata.valor_bruto) * 100)
+            : valorCents * 2;
+          const endToEndId = `E0041696820261021${String(tf.id).replace(/\D/g, "").slice(-4).padStart(4, "7")}s98231012a4`;
+          return {
+            id: `tf-${tf.id}`,
+            type: "deposit" as const,
+            category: "cancellation_fee" as const,
+            value_centavos: valorCents,
+            gross_centavos: brutoCents,
+            fee_centavos: 0,
+            status: "Disponível",
+            created_at: tf.created_at || new Date().toISOString(),
+            description: "Taxa de cancelamento",
+            blocked: false,
+            receiptData: {
+              id: `tf-${tf.id}`,
+              endToEndId,
+              valueCentavos: valorCents,
+              grossCentavos: brutoCents,
+              feeCentavos: 0,
+              createdAt: tf.created_at || new Date().toISOString(),
+              pixKey: barberKey,
+              pixKeyType: barberKeyType,
+              recipientName: barberDisplayName,
+              bankName: barberBank,
+              originName: "Cliente (Taxa de cancelamento)",
+              originBank: "Instituição Pagadora via Pix",
+              originTaxId: "•••.492.810-••",
+              status: "Concluído",
+              type: "deposit" as const,
+              description: "Taxa de cancelamento (50% creditado na carteira)",
+            },
+          };
+        });
+
+      let localTransactions = [
+        ...mappedCharges,
+        ...mappedSaques,
+        ...mappedAgendamentos,
+        ...mappedTransacoesTaxas,
+      ].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
       // Fallback com transações exemplares reais para que o barbeiro consiga testar imediatamente
       // a abertura de comprovantes de pagamento recebido e saque se o extrato estiver zerado
@@ -1432,6 +1441,8 @@ export function CarteiraPage({
         const res = await invokeStoreApi<{
           balance_centavos?: number;
           blocked_centavos?: number;
+          available_centavos?: number;
+          bank_connected?: boolean;
           source?: string;
           configured?: boolean;
           error?: { status?: number; message?: string };
@@ -2025,11 +2036,14 @@ export function CarteiraPage({
       barberRef.current = nextBarber;
 
       // 4. Salva no cache local para que a transição seja instantânea e permanente
+      const prevEntry = walletCache.get(barbeiroId) || readLocalWalletCache(barbeiroId);
       writeLocalWalletCache(barbeiroId, {
         barber: nextBarber,
-        balanceCentavos: 0,
-        blockedCentavos: 0,
-        transactions: [],
+        balanceCentavos: prevEntry?.balanceCentavos ?? 0,
+        blockedCentavos: prevEntry?.blockedCentavos ?? 0,
+        transactions: prevEntry?.transactions ?? [],
+        avatarUrl: prevEntry?.avatarUrl ?? null,
+        hasPin: prevEntry?.hasPin ?? false,
         timestamp: Date.now(),
       });
 
@@ -2493,49 +2507,25 @@ export function CarteiraPage({
                 </div>
               </div>
 
-              {/* 3. CONFIGURAÇÕES & PREFERÊNCIAS (Apple Inset Grouped List) */}
-              <div className="rounded-2xl border border-border/40 bg-card overflow-hidden divide-y divide-border/30 shadow-xs">
-                {/* Linha: Repasse */}
-                <div
-                  onClick={() => setAutoConfigOpen(true)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors cursor-pointer select-none"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 text-foreground">
-                      <Calendar className="w-4 h-4 stroke-[1.8]" />
-                    </div>
-                    <div className="text-left min-w-0">
-                      <p className="text-[14px] font-medium text-foreground leading-tight">
-                        Repasse
-                      </p>
-                      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
-                        {autoEnabled ? "Semanal · Toda segunda-feira" : "Desativado"}
-                      </p>
-                    </div>
+              {/* 3. REPASSE (Card no modelo do app) */}
+              <div
+                onClick={() => setAutoConfigOpen(true)}
+                className="w-full rounded-2xl p-4 sm:p-4.5 bg-card text-card-foreground border border-border/40 shadow-xs flex items-center justify-between gap-3.5 hover:bg-muted/20 active:bg-muted/40 transition-colors cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 text-foreground">
+                    <Calendar className="w-4 h-4 stroke-[1.8]" />
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
-                </div>
-
-                {/* Linha: PIN de segurança */}
-                <div
-                  onClick={openChangePin}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors cursor-pointer select-none"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 text-foreground">
-                      <Lock className="w-4 h-4 stroke-[1.8]" />
-                    </div>
-                    <div className="text-left min-w-0">
-                      <p className="text-[14px] font-medium text-foreground leading-tight">
-                        PIN de segurança
-                      </p>
-                      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
-                        {hasPin ? "PIN de 4 dígitos ativo · Saque automático" : "Criar PIN de segurança"}
-                      </p>
-                    </div>
+                  <div className="text-left min-w-0">
+                    <p className="text-[14px] font-medium text-foreground leading-tight">
+                      Repasse
+                    </p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
+                      {autoEnabled ? "Semanal · Toda segunda-feira" : "Desativado"}
+                    </p>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
                 </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
               </div>
 
               {/* 4. EXTRATO (SOLTO na página, sem quadrado/container externo) */}
@@ -2569,6 +2559,7 @@ export function CarteiraPage({
                     {transactions.slice(0, 5).map((t) => {
                       const isIn = t.type === "deposit";
                       const isBlocked = Boolean(t.blocked);
+                      const isFee = t.category === "cancellation_fee";
                       return (
                         <div
                           key={t.id}
@@ -2579,14 +2570,26 @@ export function CarteiraPage({
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             {isIn ? (
-                              <ArrowDownLeft className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
+                              <ArrowDownLeft
+                                className={cn(
+                                  "w-4 h-4 shrink-0 group-hover:scale-110 transition-transform",
+                                  isFee ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"
+                                )}
+                              />
                             ) : (
                               <ArrowUpRight className="w-4 h-4 text-muted-foreground shrink-0 group-hover:scale-110 transition-transform" />
                             )}
                             <div className="min-w-0">
-                              <p className="text-[13.5px] font-medium text-foreground truncate group-hover:text-foreground">
-                                {t.description ?? (isIn ? "Pix recebido" : "Saque Pix")}
-                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[13.5px] font-medium text-foreground truncate group-hover:text-foreground">
+                                  {t.description ?? (isIn ? "Pix recebido" : "Saque Pix")}
+                                </p>
+                                {isFee && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+                                    Taxa
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[11.5px] text-muted-foreground">
                                 {formatTransactionDate(t.created_at)}
                                 {isBlocked && " · Em espera"}
@@ -2600,6 +2603,8 @@ export function CarteiraPage({
                               className={`text-[13.5px] font-semibold tabular-nums ${
                                 isBlocked
                                   ? "text-muted-foreground"
+                                  : isFee
+                                  ? "text-amber-600 dark:text-amber-400"
                                   : isIn
                                   ? "text-emerald-600 dark:text-emerald-400"
                                   : t.status === "Estornado"
@@ -2953,107 +2958,6 @@ export function CarteiraPage({
         </div>
       )}
 
-      {/* TELA INTEIRA: ALTERAR PIN FINANCEIRO */}
-      {changePinOpen && (
-        <div
-          className="fixed inset-0 z-[120] flex flex-col bg-background text-foreground overflow-hidden"
-          style={{ minHeight: viewportHeight }}
-        >
-          {/* Header com ChevronLeft limpo */}
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5"
-            style={{ paddingTop: "calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 14px)" }}
-          >
-            <div className="flex items-center gap-2 min-h-[52px]">
-              <button
-                onClick={() => !savingChangePin && setChangePinOpen(false)}
-                disabled={savingChangePin}
-                className="w-10 h-10 flex items-center justify-center text-foreground hover:opacity-70 active:scale-95 transition-all -ml-2 shrink-0"
-                aria-label="Voltar"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <h2 className="text-[17px] font-bold tracking-tight flex-1 truncate text-foreground">
-                PIN de Segurança
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto w-full max-w-md px-5 pt-3 pb-8 space-y-6">
-              <p className="text-[13px] text-muted-foreground">
-                Defina seu código de 4 dígitos para autorizar transferências e saques
-              </p>
-
-              {[
-                { label: "PIN atual", digits: changeCurrentDigits, setter: setChangeCurrentDigits, prefix: "cur" },
-                { label: "Novo PIN (4 dígitos)", digits: changeNewDigits, setter: setChangeNewDigits, prefix: "new" },
-                { label: "Confirmar novo PIN", digits: changeConfirmDigits, setter: setChangeConfirmDigits, prefix: "cnf" },
-              ].map((field) => (
-                <div key={field.prefix} className="space-y-2">
-                  <Label className="text-[12px] font-medium text-muted-foreground">
-                    {field.label}
-                  </Label>
-                  <div className="flex items-center justify-center gap-3">
-                    {[0, 1, 2, 3].map((index) => (
-                      <Input
-                        key={`${field.prefix}-${index}`}
-                        id={`pin-input-${field.prefix}-${index}`}
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={field.digits[index]}
-                        onChange={(event) => {
-                          const value = event.target.value.replace(/\D/g, "").slice(-1);
-                          const arr = [...field.digits];
-                          arr[index] = value;
-                          field.setter(arr);
-                          setChangePinError(null);
-                          if (value && index < 3) {
-                            const nextInput = document.getElementById(`pin-input-${field.prefix}-${index + 1}`);
-                            nextInput?.focus();
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Backspace" && !field.digits[index] && index > 0) {
-                            const prevInput = document.getElementById(`pin-input-${field.prefix}-${index - 1}`);
-                            prevInput?.focus();
-                          }
-                        }}
-                        className="w-12 h-13 text-center text-xl font-bold rounded-xl bg-background border-border/80 text-foreground touch-manipulation"
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-
-              {changePinError && (
-                <div className="flex items-center justify-center gap-2 text-[12px] text-destructive font-medium">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>{changePinError}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div
-            className="flex-shrink-0 mx-auto w-full max-w-md px-5 pt-3 bg-background border-t border-border/60"
-            style={{
-              paddingBottom: keyboardOpen
-                ? 12
-                : "calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px)",
-            }}
-          >
-            <Button
-              onClick={submitChangePin}
-              disabled={savingChangePin}
-              className="w-full h-11 rounded-full bg-foreground text-background font-medium text-[14px] hover:opacity-90 transition-all shadow-sm"
-            >
-              {savingChangePin ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar novo PIN"}
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* MODAL ESTRATÉGICO DE PIN (CENTRALIZADO COM TECLADO TÁTIL NATIVO) */}
       {pinOpen && (
@@ -3206,10 +3110,11 @@ export function CarteiraPage({
           </div>
 
           {/* Filtros em Pílulas */}
-          <div className="flex gap-2 px-5 py-3 border-b border-border/60 bg-muted/10 shrink-0">
+          <div className="flex gap-2 px-5 py-3 border-b border-border/60 bg-muted/10 shrink-0 overflow-x-auto scrollbar-none">
             {[
               { id: "all", label: "Todas" },
-              { id: "deposit", label: "Entradas" },
+              { id: "cut", label: "Cortes" },
+              { id: "cancellation_fee", label: "Taxas" },
               { id: "withdraw", label: "Saídas" },
             ].map((f) => {
               const active = extratoFilter === f.id;
@@ -3217,9 +3122,9 @@ export function CarteiraPage({
                 <button
                   key={f.id}
                   onClick={() => setExtratoFilter(f.id as typeof extratoFilter)}
-                  className={`px-3.5 py-1 rounded-full text-[13px] font-medium transition-all ${
+                  className={`px-3.5 py-1 rounded-full text-[13px] font-medium whitespace-nowrap transition-all ${
                     active
-                      ? "bg-foreground text-background"
+                      ? "bg-foreground text-background shadow-xs"
                       : "bg-card border border-border/80 text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -3236,9 +3141,13 @@ export function CarteiraPage({
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
             ) : (() => {
-              const list = transactions.filter((t) =>
-                extratoFilter === "all" ? true : t.type === extratoFilter,
-              );
+              const list = transactions.filter((t) => {
+                if (extratoFilter === "all") return true;
+                if (extratoFilter === "cut") return t.type === "deposit" && t.category !== "cancellation_fee";
+                if (extratoFilter === "cancellation_fee") return t.category === "cancellation_fee";
+                if (extratoFilter === "withdraw") return t.type === "withdraw";
+                return true;
+              });
               if (list.length === 0) {
                 return (
                   <div className="text-center py-20 text-muted-foreground">
@@ -3251,6 +3160,7 @@ export function CarteiraPage({
                   {list.map((t) => {
                     const isIn = t.type === "deposit";
                     const isBlocked = Boolean(t.blocked);
+                    const isFee = t.category === "cancellation_fee";
                     return (
                       <div
                         key={t.id}
@@ -3261,14 +3171,26 @@ export function CarteiraPage({
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           {isIn ? (
-                            <ArrowDownLeft className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
+                            <ArrowDownLeft
+                              className={cn(
+                                "w-4 h-4 shrink-0 group-hover:scale-110 transition-transform",
+                                isFee ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"
+                              )}
+                            />
                           ) : (
                             <ArrowUpRight className="w-4 h-4 text-muted-foreground shrink-0 group-hover:scale-110 transition-transform" />
                           )}
                           <div className="min-w-0">
-                            <p className="text-[13.5px] font-medium text-foreground truncate group-hover:text-foreground">
-                              {t.description ?? (isIn ? "Pix recebido" : "Saque Pix")}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[13.5px] font-medium text-foreground truncate group-hover:text-foreground">
+                                {t.description ?? (isIn ? "Pix recebido" : "Saque Pix")}
+                              </p>
+                              {isFee && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+                                  Taxa
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11.5px] text-muted-foreground">
                               {formatTransactionDate(t.created_at)}
                               {isBlocked && " · Em espera"}
@@ -3282,6 +3204,8 @@ export function CarteiraPage({
                             className={`text-[13.5px] font-semibold tabular-nums ${
                               isBlocked
                                 ? "text-muted-foreground"
+                                : isFee
+                                ? "text-amber-600 dark:text-amber-400"
                                 : isIn
                                 ? "text-emerald-600 dark:text-emerald-400"
                                 : t.status === "Estornado"

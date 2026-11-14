@@ -1,0 +1,7 @@
+AJUSTE SUBCONTA TULIO (+5511952263002) - 10/11/2026
+Antes: subconta 144,00 | conta principal 134,20 | outras subcontas 11,00 (Tulio antigo 10,20, Pedro 0,40, Jose 0,40)
+Dinheiro real para o Tulio = 134,20 - 11,00 = 123,20 -> subconta estava 20,80 acima.
+Causa provavel: retirada feita direto da conta principal (titular e o proprio Tulio) sem debitar a subconta; a Woovi nao sincroniza as duas.
+Acao: POST /api/v1/subaccount/+5511952263002/debit valor 2080 (volta para a conta principal, nenhum dinheiro saiu).
+Depois: subconta 123,20 | principal 134,20 = 123,20 + 11,00. Nenhum outro barbeiro alterado. Codigo nao alterado.
+Obs: existe uma 2a subconta "Tulio" (+5511983916423) com 10,20 nao vinculada ao app.

@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronLeft } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -7,19 +7,6 @@ const DIAS_SEMANA = [
   'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
   'Quinta-feira', 'Sexta-feira', 'Sábado'
 ];
-
-function CurvedBackArrow({ className }: { className?: string }) {
-  return (
-    <svg
-      width="24" height="24" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M9 14L4 9l5-5" />
-      <path d="M4 9h10a4 4 0 0 1 4 4v1" />
-    </svg>
-  );
-}
 
 const OPTIONS = [5, 10, 15, 20, 30] as const;
 
@@ -38,7 +25,7 @@ export function SlotIntervalScreen({
   saving,
   onBack,
   onConfirm,
-  floatingBottomButton = false,
+  floatingBottomButton = true,
 }: SlotIntervalScreenProps) {
   const isPreset = OPTIONS.includes(currentValue as any);
   const [selected, setSelected] = useState<number>(isPreset ? currentValue : 15);
@@ -53,29 +40,30 @@ export function SlotIntervalScreen({
 
   return (
     <div
-      className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-5"
-      style={{ paddingTop: "calc(env(safe-area-inset-top) + 14px)" }}
+      className="mx-auto flex min-h-full w-full max-w-md flex-col px-4 sm:px-0 pb-28"
+      style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}
     >
-      <div className="flex items-center gap-1.5 min-h-[52px]">
+      <div className="flex items-center gap-2 min-h-[56px] py-1">
         <button
+          type="button"
           onClick={onBack}
-          className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-secondary/50 active:scale-95 transition-all -ml-1 shrink-0"
+          className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all shrink-0 text-foreground flex items-center justify-center border border-border/30"
           aria-label="Voltar"
         >
-          <CurvedBackArrow className="text-foreground" />
+          <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
         </button>
 
         <div className="flex-1 min-w-0">
           <h2 className="text-[20px] font-semibold text-foreground tracking-tight leading-none truncate">
             Intervalo de horários
           </h2>
-          <p className="text-[11px] text-muted-foreground/60 mt-2.5">
+          <p className="text-[12px] text-muted-foreground/70 mt-1 truncate">
             {DIAS_SEMANA[diaSemana]}
           </p>
         </div>
       </div>
 
-      <div className="h-px bg-border/30 mt-3" />
+      <div className="h-px bg-border/20 mt-2 mb-3" />
 
       <p className="text-[11px] text-muted-foreground/50 leading-relaxed font-light mt-3 mb-4">
         De quanto em quanto tempo os horários aparecem para o cliente. Escolha uma opção abaixo e confirme.
@@ -168,14 +156,14 @@ export function SlotIntervalScreen({
 
       <div
         className={floatingBottomButton
-          ? "fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md px-6 pt-5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90"
-          : "sticky bottom-0 z-30 mt-auto w-full pt-5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
+          ? "fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md px-4 pt-3 pb-[calc(16px+env(safe-area-inset-bottom))] bg-background/95 backdrop-blur-md border-t border-border/20 shadow-lg"
+          : "sticky bottom-0 z-30 mt-auto w-full px-4 pt-3 pb-[calc(16px+env(safe-area-inset-bottom))] bg-background/95 backdrop-blur-md border-t border-border/20"
         }
       >
         <Button
           onClick={() => onConfirm(finalValue, aplicarTodos)}
           disabled={saving || !isValid}
-          className="w-full h-[48px] rounded-xl bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full h-[50px] rounded-2xl bg-foreground hover:bg-foreground/90 text-background font-semibold text-base shadow-sm active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {saving ? (
             <>

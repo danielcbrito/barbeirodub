@@ -33,7 +33,12 @@ import {
   Banknote,
   ShieldCheck,
   Unlock,
+  AlertTriangle,
+  RotateCcw,
+  Link2,
+  Share2,
 } from "lucide-react";
+import { BarberShareLinkModal } from "@/components/barber/BarberShareLinkModal";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -156,8 +161,8 @@ function ClientHistorySection({
                   {h.payment_method === "plano"
                     ? "No Plano"
                     : typeof h.preco === "number"
-                    ? `R$ ${h.preco.toFixed(2).replace(".", ",")}`
-                    : "—"}
+                      ? `R$ ${h.preco.toFixed(2).replace(".", ",")}`
+                      : "—"}
                 </p>
                 <p className={cn("text-[10px] font-medium mt-0.5", statusCfg.color)}>
                   {statusCfg.label}
@@ -260,8 +265,8 @@ function ClientAllVisitsScreen({
                       {v.payment_method === "plano"
                         ? "No Plano"
                         : typeof v.preco === "number"
-                        ? `R$ ${v.preco.toFixed(2).replace(".", ",")}`
-                        : "—"}
+                          ? `R$ ${v.preco.toFixed(2).replace(".", ",")}`
+                          : "—"}
                     </p>
                     <span className={cn("inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold mt-1", statusCfg.color, statusCfg.bg)}>
                       {statusCfg.label}
@@ -540,7 +545,7 @@ export function BarberClientes({
   const viewId = searchParams.get("view");
 
   /* ── TanStack Query: dados dos clientes ── */
-  const { data: queryResult, isLoading: loading } = useBarberClientes(barberContext.barbeiroId);
+  const { data: queryResult, isLoading: loading, isError: isBarberClientsError, refetch: refetchBarberClients } = useBarberClientes(barberContext.barbeiroId);
   const clients = useMemo(() => queryResult?.clients ?? [], [queryResult?.clients]);
   const barberTenantId = queryResult?.tenantId ?? null;
   const loyaltyEnabled = queryResult?.loyaltyEnabled ?? false;
@@ -550,6 +555,9 @@ export function BarberClientes({
   const [planFilterOnly, setPlanFilterOnly] = useState(false);
   /** Estado do FAB expansível (abre/fecha as mini-ações) */
   const [fabOpen, setFabOpen] = useState(false);
+  /** Modal de compartilhamento do link de agendamento */
+  const [shareLinkModalOpen, setShareLinkModalOpen] = useState(false);
+  const [targetShareClient, setTargetShareClient] = useState<{ phone: string; name: string } | null>(null);
 
   /* ── View mode: Todos (tenant-wide) vs Meus (barber-only) ── */
   const queryMode = searchParams.get("mode") as ViewMode | null;
@@ -579,6 +587,7 @@ export function BarberClientes({
   const {
     data: allTenantClientsData,
     isLoading: loadingTenantClients,
+    isError: isTenantClientsError,
     refetch: refetchTenantClients,
   } = useTenantClientes(
     viewMode === "todos" ? barberContext.tenantId : null,
@@ -796,7 +805,7 @@ export function BarberClientes({
   }, [activeClients, search, planFilterOnly]);
 
   const totalClients = activeClients.length;
-  
+
 
   /* ─── Mutations ─── */
   const blockMutation = useBlockClient();
@@ -882,10 +891,10 @@ export function BarberClientes({
         });
 
         if (error) throw error;
-        
+
         // Atualizar lista local via TanStack Query e cache sincronizado
         invalidateClients();
-        
+
         resolve(true);
       } catch (err) {
         reject(err);
@@ -912,8 +921,8 @@ export function BarberClientes({
     const removableBlocks = canManageTenantWideBlock
       ? client.blockDetails
       : client.blockDetails.filter(
-          (d) => d.scope === "barber" && d.barbeiro_id === barberContext.barbeiroId
-        );
+        (d) => d.scope === "barber" && d.barbeiro_id === barberContext.barbeiroId
+      );
 
     if (removableBlocks.length === 0) {
       toast.error("Você não tem permissão para remover esses bloqueios");
@@ -1034,6 +1043,38 @@ export function BarberClientes({
   /* ─── Loading ─── */
   if (loading) {
     return <ListSkeleton rows={8} showAvatar />;
+  }
+
+  if (viewMode === "meus" && isBarberClientsError && clients.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 px-4 text-center">
+        <AlertTriangle className="w-10 h-10 text-amber-500/80" strokeWidth={1.5} />
+        <p className="text-sm text-muted-foreground">Não foi possível carregar os clientes.</p>
+        <button
+          onClick={() => refetchBarberClients()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  if (viewMode === "todos" && isTenantClientsError && allTenantClients.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 px-4 text-center">
+        <AlertTriangle className="w-10 h-10 text-amber-500/80" strokeWidth={1.5} />
+        <p className="text-sm text-muted-foreground">Não foi possível carregar os clientes da barbearia.</p>
+        <button
+          onClick={() => refetchTenantClients()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Tentar novamente
+        </button>
+      </div>
+    );
   }
 
   // ═══════════════════════════════════
@@ -1180,6 +1221,23 @@ export function BarberClientes({
                   {client.email || "Não informado"}
                 </span>
               </div>
+
+              {/* Botão rápido: Enviar link de agendamento no WhatsApp deste cliente */}
+              {client.telefone && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetShareClient({ phone: client.telefone!, name: client.nome });
+                      setShareLinkModalOpen(true);
+                    }}
+                    className="w-full h-10 rounded-xl bg-emerald-600/10 hover:bg-emerald-600/20 active:scale-[0.98] text-emerald-600 dark:text-emerald-400 text-[12.5px] font-semibold flex items-center justify-center gap-2 transition-all border border-emerald-500/25 cursor-pointer touch-manipulation"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span>Enviar link de agendamento no WhatsApp</span>
+                  </button>
+                </div>
+              )}
 
               <div className="h-px bg-border/40" />
 
@@ -1633,7 +1691,7 @@ export function BarberClientes({
       {!hideHeader && (
         <ScheduleHeader
           title="Clientes"
-          onBack={onBack ? onBack : () => navigate(`${basePath}/configuracoes-perfil`)}
+          onBack={onBack ? onBack : () => navigate(`${basePath}/config-barbearia`)}
           right={
             <span className="text-[12px] text-muted-foreground/70 font-medium tabular-nums">
               {filteredClients.length} {filteredClients.length === 1 ? "cliente" : "clientes"}
@@ -1648,6 +1706,36 @@ export function BarberClientes({
             ? "Visualize todos os clientes cadastrados da barbearia, histórico de visitas e status de planos."
             : "Visualize os clientes que realizaram agendamentos com você e o histórico de atendimentos."}
         </p>
+
+        {/* ── Banner: Compartilhar Link de Agendamento ── */}
+        <div
+          onClick={() => {
+            setTargetShareClient(null);
+            setShareLinkModalOpen(true);
+          }}
+          className="p-3 rounded-2xl bg-secondary/35 dark:bg-white/[0.04] border border-border/40 hover:bg-secondary/50 flex items-center justify-between gap-3 cursor-pointer transition-all active:scale-[0.99] group shadow-xs select-none"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-foreground/5 border border-border/40 flex items-center justify-center shrink-0 text-foreground">
+              <Link2 className="w-4 h-4 stroke-[1.8]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-semibold text-foreground tracking-tight">
+                Compartilhar link com clientes
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Envie seu link exclusivo ou QR Code no WhatsApp
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-foreground text-background flex items-center gap-1 shadow-2xs group-hover:bg-foreground/90 transition-colors">
+              <Share2 className="w-3 h-3 stroke-[2]" />
+              <span>Compartilhar</span>
+            </span>
+          </div>
+        </div>
 
         {/* ── View Mode Toggle: Todos / Meus ── */}
         {showViewModeToggle && (
@@ -1796,15 +1884,15 @@ export function BarberClientes({
               {search
                 ? "Nenhum cliente encontrado"
                 : viewMode === "meus"
-                ? "Nenhum cliente atendido por você ainda"
-                : "Nenhum cliente nesta seleção"}
+                  ? "Nenhum cliente atendido por você ainda"
+                  : "Nenhum cliente nesta seleção"}
             </p>
             <p className="text-[12px] text-muted-foreground mt-1">
               {search
                 ? "Tente ajustar o termo de busca ou telefone"
                 : viewMode === "meus"
-                ? "Clientes que agendarem com você aparecerão aqui"
-                : "Selecione outra unidade ou limpe os filtros"}
+                  ? "Clientes que agendarem com você aparecerão aqui"
+                  : "Selecione outra unidade ou limpe os filtros"}
             </p>
           </div>
         ) : (
@@ -1999,6 +2087,18 @@ export function BarberClientes({
         barbeiroId={barberContext.barbeiroId}
         tenantId={barberTenantId || barberContext.tenantId}
         onDebtUpdated={invalidateClients}
+      />
+
+      <BarberShareLinkModal
+        open={shareLinkModalOpen}
+        onOpenChange={(v) => {
+          setShareLinkModalOpen(v);
+          if (!v) setTargetShareClient(null);
+        }}
+        barbeiroId={barberContext.barbeiroId}
+        barberName={barberContext.apelido}
+        targetPhone={targetShareClient?.phone}
+        targetClientName={targetShareClient?.name}
       />
     </div>
   );

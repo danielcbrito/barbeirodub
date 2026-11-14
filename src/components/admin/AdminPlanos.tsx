@@ -655,7 +655,7 @@ export function AdminPlanos({ tenantId, basePath = "/admin", hideHeader = false 
             {!hideHeader && (
               <ScheduleHeader
                 title="Planos e Assinaturas"
-                onBack={() => navigate(`${basePath}/configuracoes-perfil`)}
+                onBack={() => navigate(`${basePath}/config-barbearia`)}
               />
             )}
 

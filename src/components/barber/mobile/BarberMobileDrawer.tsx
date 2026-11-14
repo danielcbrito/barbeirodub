@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { BarberContext } from "@/pages/Barbeiro";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 interface BarberMobileDrawerProps {
   isOpen: boolean;
@@ -91,12 +92,9 @@ export function BarberMobileDrawer({
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      localStorage.removeItem("userRole");
-      localStorage.removeItem("barbeiroId");
-      toast.success("Logout realizado com sucesso");
       onClose();
-      window.location.href = "/login";
+      await signOutAndClearDevice();
+      toast.success("Logout realizado com sucesso");
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
       toast.error("Erro ao fazer logout");

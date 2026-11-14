@@ -31,6 +31,28 @@ export function useBarberHorarioConfig(barbeiroId: string) {
 
       if (error) throw error;
 
+      const ensureSeven = (rows: any[]): HorarioConfig[] => {
+        const defaults = Array.from({ length: 7 }, (_, i) => ({
+          id: `default-${i}`,
+          dia_semana: i,
+          aberto: true,
+          hora_abertura: '09:00',
+          hora_fechamento: '18:00',
+          hora_almoco_inicio: null,
+          hora_almoco_fim: null,
+          delay_entre_servicos: 0,
+          slot_interval_minutes: null,
+        }));
+        const byDay = new Map<number, any>();
+        rows.forEach((r) => {
+          if (r && typeof r.dia_semana === 'number') byDay.set(r.dia_semana, r);
+        });
+        return defaults.map((d) => {
+          const existing = byDay.get(d.dia_semana);
+          return existing ? { ...d, ...existing, dia_semana: d.dia_semana } : d;
+        });
+      };
+
       /* Se não houver configuração, inicializar e buscar de novo */
       if (!data || data.length === 0) {
         await supabase.rpc("initialize_barber_hours", {
@@ -42,10 +64,10 @@ export function useBarberHorarioConfig(barbeiroId: string) {
           .eq("barbeiro_id", barbeiroId)
           .order("dia_semana");
         if (retryError) throw retryError;
-        return (retryData || []) as unknown as HorarioConfig[];
+        return ensureSeven(retryData || []);
       }
 
-      return data as unknown as HorarioConfig[];
+      return ensureSeven(data || []);
     },
     staleTime: STALE_TIMES.HORARIOS,
     enabled: !!barbeiroId,

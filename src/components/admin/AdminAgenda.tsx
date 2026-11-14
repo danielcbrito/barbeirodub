@@ -32,12 +32,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { extractWalkInName, isWhatsAppAppointment, extractWhatsAppName } from "@/lib/walkInName";
+import { extractWalkInName, isWhatsAppAppointment, extractWhatsAppName, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { AdminContext } from "@/pages/Admin";
+import { getStoredAgendaDate, saveAgendaSelectedDate } from "@/lib/agendaDatePersistence";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AdminMobileAgenda } from "./mobile/AdminMobileAgenda";
 import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
@@ -56,6 +57,7 @@ export interface TimelineAppointment {
   status: string;
   preco: number;
   observacoes: string | null;
+  cliente_nome?: string | null;
   barbeiro_confirmou: boolean | null;
   cliente_confirmou: boolean | null;
   ponto_liberado: boolean | null;
@@ -159,13 +161,23 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   }, [location.state, isMobile, overdueState.count, overdueState.isLoading]);
 
 
-  const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  });
+  const initialDate = useMemo(() => getStoredAgendaDate(location.state?.selectedDate), [location.state?.selectedDate]);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => initialDate);
+
+  useEffect(() => {
+    if (location.state?.selectedDate) {
+      const parsed = getStoredAgendaDate(location.state.selectedDate);
+      setSelectedDate((prev) => (isSameDay(prev, parsed) ? prev : parsed));
+    }
+  }, [location.state?.selectedDate]);
+
+  useEffect(() => {
+    saveAgendaSelectedDate(selectedDate);
+  }, [selectedDate]);
+
   const syncKey = (dateStr: string) =>
     `admin-agenda-desktop:${effectiveBarbeiroId || tenantId || "all"}:${dateStr}`;
-  const initialKey = format(new Date(), "yyyy-MM-dd");
+  const initialKey = format(initialDate, "yyyy-MM-dd");
   const [appointments, setAppointments] = useState<TimelineAppointment[]>(
     () => readSyncCache<TimelineAppointment[]>(syncKey(initialKey))?.data || []
   );
@@ -202,62 +214,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
     return names[date.getDay()];
   };
 
-  // Scroll inicial para o dia de hoje
-  useEffect(() => {
-    if (isMobile) return;
-    const timer = setTimeout(() => {
-      const el = scrollRef.current;
-      const inner = innerRef.current;
-      if (!el || !inner) return;
-      const child = inner.children[todayIndex] as HTMLElement;
-      if (!child) return;
-      el.scrollLeft = child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2;
-      setTimeout(() => { isInitialScrollDone.current = true; }, 100);
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [isMobile]);
-
-  // Detectar o dia central durante scroll
-  useEffect(() => {
-    if (isMobile) return;
-    const el = scrollRef.current;
-    const inner = innerRef.current;
-    if (!el || !inner) return;
-
-    let rafId: number;
-    const handleScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        if (!isInitialScrollDone.current) return;
-        const centerX = el.scrollLeft + el.offsetWidth / 2;
-        const children = Array.from(inner.children) as HTMLElement[];
-        let closestIdx = 0;
-        let minDist = Infinity;
-        for (let i = 0; i < children.length; i++) {
-          const childCenter = children[i].offsetLeft + children[i].offsetWidth / 2;
-          const dist = Math.abs(childCenter - centerX);
-          if (dist < minDist) {
-            minDist = dist;
-            closestIdx = i;
-          }
-        }
-        if (allDays[closestIdx]) {
-          setSelectedDate(prev => {
-            if (isSameDay(prev, allDays[closestIdx])) return prev;
-            return allDays[closestIdx];
-          });
-        }
-      });
-    };
-
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", handleScroll);
-      cancelAnimationFrame(rafId);
-    };
-  }, [allDays, isMobile]);
-
-  const scrollToDate = useCallback((date: Date) => {
+  const scrollToDate = useCallback((date: Date, behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
     const inner = innerRef.current;
     if (!el || !inner) return;
@@ -265,8 +222,23 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
     if (idx < 0) return;
     const child = inner.children[idx] as HTMLElement;
     if (!child) return;
-    el.scrollTo({ left: child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2, behavior: "smooth" });
+    const targetLeft = child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2;
+    if (behavior === "auto") {
+      el.scrollLeft = targetLeft;
+    } else {
+      el.scrollTo({ left: targetLeft, behavior });
+    }
   }, [allDays]);
+
+  // Scroll inicial para o dia selecionado (ou hoje) na montagem
+  useEffect(() => {
+    if (isMobile) return;
+    const timer = setTimeout(() => {
+      scrollToDate(selectedDate, "auto");
+      isInitialScrollDone.current = true;
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isTenantScope || !tenantId) {
@@ -321,7 +293,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       /* Select apenas campos usados nos cards + batch fetching em vez de N+1 */
       let query = supabase
         .from("agendamentos")
-        .select("id, data, hora, duracao, status, preco, observacoes, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao")
+        .select("id, data, hora, duracao, status, preco, observacoes, cliente_nome, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao")
         .eq("data", dateStr)
         .neq("status", "excluido")
         .order("hora", { ascending: true });
@@ -375,10 +347,10 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
       const appointmentsWithDetails = agendamentos.map((apt) => {
         const profile = profilesMap.get(apt.user_id);
         const servico = servicosMap.get(apt.servico_id);
-        // Encaixe walk-in ou WhatsApp: nome real digitado fica em observacoes
+        // Encaixe walk-in ou WhatsApp: nome real digitado fica em observacoes / cliente_nome
         const walkInName = extractWalkInName(apt.observacoes);
         const whatsAppName = extractWhatsAppName(apt.observacoes);
-        const displayName = whatsAppName || walkInName || profile?.nome || null;
+        const displayName = (apt as any).cliente_nome || whatsAppName || walkInName || profile?.nome || null;
         return {
           ...apt,
           profile: displayName
@@ -552,11 +524,14 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
   if (isMobile) {
     return (
       <AdminMobileAgenda
-        onAppointmentClick={(apt) =>
-          navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt as any } })
-        }
+        onAppointmentClick={(apt) => {
+          saveAgendaSelectedDate(apt.data || selectedDate);
+          navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt as any } });
+        }}
         barbeiroId={effectiveBarbeiroId}
         tenantId={tenantId}
+        initialSelectedDate={selectedDate}
+        onDateChange={setSelectedDate}
       />
     );
   }
@@ -576,8 +551,9 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
               <button
                 type="button"
                 onClick={() => {
+                  if (isSameDay(today, selectedDate)) return;
                   setSelectedDate(today);
-                  scrollToDate(today);
+                  scrollToDate(today, "smooth");
                 }}
                 className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
               >
@@ -653,11 +629,12 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
           {/* Botão Hoje — sempre presente, opacity controla visibilidade */}
           <button
             onClick={() => {
+              if (isSameDay(today, selectedDate)) return;
               setSelectedDate(today);
-              scrollToDate(today);
+              scrollToDate(today, "smooth");
             }}
             className={cn(
-              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200",
+              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200 cursor-pointer",
               isToday(selectedDate) ? "opacity-0 pointer-events-none" : "opacity-100"
             )}
           >
@@ -668,10 +645,9 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
           <div className="relative">
             <div
               ref={scrollRef}
-              className="overflow-x-auto scrollbar-hide"
+              className="overflow-x-auto scrollbar-hide scroll-smooth"
               style={{
                 WebkitOverflowScrolling: "touch",
-                scrollSnapType: "x mandatory",
               }}
             >
               <div
@@ -687,12 +663,12 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                     <div
                       key={day.toISOString()}
                       className="flex-shrink-0 w-16"
-                      style={{ scrollSnapAlign: "center" }}
                     >
                       <button
                         onClick={() => {
+                          if (isSameDay(day, selectedDate)) return;
                           setSelectedDate(day);
-                          scrollToDate(day);
+                          scrollToDate(day, "smooth");
                         }}
                         className={cn(
                           "w-full flex flex-col items-center gap-1 py-1 transition-all duration-200 select-none cursor-pointer",
@@ -778,7 +754,10 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                 return (
                   <div
                     key={apt.id}
-                    onClick={() => navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt } })}
+                    onClick={() => {
+                      saveAgendaSelectedDate(apt.data || selectedDate);
+                      navigate(`/admin/agendamento/${apt.id}`, { state: { appointment: apt } });
+                    }}
                     style={{ opacity: isCompleted ? 0.48 : 1 }}
                     className={cn(
                       "rounded-2xl border-l-[3px] p-4 border transition-all cursor-pointer backdrop-blur-xl backdrop-saturate-[180%]",
@@ -820,7 +799,7 @@ export function AdminAgenda({ adminContext, tenantId }: AdminAgendaProps) {
                     <div className="flex items-center gap-2.5 mb-3">
                       <User className="w-4 h-4 dark:text-muted-foreground/50 text-foreground/40 flex-shrink-0" />
                       <span className="text-sm dark:text-muted-foreground text-foreground/80 font-medium truncate">
-                        {apt.profile?.nome || "Cliente"}
+                        {resolveClienteDisplayName(apt.observacoes, apt.profile?.nome, "Cliente", (apt as any).cliente_nome)}
                       </span>
                       {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
                       {debtInfo.hasDebt && (

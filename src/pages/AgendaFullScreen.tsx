@@ -101,7 +101,7 @@ const AgendaFullScreen = () => {
   // Mobile Layout
   if (isMobile) {
     return (
-      <div className="min-h-screen w-full bg-background relative overflow-hidden">
+      <div className="h-dvh w-full bg-background relative overflow-hidden flex flex-col">
         {/* Premium Background Light Effects - Mobile */}
         <div className="fixed inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-[10%] left-[15%] w-[300px] h-[300px] rounded-full bg-primary/8 blur-[100px] animate-pulse" />
@@ -109,7 +109,7 @@ const AgendaFullScreen = () => {
         </div>
         
         {/* Mobile Agenda */}
-        <div className="relative z-10">
+        <div className="relative z-10 flex-1 min-h-0 flex flex-col">
           {adminContext ? (
             <AdminMobileAgenda 
               onAppointmentClick={handleAppointmentClick}

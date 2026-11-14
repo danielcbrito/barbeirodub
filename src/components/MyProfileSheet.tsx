@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 import { Label } from "@/components/ui/label";
 import { 
   User, 
@@ -259,9 +260,8 @@ export function MyProfileSheet({
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await supabase.auth.signOut();
+      await signOutAndClearDevice((url) => navigate(url));
       toast.success("Você saiu da conta");
-      navigate("/login");
     } catch (error) {
       toast.error("Erro ao sair da conta");
     } finally {

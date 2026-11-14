@@ -455,7 +455,7 @@ export function AdminCortes({ tenantId, basePath = "/admin", hideHeader = false 
             {!hideHeader && (
               <ScheduleHeader
                 title="Serviços e Cortes"
-                onBack={() => navigate(`${basePath}/configuracoes-perfil`)}
+                onBack={() => navigate(`${basePath}/config-barbearia`)}
               />
             )}
 

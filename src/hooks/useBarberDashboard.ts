@@ -152,7 +152,7 @@ const buildFallbackFromAgendaCache = (barbeiroId: string): { data: DashboardData
   const getClientName = (apt: Record<string, unknown>) => {
     const profile = apt.profile;
     const profileNome = isRecord(profile) ? toStringValue(profile.nome) : null;
-    return resolveClienteDisplayName(toStringValue(apt.observacoes), profileNome, "Cliente");
+    return resolveClienteDisplayName(toStringValue(apt.observacoes), profileNome, "Cliente", toStringValue(apt.cliente_nome));
   };
 
   const getServiceName = (apt: Record<string, unknown>) => {
@@ -222,7 +222,7 @@ export async function fetchBarberDashboard(barbeiroId: string): Promise<Dashboar
 
   const { data: todayApts } = await supabase
     .from("agendamentos")
-    .select("id, hora, status, observacoes, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
+    .select("id, hora, status, observacoes, cliente_nome, preco, duracao, payment_method, tipo_agendamento, is_free, barbeiro_confirmou, servico_id, servicos(nome, duracao_minutos, preco), profiles(nome, avatar_url)")
     .eq("barbeiro_id", barbeiroId)
     .eq("data", today)
     .not("status", "in", '("cancelled_by_admin","cancelled_by_user")')
@@ -254,7 +254,8 @@ export async function fetchBarberDashboard(barbeiroId: string): Promise<Dashboar
       const realClientName = resolveClienteDisplayName(
         upcoming.observacoes,
         (upcoming.profiles as any)?.nome,
-        "Cliente"
+        "Cliente",
+        upcoming.cliente_nome
       );
       const [uh, um] = (upcoming.hora || "00:00").split(":").map(Number);
       const uStartMin = (uh || 0) * 60 + (um || 0);

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { toast } from "sonner";
 import type { BarberClientesResult, BlockDetail } from "@/hooks/useBarberClientes";
@@ -531,7 +532,7 @@ export function useSaveBarberSchedule() {
     mutationFn: async ({ barbeiroId, configs }) => {
       const sanitize = (val: string | null | undefined) => (val === "" || val === null || val === undefined ? null : val);
       for (const config of configs) {
-        const payload: Record<string, any> = {
+        const payload: Database["public"]["Tables"]["configuracoes_horario_barbeiro"]["Update"] = {
           aberto: config.aberto ?? true,
           hora_abertura: config.hora_abertura || "09:00",
           hora_fechamento: config.hora_fechamento || "18:00",

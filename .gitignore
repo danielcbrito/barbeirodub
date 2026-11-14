@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 supabase/.temp/
+barbeirodub/
+
+# Mapa mental do projeto (privado - nao publicar)
+*mapa_mental*
+*MAPA_MENTAL*
+*mapa_mental*.html
+*MAPA_MENTAL*.html

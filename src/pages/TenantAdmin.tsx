@@ -186,6 +186,7 @@ async function resolveTenantOwnerBarber(
 const TenantAdmin = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const isSubscriptionRoute = location.pathname.includes("/assinatura");
   const isMobile = useIsMobile();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -470,17 +471,12 @@ const TenantAdmin = () => {
     );
   }
 
-  // ═══════ PAYWALL: Trial expirou e não assinou ═══════
-  // Rotas sempre acessíveis: barbeiros, dados-empresa, perfil, assinatura
-  const ALWAYS_ALLOWED = ["barbeiros", "dados-empresa", "perfil", "configuracoes-perfil", "config-barbearia", "assinatura", "loja"];
-  const currentSubPath = location.pathname.replace(BASE + "/", "").replace(BASE, "");
-  const isAllowedRoute = ALWAYS_ALLOWED.some((r) => currentSubPath.startsWith(r)) || currentSubPath === "";
-  const isSubscriptionRoute = currentSubPath.startsWith("assinatura");
-
-  if (!subscription.loading && subscription.isExpired && !isAllowedRoute && !isTestTenant) {
+  // ═══════ PAYWALL: Trial expirou ou mensalidade com mais de 4 dias de atraso ═══════
+  if (!subscription.loading && subscription.isBlocked && !subscription.isExempt && !isTestTenant) {
     return (
       <TenantPaywall
         tenantNome={tenantNome}
+        isOverdue={subscription.isOverdue}
         onLogout={async () => {
           await supabase.auth.signOut();
           navigate("/login");
@@ -590,7 +586,7 @@ const TenantAdmin = () => {
                   <Route path="seguranca" element={<AdminSeguranca basePath={BASE} />} />
                   <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath={BASE} tenantId={tenantId} />} />
                   <Route path="perfil" element={<AdminMobileProfile basePath={BASE} isTenant />} />
-                  <Route path="configuracoes-perfil" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
+                  <Route path="configuracoes-perfil" element={<Navigate to={`${BASE}/config-barbearia`} replace />} />
                   <Route path="config-barbearia" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
                   <Route path="assinatura" element={<TenantSubscriptionPage subscription={subscription} basePath={BASE} tenantId={tenantId} />} />
                   <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath={BASE} tenantNome={tenantNome} barberName={adminContext?.apelido} />} />
@@ -681,7 +677,7 @@ const TenantAdmin = () => {
                 <Route path="disparo" element={<AdminDisparo tenantId={tenantId || undefined} basePath={BASE} barbeiroId={adminContext?.barbeiroId || undefined} canSelectAllClients />} />
                 <Route path="seguranca" element={<AdminSeguranca basePath={BASE} />} />
                 <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath={BASE} tenantId={tenantId} />} />
-                <Route path="configuracoes-perfil" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
+                <Route path="configuracoes-perfil" element={<Navigate to={`${BASE}/config-barbearia`} replace />} />
                 <Route path="config-barbearia" element={tenantAdminBarberContext ? <BarberConfigBarbearia barberContext={tenantAdminBarberContext} basePath={`${BASE}/config-barbearia`} appBasePath={BASE} /> : null} />
                 <Route path="assinatura" element={<TenantSubscriptionPage subscription={subscription} basePath={BASE} tenantId={tenantId} />} />
                 <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={adminContext?.barbeiroId} userId={adminContext?.userId} basePath={BASE} tenantNome={tenantNome} barberName={adminContext?.apelido} />} />

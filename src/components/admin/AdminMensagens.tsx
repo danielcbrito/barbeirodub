@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, MessageSquare } from "lucide-react";
+import { Plus, Pencil, Trash2, MessageSquare, Loader2, AlertTriangle, RotateCcw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +38,7 @@ interface Message {
 export function AdminMensagens() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
@@ -55,19 +56,23 @@ export function AdminMensagens() {
 
   const loadMessages = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("informacoes_aplicativo")
-      .select("id, chave, titulo, conteudo, categoria, ordem, ativo, atualizado_em, atualizado_por")
-      .eq("categoria", "avisos")
-      .order("ordem", { ascending: true });
+    setLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from("informacoes_aplicativo")
+        .select("id, chave, titulo, conteudo, categoria, ordem, ativo, atualizado_em, atualizado_por")
+        .eq("categoria", "avisos")
+        .order("ordem", { ascending: true });
 
-    if (error) {
-      toast.error("Erro ao carregar mensagens");
-      console.error(error);
-    } else {
+      if (error) throw error;
       setMessages(data || []);
+    } catch (error) {
+      toast.error("Erro ao carregar mensagens");
+      setLoadError("Não foi possível carregar as mensagens.");
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleOpenDialog = (message?: Message) => {
@@ -215,8 +220,18 @@ export function AdminMensagens() {
       </div>
 
       {loading ? (
-        <Card className="p-8 text-center">
-          <p className="text-muted-foreground">Carregando mensagens...</p>
+        <Card className="p-8 text-center flex flex-col items-center justify-center gap-2">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Carregando mensagens...</p>
+        </Card>
+      ) : loadError ? (
+        <Card className="p-8 text-center flex flex-col items-center justify-center gap-3">
+          <AlertTriangle className="w-10 h-10 text-amber-500/80" />
+          <p className="text-sm text-muted-foreground">{loadError}</p>
+          <Button variant="outline" size="sm" onClick={() => loadMessages()} className="gap-2">
+            <RotateCcw className="w-3.5 h-3.5" />
+            Tentar novamente
+          </Button>
         </Card>
       ) : messages.length === 0 ? (
         <Card className="p-8 text-center">

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { isWhatsAppAppointment } from "@/lib/walkInName";
+import { isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 
 interface AgendaDiariaViewProps {
@@ -286,7 +286,7 @@ export function AgendaDiariaView({ date, appointments, onCancelAppointment }: Ag
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <User className="w-3 h-3" />
-                        <span className="truncate">{appointment.profile?.nome || "Cliente"}</span>
+                        <span className="truncate">{resolveClienteDisplayName(appointment.observacoes, appointment.profile?.nome, "Cliente", appointment.cliente_nome)}</span>
                         {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
                         {appointment.cliente_confirmou && (
                           <span className="flex items-center gap-1 text-green-600">

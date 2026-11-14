@@ -22,13 +22,16 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(title, {
     body,
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    icon: '/app-icon.png',
+    badge: '/app-icon.png',
     data: { url, ...(payload?.data || {}) },
     tag: payload?.data?.appointment_id || undefined,
     renotify: true,
   });
 });
+
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

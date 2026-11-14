@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ChevronRight, Loader2, CalendarDays } from 'lucide-react';
+import { ChevronRight, Loader2, CalendarDays, Palmtree, CalendarClock, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
@@ -134,12 +134,32 @@ const applyOnboardingDefaults = (rows: HorarioConfig[]): HorarioConfig[] => {
   });
 };
 
+const ensureAllSevenDays = (rows: any[] | null | undefined, forceZero = false): HorarioConfig[] => {
+  const defaults = createDefaultConfigs(forceZero);
+  const byDay = new Map<number, any>();
+  (rows || []).forEach((row) => {
+    if (row && typeof row.dia_semana === 'number') {
+      byDay.set(row.dia_semana, row);
+    }
+  });
+
+  return defaults.map((fallback) => {
+    const existing = byDay.get(fallback.dia_semana);
+    if (!existing) return fallback;
+    return normalizeConfig({
+      ...fallback,
+      ...existing,
+      dia_semana: fallback.dia_semana,
+    });
+  });
+};
+
 export default function AdminHorarios({
   barbeiroId,
   hideTitle,
   hideAdvanced,
-  hideSaveButton,
-  autoSaveOnDayExit,
+  hideSaveButton = true,
+  autoSaveOnDayExit = true,
   onViewModeChange,
   companyMode,
   unifiedMode,
@@ -151,7 +171,7 @@ export default function AdminHorarios({
   resetToListSignal = 0,
   forceOnboardingDefaultHours = false,
   hideDayListChevron = false,
-  dayFloatingBottomButton = false,
+  dayFloatingBottomButton = true,
   dayOnboardingFlow = false,
 }: AdminHorariosProps = {}) {
   const [configs, setConfigs] = useState<HorarioConfig[]>([]);
@@ -264,50 +284,90 @@ export default function AdminHorarios({
     return map;
   }, [configs]);
 
-  // Carregar horários da barbearia (unidade/tenant) para validação (quando barbeiro pessoal)
+  // Carregar horários da barbearia (unidade/tenant/global) para validação (quando barbeiro pessoal)
   useEffect(() => {
     if (barbeiroId && !companyMode) {
+      let isMounted = true;
       (async () => {
-        const { tId, uId } = await resolveTenantAndUnit();
-        let list: any[] | null = null;
-        if (uId) {
-          const { data } = await (supabase as any)
-            .from('configuracoes_horario_unidade')
+        try {
+          const { tId, uId } = await resolveTenantAndUnit();
+
+          // 1. Carregar template global (com todos os dias da semana)
+          const { data: globalData } = await supabase
+            .from('configuracoes_horario')
             .select('dia_semana, aberto, hora_abertura, hora_fechamento')
-            .eq('unidade_id', uId)
             .order('dia_semana');
-          if (data && data.length > 0) list = data;
-        }
-        if (!list && tId) {
-          const { data } = await (supabase as any)
-            .from('configuracoes_horario_unidade')
-            .select('dia_semana, aberto, hora_abertura, hora_fechamento')
-            .eq('tenant_id', tId)
-            .order('dia_semana');
-          if (data && data.length > 0) list = data;
-        }
-        if (list && list.length > 0) {
-          setCompanyHoursCache(list.map((c: any) => ({
-            ...c,
-            hora_abertura: formatTimeClean(c.hora_abertura, '09:00'),
-            hora_fechamento: formatTimeClean(c.hora_fechamento, '20:00'),
-          })));
-          return;
-        }
-        supabase
-          .from('configuracoes_horario')
-          .select('dia_semana, aberto, hora_abertura, hora_fechamento')
-          .order('dia_semana')
-          .then(({ data }) => {
-            if (data) {
-              setCompanyHoursCache(data.map((c: any) => ({
-                ...c,
+
+          // 2. Carregar horários específicos do tenant
+          let tenantRows: any[] = [];
+          if (tId) {
+            const { data: tData } = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .select('dia_semana, aberto, hora_abertura, hora_fechamento')
+              .eq('tenant_id', tId)
+              .order('dia_semana');
+            if (tData) tenantRows = tData;
+          }
+
+          // 3. Carregar horários específicos da unidade
+          let unitRows: any[] = [];
+          if (uId) {
+            const { data: uData } = await (supabase as any)
+              .from('configuracoes_horario_unidade')
+              .select('dia_semana, aberto, hora_abertura, hora_fechamento')
+              .eq('unidade_id', uId)
+              .order('dia_semana');
+            if (uData) unitRows = uData;
+          }
+
+          if (!isMounted) return;
+
+          // Montar mapa consolidado para todos os 7 dias (0 a 6)
+          const map = new Map<number, { dia_semana: number; aberto: boolean; hora_abertura: string; hora_fechamento: string }>();
+
+          // Base: global ou defaults
+          (globalData || []).forEach((c: any) => {
+            if (typeof c.dia_semana === 'number') {
+              map.set(c.dia_semana, {
+                dia_semana: c.dia_semana,
+                aberto: c.aberto ?? true,
                 hora_abertura: formatTimeClean(c.hora_abertura, '09:00'),
                 hora_fechamento: formatTimeClean(c.hora_fechamento, '20:00'),
-              })));
+              });
             }
           });
+
+          // Sobrepor com tenant (se houver)
+          tenantRows.forEach((c: any) => {
+            if (typeof c.dia_semana === 'number') {
+              map.set(c.dia_semana, {
+                dia_semana: c.dia_semana,
+                aberto: c.aberto ?? true,
+                hora_abertura: formatTimeClean(c.hora_abertura, map.get(c.dia_semana)?.hora_abertura || '09:00'),
+                hora_fechamento: formatTimeClean(c.hora_fechamento, map.get(c.dia_semana)?.hora_fechamento || '20:00'),
+              });
+            }
+          });
+
+          // Sobrepor com unidade (se houver, maior prioridade)
+          unitRows.forEach((c: any) => {
+            if (typeof c.dia_semana === 'number') {
+              map.set(c.dia_semana, {
+                dia_semana: c.dia_semana,
+                aberto: c.aberto ?? true,
+                hora_abertura: formatTimeClean(c.hora_abertura, map.get(c.dia_semana)?.hora_abertura || '09:00'),
+                hora_fechamento: formatTimeClean(c.hora_fechamento, map.get(c.dia_semana)?.hora_fechamento || '20:00'),
+              });
+            }
+          });
+
+          const consolidated = Array.from(map.values()).sort((a, b) => a.dia_semana - b.dia_semana);
+          setCompanyHoursCache(consolidated);
+        } catch (err) {
+          console.error('[AdminHorarios] Erro ao carregar companyHoursCache:', err);
+        }
       })();
+      return () => { isMounted = false; };
     }
   }, [barbeiroId, companyMode, tenantId, unidadeId]);
 
@@ -365,56 +425,54 @@ export default function AdminHorarios({
       }
 
       if (!data || data.length === 0) {
-        // Horário da barbearia (unidade / tenant)
+        // Horário da barbearia (unidade / tenant / global)
         const { tId, uId } = await resolveTenantAndUnit();
-        let res: any = null;
+        let unitRows: any[] = [];
+        let tenantRows: any[] = [];
 
         if (uId) {
-          res = await (supabase as any)
+          const resU = await (supabase as any)
             .from('configuracoes_horario_unidade')
             .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
             .eq('unidade_id', uId)
             .order('dia_semana');
+          if (resU?.data) unitRows = resU.data;
         }
 
-        if ((!res || !res.data || res.data.length === 0) && tId) {
-          res = await (supabase as any)
+        if (tId) {
+          const resT = await (supabase as any)
             .from('configuracoes_horario_unidade')
             .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos, slot_interval_minutes')
             .eq('tenant_id', tId)
             .order('dia_semana');
+          if (resT?.data) tenantRows = resT.data;
         }
 
-        if (res?.data && res.data.length > 0) {
-          data = res.data;
-          error = res.error;
-        } else {
-          // Se ainda não há linhas na barbearia, exibe defaults baseados no template global
-          const defaultRes = await supabase
-            .from('configuracoes_horario')
-            .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos')
-            .order('dia_semana');
-          data = defaultRes.data;
-          error = defaultRes.error;
-        }
+        // Carrega template global como base para todos os 7 dias
+        const defaultRes = await supabase
+          .from('configuracoes_horario')
+          .select('id, dia_semana, aberto, hora_abertura, hora_fechamento, hora_almoco_inicio, hora_almoco_fim, delay_entre_servicos')
+          .order('dia_semana');
+        if (defaultRes.error) error = defaultRes.error;
+
+        const globalMap = new Map<number, any>();
+        (defaultRes.data || []).forEach(r => globalMap.set(r.dia_semana, r));
+        // Sobrepor com tenant (se houver)
+        tenantRows.forEach(r => globalMap.set(r.dia_semana, { ...globalMap.get(r.dia_semana), ...r }));
+        // Sobrepor com unidade (se houver)
+        unitRows.forEach(r => globalMap.set(r.dia_semana, { ...globalMap.get(r.dia_semana), ...r }));
+
+        data = Array.from(globalMap.values()).sort((a, b) => a.dia_semana - b.dia_semana);
       }
 
       if (error) throw error;
-      if (data && data.length > 0) {
-        const normalized = forceOnboardingDefaultHours
-          ? applyOnboardingDefaults(data as HorarioConfig[])
-          : (data as HorarioConfig[]).map(normalizeConfig);
+      const normalized = forceOnboardingDefaultHours
+        ? applyOnboardingDefaults((data || []) as HorarioConfig[])
+        : ensureAllSevenDays(data, forceOnboardingDefaultHours);
 
-        setConfigs(normalized);
-        originalRef.current = JSON.stringify(normalized);
-        setHasChanges(false);
-      } else {
-        // Sem configs salvas ainda: no onboarding começa 00:00-00:00; fora dele, 09:00 - 20:00.
-        const defaults = createDefaultConfigs(forceOnboardingDefaultHours);
-        setConfigs(defaults);
-        originalRef.current = JSON.stringify(defaults);
-        setHasChanges(false);
-      }
+      setConfigs(normalized);
+      originalRef.current = JSON.stringify(normalized);
+      setHasChanges(false);
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
       toast.error('Erro ao carregar configurações de horário');
@@ -455,9 +513,10 @@ export default function AdminHorarios({
     for (const cfg of configsToValidate) {
       if (!cfg.aberto) continue;
       const company = companyHoursCache.find(c => c.dia_semana === cfg.dia_semana);
-      if (!company || !company.aberto) {
+      if (company && company.aberto === false) {
         return `${DIAS[cfg.dia_semana]}: a barbearia está fechada neste dia.`;
       }
+      if (!company) continue;
       const barberOpenMin = timeToMinutes(cfg.hora_abertura, 9 * 60, false);
       const barberCloseMin = timeToMinutes(cfg.hora_fechamento, 18 * 60, true);
       const companyOpenMin = timeToMinutes(company.hora_abertura, 9 * 60, false);
@@ -1120,6 +1179,7 @@ export default function AdminHorarios({
         if (!saved) return;
       }
       setSelectedDay(null);
+      onViewModeChange?.('list');
     };
 
     const handleConfirmDay = async () => {
@@ -1131,6 +1191,7 @@ export default function AdminHorarios({
       const saved = await saveSingleDay(selectedConfig);
       if (!saved) return false;
       setSelectedDay(null);
+      onViewModeChange?.('list');
       return true;
     };
 
@@ -1143,7 +1204,7 @@ export default function AdminHorarios({
     };
 
     return (
-      <div className="max-w-lg">
+      <div className="max-w-lg w-full flex-1 flex flex-col min-h-full">
         <AnimatePresence mode="wait">
           <DayScheduleScreen
             key={selectedDay}
@@ -1156,7 +1217,7 @@ export default function AdminHorarios({
             hideBackArrow={dayHideBackArrow}
             saveLabel={daySaveLabel}
             hideSaveWhenUnchanged={dayHideSaveWhenUnchanged}
-            floatingBottomButton={dayFloatingBottomButton}
+            floatingBottomButton={dayFloatingBottomButton ?? true}
             onboardingFlow={dayOnboardingFlow}
             onOnboardingDayComplete={dayOnboardingFlow ? handleOnboardingDayComplete : undefined}
             tenantSlotInterval={tenantSlot}
@@ -1187,11 +1248,117 @@ export default function AdminHorarios({
               });
               await loadConfigs();
             }}
-            onApplyToOtherDays={(srcCfg, targetDays) => {
-              setApplyToWeek({
-                sourceDay: srcCfg.dia_semana,
-                selectedDays: targetDays,
+            onApplyToOtherDays={async (srcCfg, targetDays) => {
+              const allDaysToUpdate = Array.from(new Set([srcCfg.dia_semana, ...targetDays]));
+              const nextConfigs = configs.map(c => {
+                if (allDaysToUpdate.includes(c.dia_semana)) {
+                  return {
+                    ...c,
+                    aberto: srcCfg.aberto,
+                    hora_abertura: srcCfg.hora_abertura,
+                    hora_fechamento: srcCfg.hora_fechamento,
+                    hora_almoco_inicio: srcCfg.hora_almoco_inicio,
+                    hora_almoco_fim: srcCfg.hora_almoco_fim,
+                    slot_interval_minutes: srcCfg.slot_interval_minutes,
+                  };
+                }
+                return c;
               });
+
+              const effectiveTId = tenantId || resolvedTenantId;
+              const bId = isUnified ? targetBarbeiroId : (barbeiroId && !companyMode ? barbeiroId : undefined);
+              const tId = isUnified ? effectiveTId : (companyMode || !barbeiroId ? effectiveTId : undefined);
+              const uId = resolvedUnidadeId;
+
+              const configsToSave = nextConfigs.filter(c => allDaysToUpdate.includes(c.dia_semana));
+              const sanitize = (val: string | null) => (val === '' || val === null) ? null : val;
+
+              if (bId) {
+                const promises = configsToSave.map(async (c) => {
+                  const payload = {
+                    aberto: c.aberto,
+                    hora_abertura: c.hora_abertura || DEFAULT_OPEN_TIME,
+                    hora_fechamento: c.hora_fechamento || DEFAULT_CLOSE_TIME,
+                    hora_almoco_inicio: sanitize(c.hora_almoco_inicio),
+                    hora_almoco_fim: sanitize(c.hora_almoco_fim),
+                    delay_entre_servicos: c.delay_entre_servicos,
+                    slot_interval_minutes: c.slot_interval_minutes,
+                  };
+                  const upd = await (supabase as any)
+                    .from('configuracoes_horario_barbeiro')
+                    .update(payload)
+                    .eq('barbeiro_id', bId)
+                    .eq('dia_semana', c.dia_semana)
+                    .select();
+                  if (upd.error) throw upd.error;
+                  if (!upd.data || upd.data.length === 0) {
+                    const ins = await (supabase as any)
+                      .from('configuracoes_horario_barbeiro')
+                      .insert({ ...payload, barbeiro_id: bId, dia_semana: c.dia_semana })
+                      .select();
+                    if (ins.error) throw ins.error;
+                  }
+                });
+                await Promise.all(promises);
+              } else {
+                if (!tId) throw new Error('Não foi possível identificar a barbearia');
+                for (const config of configsToSave) {
+                  const payload = {
+                    aberto: config.aberto,
+                    hora_abertura: config.hora_abertura || DEFAULT_OPEN_TIME,
+                    hora_fechamento: config.hora_fechamento || DEFAULT_CLOSE_TIME,
+                    hora_almoco_inicio: sanitize(config.hora_almoco_inicio),
+                    hora_almoco_fim: sanitize(config.hora_almoco_fim),
+                    delay_entre_servicos: config.delay_entre_servicos,
+                    slot_interval_minutes: config.slot_interval_minutes,
+                    updated_at: new Date().toISOString(),
+                  };
+
+                  let upd = null;
+                  if (uId) {
+                    upd = await (supabase as any)
+                      .from('configuracoes_horario_unidade')
+                      .update(payload)
+                      .eq('unidade_id', uId)
+                      .eq('dia_semana', config.dia_semana)
+                      .select();
+                  } else {
+                    upd = await (supabase as any)
+                      .from('configuracoes_horario_unidade')
+                      .update(payload)
+                      .eq('tenant_id', tId)
+                      .eq('dia_semana', config.dia_semana)
+                      .select();
+                  }
+
+                  if (upd?.error) throw upd.error;
+
+                  if (!upd?.data || upd.data.length === 0) {
+                    const ins = await (supabase as any)
+                      .from('configuracoes_horario_unidade')
+                      .insert({
+                        tenant_id: tId,
+                        unidade_id: uId || null,
+                        dia_semana: config.dia_semana,
+                        ...payload,
+                      })
+                      .select();
+                    if (ins.error) throw ins.error;
+                  }
+                }
+              }
+
+              const normalized = nextConfigs.map(normalizeConfig);
+              setConfigs(normalized);
+              originalRef.current = JSON.stringify(normalized);
+              setHasChanges(false);
+              setSelectedDay(null);
+              onViewModeChange?.('list');
+              toast.success(
+                targetDays.length === 6
+                  ? 'Horários aplicados a toda a semana com sucesso!'
+                  : `Horários aplicados a ${targetDays.length} ${targetDays.length === 1 ? 'dia' : 'dias'} da semana!`
+              );
             }}
             existingDaySummaries={existingDaySummaries}
           />
@@ -1202,10 +1369,26 @@ export default function AdminHorarios({
 
   if (activeSubScreen === 'ferias') {
     return (
-      <div className="max-w-lg space-y-6">
-        <button onClick={() => setActiveSubScreen(null)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          ← Voltar aos Horários
-        </button>
+      <div className="w-full max-w-lg space-y-4">
+        <div className="flex items-center gap-2 min-h-[56px] py-1">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSubScreen(null);
+              onViewModeChange?.('list');
+            }}
+            aria-label="Voltar"
+            className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all shrink-0 text-foreground flex items-center justify-center border border-border/30"
+          >
+            <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[20px] font-semibold text-foreground tracking-tight leading-none truncate">
+              Modo Férias
+            </h2>
+          </div>
+        </div>
+        <div className="h-px bg-border/20 mb-2" />
         {barbeiroId ? <BarberVacationMode barbeiroId={barbeiroId} /> : <VacationMode />}
       </div>
     );
@@ -1213,10 +1396,26 @@ export default function AdminHorarios({
 
   if (activeSubScreen === 'excecoes') {
     return (
-      <div className="max-w-lg space-y-6">
-        <button onClick={() => setActiveSubScreen(null)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          ← Voltar aos Horários
-        </button>
+      <div className="w-full max-w-lg space-y-4">
+        <div className="flex items-center gap-2 min-h-[56px] py-1">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSubScreen(null);
+              onViewModeChange?.('list');
+            }}
+            aria-label="Voltar"
+            className="w-9 h-9 rounded-full bg-secondary/80 hover:bg-secondary active:scale-95 transition-all shrink-0 text-foreground flex items-center justify-center border border-border/30"
+          >
+            <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[20px] font-semibold text-foreground tracking-tight leading-none truncate">
+              Exceções de Horário
+            </h2>
+          </div>
+        </div>
+        <div className="h-px bg-border/20 mb-2" />
         <HorariosExcepcionais barbeiroId={barbeiroId} />
       </div>
     );
@@ -1235,35 +1434,6 @@ export default function AdminHorarios({
         }
       </p>
 
-      {/* ── Banner: Configuração da Semana Inteira ── */}
-      <div className="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border/40 shadow-xs gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-            <CalendarDays className="w-5 h-5 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">
-              Configurar semana inteira
-            </p>
-            <p className="text-[11.5px] text-muted-foreground/80 leading-snug">
-              Aplique horários e intervalos a todos os dias da semana em uma ação única
-            </p>
-          </div>
-        </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            const firstOpen = configs.find(c => c.aberto) || configs[1] || configs[0];
-            setApplyToWeek({
-              sourceDay: firstOpen?.dia_semana ?? 1,
-              selectedDays: [0, 1, 2, 3, 4, 5, 6],
-            });
-          }}
-          className="shrink-0 h-9 px-3.5 rounded-xl text-xs font-semibold shadow-xs"
-        >
-          Configurar
-        </Button>
-      </div>
 
       <div className="space-y-1">
         {configs.map((config) => {
@@ -1277,7 +1447,10 @@ export default function AdminHorarios({
           return (
             <button
               key={config.dia_semana}
-              onClick={() => setSelectedDay(config.dia_semana)}
+              onClick={() => {
+                setSelectedDay(config.dia_semana);
+                onViewModeChange?.('day');
+              }}
               className="flex items-center justify-between py-4 px-1 w-full text-left hover:bg-muted/5 active:bg-muted/10 transition-colors border-b border-border/10 last:border-b-0"
             >
               <span className={cn(
@@ -1302,61 +1475,50 @@ export default function AdminHorarios({
 
       {/* ── Configurações Avançadas ── */}
       {!hideAdvanced && (
-        <div>
-          <span className="text-[11px] text-muted-foreground/50 font-light uppercase tracking-wider">
+        <div className="space-y-3 pt-2">
+          <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
             Configurações avançadas
           </span>
-          <div className="h-px bg-border/15 mt-2" />
 
-          <button
-            onClick={() => setActiveSubScreen('ferias')}
-            className="flex items-center justify-between py-4 w-full text-left hover:bg-muted/5 active:bg-muted/10 transition-colors"
-          >
-            <div className="min-w-0 pr-3">
-              <p className="text-sm font-semibold text-foreground">Modo Férias</p>
-              <p className="text-[11px] font-light text-muted-foreground/70 mt-0.5">
-                {companyMode ? 'Pausa toda a barbearia no período' : 'Pausa seus agendamentos no período'}
-              </p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
-          </button>
+          <div className="rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm divide-y divide-border/20 overflow-hidden shadow-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSubScreen('ferias');
+                onViewModeChange?.('advanced');
+              }}
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/10 active:bg-muted/15 transition-all group"
+            >
+              <div className="min-w-0 pr-3">
+                <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                  Modo Férias
+                </p>
+                <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                  {companyMode ? 'Pausa os agendamentos de toda a barbearia no período' : 'Pausa seus agendamentos no período selecionado'}
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+            </button>
 
-          <div className="h-px bg-border/10" />
-
-          <button
-            onClick={() => setActiveSubScreen('excecoes')}
-            className="flex items-center justify-between py-4 w-full text-left hover:bg-muted/5 active:bg-muted/10 transition-colors"
-          >
-            <div className="min-w-0 pr-3">
-              <p className="text-sm font-semibold text-foreground">Exceções de Horário</p>
-              <p className="text-[11px] font-light text-muted-foreground/70 mt-0.5">
-                {companyMode ? 'Feriados e datas especiais para toda a barbearia' : 'Feriados e datas especiais para você'}
-              </p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
-          </button>
-
-
-          <div className="h-px bg-border/15" />
-        </div>
-      )}
-
-      {hasChanges && !hideSaveButton && (
-        <div className="pt-4">
-          <Button
-            onClick={handleSaveClick}
-            disabled={saving}
-            className="w-full h-[48px] rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm shadow-sm transition-colors"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Salvando...
-              </>
-            ) : (
-              'Salvar'
-            )}
-          </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSubScreen('excecoes');
+                onViewModeChange?.('advanced');
+              }}
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/10 active:bg-muted/15 transition-all group"
+            >
+              <div className="min-w-0 pr-3">
+                <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                  Exceções de Horário
+                </p>
+                <p className="text-[12px] text-muted-foreground/75 mt-0.5 leading-relaxed">
+                  {companyMode ? 'Feriados, datas comemorativas e horários especiais para toda a barbearia' : 'Feriados, folgas e horários especiais personalizados'}
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+            </button>
+          </div>
         </div>
       )}
 

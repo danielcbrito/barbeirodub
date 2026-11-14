@@ -4,7 +4,7 @@ import { Clock, User, CreditCard, AlertCircle, CheckCircle2, Crown } from "lucid
 import { TimelineAppointment } from "./AdminAgenda";
 import { useMemo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { isWhatsAppAppointment } from "@/lib/walkInName";
+import { isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -343,7 +343,7 @@ export function TimelineView({ appointments, loading, selectedDate, onSelectAppo
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">
                         <User className="w-3 h-3" />
-                        <span className="truncate">{appointment.profile?.nome || "Cliente"}</span>
+                        <span className="truncate">{resolveClienteDisplayName(appointment.observacoes, appointment.profile?.nome, "Cliente", appointment.cliente_nome)}</span>
                         {isWhatsAppAppointment(appointment.observacoes) && <WhatsAppBadge />}
                       </div>
                       

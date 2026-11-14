@@ -11,6 +11,7 @@ import {
   Send, Star, MessageSquare, BarChart3, ArrowRight,
 } from "lucide-react";
 import { CopyCode } from "@/components/ui/copy-code-button";
+import { BarberShareLinkCard } from "@/components/barber/BarberShareLinkModal";
 
 import { SetupCompletionBanner } from "@/components/barber/SetupCompletionBanner";
 import { useSetupCompletion } from "@/hooks/useSetupCompletion";
@@ -18,6 +19,7 @@ import { useAdminBarbeiroId } from "@/hooks/useAdminBarbeiroId";
 import { useAtualizarBannerAdmin } from "@/hooks/useAdminMutations";
 import { resolveOwnerIdentity } from "@/lib/ownerIdentity";
 import { useStatusBarColor } from "@/hooks/useStatusBarColor";
+import { useBarbershopPendingFields } from "@/hooks/useBarbershopPendingFields";
 import { ApplyScopeSheet, type ApplyScope } from "@/components/admin/mobile/ApplyScopeSheet";
 import { ThemeSegmentedToggle } from "@/components/profile/ThemeSegmentedToggle";
 import { useTenantBarbersCount } from "@/hooks/useTenantBarbersCount";
@@ -26,6 +28,7 @@ import { WhenToSendDrawer } from "@/components/admin/WhenToSendDrawer";
 import { SelectBarbeariaDrawer } from "@/components/admin/unidades/SelectBarbeariaDrawer";
 import { ProfileInstagramBanner } from "@/components/profile/ProfileInstagramBanner";
 import { ProfilePortfolioCarousel } from "@/components/profile/ProfilePortfolioCarousel";
+import { signOutAndClearDevice } from "@/lib/sessionGuard";
 
 
 interface AdminMobileProfileProps {
@@ -71,6 +74,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
   const [tenantName, setTenantName] = useState<string>(cached?.tenantName ?? "");
   const [unitsCount, setUnitsCount] = useState<number>(cached?.unitsCount ?? 0);
   const [tenantId, setTenantId] = useState<string | null>(cached?.tenantId ?? null);
+  const { totalPendingCount: companyPendingCount } = useBarbershopPendingFields(tenantId);
 
   const [scopeOpen, setScopeOpen] = useState(false);
   const [scopeConfig, setScopeConfig] = useState<{
@@ -403,10 +407,14 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
             </div>
           </div>
 
-          {/* Link de copiar — lugar estratégico e compacto logo abaixo */}
+          {/* Link de agendamento — 100% idêntico entre Admin e Barbeiro */}
           {tenantSlug && (
             <div className="mt-4">
-              <CopyCode code={fullLink} label={displayLink} />
+              <BarberShareLinkCard
+                tenantSlug={tenantSlug}
+                tenantName={tenantName}
+                barberName={profileName}
+              />
             </div>
           )}
         </div>
@@ -511,6 +519,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
             <ProfileMenuItem
               label="Configurações gerais"
               description="Horários, serviços, clientes, equipe e dados"
+              pendingCount={companyPendingCount}
               onClick={handleConfigBarbeariaClick}
             />
             <ProfileMenuItem
@@ -539,7 +548,7 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
             onClick={() =>
               window.open(
                 "https://wa.me/5511963390043?text=" +
-                  encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"),
+                encodeURIComponent("Olá! Preciso de suporte no app DUB 🙏"),
                 "_blank",
                 "noopener,noreferrer"
               )
@@ -569,11 +578,8 @@ export function AdminMobileProfile({ basePath = "/admin", isTenant = false }: Ad
                 if (loggingOut) return;
                 setLoggingOut(true);
                 try {
-                  await supabase.auth.signOut();
-                  localStorage.removeItem("userRole");
-                  localStorage.removeItem("barbeiroId");
+                  await signOutAndClearDevice();
                   toast.success("Sessão encerrada");
-                  window.location.href = "/login";
                 } catch {
                   toast.error("Erro ao sair");
                   setLoggingOut(false);
@@ -641,11 +647,13 @@ function ProfileMenuItem({
   label,
   description,
   badge,
+  pendingCount,
   onClick,
 }: {
   label: string;
   description: string;
   badge?: string;
+  pendingCount?: number;
   onClick: () => void;
 }) {
   return (
@@ -669,7 +677,14 @@ function ProfileMenuItem({
           {description}
         </p>
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      <div className="flex items-center gap-2 shrink-0">
+        {(pendingCount ?? 0) > 0 && (
+          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white font-bold text-[11px] flex items-center justify-center leading-none shadow-xs">
+            {pendingCount}
+          </span>
+        )}
+        <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
+      </div>
     </button>
   );
 }

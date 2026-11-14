@@ -35,13 +35,18 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { MobileManualBookingModal } from "./MobileManualBookingModal";
-import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment } from "@/lib/walkInName";
+import { extractWalkInName, extractWhatsAppName, isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
-import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
+import {
+  extractDebtFromAppointment,
+  getCancellationFeeBadge,
+  useAppointmentCancellationFees,
+} from "@/lib/barberCancellationFee";
 import { readSyncCache, writeSyncCache } from "@/lib/syncQueryCache";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
 import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
+import { getStoredAgendaDate, saveAgendaSelectedDate } from "@/lib/agendaDatePersistence";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,6 +65,7 @@ interface MobileAppointment {
   status: string;
   preco: number;
   observacoes: string | null;
+  cliente_nome?: string | null;
   barbeiro_confirmou: boolean | null;
   is_free: boolean | null;
   payment_method: string | null;
@@ -67,6 +73,7 @@ interface MobileAppointment {
   user_id: string;
   servico_id: string;
   barbeiro_id?: string | null;
+  barbeiro_apelido?: string | null;
   duracao: number;
   profile: { nome: string; telefone?: string } | null;
   servico: { nome: string; duracao_minutos: number } | null;
@@ -81,6 +88,8 @@ interface AdminMobileAgendaProps {
   title?: string;
   onBack?: () => void;
   showBack?: boolean;
+  initialSelectedDate?: Date | string;
+  onDateChange?: (date: Date) => void;
 }
 
 /** Status oficial do sistema com cores solicitadas:
@@ -165,6 +174,8 @@ export function AdminMobileAgenda({
   title = "Agenda",
   onBack,
   showBack = false,
+  initialSelectedDate,
+  onDateChange,
 }: AdminMobileAgendaProps) {
   const navigate = useNavigate();
 
@@ -176,25 +187,56 @@ export function AdminMobileAgenda({
   const getDateKey = (date: Date) => format(date, 'yyyy-MM-dd');
   const syncKey = (dateStr: string) => `admin-agenda:${barbeiroId || tenantId || "all"}:${dateStr}`;
 
+  const location = useLocation();
   const today = useMemo(() => getLocalToday(), []);
 
+  // Data inicial persistida via prop, location.state (retorno de detalhes) ou sessionStorage
+  const initialDate = useMemo(
+    () => getStoredAgendaDate(initialSelectedDate || location.state?.selectedDate),
+    [initialSelectedDate, location.state?.selectedDate]
+  );
+
   // Mês selecionado no carrossel e data selecionada
-  const [selectedMonth, setSelectedMonth] = useState<Date>(() => startOfMonth(getLocalToday()));
-  const [selectedDate, setSelectedDate] = useState<Date>(() => getLocalToday());
+  const [selectedMonth, setSelectedMonth] = useState<Date>(() => startOfMonth(initialDate));
+  const [selectedDate, setSelectedDate] = useState<Date>(() => initialDate);
+
+  // Sincroniza quando props ou location.state trouxerem uma data explícita (ex: ao fechar tela de agendamento)
+  useEffect(() => {
+    const candidate = initialSelectedDate || location.state?.selectedDate;
+    if (candidate) {
+      const parsed = getStoredAgendaDate(candidate);
+      setSelectedDate((prev) => (isSameDay(prev, parsed) ? prev : parsed));
+      setSelectedMonth((prev) => {
+        const nextMonth = startOfMonth(parsed);
+        return isSameMonth(prev, nextMonth) ? prev : nextMonth;
+      });
+      saveAgendaSelectedDate(parsed);
+    }
+  }, [initialSelectedDate, location.state?.selectedDate]);
+
+  // Persiste na sessão sempre que o barbeiro mudar a data selecionada e notifica callback pai
+  const lastNotifiedDateKeyRef = useRef<string>("");
+  useEffect(() => {
+    const key = getDateKey(selectedDate);
+    saveAgendaSelectedDate(selectedDate);
+    if (lastNotifiedDateKeyRef.current !== key) {
+      lastNotifiedDateKeyRef.current = key;
+      onDateChange?.(selectedDate);
+    }
+  }, [selectedDate, onDateChange]);
 
   // Modal de seleção rápida de mês/ano
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(() => selectedMonth.getFullYear());
 
   const [appointments, setAppointments] = useState<MobileAppointment[]>(
-    () => readSyncCache<MobileAppointment[]>(syncKey(getDateKey(getLocalToday())))?.data || []
+    () => readSyncCache<MobileAppointment[]>(syncKey(getDateKey(initialDate)))?.data || []
   );
-  const [appointmentsDateKey, setAppointmentsDateKey] = useState(() => getDateKey(getLocalToday()));
+  const [appointmentsDateKey, setAppointmentsDateKey] = useState(() => getDateKey(initialDate));
   const [loading, setLoading] = useState(
-    () => !readSyncCache<MobileAppointment[]>(syncKey(getDateKey(getLocalToday())))
+    () => !readSyncCache<MobileAppointment[]>(syncKey(getDateKey(initialDate)))
   );
   const [refreshing, setRefreshing] = useState(false);
-  const location = useLocation();
   const [manualBookingOpen, setManualBookingOpen] = useState(() => Boolean(location.state?.openManualBooking));
   const [selectedSlotTime, setSelectedSlotTime] = useState("09:00");
   const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(() => Boolean(location.state?.openOverdueModal));
@@ -365,13 +407,16 @@ export function AdminMobileAgenda({
     return names[date.getDay()];
   };
 
+  const appointmentIds = useMemo(
+    () => (appointments || []).map((a) => a?.id).filter(Boolean) as string[],
+    [appointments]
+  );
+  const feeMap = useAppointmentCancellationFees(appointmentIds);
+
   const commitAppointments = useCallback((nextAppointments: MobileAppointment[], dateKey?: string) => {
     setAppointments(nextAppointments);
     if (dateKey) setAppointmentsDateKey(dateKey);
   }, []);
-
-  const isScrollingFromCodeRef = useRef(false);
-  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Centraliza com precisão o dia selecionado no centro geométrico do carrossel
   const scrollToDay = useCallback((day: Date, behavior: ScrollBehavior = "smooth") => {
@@ -381,70 +426,20 @@ export function AdminMobileAgenda({
     const el = container.querySelector(`[data-date="${dayKey}"]`) as HTMLElement;
     if (!el) return;
 
-    isScrollingFromCodeRef.current = true;
     const containerWidth = container.offsetWidth;
     const cardLeft = el.offsetLeft;
     const cardWidth = el.offsetWidth;
     const targetScroll = cardLeft - (containerWidth / 2) + (cardWidth / 2);
 
-    container.scrollTo({
-      left: Math.max(0, targetScroll),
-      behavior,
-    });
-
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    scrollTimeoutRef.current = setTimeout(() => {
-      isScrollingFromCodeRef.current = false;
-    }, behavior === "smooth" ? 350 : 50);
-  }, []);
-
-  // Detecta o dia mais próximo ao centro quando o usuário passa o dedo no carrossel
-  useEffect(() => {
-    const container = carouselRef.current;
-    if (!container) return;
-
-    let rafId: number;
-    const handleScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        if (isScrollingFromCodeRef.current) return;
-
-        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-        scrollTimeoutRef.current = setTimeout(() => {
-          if (isScrollingFromCodeRef.current) return;
-          const centerX = container.scrollLeft + container.offsetWidth / 2;
-          const children = container.querySelectorAll("[data-date]");
-          let closestDate: Date | null = null;
-          let minDist = Infinity;
-
-          children.forEach((child) => {
-            const el = child as HTMLElement;
-            const childCenter = el.offsetLeft + el.offsetWidth / 2;
-            const dist = Math.abs(childCenter - centerX);
-            if (dist < minDist) {
-              minDist = dist;
-              const dateStr = el.getAttribute("data-date");
-              if (dateStr) {
-                const [y, m, d] = dateStr.split("-").map(Number);
-                closestDate = new Date(y, m - 1, d);
-              }
-            }
-          });
-
-          if (closestDate && !isSameDay(closestDate, selectedDate)) {
-            setSelectedDate(closestDate);
-          }
-        }, 60);
+    if (behavior === "auto") {
+      container.scrollLeft = Math.max(0, targetScroll);
+    } else {
+      container.scrollTo({
+        left: Math.max(0, targetScroll),
+        behavior,
       });
-    };
-
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      container.removeEventListener("scroll", handleScroll);
-      cancelAnimationFrame(rafId);
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    };
-  }, [selectedDate]);
+    }
+  }, []);
 
   // Carregar agendamentos do dia ativo
   const loadAppointments = useCallback(async (
@@ -477,11 +472,16 @@ export function AdminMobileAgenda({
           appointmentsWithDetails = raw
             .filter((apt) => Boolean(apt) && apt.status !== "excluido")
             .map((apt) => {
-              const walkInName = extractWalkInName(apt.observacoes);
-              const whatsAppName = extractWhatsAppName(apt.observacoes);
-              const displayName = whatsAppName || walkInName || apt.profile?.nome || null;
+              const displayName = resolveClienteDisplayName(
+                apt.observacoes,
+                apt.profile?.nome,
+                "Cliente",
+                apt.cliente_nome,
+                apt.barbeiro_apelido
+              );
               return {
                 ...apt,
+                cliente_nome: apt.cliente_nome || null,
                 hora: apt.hora || "00:00",
                 preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
                 duracao: apt.duracao || apt.servico?.duracao_minutos || 30,
@@ -500,7 +500,7 @@ export function AdminMobileAgenda({
       if (!appointmentsWithDetails) {
         let query = supabase
           .from("agendamentos")
-          .select("id, data, hora, duracao, status, preco, observacoes, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao, created_at")
+          .select("id, data, hora, duracao, status, preco, observacoes, cliente_nome, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao, created_at")
           .eq("data", dateStr)
           .neq("status", "excluido")
           .order("hora", { ascending: true });
@@ -537,14 +537,18 @@ export function AdminMobileAgenda({
           appointmentsWithDetails = rawAppointments
             .filter(Boolean)
             .map((apt) => {
-              const walkInName = extractWalkInName(apt.observacoes);
-              const whatsAppName = extractWhatsAppName(apt.observacoes);
-              const displayName = whatsAppName || walkInName || null;
+              const displayName = resolveClienteDisplayName(
+                apt.observacoes,
+                profilesMap.get(apt.user_id)?.nome,
+                "Cliente",
+                (apt as any).cliente_nome
+              );
               const profile = displayName
                 ? { nome: displayName, telefone: profilesMap.get(apt.user_id)?.telefone ?? undefined }
                 : profilesMap.get(apt.user_id) || null;
               return {
                 ...apt,
+                cliente_nome: (apt as any).cliente_nome || null,
                 hora: apt.hora || "00:00",
                 preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
                 duracao: apt.duracao || servicosMap.get(apt.servico_id)?.duracao_minutos || 30,
@@ -717,13 +721,31 @@ export function AdminMobileAgenda({
     };
   }, [selectedDate, selectedMonth, loadAppointments, barbeiroId]);
 
-  // Centraliza o carrossel no dia selecionado
+  // Centraliza o carrossel no dia selecionado com suporte resiliente a montagem e troca de mês
   useEffect(() => {
-    const timer = setTimeout(() => {
-      scrollToDay(selectedDate, isInitialScrollDone.current ? "smooth" : "auto");
-      isInitialScrollDone.current = true;
-    }, 60);
-    return () => clearTimeout(timer);
+    let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+
+    const attemptScroll = (attemptsLeft: number) => {
+      if (cancelled) return;
+      const container = carouselRef.current;
+      const dayKey = format(selectedDate, "yyyy-MM-dd");
+      const el = container?.querySelector(`[data-date="${dayKey}"]`);
+      if (el) {
+        scrollToDay(selectedDate, isInitialScrollDone.current ? "smooth" : "auto");
+        isInitialScrollDone.current = true;
+      } else if (attemptsLeft > 0) {
+        timer = setTimeout(() => attemptScroll(attemptsLeft - 1), 30);
+      } else {
+        isInitialScrollDone.current = true;
+      }
+    };
+
+    attemptScroll(10);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [selectedDate, selectedMonth, scrollToDay]);
 
   // Troca de mês pelos botões de seta
@@ -763,9 +785,14 @@ export function AdminMobileAgenda({
   const formattedDateTitle = `${capitalizedWeekday}, ${dayAndMonth}`;
 
   return (
-    <div className="admin-mobile-agenda flex flex-col bg-background relative w-full" style={{ height: 'calc(100dvh - 56px)' }}>
+    <div className="admin-mobile-agenda flex flex-col bg-background relative w-full h-dvh" style={{ height: '100dvh' }}>
       {/* ══════ HEADER FIXO: NAVEGAÇÃO E CARROSSEL DE DATAS ESTILO APPLE HIG (CORES DA MARCA: VERMELHO/PRETO/BRANCO) ══════ */}
-      <div className="flex-shrink-0 z-20 bg-background/80 backdrop-blur-xl pt-3 pb-2.5 relative">
+      <div 
+        className="flex-shrink-0 z-20 bg-background/85 backdrop-blur-xl pb-2.5 relative border-b border-border/15"
+        style={{
+          paddingTop: "max(calc(var(--app-safe-top, env(safe-area-inset-top, 0px)) + 0.5rem), 1rem)",
+        }}
+      >
         {/* Linha 1: Mês/Ano + Botão Hoje + Setas de Navegação */}
         <div className="flex items-center justify-between px-4 mb-2.5">
           {/* Seletor Mês/Ano */}
@@ -820,7 +847,7 @@ export function AdminMobileAgenda({
           className="w-full overflow-x-auto scrollbar-hide py-1 scroll-smooth"
           style={{
             WebkitOverflowScrolling: "touch",
-            scrollSnapType: "x mandatory",
+            scrollSnapType: "x proximity",
           }}
         >
           <div
@@ -845,6 +872,7 @@ export function AdminMobileAgenda({
                   <button
                     type="button"
                     onClick={() => {
+                      if (isSameDay(day, selectedDate)) return;
                       setSelectedDate(day);
                       scrollToDay(day, "smooth");
                     }}
@@ -900,7 +928,12 @@ export function AdminMobileAgenda({
       </div>
 
       {/* ══════ ÁREA SCROLLÁVEL: DATA, CONTAGEM E BOTÃO SOBEM JUNTOS AO ROLAR A TELA ══════ */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-20 pt-2">
+      <div 
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain pt-2"
+        style={{
+          paddingBottom: "calc(7.5rem + var(--app-safe-bottom, 8px) + env(safe-area-inset-bottom, 0px))",
+        }}
+      >
         {/* Barra de Ação (Data + Contagem + Botão Novo Encaixe) — sobe junto com os agendamentos */}
         <div className="px-4 pt-2 pb-2.5 flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1 pr-1">
@@ -1001,7 +1034,13 @@ export function AdminMobileAgenda({
               // Card fica atenuado/transparente se concluído, cancelado, faltou ou horário já decorrido
               const isMuted = isCompleted || isCancelled || isNoShow || isPastTime;
 
-              const clientName = apt.profile?.nome || "Cliente";
+              const clientName = resolveClienteDisplayName(
+                apt.observacoes,
+                apt.profile?.nome,
+                "Cliente",
+                apt.cliente_nome,
+                apt.barbeiro_apelido
+              );
               const serviceName = (() => {
                 if (apt.observacoes?.startsWith("Serviços:")) {
                   return apt.observacoes.split(".")[0].replace("Serviços: ", "");
@@ -1033,11 +1072,15 @@ export function AdminMobileAgenda({
                 : '0,00';
 
               const debtInfo = extractDebtFromAppointment(apt);
+              const feeBadge = getCancellationFeeBadge(apt, feeMap);
 
               return (
                 <div
                   key={apt.id}
-                  onClick={() => onAppointmentClick?.(apt)}
+                  onClick={() => {
+                    saveAgendaSelectedDate(selectedDate);
+                    onAppointmentClick?.(apt);
+                  }}
                   style={{ opacity: isMuted ? 0.45 : 1 }}
                   className={cn(
                     "w-full rounded-2xl border transition-all duration-200 cursor-pointer p-3 sm:p-3.5 flex items-center gap-3 backdrop-blur-xl backdrop-saturate-[180%]",
@@ -1094,7 +1137,7 @@ export function AdminMobileAgenda({
                   <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
                     {/* Linha Superior: Nome do Cliente + Preço / Plano */}
                     <div className="flex items-center justify-between gap-2 overflow-hidden w-full">
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden flex-wrap">
                         <span className={cn(
                           "text-[15px] tracking-tight truncate block",
                           isMuted ? "text-muted-foreground/75 font-normal" : "text-foreground font-semibold"
@@ -1106,11 +1149,15 @@ export function AdminMobileAgenda({
                             (Não veio)
                           </span>
                         )}
-                        {debtInfo.hasDebt && (
+                        {feeBadge ? (
+                          <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide shrink-0", feeBadge.cls)}>
+                            {feeBadge.label}
+                          </span>
+                        ) : debtInfo.hasDebt ? (
                           <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 text-[10px] font-semibold tabular-nums shrink-0">
                             + R$ {debtInfo.debtAmount.toFixed(2).replace(".", ",")}
                           </span>
-                        )}
+                        ) : null}
                         {isWhatsAppAppointment(apt.observacoes) && (
                           <span className={cn(isMuted && "opacity-60")}>
                             <WhatsAppBadge />

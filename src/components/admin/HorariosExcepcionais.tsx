@@ -20,12 +20,14 @@ import { ptBR } from 'date-fns/locale';
 import { Textarea } from '@/components/ui/textarea';
 import { NumericDateInput } from '@/components/shared/NumericDateInput';
 import { NumericTimeInput } from '@/components/shared/NumericTimeInput';
+import { VisualCalendarPicker } from '@/components/shared/VisualCalendarPicker';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/lib/queryKeys';
 import { STALE_TIMES } from '@/lib/queryConstants';
 import { useAddHorarioExcepcional, useDeleteHorarioExcepcional } from '@/hooks/useAdminMutations';
 import { useAdminHorarioScope } from '@/hooks/useAdminHorarioScope';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -95,6 +97,9 @@ export default function HorariosExcepcionais({ barbeiroId }: HorariosExcepcionai
 
   const addMutation = useAddHorarioExcepcional();
   const deleteMutation = useDeleteHorarioExcepcional();
+
+  const { isTenantAdmin, isDubAdmin } = usePermissions();
+  const isAdmin = Boolean(isTenantAdmin || isDubAdmin);
 
   const { data: scopeData, isLoading: loadingScope } = useAdminHorarioScope(barbeiroId);
   const effectiveBarbeiroId = scopeData?.effectiveBarbeiroId ?? null;
@@ -288,9 +293,17 @@ export default function HorariosExcepcionais({ barbeiroId }: HorariosExcepcionai
 
   const isSaving = addMutation.isPending || savingUnits;
 
-  /** Abre o drawer de escopo ao clicar em "Salvar Exceção" */
+  /** Abre o drawer de escopo ao clicar em "Salvar Exceção" (apenas admin) ou salva direto na agenda pessoal (barbeiro) */
   const handleSaveClick = () => {
     if (!validateForm()) return;
+
+    // Barbeiros comuns só criam exceção para sua própria agenda (escopo: barbeiro).
+    // Não devem ver nem acessar opções de aplicar para barbearias inteiras.
+    if (!isAdmin) {
+      handleSaveForMe();
+      return;
+    }
+
     setDrawerMode('scope');
     setSelectedUnits([]);
     setDrawerOpen(true);
@@ -316,22 +329,37 @@ export default function HorariosExcepcionais({ barbeiroId }: HorariosExcepcionai
             className="flex flex-col min-h-[calc(100vh-200px)]"
           >
             <div className="flex-1 space-y-6 pb-24">
-              <p className="text-xs font-extralight text-muted-foreground">
-                Preencha a data e os horários da exceção.
-              </p>
+              {/* Header: Nova Exceção */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Nova Exceção</h3>
+                  <p className="text-xs font-extralight text-muted-foreground">
+                    Selecione o dia e configure os horários.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScreen('list')}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors font-medium py-1 px-2.5 rounded-lg hover:bg-muted/30"
+                >
+                  Cancelar
+                </button>
+              </div>
 
-              {/* ── Data ── */}
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest">Data</p>
-                <NumericDateInput
+              {/* ── Data (Calendário Visual) ── */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest">
+                  Selecione o dia
+                </p>
+                <VisualCalendarPicker
                   value={novaExcecao.data}
-                  min={format(new Date(), 'yyyy-MM-dd')}
+                  minDate={new Date()}
                   onChange={(iso) => setNovaExcecao(prev => ({ ...prev, data: iso }))}
                 />
               </div>
 
               {/* ── Toggle aberto/fechado ── */}
-              <div className="rounded-xl border border-border/30 bg-muted/5 p-4">
+              <div className="rounded-2xl border border-border/30 bg-muted/5 p-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium text-foreground">
@@ -398,37 +426,46 @@ export default function HorariosExcepcionais({ barbeiroId }: HorariosExcepcionai
               </div>
             </div>
 
-            {/* ── Botão salvar — abre drawer de escopo ── */}
+            {/* ── Botão salvar ── */}
             <div className="sticky bottom-0 left-0 right-0 p-4 pb-6 bg-background border-t border-border/20">
               <Button
                 onClick={handleSaveClick}
-                disabled={!novaExcecao.data}
+                disabled={!novaExcecao.data || isSaving}
                 className="w-full h-[48px] rounded-xl bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm shadow-sm transition-colors"
               >
-                Salvar Exceção
+                {isSaving ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Salvando...
+                  </span>
+                ) : (
+                  'Salvar Exceção'
+                )}
               </Button>
             </div>
           </motion.div>
         </AnimatePresence>
 
-        {/* ═══ DRAWER: Escopo + Seleção de barbearias ═══ */}
-        <ScopeDrawer
-          open={drawerOpen}
-          mode={drawerMode}
-          onClose={() => { setDrawerOpen(false); setDrawerMode('scope'); }}
-          onSaveForMe={handleSaveForMe}
-          onGoToUnits={() => setDrawerMode('units')}
-          onBackToScope={() => setDrawerMode('scope')}
-          barbearias={barbearias}
-          selectedUnits={selectedUnits}
-          toggleUnit={toggleUnit}
-          toggleAllUnits={toggleAllUnits}
-          onSaveForUnits={handleSaveForUnits}
-          isSaving={isSaving}
-          isLoadingBarbearias={loadingScope}
-          novaExcecao={novaExcecao}
-          formatDateShort={formatDateShort}
-        />
+        {/* ═══ DRAWER: Escopo + Seleção de barbearias (Apenas Admin) ═══ */}
+        {isAdmin && (
+          <ScopeDrawer
+            open={drawerOpen}
+            mode={drawerMode}
+            onClose={() => { setDrawerOpen(false); setDrawerMode('scope'); }}
+            onSaveForMe={handleSaveForMe}
+            onGoToUnits={() => setDrawerMode('units')}
+            onBackToScope={() => setDrawerMode('scope')}
+            barbearias={barbearias}
+            selectedUnits={selectedUnits}
+            toggleUnit={toggleUnit}
+            toggleAllUnits={toggleAllUnits}
+            onSaveForUnits={handleSaveForUnits}
+            isSaving={isSaving}
+            isLoadingBarbearias={loadingScope}
+            novaExcecao={novaExcecao}
+            formatDateShort={formatDateShort}
+          />
+        )}
       </>
     );
   }

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Building2, ChevronRight, Users, Calendar, BarChart3, Settings, LogOut,
-  Loader2, MapPin, Shield,
+  Loader2, MapPin, Shield, AlertTriangle, RotateCcw,
 } from "lucide-react";
 
 interface UnitInfo {
@@ -26,6 +26,7 @@ interface UnitInfo {
 const UnitAdminDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [units, setUnits] = useState<UnitInfo[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<UnitInfo | null>(null);
 
@@ -34,6 +35,8 @@ const UnitAdminDashboard = () => {
   }, []);
 
   const loadAdminUnits = async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
@@ -99,6 +102,7 @@ const UnitAdminDashboard = () => {
       }
     } catch (err) {
       console.error("Erro ao carregar unidades:", err);
+      setLoadError("Não foi possível carregar as unidades gerenciadas.");
       toast.error("Erro ao carregar dados");
     } finally {
       setLoading(false);
@@ -117,6 +121,22 @@ const UnitAdminDashboard = () => {
           <div className="w-10 h-10 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
           <p className="text-[13px] text-muted-foreground">Carregando unidades...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (loadError && units.length === 0) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-background px-4 gap-3 text-center">
+        <AlertTriangle className="h-10 w-10 text-amber-500/80" />
+        <p className="text-sm text-muted-foreground">{loadError}</p>
+        <button
+          onClick={() => loadAdminUnits()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Tentar novamente
+        </button>
       </div>
     );
   }

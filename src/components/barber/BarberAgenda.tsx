@@ -38,17 +38,22 @@ import { AdminMobileAgenda } from "@/components/admin/mobile/AdminMobileAgenda";
 import { canAutoOpenOverdueModal, recordOverdueModalDismissal } from "@/lib/modalFrequency";
 import { ConfirmAttendanceModal } from "@/components/admin/ConfirmAttendanceModal";
 import { MobileManualBookingModal } from "@/components/admin/mobile/MobileManualBookingModal";
+import { getStoredAgendaDate, saveAgendaSelectedDate } from "@/lib/agendaDatePersistence";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBarberAgenda, type TimelineAppointment } from "@/hooks/useBarberAgenda";
 import { useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
-import { isWhatsAppAppointment } from "@/lib/walkInName";
+import { isWhatsAppAppointment, resolveClienteDisplayName } from "@/lib/walkInName";
 import { WhatsAppBadge } from "@/components/shared/WhatsAppBadge";
 import { fetchAgendaDia } from "@/lib/fetchers/agendaFetchers";
 import { toast } from "sonner";
 import { useOverdueAppointments } from "@/hooks/useOverdueAppointments";
 import { PendingAppointmentsModal } from "@/components/barber/PendingAppointmentsModal";
-import { extractDebtFromAppointment } from "@/lib/barberCancellationFee";
+import {
+  extractDebtFromAppointment,
+  getCancellationFeeBadge,
+  useAppointmentCancellationFees,
+} from "@/lib/barberCancellationFee";
 
 interface BarberAgendaProps {
   barberContext: BarberContext;
@@ -70,6 +75,18 @@ const getStatusColorConfig = (status: string, barbeiroConfirmou: boolean | null)
       dot: "bg-zinc-400 dark:bg-zinc-500",
       statusBadge: "text-muted-foreground",
       statusLabel: "Não veio",
+    };
+  }
+  if (
+    status === "cancelled_by_user" ||
+    status === "cancelled_by_admin" ||
+    status === "cancelado" ||
+    status === "cancelled"
+  ) {
+    return {
+      dot: "bg-[#FF3B30] dark:bg-[#FF453A]",
+      statusBadge: "text-muted-foreground",
+      statusLabel: "Cancelado",
     };
   }
   if (status === "confirmed" || barbeiroConfirmou) {
@@ -109,16 +126,26 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  });
+  const location = useLocation();
+  const initialDate = useMemo(() => getStoredAgendaDate(location.state?.selectedDate), [location.state?.selectedDate]);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => initialDate);
+
+  useEffect(() => {
+    if (location.state?.selectedDate) {
+      const parsed = getStoredAgendaDate(location.state.selectedDate);
+      setSelectedDate((prev) => (isSameDay(prev, parsed) ? prev : parsed));
+    }
+  }, [location.state?.selectedDate]);
+
+  useEffect(() => {
+    saveAgendaSelectedDate(selectedDate);
+  }, [selectedDate]);
+
   const [confirmModalAppointment, setConfirmModalAppointment] = useState<TimelineAppointment | null>(null);
   const [manualBookingModalOpen, setManualBookingModalOpen] = useState(false);
   const [selectedEmptySlot, setSelectedEmptySlot] = useState({ date: "", time: "" });
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const location = useLocation();
   const overdueState = useOverdueAppointments(barberContext.barbeiroId, { enabled: !isMobile });
   const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(() => Boolean(location.state?.openOverdueModal));
   const hasAutoPromptedOverdueRef = useRef(false);
@@ -230,62 +257,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     return names[date.getDay()];
   };
 
-  // Scroll inicial para o dia de hoje
-  useEffect(() => {
-    if (isMobile) return;
-    const timer = setTimeout(() => {
-      const el = scrollRef.current;
-      const inner = innerRef.current;
-      if (!el || !inner) return;
-      const child = inner.children[todayIndex] as HTMLElement;
-      if (!child) return;
-      el.scrollLeft = child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2;
-      setTimeout(() => { isInitialScrollDone.current = true; }, 100);
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [isMobile]);
-
-  // Detectar o dia central durante scroll
-  useEffect(() => {
-    if (isMobile) return;
-    const el = scrollRef.current;
-    const inner = innerRef.current;
-    if (!el || !inner) return;
-
-    let rafId: number;
-    const handleScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        if (!isInitialScrollDone.current) return;
-        const centerX = el.scrollLeft + el.offsetWidth / 2;
-        const children = Array.from(inner.children) as HTMLElement[];
-        let closestIdx = 0;
-        let minDist = Infinity;
-        for (let i = 0; i < children.length; i++) {
-          const childCenter = children[i].offsetLeft + children[i].offsetWidth / 2;
-          const dist = Math.abs(childCenter - centerX);
-          if (dist < minDist) {
-            minDist = dist;
-            closestIdx = i;
-          }
-        }
-        if (allDays[closestIdx]) {
-          setSelectedDate(prev => {
-            if (isSameDay(prev, allDays[closestIdx])) return prev;
-            return allDays[closestIdx];
-          });
-        }
-      });
-    };
-
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", handleScroll);
-      cancelAnimationFrame(rafId);
-    };
-  }, [allDays, isMobile]);
-
-  const scrollToDate = useCallback((date: Date) => {
+  const scrollToDate = useCallback((date: Date, behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
     const inner = innerRef.current;
     if (!el || !inner) return;
@@ -293,8 +265,23 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     if (idx < 0) return;
     const child = inner.children[idx] as HTMLElement;
     if (!child) return;
-    el.scrollTo({ left: child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2, behavior: "smooth" });
+    const targetLeft = child.offsetLeft - el.offsetWidth / 2 + child.offsetWidth / 2;
+    if (behavior === "auto") {
+      el.scrollLeft = targetLeft;
+    } else {
+      el.scrollTo({ left: targetLeft, behavior });
+    }
   }, [allDays]);
+
+  // Scroll inicial para o dia selecionado (ou hoje) na montagem
+  useEffect(() => {
+    if (isMobile) return;
+    const timer = setTimeout(() => {
+      scrollToDate(selectedDate, "auto");
+      isInitialScrollDone.current = true;
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check for appointments that need confirmation - ONLY for TODAY
   useEffect(() => {
@@ -328,6 +315,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     if (filterStatus !== "all" && apt.status !== filterStatus) return false;
     return true;
   });
+
+  const appointmentIds = useMemo(
+    () => filteredAppointments.map((a) => a?.id).filter(Boolean) as string[],
+    [filteredAppointments]
+  );
+  const feeMap = useAppointmentCancellationFees(appointmentIds);
 
   const dayPendingAppointments = useMemo(() => {
     if (!appointments || appointments.length === 0) return [];
@@ -377,11 +370,14 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
     return (
       <>
         <AdminMobileAgenda
-          onAppointmentClick={(apt) =>
-            navigate(`/barbeiro/agendamento/${apt.id}`, { state: { appointment: apt as any } })
-          }
+          onAppointmentClick={(apt) => {
+            saveAgendaSelectedDate(apt.data || selectedDate);
+            navigate(`/barbeiro/agendamento/${apt.id}`, { state: { appointment: apt as any } });
+          }}
           barbeiroId={barberContext.barbeiroId}
           tenantId={barberContext.tenantId}
+          initialSelectedDate={selectedDate}
+          onDateChange={setSelectedDate}
         />
         <ConfirmAttendanceModal
           appointment={confirmModalAppointment}
@@ -408,8 +404,9 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
               <button
                 type="button"
                 onClick={() => {
+                  if (isSameDay(today, selectedDate)) return;
                   setSelectedDate(today);
-                  scrollToDate(today);
+                  scrollToDate(today, "smooth");
                 }}
                 className="px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-secondary text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
               >
@@ -468,11 +465,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
         <div className="mb-0">
           <button
             onClick={() => {
+              if (isSameDay(today, selectedDate)) return;
               setSelectedDate(today);
-              scrollToDate(today);
+              scrollToDate(today, "smooth");
             }}
             className={cn(
-              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200",
+              "mb-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-opacity duration-200 cursor-pointer",
               isToday(selectedDate) ? "opacity-0 pointer-events-none" : "opacity-100"
             )}
           >
@@ -482,10 +480,9 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
           <div className="relative">
             <div
               ref={scrollRef}
-              className="overflow-x-auto scrollbar-hide"
+              className="overflow-x-auto scrollbar-hide scroll-smooth"
               style={{
                 WebkitOverflowScrolling: "touch",
-                scrollSnapType: "x mandatory",
               }}
             >
               <div
@@ -501,12 +498,12 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                     <div
                       key={day.toISOString()}
                       className="flex-shrink-0 w-16"
-                      style={{ scrollSnapAlign: "center" }}
                     >
                       <button
                         onClick={() => {
+                          if (isSameDay(day, selectedDate)) return;
                           setSelectedDate(day);
-                          scrollToDate(day);
+                          scrollToDate(day, "smooth");
                         }}
                         className={cn(
                           "w-full flex flex-col items-center gap-1 py-1 transition-all duration-200 select-none cursor-pointer",
@@ -583,6 +580,7 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                 const rawHora = apt.hora || "00:00";
                 const horaFormatted = rawHora.slice(0, 5);
                 const debtInfo = extractDebtFromAppointment(apt);
+                const feeBadge = getCancellationFeeBadge(apt, feeMap);
 
                 const now = new Date();
                 const isViewingToday = isToday(selectedDate);
@@ -592,21 +590,33 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                   return ((h || 0) * 60 + (m || 0)) + duration;
                 })();
                 const nowMinutes = now.getHours() * 60 + now.getMinutes();
-                const isCompleted = apt.status === "completed" || apt.status === "no_show";
+                const isCancelled =
+                  apt.status === "cancelled_by_user" ||
+                  apt.status === "cancelled_by_admin" ||
+                  apt.status === "cancelled" ||
+                  apt.status === "cancelado";
+                const isCompleted = apt.status === "completed" || apt.status === "no_show" || isCancelled;
                 const isPastTime = isViewingToday && aptEndMinutes <= nowMinutes;
                 const isDone = isCompleted || isPastTime;
                 const isNextUp = isViewingToday && !isDone && rawHora >= currentTimeStr
                   && apt.status !== "completed" && apt.status !== "no_show"
+                  && !isCancelled
                   && idx === filteredAppointments.findIndex(a =>
                     (a?.hora || "") >= currentTimeStr
                     && a?.status !== "completed"
                     && a?.status !== "no_show"
+                    && a?.status !== "cancelled_by_user"
+                    && a?.status !== "cancelled_by_admin"
+                    && a?.status !== "cancelled"
                   );
 
                 return (
                   <div
                     key={apt.id}
-                    onClick={() => navigate(`/barbeiro/agendamento/${apt.id}`, { state: { appointment: apt } })}
+                    onClick={() => {
+                      saveAgendaSelectedDate(apt.data || selectedDate);
+                      navigate(`/barbeiro/agendamento/${apt.id}`, { state: { appointment: apt } });
+                    }}
                     onMouseEnter={() => {
                       if (!apt.user_id) return;
                       queryClient.prefetchQuery({
@@ -664,17 +674,21 @@ export function BarberAgenda({ barberContext }: BarberAgendaProps) {
                     </div>
 
                     {/* Cliente */}
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
                       <User className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
                       <span className="text-[13px] text-muted-foreground truncate">
-                        {apt.profile?.nome || "Cliente"}
+                        {resolveClienteDisplayName(apt.observacoes, apt.profile?.nome, "Cliente", apt.cliente_nome)}
                       </span>
                       {isWhatsAppAppointment(apt.observacoes) && <WhatsAppBadge />}
-                      {debtInfo.hasDebt && (
+                      {feeBadge ? (
+                        <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide shrink-0", feeBadge.cls)}>
+                          {feeBadge.label}
+                        </span>
+                      ) : debtInfo.hasDebt ? (
                         <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 text-[10px] font-semibold tabular-nums shrink-0">
                           + R$ {debtInfo.debtAmount.toFixed(2).replace(".", ",")} taxa
                         </span>
-                      )}
+                      ) : null}
                       {isNextUp && (
                         <span className="ml-auto text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
                           agora

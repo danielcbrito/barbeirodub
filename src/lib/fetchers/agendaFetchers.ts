@@ -41,7 +41,7 @@ export async function fetchAgendaDia(
   return raw.filter(Boolean).map((apt: any): TimelineAppointment => {
     const walkInName = extractWalkInName(apt.observacoes);
     const whatsAppName = extractWhatsAppName(apt.observacoes);
-    const displayName = whatsAppName || walkInName || apt.profile?.nome || null;
+    const displayName = apt.cliente_nome || whatsAppName || walkInName || apt.profile?.nome || null;
     return {
       id: apt.id,
       data: apt.data || dateStr,
@@ -50,6 +50,7 @@ export async function fetchAgendaDia(
       status: apt.status || "pending",
       preco: typeof apt.preco === "number" && !isNaN(apt.preco) ? apt.preco : 0,
       observacoes: apt.observacoes,
+      cliente_nome: apt.cliente_nome || null,
       barbeiro_confirmou: apt.barbeiro_confirmou,
       cliente_confirmou: apt.cliente_confirmou,
       ponto_liberado: apt.ponto_liberado,
@@ -82,11 +83,11 @@ async function fetchAgendaDiaFallback(
   const { data: rawApts, error } = await supabase
     .from("agendamentos")
     .select(
-      "id, data, hora, duracao, status, preco, observacoes, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao"
+      "id, data, hora, duracao, status, preco, observacoes, cliente_nome, barbeiro_confirmou, cliente_confirmou, ponto_liberado, user_id, servico_id, barbeiro_id, is_free, payment_method, tipo_agendamento, remarcacao_solicitada, motivo_remarcacao"
     )
     .eq("barbeiro_id", barbeiroId)
     .eq("data", dateStr)
-    .in("status", ["pending", "confirmed", "completed", "no_show"])
+    .in("status", ["pending", "confirmed", "completed", "no_show", "cancelled_by_user", "cancelled_by_admin"])
     .order("hora", { ascending: true });
 
   if (error) throw error;
@@ -116,12 +117,12 @@ async function fetchAgendaDiaFallback(
     pagamentosMap.set(key, arr);
   }
 
-  return agendamentos.filter(Boolean).map((apt): TimelineAppointment => {
+  return agendamentos.filter(Boolean).map((apt: any): TimelineAppointment => {
     const profile = profilesMap.get(apt.user_id) as any;
     const servico = servicosMap.get(apt.servico_id) as any;
     const walkInName = extractWalkInName(apt.observacoes);
     const whatsAppName = extractWhatsAppName(apt.observacoes);
-    const displayName = whatsAppName || walkInName || profile?.nome || null;
+    const displayName = apt.cliente_nome || whatsAppName || walkInName || profile?.nome || null;
     return {
       id: apt.id,
       data: apt.data || dateStr,
