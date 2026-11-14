@@ -204,7 +204,11 @@ export function BarberFormasPagamento({
       setInputValue(String(cleanVal));
 
       toast.success("Configurações de taxa salvas com sucesso!");
-      setShowExplainModal(true);
+      // O drawer/modal de configuração só aparece quando o barbeiro ATIVA a taxa.
+      // Se ele desativar, não precisa exibir o drawer.
+      if (nextConfig.habilitado) {
+        setShowExplainModal(true);
+      }
     } catch (err: any) {
       console.error("Erro ao salvar taxa de cancelamento:", err);
       toast.error(err?.message || "Erro ao salvar taxa de cancelamento.");
