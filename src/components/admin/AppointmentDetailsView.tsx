@@ -554,6 +554,9 @@ export function AppointmentDetailsView({
           onUpdate();
           onClose();
         },
+        onError: () => {
+          toast.error("Erro ao registrar falta. Tente novamente.");
+        },
       }
     );
   };
@@ -643,7 +646,7 @@ export function AppointmentDetailsView({
   const payment = appointment.pagamentos?.[0];
   const paymentMethod = payment?.metodo || appointment.payment_method || 'cash';
   const isPrepaid = payment?.status === 'paid';
-  const isMutating = completeMutation.isPending || cancelMutation.isPending || noShowMutation.isPending;
+  const isMutating = completeMutation.isPending || cancelMutation.isPending;
   const isActing = loading || isMutating;
   const isActiveStatus = !['completed', 'cancelled_by_admin', 'cancelled_by_user', 'no_show'].includes(appointment.status);
   const canComplete = isActiveStatus;
@@ -1025,9 +1028,9 @@ export function AppointmentDetailsView({
                 )}
 
                 {canNoShow && (
-                  <button 
-                    onClick={handleNoShow} 
-                    disabled={isActing}
+                  <button
+                    onClick={handleNoShow}
+                    disabled={isActing || noShowMutation.isPending}
                     className={cn(
                       "flex-1 h-10 rounded-xl text-[12px] font-medium flex items-center justify-center gap-1.5",
                       "bg-card border border-border/60 text-muted-foreground",
@@ -1049,7 +1052,10 @@ export function AppointmentDetailsView({
   );
 
   const pageWrapper = (
-    <div className="fixed inset-0 z-[80] bg-background flex flex-col overflow-hidden">
+    <div className={cn(
+      "fixed inset-0 bg-background flex flex-col overflow-hidden",
+      (confirmNoShowOpen || confirmFinalizeOpen) ? "z-10" : "z-[80]"
+    )}>
       {/* ── HEADER PADRÃO DO APP ── */}
       <div
         className="flex-shrink-0 mx-auto w-full max-w-md px-4"
@@ -1121,9 +1127,9 @@ export function AppointmentDetailsView({
               )}
 
               {canNoShow && (
-                <button 
-                  onClick={() => setConfirmNoShowOpen(true)} 
-                  disabled={isActing}
+                <button
+                  onClick={() => setConfirmNoShowOpen(true)}
+                  disabled={isActing || noShowMutation.isPending}
                   className={cn(
                     "flex-1 h-10 rounded-xl text-[12px] font-medium flex items-center justify-center gap-1.5",
                     "bg-card border border-border/60 text-muted-foreground",
@@ -1299,7 +1305,7 @@ export function AppointmentDetailsView({
                 setConfirmNoShowOpen(false);
                 handleNoShow();
               }}
-              disabled={isActing}
+              disabled={isActing || noShowMutation.isPending}
               className="flex-1 h-11 rounded-full bg-destructive text-destructive-foreground text-[13px] font-semibold hover:opacity-90 active:scale-[0.99] transition-all shadow-xs"
             >
               Sim, registrar falta

@@ -263,14 +263,19 @@ export function useNoShowAppointment() {
       if (error) throw error;
 
       // Notificação ao cliente
-      await supabase.from("notificacoes").insert({
-        user_id: userId,
-        agendamento_id: appointmentId,
-        titulo: "Falta registrada",
-        mensagem: `Sua presença não foi registrada no atendimento de ${serviceName}. Entre em contato se houver algum engano.`,
-        tipo: "geral",
-        lida: false,
-      });
+      const { error: notifError } = await supabase
+        .from("notificacoes").insert({
+          user_id: userId,
+          agendamento_id: appointmentId,
+          titulo: "Falta registrada",
+          mensagem: `Sua presença não foi registrada no atendimento de ${serviceName}. Entre em contato se houver algum engano.`,
+          tipo: "geral",
+          lida: false,
+        });
+      if (notifError) {
+        console.error("Erro ao inserir notificação de falta:", notifError);
+        // Não falha a mutação — a falta já foi registrada no agendamento
+      }
     },
 
     onMutate: async ({ appointmentId, barbeiroId, date }) => {
