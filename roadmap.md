@@ -52,3 +52,5 @@
 - [x] Cadastro na Carteira, função de onboarding, cobrança pela conta própria
 - [ ] Bloqueado: Woovi precisa habilitar o modelo parceiro (escopos PARTNER_COMPANY_POST/GET, PARTNER_APPLICATION_POST) na conta principal
 - [ ] Webhook/consulta de status de cobranças das contas afiliadas e split de comissão para o dono
+- [x] Subcontas fora do fluxo: sem split novo, Finanças exige criar conta própria, barbeiros novos ganham cadastro automático
+- [ ] Apagar subcontas no banco Woovi só depois de sacar o saldo restante de cada uma

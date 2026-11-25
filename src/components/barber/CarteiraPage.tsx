@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import pixLogo from "@/assets/pix-logo.png";
 import logoDub from "@/assets/logo-dub.png";
-import { OwnAccountCard } from "./OwnAccountCard";
+import { OwnAccountGate } from "./OwnAccountCard";
 import {
   saveFinancialPin,
   getSavedFinancialPin,
@@ -785,7 +785,15 @@ function withTimeout<T>(promise: PromiseLike<T> | Promise<T>, ms = 3000, fallbac
   ]);
 }
 
-export function CarteiraPage({
+export function CarteiraPage(props: CarteiraPageProps) {
+  return (
+    <OwnAccountGate barbeiroId={props.barbeiroId} onBack={props.onBack}>
+      <CarteiraPageInner {...props} />
+    </OwnAccountGate>
+  );
+}
+
+function CarteiraPageInner({
   barbeiroId,
   barbeiroNome,
   basePath = "/barbeiro",
@@ -2444,7 +2452,6 @@ export function CarteiraPage({
           </div>
         </div>
       </header>
-      <OwnAccountCard barbeiroId={barbeiroId} />
 
       {/* CONTEÚDO PRINCIPAL (ABAIXO DO HEADER VERDE) */}
       <div className="relative z-10 px-4 pt-5 pb-12 sm:px-6">

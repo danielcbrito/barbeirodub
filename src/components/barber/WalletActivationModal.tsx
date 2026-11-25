@@ -35,7 +35,12 @@ function detectPixKeyType(v: string): PixKeyType {
  *
  * 3 etapas de carrossel + etapa final com chave Pix + criação.
  */
-export function WalletActivationModal({
+/** Subcontas foram descontinuadas: cada barbeiro cria a própria conta em Finanças. */
+export function WalletActivationModal(_props: WalletActivationModalProps) {
+  return null;
+}
+
+function LegacyWalletActivationModal({
   open,
   onOpenChange,
   barbeiroId,

@@ -17,8 +17,8 @@ export function validateOnboarding(input: { full_name?: string; tax_id?: string;
 }
 
 /** Pix do cliente só vai para a conta do barbeiro quando ela estiver aprovada e com credencial. */
-export function chargeRoute(status: AccountStatus | null | undefined, hasCredential: boolean): 'own_account' | 'legacy_split' {
-  return status === 'approved' && hasCredential ? 'own_account' : 'legacy_split';
+export function chargeRoute(status: AccountStatus | null | undefined, hasCredential: boolean): 'own_account' | 'unavailable' {
+  return status === 'approved' && hasCredential ? 'own_account' : 'unavailable';
 }
 
 /** AppID Woovi = base64(clientId:clientSecret). */

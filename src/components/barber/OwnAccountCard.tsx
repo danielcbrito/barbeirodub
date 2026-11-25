@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ChevronLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
 import { Button } from "@/components/ui/button";
@@ -8,11 +9,11 @@ import { toast } from "sonner";
 
 type Acc = { id: string; full_name: string | null; tax_id: string | null; email: string | null; phone: string | null; pix_key: string | null; status: string; status_message: string | null };
 
-const STATUS: Record<string, string> = { pending: "Em análise", approved: "Ativa no seu nome", rejected: "Recusada — corrija os dados" };
+const FIELDS = [["full_name", "Nome completo"], ["tax_id", "CPF ou CNPJ"], ["email", "E-mail"], ["phone", "Telefone"], ["pix_key", "Chave Pix para saque"]] as const;
 
-export function OwnAccountCard({ barbeiroId }: { barbeiroId: string }) {
-  const [acc, setAcc] = useState<Acc | null>(null);
-  const [open, setOpen] = useState(false);
+/** Finanças só abre depois que o barbeiro cria a conta dele. Quem não tem cadastro (conta principal) passa direto. */
+export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: string; onBack?: () => void; children: ReactNode }) {
+  const [acc, setAcc] = useState<Acc | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -22,7 +23,9 @@ export function OwnAccountCard({ barbeiroId }: { barbeiroId: string }) {
     return () => { alive = false; };
   }, [barbeiroId]);
 
-  if (!acc) return null;
+  if (acc === undefined) return <div className="min-h-[var(--app-height,100dvh)] bg-background" />;
+  if (acc === null || acc.status === "approved") return <>{children}</>;
+
   const editable = acc.status === "draft" || acc.status === "rejected";
   const set = (k: keyof Acc) => (e: React.ChangeEvent<HTMLInputElement>) => setAcc({ ...acc, [k]: e.target.value });
 
@@ -32,11 +35,10 @@ export function OwnAccountCard({ barbeiroId }: { barbeiroId: string }) {
       full_name: acc.full_name, tax_id: acc.tax_id, email: acc.email, phone: acc.phone, pix_key: acc.pix_key,
     }).eq("id", acc.id);
     if (saveErr) { setBusy(false); toast.error("Não foi possível salvar seus dados."); return; }
-    const { data, error } = await invokeAuthenticatedFunction<{ status: string; message?: string }>("barber-account-onboard", { body: { action: "submit" } });
+    const { data, error } = await invokeAuthenticatedFunction<{ status: string }>("barber-account-onboard", { body: { action: "submit" } });
     setBusy(false);
-    if (error || !data) { toast.error(error?.message || "Não foi possível enviar o cadastro."); return; }
-    setAcc({ ...acc, status: data.status, status_message: "Confira seu e-mail e SMS da Woovi para validar a conta." });
-    setOpen(false);
+    if (error || !data) { toast.error(error?.message || "Não foi possível criar sua conta."); return; }
+    setAcc({ ...acc, status: data.status, status_message: "Confira seu e-mail e SMS para validar a conta." });
   };
 
   const sync = async () => {
@@ -47,27 +49,34 @@ export function OwnAccountCard({ barbeiroId }: { barbeiroId: string }) {
   };
 
   return (
-    <section className="mx-auto w-full max-w-md px-4 mt-4">
-      <div className="rounded-2xl border border-border bg-card p-4">
-        <p className="text-sm font-semibold">Recebimento no meu nome</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          {editable ? "Ative para que o Pix dos seus clientes caia direto na sua conta, com seu nome no comprovante." : STATUS[acc.status]}
+    <div className="min-h-[var(--app-height,100dvh)] bg-background text-foreground" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 12px)" }}>
+      <div className="mx-auto w-full max-w-md px-5 pb-10">
+        {onBack && (
+          <button onClick={onBack} aria-label="Voltar" className="w-9 h-9 -ml-2 rounded-full flex items-center justify-center">
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+        )}
+        <h1 className="text-2xl font-semibold mt-4">{editable ? "Crie sua conta" : "Conta em análise"}</h1>
+        <p className="text-sm text-muted-foreground mt-2">
+          {editable ? "Sua conta fica no seu nome. Leva menos de um minuto."
+            : acc.status_message || "Assim que a validação terminar, suas finanças são liberadas aqui."}
         </p>
-        {acc.status_message && !editable && <p className="text-xs text-muted-foreground mt-1">{acc.status_message}</p>}
-        {editable && !open && <Button className="w-full h-[52px] rounded-full mt-3" onClick={() => setOpen(true)}>Ativar recebimento no meu nome</Button>}
-        {acc.status === "pending" && <Button variant="outline" className="w-full h-[52px] rounded-full mt-3" disabled={busy} onClick={sync}>Verificar status</Button>}
-        {editable && open && (
-          <div className="mt-3 space-y-3">
-            {([["full_name", "Nome completo"], ["tax_id", "CPF ou CNPJ"], ["email", "E-mail"], ["phone", "Telefone"], ["pix_key", "Chave Pix pessoal (para saque)"]] as const).map(([k, l]) => (
-              <div key={k} className="space-y-1">
+        {acc.status === "rejected" && <p className="text-sm text-destructive mt-2">Os dados foram recusados. Confira e envie novamente.</p>}
+
+        {editable ? (
+          <div className="mt-6 space-y-4">
+            {FIELDS.map(([k, l]) => (
+              <div key={k} className="space-y-1.5">
                 <Label htmlFor={`own-${k}`}>{l}</Label>
-                <Input id={`own-${k}`} value={(acc[k] as string) ?? ""} onChange={set(k)} />
+                <Input id={`own-${k}`} className="h-12 rounded-xl" value={(acc[k] as string) ?? ""} onChange={set(k)} />
               </div>
             ))}
-            <Button className="w-full h-[52px] rounded-full" disabled={busy} onClick={submit}>{busy ? "Enviando..." : "Criar minha conta"}</Button>
+            <Button className="w-full h-[54px] rounded-full mt-2" disabled={busy} onClick={submit}>{busy ? "Criando..." : "Criar minha conta"}</Button>
           </div>
+        ) : (
+          <Button variant="outline" className="w-full h-[54px] rounded-full mt-6" disabled={busy} onClick={sync}>{busy ? "Verificando..." : "Verificar status"}</Button>
         )}
       </div>
-    </section>
+    </div>
   );
 }

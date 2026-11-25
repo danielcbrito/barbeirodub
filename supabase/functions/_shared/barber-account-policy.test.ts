@@ -1,11 +1,11 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { chargeRoute, validateOnboarding, appIdFrom } from './barber-account-policy.ts';
 
-Deno.test('Pix só vai para conta própria quando aprovada com credencial', () => {
+Deno.test('Sem subconta: Pix só existe na conta própria quando aprovada com credencial', () => {
   assertEquals(chargeRoute('approved', true), 'own_account');
-  assertEquals(chargeRoute('pending', true), 'legacy_split');
-  assertEquals(chargeRoute('approved', false), 'legacy_split');
-  assertEquals(chargeRoute(null, false), 'legacy_split');
+  assertEquals(chargeRoute('pending', true), 'unavailable');
+  assertEquals(chargeRoute('approved', false), 'unavailable');
+  assertEquals(chargeRoute(null, false), 'unavailable');
 });
 Deno.test('Cadastro exige nome completo, CPF/CNPJ, e-mail, telefone e chave Pix', () => {
   const r = validateOnboarding({ full_name: 'Jose', tax_id: '123', email: 'x', phone: '1', pix_key: '' });
