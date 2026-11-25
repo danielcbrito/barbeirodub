@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Clock } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import logoDub from "@/assets/logo-dub.png";
 
@@ -10,26 +10,17 @@ interface MaintenanceScreenProps {
 
 export function MaintenanceScreen({ message, onExit }: MaintenanceScreenProps) {
   const defaultMessage =
-    "Estamos realizando melhorias no sistema para atendê-lo com ainda mais qualidade. Agradecemos a sua compreensão.";
+    "Estamos em manutenção. Retornamos na segunda-feira, 30 de novembro de 2026.";
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-8 relative overflow-hidden">
-      {/* Subtle decorative background grid */}
-      <div className="absolute inset-0 opacity-[0.03]">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `linear-gradient(currentColor 1px, transparent 0), linear-gradient(90deg, currentColor 1px, transparent 0)`,
-            backgroundSize: "24px 24px",
-          }}
-        />
-      </div>
-
+    <div
+      className="fixed inset-0 z-[999999] bg-background flex flex-col items-center justify-center p-8 overflow-hidden"
+    >
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 flex flex-col items-center text-center max-w-md w-full space-y-8"
+        transition={{ duration: 0.4 }}
+        className="flex flex-col items-center text-center max-w-md w-full space-y-6"
       >
         {/* Logo */}
         <motion.img
@@ -38,65 +29,34 @@ export function MaintenanceScreen({ message, onExit }: MaintenanceScreenProps) {
           transition={{ duration: 0.4, delay: 0.1 }}
           src={logoDub}
           alt="Barbearia DUB"
-          className="w-16 h-16 object-contain mb-2"
+          className="w-16 h-16 object-contain mb-4"
         />
 
-        {/* Status indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.15 }}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-border border border-border/50"
-        >
-          <span className="w-2 h-2 rounded-full bg-foreground animate-pulse" />
-          <span className="text-[11px] font-medium text-foreground tracking-wide uppercase">
-            Manutenção programada
-          </span>
-        </motion.div>
-
-        {/* Title */}
+        {/* Título */}
         <motion.h1
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="text-2xl font-semibold text-foreground tracking-tight mb-2"
+          className="text-xl font-semibold text-foreground tracking-tight"
         >
           Estamos em manutenção
         </motion.h1>
 
-        {/* Message */}
+        {/* Mensagem */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.25 }}
-          className="text-sm text-muted-foreground leading-relaxed mb-8 max-w-sm"
+          className="text-sm text-muted-foreground leading-relaxed max-w-sm"
         >
           {message || defaultMessage}
         </motion.p>
 
-        {/* Return date card */}
+        {/* Botão Voltar */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="flex flex-col items-center gap-2 px-6 py-4 rounded-xl bg-muted/30 border border-border/50"
-        >
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              Retorno previsto
-            </span>
-          </div>
-          <p className="text-sm font-semibold text-foreground">
-            Segunda-feira, 30 de novembro de 2026
-          </p>
-        </motion.div>
-
-        {/* Back button */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.35 }}
           className="w-full"
         >
           <Button
@@ -109,16 +69,6 @@ export function MaintenanceScreen({ message, onExit }: MaintenanceScreenProps) {
           </Button>
         </motion.div>
       </motion.div>
-
-      {/* Footer */}
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="absolute bottom-8 text-[10px] text-muted-foreground/40 tracking-widest uppercase"
-      >
-        Barbearia DUB &bull; Sistema temporariamente indisponível
-      </motion.p>
     </div>
   );
 }
