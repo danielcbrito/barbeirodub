@@ -162,6 +162,7 @@ export type Database = {
           google_event_id: string | null
           hora: string
           id: string
+          inicio_em: string | null
           is_free: boolean | null
           motivo_remarcacao: string | null
           observacoes: string | null
@@ -195,6 +196,7 @@ export type Database = {
           google_event_id?: string | null
           hora: string
           id?: string
+          inicio_em?: string | null
           is_free?: boolean | null
           motivo_remarcacao?: string | null
           observacoes?: string | null
@@ -228,6 +230,7 @@ export type Database = {
           google_event_id?: string | null
           hora?: string
           id?: string
+          inicio_em?: string | null
           is_free?: boolean | null
           motivo_remarcacao?: string | null
           observacoes?: string | null
@@ -2562,6 +2565,54 @@ export type Database = {
           last_activity?: string | null
           os?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      dividas: {
+        Row: {
+          agendamento_id: string
+          barbeiro_id: string
+          cliente_id: string
+          criado_em: string
+          id: string
+          pago_em: string | null
+          pix_id: string | null
+          pix_qr_code: string | null
+          status: string
+          updated_at: string
+          valor_barbeiro: number
+          valor_plataforma: number
+          valor_total: number
+        }
+        Insert: {
+          agendamento_id: string
+          barbeiro_id: string
+          cliente_id: string
+          criado_em?: string
+          id?: string
+          pago_em?: string | null
+          pix_id?: string | null
+          pix_qr_code?: string | null
+          status?: string
+          updated_at?: string
+          valor_barbeiro?: number
+          valor_plataforma?: number
+          valor_total?: number
+        }
+        Update: {
+          agendamento_id?: string
+          barbeiro_id?: string
+          cliente_id?: string
+          criado_em?: string
+          id?: string
+          pago_em?: string | null
+          pix_id?: string | null
+          pix_qr_code?: string | null
+          status?: string
+          updated_at?: string
+          valor_barbeiro?: number
+          valor_plataforma?: number
+          valor_total?: number
         }
         Relationships: []
       }
@@ -6702,6 +6753,10 @@ export type Database = {
           total_entradas: number
           total_saques: number
         }[]
+      }
+      cancelar_agendamento_cliente: {
+        Args: { p_agendamento_id: string; p_user_id: string }
+        Returns: Json
       }
       cancellation_fee_amount:
         | {
