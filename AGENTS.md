@@ -34,3 +34,6 @@ Todas as alterações, novos componentes, telas e fluxos no sistema Dub / Barbei
 - Use `useBarberReportData` and `barberReportMetrics` for live home/report revenue and comparisons; shared scoped pagination prevents divergent totals and PostgREST truncation.
 - Recognize completed non-free standalone services at final appointment price plus recorded cash and paid non-cash subscription receipts; never estimate missing months or add plan-use prices again.
 - Compute performance only from observed factors with coverage and absent-data states; compare elapsed monthly days for performance trends to avoid penalizing unfinished periods.
+
+## Barber own payment accounts
+- Each barber receives client Pix in an own Woovi affiliate account (partner API); charges use that account's AppID only when `barber_payment_accounts.status = 'approved'` and a server-only credential exists, otherwise the legacy subaccount split applies — keeps receipts and tax liability in the barber's own name.

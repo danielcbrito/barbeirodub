@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { wooviFetch, WooviError } from './woovi-client.ts';
+import { chargeRoute } from './barber-account-policy.ts';
 
 interface ChargeInput {
   correlationID: string;
@@ -16,7 +17,13 @@ export async function createWooviCharge(admin: SupabaseClient<any>, input: Charg
   if (!Number.isSafeInteger(cents) || cents < 100) throw new Error('Valor mínimo para Pix: R$ 1,00');
   const { data: barber, error } = await admin.from('barbeiros').select('id, woovi_pix_key').eq('id', input.barberId).eq('ativo', true).maybeSingle();
   if (error) throw error;
-  if (!barber?.woovi_pix_key) throw new Error('Carteira Woovi do barbeiro não configurada');
+  // Conta própria do barbeiro (afiliada Woovi no CPF/CNPJ dele) tem prioridade.
+  const [{ data: ownAcc }, { data: cred }] = await Promise.all([
+    admin.from('barber_payment_accounts').select('status').eq('barbeiro_id', input.barberId).maybeSingle(),
+    admin.from('barber_payment_credentials').select('app_id').eq('barbeiro_id', input.barberId).maybeSingle(),
+  ]);
+  const ownAppId = chargeRoute(ownAcc?.status, !!cred?.app_id) === 'own_account' ? cred!.app_id as string : undefined;
+  if (!ownAppId && !barber?.woovi_pix_key) throw new Error('Carteira Woovi do barbeiro não configurada');
   // Persist intent before asking the bank, so an early callback can be reconciled.
   const { error: intentError } = await admin.from('woovi_charges').upsert({
     correlation_id: input.correlationID, user_id: input.userId, barbeiro_id: input.barberId,
@@ -28,7 +35,7 @@ export async function createWooviCharge(admin: SupabaseClient<any>, input: Charg
   if (existing.user_id !== input.userId || existing.barbeiro_id !== input.barberId || existing.value_centavos !== cents) throw new Error('CHARGE_INTENT_MISMATCH');
   let response: ChargeResponse;
   try {
-    response = await wooviFetch<ChargeResponse>(`/api/v1/charge/${encodeURIComponent(input.correlationID)}`);
+    response = await wooviFetch<ChargeResponse>(`/api/v1/charge/${encodeURIComponent(input.correlationID)}`, { appId: ownAppId });
   } catch (error) {
     if (!(error instanceof WooviError) || error.status !== 404) throw error;
     // Taxa bancária fixa cobrada pela Woovi em cada Pix (R$ 0,50).
@@ -36,10 +43,12 @@ export async function createWooviCharge(admin: SupabaseClient<any>, input: Charg
     // pague a taxa do seu próprio Pix recebido e mantenha o caixa equilibrado.
     const feeCentavos = 50;
     const splitValue = Math.max(0, cents - feeCentavos);
-    response = await wooviFetch<ChargeResponse>('/api/v1/charge', { method: 'POST', body: {
-      correlationID: input.correlationID, value: cents, comment: input.comment,
-      splits: [{ splitType: 'SPLIT_SUB_ACCOUNT', pixKey: barber.woovi_pix_key, value: splitValue }],
-    } });
+    response = await wooviFetch<ChargeResponse>('/api/v1/charge', ownAppId
+      ? { method: 'POST', appId: ownAppId, body: { correlationID: input.correlationID, value: cents, comment: input.comment } }
+      : { method: 'POST', body: {
+        correlationID: input.correlationID, value: cents, comment: input.comment,
+        splits: [{ splitType: 'SPLIT_SUB_ACCOUNT', pixKey: barber!.woovi_pix_key, value: splitValue }],
+      } });
   }
   const charge = response.charge;
   if (charge?.value !== cents) throw new Error('BANK_CHARGE_VALUE_MISMATCH');

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import pixLogo from "@/assets/pix-logo.png";
 import logoDub from "@/assets/logo-dub.png";
+import { OwnAccountCard } from "./OwnAccountCard";
 import {
   saveFinancialPin,
   getSavedFinancialPin,
@@ -2443,6 +2444,7 @@ export function CarteiraPage({
           </div>
         </div>
       </header>
+      <OwnAccountCard barbeiroId={barbeiroId} />
 
       {/* CONTEÚDO PRINCIPAL (ABAIXO DO HEADER VERDE) */}
       <div className="relative z-10 px-4 pt-5 pb-12 sm:px-6">

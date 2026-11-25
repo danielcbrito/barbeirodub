@@ -1391,6 +1391,108 @@ export type Database = {
           },
         ]
       }
+      barber_payment_accounts: {
+        Row: {
+          barbeiro_id: string
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          phone: string | null
+          pix_key: string | null
+          status: string
+          status_message: string | null
+          tax_id: string | null
+          tax_type: string
+          tenant_id: string | null
+          updated_at: string
+          user_id: string
+          woovi_company_id: string | null
+        }
+        Insert: {
+          barbeiro_id: string
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          pix_key?: string | null
+          status?: string
+          status_message?: string | null
+          tax_id?: string | null
+          tax_type?: string
+          tenant_id?: string | null
+          updated_at?: string
+          user_id: string
+          woovi_company_id?: string | null
+        }
+        Update: {
+          barbeiro_id?: string
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          pix_key?: string | null
+          status?: string
+          status_message?: string | null
+          tax_id?: string | null
+          tax_type?: string
+          tenant_id?: string | null
+          updated_at?: string
+          user_id?: string
+          woovi_company_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barber_payment_accounts_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: true
+            referencedRelation: "barbeiros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "barber_payment_accounts_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: true
+            referencedRelation: "barbeiros_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      barber_payment_credentials: {
+        Row: {
+          app_id: string
+          barbeiro_id: string
+          created_at: string
+        }
+        Insert: {
+          app_id: string
+          barbeiro_id: string
+          created_at?: string
+        }
+        Update: {
+          app_id?: string
+          barbeiro_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barber_payment_credentials_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: true
+            referencedRelation: "barbeiros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "barber_payment_credentials_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: true
+            referencedRelation: "barbeiros_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bloqueios_cliente_barbeiro: {
         Row: {
           barbeiro_id: string

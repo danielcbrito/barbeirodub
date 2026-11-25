@@ -47,3 +47,8 @@
 - [ ] Verify authenticated real Pix, subscriptions, shop, withdrawals and bank callbacks — blocked by unavailable external authenticated test session and unverified bank event setup.
 - [ ] Confirm removal of external Asaas secrets and two legacy subaccount endpoints — tools returned not found / deletion failed, external state not confirmed.
 - [ ] Complete partial-credit + online payment parity — currently fails closed; needs atomic credit-consumption design and validation before enabling.
+
+## Recebimento no nome do barbeiro
+- [x] Cadastro na Carteira, função de onboarding, cobrança pela conta própria
+- [ ] Bloqueado: Woovi precisa habilitar o modelo parceiro (escopos PARTNER_COMPANY_POST/GET, PARTNER_APPLICATION_POST) na conta principal
+- [ ] Webhook/consulta de status de cobranças das contas afiliadas e split de comissão para o dono
