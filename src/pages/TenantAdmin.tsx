@@ -22,6 +22,8 @@ import { TenantPaywall } from "@/components/tenant/TenantPaywall";
 import { TenantSubscriptionPage } from "@/components/tenant/TenantSubscriptionPage";
 import { Loader2 } from "lucide-react";
 
+import { FinanceMaintenanceGate } from "@/components/FinanceMaintenanceGate";
+
 // Componentes Admin reutilizados (idênticos ao /admin)
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { AdminAgenda } from "@/components/admin/AdminAgenda";
@@ -471,6 +473,7 @@ const TenantAdmin = () => {
     );
   }
 
+  // Manutenção: barbearias de teste (is_test) são isentas
   // ═══════ PAYWALL: Trial expirou ou mensalidade com mais de 4 dias de atraso ═══════
   if (!subscription.loading && subscription.isBlocked && !subscription.isExempt && !isTestTenant) {
     return (
@@ -495,6 +498,7 @@ const TenantAdmin = () => {
     deletedAt: null,
     graceDaysLeft: 0,
     tenantId,
+    isTestTenant,
     isTenantAdmin: true,
     canManageTenantWideClientBlock: true,
   } : null;
@@ -572,11 +576,19 @@ const TenantAdmin = () => {
                   <Route path="agenda" element={<AdminAgenda adminContext={adminContext} tenantId={tenantId} />} />
                   <Route path="confirmacoes-pendentes" element={<AdminConfirmacoesPendentes adminContext={adminContext} />} />
                   <Route path="barbeiros" element={tenantId ? <TenantBarbeiros tenantId={tenantId} basePath={BASE} subscriptionStatus={subscription.status} subscriptionPriceMonthly={subscription.priceMonthly} /> : null} />
-                  <Route path="clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="todos" /> : null} />
-                  <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="meus" /> : null} />
+                  <Route path="clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTestTenant, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="todos" /> : null} />
+                  <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTestTenant, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="meus" /> : null} />
                   <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={tenantId || undefined} basePath={BASE} />} />
-                  <Route path="financeiro" element={<AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />} />
-                  <Route path="carteira" element={<AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />} />
+                  <Route path="financeiro" element={
+  <FinanceMaintenanceGate isTestTenant={isTestTenant} onExit={() => navigate(BASE)}>
+    <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
+  </FinanceMaintenanceGate>
+} />
+                  <Route path="carteira" element={
+  <FinanceMaintenanceGate isTestTenant={isTestTenant} onExit={() => navigate(BASE)}>
+    <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
+  </FinanceMaintenanceGate>
+} />
                   <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} tenantId={tenantId} basePath="/tenant/admin/perfil" />} />
                   <Route path="servicos/*" element={tenantId ? <AdminServicos tenantId={tenantId} basePath={BASE} /> : null} />
                   <Route path="promocoes/preparando" element={<Navigate to={`${BASE}/promocoes`} replace />} />
@@ -665,10 +677,14 @@ const TenantAdmin = () => {
                 <Route path="agenda" element={<AdminAgenda adminContext={adminContext} tenantId={tenantId} />} />
                 <Route path="confirmacoes-pendentes" element={<AdminConfirmacoesPendentes adminContext={adminContext} />} />
                 <Route path="barbeiros" element={tenantId ? <TenantBarbeiros tenantId={tenantId} basePath={BASE} subscriptionStatus={subscription.status} subscriptionPriceMonthly={subscription.priceMonthly} /> : null} />
-                <Route path="clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="todos" /> : null} />
-                <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="meus" /> : null} />
+                <Route path="clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTestTenant, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="todos" /> : null} />
+                <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTestTenant, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="meus" /> : null} />
                 <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={tenantId || undefined} basePath={BASE} />} />
-                <Route path="financeiro" element={<AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />} />
+                <Route path="financeiro" element={
+  <FinanceMaintenanceGate isTestTenant={isTestTenant} onExit={() => navigate(BASE)}>
+    <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
+  </FinanceMaintenanceGate>
+} />
                 <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} tenantId={tenantId} basePath="/tenant/admin/perfil" />} />
                 <Route path="servicos/*" element={tenantId ? <AdminServicos tenantId={tenantId} basePath={BASE} /> : null} />
                 <Route path="promocoes/preparando" element={<Navigate to={`${BASE}/promocoes`} replace />} />

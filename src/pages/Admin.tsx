@@ -8,8 +8,7 @@ import { AdminMobileHeader } from "@/components/admin/mobile/AdminMobileHeader";
 import { AdminMobileNavigation } from "@/components/admin/mobile/AdminMobileNavigation";
 import { AdminMobileDrawer } from "@/components/admin/mobile/AdminMobileDrawer";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
-import { MaintenanceScreen } from "@/components/MaintenanceScreen";
+import { FinanceMaintenanceGate } from "@/components/FinanceMaintenanceGate";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useNotificationPermission } from "@/hooks/useNotificationPermission";
 import { useTenantSubscription } from "@/hooks/useTenantSubscription";
@@ -96,6 +95,7 @@ export interface AdminContext {
   isAdmin: boolean;
   tenantId?: string | null;
   tenantBarberIds?: string[];
+  isTestTenant?: boolean;
 }
 
 
@@ -113,15 +113,7 @@ const Admin = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const subscription = useTenantSubscription(adminContext?.tenantId || null);
 
-  // Verificação de manutenção
-  const {
-    isMaintenanceMode,
-    maintenanceMessage,
-    isLoading: maintenanceLoading,
-    isAllowedUser
-  } = useMaintenanceMode();
-
-  // Carregar contagem de pendentes (filtrado por barbeiro se aplicável)
+  // Verificação de manutenção apenas nas rotas de financeiro/carteira
   useEffect(() => {
     if (!adminContext) return;
 
@@ -307,12 +299,25 @@ const Admin = () => {
             .maybeSingle();
           tenantId = ownedTenant?.id || null;
         }
+
+        // Verifica se o tenant é de teste (isento de manutenção)
+        let isTestTenant = false;
+        if (tenantId) {
+          const { data: tenantRow } = await supabase
+            .from("tenants")
+            .select("is_test")
+            .eq("id", tenantId)
+            .maybeSingle();
+          isTestTenant = !!tenantRow?.is_test;
+        }
+
         const ctx: AdminContext = {
           barbeiroId: ownBarber?.id || null,
           apelido: ownBarber?.apelido || null,
           userId: session.user.id,
           isAdmin: true,
           tenantId,
+          isTestTenant,
         };
 
         setAdminContext(ctx);
@@ -346,16 +351,6 @@ const Admin = () => {
     }
   };
 
-
-  // Se está em manutenção e o usuário NÃO está na lista de permitidos
-  if (!maintenanceLoading && authChecked && isMaintenanceMode && !isAllowedUser) {
-    return (
-      <MaintenanceScreen
-        message={maintenanceMessage || undefined}
-        onExit={() => navigate("/")}
-      />
-    );
-  }
 
   // Obter título da rota atual
   const getCurrentTitle = () => {
@@ -544,7 +539,11 @@ const Admin = () => {
                   )
                 } />
                 <Route path="avaliacoes" element={<AdminAvaliacoes />} />
-                <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId || (adminContext?.tenantBarberIds && adminContext.tenantBarberIds.length > 0 ? adminContext.tenantBarberIds[0] : null)} userName={adminContext?.apelido || "Admin"} basePath="/admin" />} />
+                <Route path="financeiro" element={
+  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} onExit={() => navigate("/admin")}>
+    <AdminFinanceiro barbeiroId={adminContext?.barbeiroId || (adminContext?.tenantBarberIds && adminContext.tenantBarberIds.length > 0 ? adminContext.tenantBarberIds[0] : null)} userName={adminContext?.apelido || "Admin"} basePath="/admin" />
+  </FinanceMaintenanceGate>
+} />
                 <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext?.barbeiroId ?? null} tenantId={adminContext?.tenantId} basePath="/admin/perfil" />} />
                 <Route path="servicos/*" element={<AdminServicos />} />
                 <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />
@@ -559,18 +558,20 @@ const Admin = () => {
                 <Route path="disparo" element={<AdminDisparo />} />
                 <Route path="perfil" element={<AdminMobileProfile />} />
                 <Route path="carteira" element={
-                  (adminContext.barbeiroId || (adminContext.tenantBarberIds && adminContext.tenantBarberIds.length > 0)) ? (
-                    <CarteiraPage
-                      barbeiroId={adminContext.barbeiroId || adminContext.tenantBarberIds![0]}
-                      barbeiroNome={adminContext.apelido || "Admin"}
-                      basePath="/admin"
-                    />
-                  ) : (
-                    <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-                      Sua conta de administrador não está vinculada a um barbeiro, então não há carteira disponível.
-                    </div>
-                  )
-                } />
+  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} onExit={() => navigate("/admin")}>
+    {(adminContext.barbeiroId || (adminContext.tenantBarberIds && adminContext.tenantBarberIds.length > 0)) ? (
+      <CarteiraPage
+        barbeiroId={adminContext.barbeiroId || adminContext.tenantBarberIds![0]}
+        barbeiroNome={adminContext.apelido || "Admin"}
+        basePath="/admin"
+      />
+    ) : (
+      <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+        Sua conta de administrador não está vinculada a um barbeiro, então não há carteira disponível.
+      </div>
+    )}
+  </FinanceMaintenanceGate>
+} />
                 <Route path="meus-planos" element={<AdminMeusPlanos basePath="/admin" />} />
                 <Route path="configuracoes-perfil" element={<Navigate to="/admin/config-barbearia" replace />} />
                 <Route path="dados-empresa/*" element={<AdminDadosEmpresa basePath="/admin" tenantId={adminContext?.tenantId} />} />
@@ -680,7 +681,11 @@ const Admin = () => {
                   }
                 />
                 <Route path="avaliacoes" element={<AdminAvaliacoes />} />
-                <Route path="financeiro" element={<AdminFinanceiro barbeiroId={adminContext?.barbeiroId} userName={adminContext?.apelido || "Admin"} />} />
+                <Route path="financeiro" element={
+  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} onExit={() => navigate("/admin")}>
+    <AdminFinanceiro barbeiroId={adminContext?.barbeiroId} userName={adminContext?.apelido || "Admin"} />
+  </FinanceMaintenanceGate>
+} />
                 <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} tenantId={adminContext.tenantId} basePath="/admin/perfil" />} />
                 <Route path="servicos/*" element={<AdminServicos />} />
                 <Route path="promocoes/preparando" element={<Navigate to="/admin/promocoes" replace />} />
@@ -719,15 +724,19 @@ const Admin = () => {
                 <Route path="indicacoes" element={<AdminIndicacoes />} />
                 <Route path="minhas-indicacoes" element={<AdminIndicacoes />} />
                 <Route path="perfil" element={<div className="max-w-2xl mx-auto"><AdminMobileProfile /></div>} />
-                <Route path="carteira" element={adminContext.barbeiroId ? (
-                  <div className="max-w-2xl mx-auto">
-                    <CarteiraPage barbeiroId={adminContext.barbeiroId} barbeiroNome={adminContext.apelido || "Admin"} basePath="/admin" />
-                  </div>
-                ) : (
-                  <div className="max-w-2xl mx-auto px-5 py-10 text-center text-sm text-muted-foreground">
-                    Sua conta de administrador não está vinculada a um barbeiro, então não há carteira disponível.
-                  </div>
-                )} />
+                <Route path="carteira" element={
+  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} onExit={() => navigate("/admin")}>
+    {adminContext.barbeiroId ? (
+      <div className="max-w-2xl mx-auto">
+        <CarteiraPage barbeiroId={adminContext.barbeiroId} barbeiroNome={adminContext.apelido || "Admin"} basePath="/admin" />
+      </div>
+    ) : (
+      <div className="max-w-2xl mx-auto px-5 py-10 text-center text-sm text-muted-foreground">
+        Sua conta de administrador não está vinculada a um barbeiro, então não há carteira disponível.
+      </div>
+    )}
+  </FinanceMaintenanceGate>
+} />
                 <Route path="config-barbearia" element={
                   adminContext ? (
                     <BarberConfigBarbearia

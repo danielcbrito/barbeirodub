@@ -212,7 +212,7 @@ function MaintenanceWrapper({ children }: { children: React.ReactNode }) {
   // Rotas de staff (admin, barbeiro, ti) gerenciam seu próprio banner e controle de manutenção internamente.
   // A agenda em tela cheia também é uma rota autenticada de staff; se ela passar pelo fluxo
   // público/cliente, pode ser tratada como slug público e voltar para a tela inicial.
-  const isStaffRoute = location.pathname.startsWith('/admin') || 
+  const isStaffRoute = location.pathname.startsWith('/admin') ||
                        location.pathname.startsWith('/ti') ||
                        location.pathname.startsWith('/barbeiro') ||
                        location.pathname === '/agenda' ||

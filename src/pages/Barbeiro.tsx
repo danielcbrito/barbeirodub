@@ -15,7 +15,7 @@ import { useTenantSubscription } from "@/hooks/useTenantSubscription";
 import { TenantPaywall } from "@/components/tenant/TenantPaywall";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
-import { MaintenanceScreen } from "@/components/MaintenanceScreen";
+import { FinanceMaintenanceGate } from "@/components/FinanceMaintenanceGate";
 import { MaintenanceWarningBanner } from "@/components/MaintenanceWarningBanner";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useNotificationPermission } from "@/hooks/useNotificationPermission";
@@ -82,6 +82,8 @@ export interface BarberContext {
   graceDaysLeft: number;
   /** ID do tenant (barbearia) ao qual o barbeiro pertence */
   tenantId: string | null;
+  /** Se o tenant é de teste (isento de manutenção) */
+  isTestTenant?: boolean;
   /** Controle para regras/UX que só o dono/admin da operação deve ver */
   isTenantAdmin: boolean;
   /** Permissão específica para bloqueio global de clientes na barbearia */
@@ -472,7 +474,8 @@ const Barbeiro = () => {
     };
   }, [barberContext, playNotificationSound, sendBrowserNotification]);
 
-  const applyValidatedBarberContext = useCallback((userId: string, appContext: unknown): BarberContextApplyResult => {
+  const applyValidatedBarberContext = useCallback(
+    (userId: string, appContext: unknown, isTestTenant: boolean = false): BarberContextApplyResult => {
     const fastContext = parseBarberAppContext(appContext);
     const roles = fastContext.roles;
     const barbeiro = fastContext.barbeiro;
@@ -536,6 +539,7 @@ const Barbeiro = () => {
       deletedAt,
       graceDaysLeft,
       tenantId: resolvedTenantId || null,
+      isTestTenant,
       isTenantAdmin: hasTenantAdminRole || hasAdminRole || !!ownerTenantId,
       canManageTenantWideClientBlock,
     };
@@ -580,7 +584,21 @@ const Barbeiro = () => {
         throw new Error("Contexto do barbeiro não retornado pelo bundle de inicialização.");
       }
 
-      applyValidatedBarberContext(userId, appContext);
+      // Descobre o tenantId do contexto para verificar se é tenant de teste (isento de manutenção)
+      const fastCtx = parseBarberAppContext(appContext);
+      const resolvedTenantId = fastCtx.barbeiro?.tenant_id || fastCtx.ownerTenantId || null;
+
+      let isTestTenant = false;
+      if (resolvedTenantId) {
+        const { data: tenantRow } = await supabase
+          .from("tenants")
+          .select("is_test")
+          .eq("id", resolvedTenantId)
+          .maybeSingle();
+        isTestTenant = !!tenantRow?.is_test;
+      }
+
+      applyValidatedBarberContext(userId, appContext, isTestTenant);
     } catch (error) {
       console.error("[Barbeiro] Falha ao validar sessão:", error);
 
@@ -696,16 +714,6 @@ const Barbeiro = () => {
 
     void checkAuth(authUser.id);
   }, [authUser, isAuthReady, navigate, checkAuth, cachedSnapshot]);
-
-  // Se está em manutenção e o usuário NÃO está na lista de permitidos
-  if (!maintenanceLoading && authChecked && isMaintenanceMode && !isAllowedUser) {
-    return (
-      <MaintenanceScreen 
-        message={maintenanceMessage || undefined}
-        onExit={() => navigate("/")}
-      />
-    );
-  }
 
   const handleCloseDrawer = () => setIsDrawerOpen(false);
 
@@ -925,7 +933,11 @@ const Barbeiro = () => {
                 {isInGracePeriod ? (
                   <>
                     <Route index element={<GraceRedirect />} />
-                    <Route path="financeiro" element={<BarberFinanceiro barberContext={barberContext} />} />
+                    <Route path="financeiro" element={
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+    <BarberFinanceiro barberContext={barberContext} />
+  </FinanceMaintenanceGate>
+} />
                     <Route path="perfil" element={<BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} />} />
                     <Route path="*" element={<GraceRedirect />} />
                   </>
@@ -938,7 +950,11 @@ const Barbeiro = () => {
                     <Route path="clientes" element={<Navigate to="/barbeiro/config-barbearia?screen=clientes" replace />} />
                     <Route path="servicos" element={<Navigate to="/barbeiro/config-barbearia?screen=servicos" replace />} />
                     <Route path="relatorios" element={<EstatisticasRelatorios barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} basePath="/barbeiro/perfil" />} />
-                    <Route path="financeiro" element={<BarberFinanceiro barberContext={barberContext} />} />
+                    <Route path="financeiro" element={
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+    <BarberFinanceiro barberContext={barberContext} />
+  </FinanceMaintenanceGate>
+} />
                     <Route path="horarios" element={<Navigate to="/barbeiro/config-barbearia?screen=horarios" replace />} />
                     <Route path="planos" element={<AdminPlanos tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
                     <Route path="meus-planos" element={<AdminMeusPlanos basePath="/barbeiro" />} />
@@ -953,7 +969,11 @@ const Barbeiro = () => {
                     <Route path="meus-dados/*" element={<BarberDadosPessoais barberContext={barberContext} />} />
                     <Route path="seguranca/*" element={<BarberSeguranca />} />
                     <Route path="perfil" element={<BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} />} />
-                    <Route path="carteira" element={<CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" />} />
+                    <Route path="carteira" element={
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+    <CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" />
+  </FinanceMaintenanceGate>
+} />
                     <Route path="configuracoes-perfil" element={<Navigate to="/barbeiro/config-barbearia" replace />} />
                     <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} hideAgent={!barberContext.isTenantAdmin} />} />
                     <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
@@ -1031,7 +1051,11 @@ const Barbeiro = () => {
                   {isInGracePeriod ? (
                     <>
                       <Route index element={<GraceRedirect />} />
-                      <Route path="financeiro" element={<BarberFinanceiro barberContext={barberContext} />} />
+                      <Route path="financeiro" element={
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+    <BarberFinanceiro barberContext={barberContext} />
+  </FinanceMaintenanceGate>
+} />
                       <Route path="perfil" element={<div className="max-w-2xl mx-auto"><BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} /></div>} />
                       <Route path="*" element={<GraceRedirect />} />
                     </>
@@ -1044,7 +1068,11 @@ const Barbeiro = () => {
                       <Route path="clientes" element={<BarberClientes barberContext={barberContext} />} />
                       <Route path="servicos" element={<BarberCortes barberContext={barberContext} />} />
                       <Route path="relatorios" element={<EstatisticasRelatorios barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} basePath="/barbeiro/perfil" />} />
-                      <Route path="financeiro" element={<BarberFinanceiro barberContext={barberContext} />} />
+                      <Route path="financeiro" element={
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+    <BarberFinanceiro barberContext={barberContext} />
+  </FinanceMaintenanceGate>
+} />
                       <Route path="horarios" element={<BarberHorarios barberContext={barberContext} />} />
                       <Route path="planos" element={<AdminPlanos tenantId={barberContext.tenantId || undefined} basePath="/barbeiro" />} />
                       <Route path="meu-plano" element={<Navigate to="/barbeiro/config-barbearia?screen=meu-plano" replace />} />
@@ -1059,7 +1087,11 @@ const Barbeiro = () => {
                       <Route path="meus-dados/*" element={<BarberDadosPessoais barberContext={barberContext} />} />
                       <Route path="seguranca/*" element={<BarberSeguranca />} />
                       <Route path="perfil" element={<div className="max-w-2xl mx-auto"><BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} /></div>} />
-                      <Route path="carteira" element={<div className="max-w-2xl mx-auto"><CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" /></div>} />
+                      <Route path="carteira" element={
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+    <div className="max-w-2xl mx-auto"><CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" /></div>
+  </FinanceMaintenanceGate>
+} />
                       <Route path="whatsapp" element={<WhatsAppConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                       <Route path="instagram" element={<InstagramConnectionPage barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" tenantNome={tenantNome} barberName={barberContext.apelido} tenantId={barberContext.tenantId} />} />
                       <Route path="instagram-callback" element={<InstagramCallbackHandler barbeiroId={barberContext.barbeiroId} basePath="/barbeiro" />} />
