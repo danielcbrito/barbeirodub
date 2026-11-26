@@ -21,19 +21,20 @@ export function MaintenanceScreen({ message, onExit }: MaintenanceScreenProps) {
         transition={{ duration: 0.4 }}
         className="flex flex-col items-center text-center max-w-md w-full space-y-6"
       >
-        {/* Logo DUB — construído em código: D (marca) + ub (nome) */}
+        {/* Logo DUB — D oficial (imagem) + ub (texto) */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="flex items-center gap-2"
+          className="flex items-center gap-1.5"
         >
-          <div className="w-14 h-14 rounded-full bg-foreground flex items-center justify-center">
-            <span className="text-[32px] font-bold text-background leading-none">
-              D
-            </span>
-          </div>
-          <span className="text-[32px] font-bold text-foreground tracking-tight leading-none">
+          <img
+            src="/auth-assets/dub_logo_d.png"
+            alt="D"
+            className="h-12 w-auto object-contain block dark:invert select-none"
+            draggable={false}
+          />
+          <span className="text-[36px] font-bold text-foreground tracking-tight leading-none">
             ub
           </span>
         </motion.div>

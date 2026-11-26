@@ -744,7 +744,6 @@ export function BarberMeuPlano({ tenantId, tenantNome = "Sua Barbearia", onBack 
           >
             {/* Header oficial do sistema */}
             <ScheduleHeader
-              title="Assinatura DUB"
               title="Assinatura"
               onBack={() => setCurrentView("escolha-plano")}
             />
