@@ -1391,6 +1391,48 @@ export type Database = {
           },
         ]
       }
+      barber_mp_credentials: {
+        Row: {
+          access_token: string
+          barbeiro_id: string
+          created_at: string
+          expires_at: string
+          mp_user_id: string | null
+          refresh_token: string
+        }
+        Insert: {
+          access_token: string
+          barbeiro_id: string
+          created_at?: string
+          expires_at: string
+          mp_user_id?: string | null
+          refresh_token: string
+        }
+        Update: {
+          access_token?: string
+          barbeiro_id?: string
+          created_at?: string
+          expires_at?: string
+          mp_user_id?: string | null
+          refresh_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barber_mp_credentials_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: true
+            referencedRelation: "barbeiros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "barber_mp_credentials_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: true
+            referencedRelation: "barbeiros_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       barber_payment_accounts: {
         Row: {
           barbeiro_id: string
@@ -1401,6 +1443,7 @@ export type Database = {
           owner_cpf: string | null
           phone: string | null
           pix_key: string | null
+          provider: string
           status: string
           status_message: string | null
           tax_id: string | null
@@ -1419,6 +1462,7 @@ export type Database = {
           owner_cpf?: string | null
           phone?: string | null
           pix_key?: string | null
+          provider?: string
           status?: string
           status_message?: string | null
           tax_id?: string | null
@@ -1437,6 +1481,7 @@ export type Database = {
           owner_cpf?: string | null
           phone?: string | null
           pix_key?: string | null
+          provider?: string
           status?: string
           status_message?: string | null
           tax_id?: string | null
