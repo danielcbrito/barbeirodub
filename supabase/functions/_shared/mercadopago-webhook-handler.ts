@@ -1,9 +1,9 @@
 // Aviso do Mercado Pago: só gatilho. Revalida o pagamento com o token do barbeiro e confirma pela função atômica.
-import { serviceClient } from '../_shared/woovi-auth.ts';
-import { jsonResponse } from '../_shared/woovi-client.ts';
-import { mpFetch, sellerToken } from '../_shared/mercadopago-seller.ts';
+import { serviceClient } from './woovi-auth.ts';
+import { jsonResponse } from './woovi-client.ts';
+import { mpFetch, sellerToken } from './mercadopago-seller.ts';
 
-Deno.serve(async (req) => {
+export async function handleMpWebhook(req: Request): Promise<Response> {
   const u = new URL(req.url);
   let body: any = {};
   try { body = await req.json(); } catch { /* vazio */ }
@@ -27,4 +27,4 @@ Deno.serve(async (req) => {
     console.error('[mercadopago-webhook]', e instanceof Error ? e.message : e);
     return jsonResponse({ error: 'FETCH_FAILED' }, 500);
   }
-});
+}

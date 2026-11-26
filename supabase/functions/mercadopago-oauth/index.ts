@@ -1,10 +1,12 @@
 // POST {action:'start'} (logado) -> URL de autorização. GET ?code&state -> callback do Mercado Pago.
 import { requireUser, serviceClient } from '../_shared/woovi-auth.ts';
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/woovi-client.ts';
+import { handleMpWebhook } from '../_shared/mercadopago-webhook-handler.ts';
 import { APP_ORIGINS, callbackUrl, exchangeCode, readState, signState } from '../_shared/mercadopago-seller.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (new URL(req.url).searchParams.has('b')) return handleMpWebhook(req); // aviso de pagamento
   if (req.method === 'GET') {
     const u = new URL(req.url);
     const state = await readState(u.searchParams.get('state') ?? '').catch(() => null);

@@ -58,7 +58,7 @@ export async function createWooviCharge(admin: SupabaseClient<any>, input: Charg
     pixQrCode: { encodedImage: charge.qrCodeImage ?? '', payload: charge.brCode } };
 }
 
-/** Pix na conta Mercado Pago do próprio barbeiro; confirmado pelo mercadopago-webhook. */
+/** Pix na conta Mercado Pago do próprio barbeiro; confirmado pelo aviso na mercadopago-oauth. */
 async function createMercadoPagoCharge(admin: SupabaseClient<any>, input: ChargeInput, cents: number, token: string) {
   const { error: intentError } = await admin.from('woovi_charges').upsert({
     correlation_id: input.correlationID, user_id: input.userId, barbeiro_id: input.barberId, value_centavos: cents, ...input.target,
@@ -73,7 +73,7 @@ async function createMercadoPagoCharge(admin: SupabaseClient<any>, input: Charge
   const p = await mpFetch(token, 'v1/payments', { method: 'POST', idempotencyKey: `pix-${input.correlationID}`, body: {
     transaction_amount: cents / 100, payment_method_id: 'pix', description: input.comment.slice(0, 200),
     external_reference: input.correlationID, payer: { email },
-    notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mercadopago-webhook?b=${input.barberId}`,
+    notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mercadopago-oauth?b=${input.barberId}`,
   } });
   const td = p?.point_of_interaction?.transaction_data;
   if (!td?.qr_code) throw new Error('Mercado Pago não retornou código Pix');
