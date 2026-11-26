@@ -1,0 +1,1 @@
+ALTER TABLE public.barber_payment_accounts ADD COLUMN IF NOT EXISTS owner_cpf text;

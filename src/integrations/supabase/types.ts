@@ -1398,6 +1398,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          owner_cpf: string | null
           phone: string | null
           pix_key: string | null
           status: string
@@ -1415,6 +1416,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          owner_cpf?: string | null
           phone?: string | null
           pix_key?: string | null
           status?: string
@@ -1432,6 +1434,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          owner_cpf?: string | null
           phone?: string | null
           pix_key?: string | null
           status?: string

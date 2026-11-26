@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-type Acc = { id: string; full_name: string | null; tax_id: string | null; email: string | null; phone: string | null; pix_key: string | null; status: string; status_message: string | null };
+type Acc = { id: string; full_name: string | null; tax_id: string | null; owner_cpf: string | null; email: string | null; phone: string | null; pix_key: string | null; status: string; status_message: string | null };
 
-const FIELDS = [["full_name", "Nome completo"], ["tax_id", "CPF ou CNPJ"], ["email", "E-mail"], ["phone", "Telefone"], ["pix_key", "Chave Pix para saque"]] as const;
+const FIELDS = [["full_name", "Nome completo"], ["tax_id", "CNPJ da barbearia / MEI"], ["owner_cpf", "CPF do titular"], ["email", "E-mail"], ["phone", "Telefone"], ["pix_key", "Chave Pix para saque"]] as const;
 
 /** Finanças só abre depois que o barbeiro cria a conta dele. Quem não tem cadastro (conta principal) passa direto. */
 export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: string; onBack?: () => void; children: ReactNode }) {
@@ -18,7 +18,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
 
   useEffect(() => {
     let alive = true;
-    (supabase as any).from("barber_payment_accounts").select("id,full_name,tax_id,email,phone,pix_key,status,status_message")
+    (supabase as any).from("barber_payment_accounts").select("id,full_name,tax_id,owner_cpf,email,phone,pix_key,status,status_message")
       .eq("barbeiro_id", barbeiroId).maybeSingle().then(({ data }: { data: Acc | null }) => { if (alive) setAcc(data); });
     return () => { alive = false; };
   }, [barbeiroId]);
@@ -32,7 +32,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
   const submit = async () => {
     setBusy(true);
     const { error: saveErr } = await (supabase as any).from("barber_payment_accounts").update({
-      full_name: acc.full_name, tax_id: acc.tax_id, email: acc.email, phone: acc.phone, pix_key: acc.pix_key,
+      full_name: acc.full_name, tax_id: acc.tax_id, owner_cpf: acc.owner_cpf, email: acc.email, phone: acc.phone, pix_key: acc.pix_key,
     }).eq("id", acc.id);
     if (saveErr) { setBusy(false); toast.error("Não foi possível salvar seus dados."); return; }
     const { data, error } = await invokeAuthenticatedFunction<{ status: string; message?: string }>("barber-account-onboard", { body: { action: "submit" } });

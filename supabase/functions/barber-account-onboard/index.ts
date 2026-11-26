@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
       const phone = acc.phone.replace(/\D/g, '');
       await wooviFetch('/api/v1/partner/company', { method: 'POST', body: {
         preRegistration: { name: acc.full_name.trim(), taxID: { taxID: v.doc, type: v.taxType }, website: 'https://barbeirodub.lovable.app' },
-        user: { firstName, lastName: rest.join(' '), email: acc.email.trim(), phone: phone.startsWith('55') ? `+${phone}` : `+55${phone}`, taxID: { taxID: v.doc, type: 'BR:CPF' } },
+        user: { firstName, lastName: rest.join(' '), email: acc.email.trim(), phone: phone.startsWith('55') ? `+${phone}` : `+55${phone}`, taxID: { taxID: v.ownerCpf, type: 'BR:CPF' } },
       } });
       await admin.from('barber_payment_accounts').update({ status: 'pending', tax_id: v.doc, tax_type: v.taxType,
         status_message: 'Enviamos um e-mail e SMS da Woovi para você validar sua conta.' }).eq('id', acc.id);
