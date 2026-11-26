@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import logoDub from "@/assets/logo-dub.png";
 
 interface MaintenanceScreenProps {
   message?: string;
@@ -22,15 +21,22 @@ export function MaintenanceScreen({ message, onExit }: MaintenanceScreenProps) {
         transition={{ duration: 0.4 }}
         className="flex flex-col items-center text-center max-w-md w-full space-y-6"
       >
-        {/* Logo */}
-        <motion.img
+        {/* Logo DUB — construído em código: D (marca) + ub (nome) */}
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          src={logoDub}
-          alt="Barbearia DUB"
-          className="w-16 h-16 object-contain mb-4"
-        />
+          className="flex items-center gap-2"
+        >
+          <div className="w-14 h-14 rounded-full bg-foreground flex items-center justify-center">
+            <span className="text-[32px] font-bold text-background leading-none">
+              D
+            </span>
+          </div>
+          <span className="text-[32px] font-bold text-foreground tracking-tight leading-none">
+            ub
+          </span>
+        </motion.div>
 
         {/* Título */}
         <motion.h1
