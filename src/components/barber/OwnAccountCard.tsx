@@ -23,6 +23,20 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
     return () => { alive = false; };
   }, [barbeiroId]);
 
+  // Enquanto em análise, consulta o banco sozinho (ao abrir e a cada 30s) e libera Finanças ao aprovar.
+  const pending = acc?.status === "pending";
+  useEffect(() => {
+    if (!pending) return;
+    let alive = true;
+    const check = async () => {
+      const { data } = await invokeAuthenticatedFunction<{ status: string }>("barber-account-onboard", { body: { action: "sync" } });
+      if (alive && data?.status && data.status !== "pending") setAcc((a) => (a ? { ...a, status: data.status } : a));
+    };
+    check();
+    const t = setInterval(check, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, [pending]);
+
   if (acc === undefined) return <div className="min-h-[var(--app-height,100dvh)] bg-background" />;
   if (acc === null || acc.status === "approved") return <>{children}</>;
 
@@ -75,7 +89,10 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
             <Button className="w-full h-[54px] rounded-full mt-2" disabled={busy} onClick={submit}>{busy ? "Criando..." : "Criar minha conta"}</Button>
           </div>
         ) : (
-          <Button variant="outline" className="w-full h-[54px] rounded-full mt-6" disabled={busy} onClick={sync}>{busy ? "Verificando..." : "Verificar status"}</Button>
+          <>
+            <p className="text-sm text-muted-foreground mt-6">Verificando automaticamente. Suas finanças abrem sozinhas assim que o banco aprovar.</p>
+            <Button variant="outline" className="w-full h-[54px] rounded-full mt-4" disabled={busy} onClick={sync}>{busy ? "Verificando..." : "Verificar agora"}</Button>
+          </>
         )}
       </div>
     </div>
