@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import pixLogo from "@/assets/pix-logo.png";
 import logoDub from "@/assets/logo-dub.png";
-import { OwnAccountGate } from "./OwnAccountCard";
+import { OwnAccountGate, useOwnAccount } from "./OwnAccountCard";
 import {
   saveFinancialPin,
   getSavedFinancialPin,
@@ -799,6 +799,7 @@ function CarteiraPageInner({
   basePath = "/barbeiro",
   onBack,
 }: CarteiraPageProps) {
+  const ownAccount = useOwnAccount();
   const cached = walletCache.get(barbeiroId) || readLocalWalletCache(barbeiroId);
 
   // Inicialização instantânea do barbeiro (Zero Latency)
@@ -2228,6 +2229,39 @@ function CarteiraPageInner({
       setSavingSettings(false);
     }
   };
+
+  if (ownAccount?.status === "approved") {
+    const isMercadoPago = ownAccount.provider === "mercadopago";
+    return (
+      <div className="w-full min-h-[calc(100vh-80px)] bg-background text-foreground px-4 py-8 sm:px-6">
+        <div className="mx-auto w-full max-w-md">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="w-10 h-10 -ml-2 mb-4 rounded-full flex items-center justify-center text-foreground hover:bg-muted"
+              aria-label="Voltar"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <PixLogoImage size={36} className="mb-4" />
+            <h1 className="text-xl font-semibold">
+              {isMercadoPago ? "Conta Mercado Pago conectada" : "Conta Woovi ativa"}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+              {isMercadoPago
+                ? "O dinheiro dos seus clientes cai diretamente na sua conta do Mercado Pago. Consulte saldo, extrato e transferências no aplicativo do Mercado Pago."
+                : "Sua própria conta está apta a receber Pix dos clientes, sem usar a conta do proprietário da barbearia."}
+            </p>
+            <p className="text-sm text-muted-foreground mt-4 leading-relaxed">
+              A opção Pix é disponibilizada somente enquanto esta conta estiver aprovada e conectada.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!hasSubaccount) {
     return (

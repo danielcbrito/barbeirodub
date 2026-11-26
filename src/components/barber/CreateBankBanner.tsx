@@ -17,8 +17,8 @@ interface CreateBankBannerProps {
 type BankStatus = "loading" | "active" | "missing_data" | "ready" | "creating" | "error";
 
 /**
- * Banner premium de ativação da carteira digital (subconta Woovi).
- * Design persuasivo com gradientes e copy orientada a conversão.
+ * Banner de ativação da conta própria para recebimentos via Pix.
+ * Funcionários nunca herdam a conta do proprietário da barbearia.
  */
 export function CreateBankBanner({ barbeiroId, basePath = "/barbeiro", variant = "card" }: CreateBankBannerProps) {
   const navigate = useNavigate();
@@ -32,12 +32,8 @@ export function CreateBankBanner({ barbeiroId, basePath = "/barbeiro", variant =
 
   const checkStatus = async () => {
     try {
-      const [barberRes, privateRes] = await Promise.all([
-        supabase
-          .from("barbeiros")
-          .select("woovi_pix_key, conta_configurada, conta_financeira_id, apelido, tenant_id, user_id")
-          .eq("id", barbeiroId)
-          .single(),
+      const [availabilityRes, privateRes] = await Promise.all([
+        supabase.rpc("validate_barber_can_receive_pix", { p_barbeiro_id: barbeiroId }),
         supabase
           .from("barbeiros_private")
           .select("cpf, email")
@@ -45,46 +41,11 @@ export function CreateBankBanner({ barbeiroId, basePath = "/barbeiro", variant =
           .maybeSingle(),
       ]);
 
-      if (barberRes.error) throw barberRes.error;
+      if (availabilityRes.error) throw availabilityRes.error;
 
-      const hasConfiguredWallet =
-        !!barberRes.data?.woovi_pix_key ||
-        (!!barberRes.data?.conta_configurada && !!barberRes.data?.conta_financeira_id);
-
-      if (hasConfiguredWallet) {
+      if (availabilityRes.data === true) {
         setStatus("active");
         return;
-      }
-
-      // Barbeiro de tenant (não-owner) — usa conta compartilhada do dono
-      if (barberRes.data?.tenant_id && barberRes.data?.user_id) {
-        const { data: tenantData } = await supabase
-          .from("tenants")
-          .select("owner_user_id")
-          .eq("id", barberRes.data.tenant_id)
-          .maybeSingle();
-
-        if (tenantData?.owner_user_id && tenantData.owner_user_id !== barberRes.data.user_id) {
-          setStatus("active");
-          return;
-        }
-      }
-
-      // Barbeiro funcionário por role global — usa conta compartilhada
-      if (barberRes.data?.user_id) {
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", barberRes.data.user_id);
-
-        const userRoles = (roles || []).map((r) => String(r.role));
-        const hasBarberRole = userRoles.includes("barber") || userRoles.includes("barbeiro");
-        const isEmployee = hasBarberRole && !userRoles.includes("admin") && !userRoles.includes("tenant_admin");
-
-        if (isEmployee) {
-          setStatus("active");
-          return;
-        }
       }
 
       const cpf = privateRes.data?.cpf?.replace(/\D/g, "");

@@ -1541,6 +1541,42 @@ export type Database = {
           },
         ]
       }
+      barber_pix_availability: {
+        Row: {
+          barbeiro_id: string
+          can_receive_pix: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          barbeiro_id: string
+          can_receive_pix?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          barbeiro_id?: string
+          can_receive_pix?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barber_pix_availability_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: true
+            referencedRelation: "barbeiros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "barber_pix_availability_barbeiro_id_fkey"
+            columns: ["barbeiro_id"]
+            isOneToOne: true
+            referencedRelation: "barbeiros_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bloqueios_cliente_barbeiro: {
         Row: {
           barbeiro_id: string
@@ -7360,6 +7396,10 @@ export type Database = {
         Returns: Json
       }
       refresh_barber_home_snapshot: {
+        Args: { p_barbeiro_id: string }
+        Returns: undefined
+      }
+      refresh_barber_pix_availability: {
         Args: { p_barbeiro_id: string }
         Returns: undefined
       }

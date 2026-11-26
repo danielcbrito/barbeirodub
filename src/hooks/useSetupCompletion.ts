@@ -33,7 +33,7 @@ interface CachedSetup {
  * Verifica: foto, dados pessoais, endereço, serviços, horários, WhatsApp e carteira.
  *
  * Endereço: verifica barbeiros_private E informacoes_empresa (admin/tenant).
- * Carteira: verifica Woovi, conta financeira configurada ou chaves PIX cadastradas.
+ * Carteira: verifica a conta própria aprovada do barbeiro, sem herdar a conta do dono.
  *
  * Perf: hidrata sincronicamente do localStorage — mesma metodologia da agenda.
  * Cold start renderiza em ~0ms com o último snapshot enquanto revalida em background.
@@ -77,7 +77,7 @@ export function useSetupCompletion({
       // ── Fase 1: buscar barbeiro para descobrir tenant_id ──
       const barbeiroRes = await supabase
         .from("barbeiros")
-        .select("foto_url, woovi_pix_key, conta_configurada, conta_financeira_id, tenant_id")
+        .select("foto_url, tenant_id")
         .eq("id", barbeiroId)
         .maybeSingle();
 
@@ -94,34 +94,15 @@ export function useSetupCompletion({
         servicosRes,
         horariosRes,
         whatsappRes,
-        pixRes,
-        bankRes,
-        depositRes,
+        walletRes,
         profileRes,
       ] = await Promise.all([
         supabase.from("barbeiros_private").select("nome_completo, cpf, telefone, email, endereco_cep, endereco_rua, endereco_cidade, endereco_estado").eq("barbeiro_id", barbeiroId).maybeSingle(),
         servicosQuery,
         supabase.from("configuracoes_horario_barbeiro").select("id, aberto").eq("barbeiro_id", barbeiroId),
         supabase.from("whatsapp_instances" as any).select("status").eq("barbeiro_id", barbeiroId).maybeSingle(),
-        // Carteira por chave PIX (por usuário ou por barbeiro)
-        supabase
-          .from("chaves_pix")
-          .select("id")
-          .or(`user_id.eq.${userId},barbeiro_id.eq.${barbeiroId}`)
-          .limit(1),
-        // Carteira por conta bancária (por usuário ou por barbeiro)
-        supabase
-          .from("contas_bancarias")
-          .select("id")
-          .or(`user_id.eq.${userId},barbeiro_id.eq.${barbeiroId}`)
-          .limit(1),
-        // Carteira por uso real (depósito confirmado)
-        supabase
-          .from("depositos")
-          .select("id")
-          .or(`user_id.eq.${userId},barbeiro_id.eq.${barbeiroId}`)
-          .in("status", ["confirmado", "paid", "completed"])
-          .limit(1),
+        // Conta própria aprovada do barbeiro; não usa a conta do dono ou do funcionário.
+        supabase.rpc("validate_barber_can_receive_pix", { p_barbeiro_id: barbeiroId }),
         // Foto no profile (paralelizado — antes rodava sequencial após barbeiroRes)
         supabase.from("profiles").select("avatar_url").eq("id", userId).maybeSingle(),
       ]);
@@ -195,13 +176,8 @@ export function useSetupCompletion({
       // ── WhatsApp ──
       const hasWhatsApp = (whatsappRes.data as any)?.status === "connected";
 
-      // ── Carteira: Woovi, conta financeira configurada ou chaves PIX cadastradas ──
-      const hasCarteira =
-        !!barbeiroRes.data?.woovi_pix_key ||
-        (!!barbeiroRes.data?.conta_configurada && !!barbeiroRes.data?.conta_financeira_id) ||
-        (pixRes.data?.length || 0) > 0 ||
-        (bankRes.data?.length || 0) > 0 ||
-        (depositRes.data?.length || 0) > 0;
+      // ── Carteira: conta própria aprovada, inclusive para funcionários do Túlio ──
+      const hasCarteira = !walletRes.error && walletRes.data === true;
 
       // ── Rotas ──
       // ── Dados Gerais: unifica foto + dados pessoais + endereço ──

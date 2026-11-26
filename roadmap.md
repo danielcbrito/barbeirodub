@@ -1,5 +1,12 @@
 # Payment provider cleanup
 
+## Subcontas removidas e PIX por conta própria
+- [x] Desvincular as subcontas antigas de todos os barbeiros, exceto Túlio, preservando o histórico e a conexão Mercado Pago do Barbeiro Teste.
+- [x] Expor ao cliente somente a disponibilidade segura do PIX, sincronizada com a conta aprovada e a credencial do próprio barbeiro.
+- [x] Ajustar Finanças, agendamento e cobrança para aplicar a mesma regra; 6 testes passaram, as funções passaram na checagem de tipos e a compilação terminou sem erros.
+- [ ] Repetir o agendamento e a criação de conta com usuários autenticados — o Supabase externo não permite injetar uma sessão automática no navegador desta verificação.
+- [ ] Excluir as subcontas antigas na Woovi somente após conferir e sacar os saldos restantes; nenhum valor foi movido nesta etapa.
+
 ## Recorrência com cartão tokenizado — documento enviado
 - [x] Validar na documentação oficial Woovi: a API pública de cartão documenta cobrança avulsa e não documenta card_id/customer_id reutilizável nem o campo para cobrar esse token.
 - [ ] Implementar tokenização e renovação diária — bloqueado até a Woovi fornecer o contrato oficial de cobrança off-session, consentimento e retentativas; nenhum campo ou cron foi criado.

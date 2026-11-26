@@ -36,4 +36,4 @@ Todas as alterações, novos componentes, telas e fluxos no sistema Dub / Barbei
 - Compute performance only from observed factors with coverage and absent-data states; compare elapsed monthly days for performance trends to avoid penalizing unfinished periods.
 
 ## Barber own payment accounts
-- Each barber (except the main-account owner) receives client Pix only in an own Woovi affiliate account (partner API); subaccount splits are discontinued, charges use the barber's server-only AppID when `barber_payment_accounts.status = 'approved'` and are refused otherwise, and Finanças is gated behind account creation — keeps receipts and tax liability in the barber's own name.
+- Each barber (except the main-account owner) receives client Pix only in an own approved Woovi affiliate or Mercado Pago OAuth account with its matching server-only credential; tenant ownership never grants a worker's eligibility, legacy subaccounts cannot be recreated by workers, and charges fail closed otherwise. Client eligibility reads only the trigger-synchronized `barber_pix_availability` projection, never credential tables.

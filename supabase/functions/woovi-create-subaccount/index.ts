@@ -1,8 +1,9 @@
-// Cria (ou reutiliza) subconta Woovi para um barbeiro a partir da chave Pix informada.
-// Salva woovi_pix_key + woovi_subaccount_name em `barbeiros`.
+// Fluxo legado exclusivo da conta principal do Túlio.
+// Os demais barbeiros usam Mercado Pago ou conta Woovi própria, sem subconta antiga.
 
 import { corsHeaders, errorResponse, jsonResponse, wooviFetch, WooviError } from '../_shared/woovi-client.ts';
 import { requireUser } from '../_shared/woovi-auth.ts';
+import { MAIN_ACCOUNT_BARBER_ID } from '../_shared/barber-account-policy.ts';
 
 interface Body {
   barbeiro_id?: string;
@@ -26,7 +27,7 @@ Deno.serve(async (req) => {
   // Carrega o barbeiro (pelo barbeiro_id ou pelo user_id do usuário logado).
   let query = admin
     .from('barbeiros')
-    .select('id, nome, woovi_pix_key, woovi_subaccount_name');
+    .select('id, user_id, apelido, woovi_pix_key, woovi_subaccount_name');
   if (body?.barbeiro_id) {
     query = query.eq('id', body.barbeiro_id);
   } else {
@@ -36,8 +37,11 @@ Deno.serve(async (req) => {
   const { data: barb, error: bErr } = await query.maybeSingle();
   if (bErr) return errorResponse('DB_ERROR', bErr.message, 500);
   if (!barb) return errorResponse('NOT_A_BARBER', 'Usuário não é barbeiro', 403);
+  if (barb.id !== MAIN_ACCOUNT_BARBER_ID || barb.user_id !== userId) {
+    return errorResponse('SUBACCOUNT_DISCONTINUED', 'Subcontas antigas foram descontinuadas. Crie sua própria conta em Finanças.', 403);
+  }
 
-  const subName = (body.name ?? barb.nome ?? `Barbeiro ${barb.id.slice(0, 8)}`).slice(0, 100);
+  const subName = (body.name ?? barb.apelido ?? `Barbeiro ${barb.id.slice(0, 8)}`).slice(0, 100);
 
   try {
     // Idempotência: se já tem chave, tenta buscar antes de criar.

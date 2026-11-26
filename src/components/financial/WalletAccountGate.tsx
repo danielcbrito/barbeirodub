@@ -56,19 +56,13 @@ export function WalletAccountGate({
         return;
       }
 
-      const { data, error } = await supabase
-        .from("barbeiros")
-        .select("woovi_pix_key, conta_configurada, conta_financeira_id")
-        .eq("id", barbeiroId)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc("validate_barber_can_receive_pix", {
+        p_barbeiro_id: barbeiroId,
+      });
 
       if (!mounted) return;
 
-      const hasConfiguredWallet =
-        !!data?.woovi_pix_key ||
-        (!!data?.conta_configurada && !!data?.conta_financeira_id);
-
-      if (error || !hasConfiguredWallet) {
+      if (error || data !== true) {
         setStatus("blocked");
       } else {
         setStatus("ready");

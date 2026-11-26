@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
@@ -7,11 +7,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-type Acc = { id: string; full_name: string | null; tax_id: string | null; owner_cpf: string | null; email: string | null; phone: string | null; pix_key: string | null; status: string; status_message: string | null };
+type Acc = {
+  id: string | null;
+  user_id: string;
+  tenant_id: string | null;
+  full_name: string | null;
+  tax_id: string | null;
+  owner_cpf: string | null;
+  email: string | null;
+  phone: string | null;
+  pix_key: string | null;
+  provider: string;
+  status: string;
+  status_message: string | null;
+};
 
+const MAIN_ACCOUNT_BARBER_ID = "767c51a7-7323-4933-8fc5-9a666f6baa7c";
+const ACCOUNT_FIELDS = "id,user_id,tenant_id,full_name,tax_id,owner_cpf,email,phone,pix_key,provider,status,status_message";
 const FIELDS = [["full_name", "Nome completo"], ["tax_id", "CNPJ da barbearia / MEI"], ["owner_cpf", "CPF do titular"], ["email", "E-mail"], ["phone", "Telefone"], ["pix_key", "Chave Pix para saque"]] as const;
 
-/** Finanças só abre depois que o barbeiro cria a conta dele. Quem não tem cadastro (conta principal) passa direto. */
+const OwnAccountContext = createContext<Acc | null>(null);
+export function useOwnAccount() { return useContext(OwnAccountContext); }
+
+/** Finanças só abre depois que o barbeiro cria a conta dele. A conta principal existente do Túlio passa direto. */
 export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: string; onBack?: () => void; children: ReactNode }) {
   const [acc, setAcc] = useState<Acc | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -35,8 +53,34 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
 
   useEffect(() => {
     let alive = true;
-    (supabase as any).from("barber_payment_accounts").select("id,full_name,tax_id,owner_cpf,email,phone,pix_key,status,status_message")
-      .eq("barbeiro_id", barbeiroId).maybeSingle().then(({ data }: { data: Acc | null }) => { if (alive) setAcc(data); });
+    const load = async () => {
+      const [{ data: account }, { data: barber }] = await Promise.all([
+        (supabase as any).from("barber_payment_accounts").select(ACCOUNT_FIELDS).eq("barbeiro_id", barbeiroId).maybeSingle(),
+        (supabase as any).from("barbeiros").select("user_id,tenant_id").eq("id", barbeiroId).maybeSingle(),
+      ]);
+      if (!alive) return;
+      if (account) {
+        setAcc(account as Acc);
+      } else if (barber?.user_id) {
+        setAcc({
+          id: null,
+          user_id: barber.user_id,
+          tenant_id: barber.tenant_id,
+          full_name: null,
+          tax_id: null,
+          owner_cpf: null,
+          email: null,
+          phone: null,
+          pix_key: null,
+          provider: "woovi",
+          status: "draft",
+          status_message: null,
+        });
+      } else {
+        setAcc(null);
+      }
+    };
+    load();
     return () => { alive = false; };
   }, [barbeiroId]);
 
@@ -54,23 +98,60 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
     return () => { alive = false; clearInterval(t); };
   }, [pending]);
 
+  if (barbeiroId === MAIN_ACCOUNT_BARBER_ID) return <>{children}</>;
   if (acc === undefined) return <div className="min-h-[var(--app-height,100dvh)] bg-background" />;
-  if (acc === null || acc.status === "approved") return <>{children}</>;
+  if (acc === null) {
+    return (
+      <div className="min-h-[var(--app-height,100dvh)] bg-background text-foreground px-5 pt-16">
+        <div className="mx-auto w-full max-w-md">
+          <h1 className="text-2xl font-semibold">Cadastro indisponível</h1>
+          <p className="text-sm text-muted-foreground mt-2">Não foi possível carregar os dados do barbeiro. Tente novamente.</p>
+          <Button className="w-full h-[54px] rounded-full mt-6" onClick={() => window.location.reload()}>Tentar novamente</Button>
+          {onBack && <Button variant="ghost" className="w-full h-[54px] rounded-full mt-2" onClick={onBack}>Voltar</Button>}
+        </div>
+      </div>
+    );
+  }
+  if (acc.status === "approved") {
+    return <OwnAccountContext.Provider value={acc}>{children}</OwnAccountContext.Provider>;
+  }
 
   const editable = reselect || acc.status === "draft" || acc.status === "rejected";
   const set = (k: keyof Acc) => (e: React.ChangeEvent<HTMLInputElement>) => setAcc({ ...acc, [k]: e.target.value });
 
   const submit = async () => {
     setBusy(true);
-    const { error: saveErr } = await (supabase as any).from("barber_payment_accounts").update({
-      full_name: acc.full_name, tax_id: acc.tax_id, owner_cpf: acc.owner_cpf, email: acc.email, phone: acc.phone, pix_key: acc.pix_key,
-    }).eq("id", acc.id);
-    if (saveErr) { setBusy(false); toast.error("Não foi possível salvar seus dados."); return; }
+    const values = {
+      full_name: acc.full_name,
+      tax_id: acc.tax_id,
+      owner_cpf: acc.owner_cpf,
+      email: acc.email,
+      phone: acc.phone,
+      pix_key: acc.pix_key,
+    };
+    let savedAcc: Acc;
+    if (acc.id) {
+      const { data, error } = await (supabase as any).from("barber_payment_accounts").update(values).eq("id", acc.id).select(ACCOUNT_FIELDS).single();
+      if (error) { setBusy(false); toast.error("Não foi possível salvar seus dados."); return; }
+      savedAcc = data as Acc;
+    } else {
+      const { data, error } = await (supabase as any).from("barber_payment_accounts").insert({
+        ...values,
+        barbeiro_id: barbeiroId,
+        user_id: acc.user_id,
+        tenant_id: acc.tenant_id,
+        provider: "woovi",
+        status: "draft",
+      }).select(ACCOUNT_FIELDS).single();
+      if (error) { setBusy(false); toast.error("Não foi possível iniciar seu cadastro."); return; }
+      savedAcc = data as Acc;
+    }
+    setAcc(savedAcc);
     const { data, error } = await invokeAuthenticatedFunction<{ status: string; message?: string }>("barber-account-onboard", { body: { action: "submit" } });
     setBusy(false);
     if (data?.status === "unavailable") { toast.error(data.message || "Criação de conta indisponível no momento."); return; }
     if (error || !data) { toast.error(error?.message || "Não foi possível criar sua conta."); return; }
-    setAcc({ ...acc, status: data.status, status_message: `Abra o e-mail do banco em ${acc.email ?? "seu e-mail"} e toque em "Validar cadastro" para enviar os documentos. Suas finanças abrem sozinhas quando o banco aprovar.` });
+    setAcc({ ...savedAcc, status: data.status, status_message: `Abra o e-mail do banco em ${savedAcc.email ?? "seu e-mail"} e toque em "Validar cadastro" para enviar os documentos. Suas finanças abrem sozinhas quando o banco aprovar.` });
   };
 
   const sync = async () => {
@@ -91,7 +172,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
         <h1 className="text-2xl font-semibold mt-4">{editable ? (choice === "woovi" ? "Conta Barbearia DUB" : "Como você quer receber?") : "Conta em análise"}</h1>
         <p className="text-sm text-muted-foreground mt-2">
           {editable ? (choice === "woovi" ? "Preencha seus dados aqui. Depois o banco envia um e-mail para você terminar o cadastro."
-            : "O dinheiro dos seus clientes cai direto na sua conta, no seu nome.")
+            : "O dinheiro dos seus clientes cai direto na sua conta, no seu nome. Enquanto a conta não estiver ativa, seus clientes não verão a opção Pix.")
             : acc.status_message || "Assim que a validação terminar, suas finanças são liberadas aqui."}
         </p>
         {acc.status === "rejected" && <p className="text-sm text-destructive mt-2">Os dados foram recusados. Confira e envie novamente.</p>}

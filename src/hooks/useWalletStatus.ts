@@ -1,9 +1,7 @@
 /**
- * ═══════════════════════════════════════════════════════════
- * useWalletStatus — Verifica se o barbeiro tem carteira ativa
- * ═══════════════════════════════════════════════════════════
- *
- * Woovi: hasWallet = tem chave Pix cadastrada (subconta) OU conta financeira configurada pela equipe.
+ * Verifica se o próprio barbeiro pode receber Pix.
+ * A disponibilidade é calculada no banco a partir da conta aprovada e da credencial,
+ * sem herdar a conta do dono da barbearia nem expor dados bancários ao cliente.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -18,36 +16,24 @@ interface WalletStatusData {
   contaFinanceiraId: string | null;
 }
 
+const unavailable: WalletStatusData = {
+  hasWallet: false,
+  wooviPixKey: null,
+  contaConfigurada: false,
+  contaFinanceiraId: null,
+};
+
 export function useWalletStatus(barbeiroId: string | null) {
   return useQuery<WalletStatusData>({
     queryKey: QUERY_KEYS.shared.walletStatus(barbeiroId!),
     enabled: !!barbeiroId,
     queryFn: async () => {
-      if (!barbeiroId) {
-        return {
-          hasWallet: false,
-          wooviPixKey: null,
-          contaConfigurada: false,
-          contaFinanceiraId: null,
-        };
-      }
-
-      const { data } = await supabase
-        .from("barbeiros")
-        .select("woovi_pix_key, conta_configurada, conta_financeira_id")
-        .eq("id", barbeiroId)
-        .maybeSingle();
-
-      const wooviPixKey = (data as any)?.woovi_pix_key ?? null;
-      const contaConfigurada = !!data?.conta_configurada;
-      const contaFinanceiraId = data?.conta_financeira_id ?? null;
-
-      return {
-        hasWallet: !!wooviPixKey || (contaConfigurada && !!contaFinanceiraId),
-        wooviPixKey,
-        contaConfigurada,
-        contaFinanceiraId,
-      };
+      if (!barbeiroId) return unavailable;
+      const { data, error } = await supabase.rpc("validate_barber_can_receive_pix", {
+        p_barbeiro_id: barbeiroId,
+      });
+      if (error) return unavailable;
+      return { ...unavailable, hasWallet: data === true };
     },
     staleTime: STALE_TIMES.WALLET,
   });

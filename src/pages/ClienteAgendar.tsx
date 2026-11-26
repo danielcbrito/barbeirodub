@@ -124,7 +124,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
   // Durações personalizadas do barbeiro selecionado
   const [barberDurations, setBarberDurations] = useState<Map<string, number>>(new Map());
 
-  // Indica se o barbeiro selecionado possui banco (subconta Woovi) vinculado
+  // Somente a conta própria aprovada do barbeiro selecionado libera Pix para o cliente.
   const [barberHasBank, setBarberHasBank] = useState(false);
 
   // Formas de pagamento personalizadas do barbeiro selecionado (Pix e Pagamento na barbearia)
@@ -247,26 +247,22 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
 
     const loadBarberData = async () => {
       // Carregar durações e verificar banco em paralelo
-      const [durationsRes, barberRes] = await Promise.all([
+      const [durationsRes, pixAvailabilityRes] = await Promise.all([
         supabase
           .from("barbeiro_servico_duracao")
           .select("servico_id, duracao_personalizada")
           .eq("barbeiro_id", selectedBarberId),
-        supabase
-          .from("barbeiros")
-          .select("woovi_pix_key")
-          .eq("id", selectedBarberId)
-          .maybeSingle(),
+        supabase.rpc("validate_barber_can_receive_pix", {
+          p_barbeiro_id: selectedBarberId,
+        }),
       ]);
 
       const map = new Map<string, number>();
       (durationsRes.data || []).forEach((d) => map.set(d.servico_id, d.duracao_personalizada));
       setBarberDurations(map);
 
-      // Carteira do barbeiro: Woovi
-      const row: any = barberRes.data;
-      const hasBank = !!row?.woovi_pix_key;
-      setBarberHasBank(hasBank);
+      // A RPC considera Mercado Pago, Woovi própria e somente a exceção existente do Túlio.
+      setBarberHasBank(!pixAvailabilityRes.error && pixAvailabilityRes.data === true);
     };
 
     loadBarberData();
@@ -283,22 +279,12 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     fetchBarberPaymentMethods(selectedBarberId, effectiveTenantId).then((methods) => {
       if (mounted) {
         setBarberPaymentMethods(methods);
-        setPaymentMethod((prev) => {
-          if (prev === "pix" && !methods.pix && methods.barbearia) return "cash";
-          if (prev === "cash" && !methods.barbearia && methods.pix) return "pix";
-          return prev;
-        });
       }
     });
 
     const unsubscribe = subscribeToBarberPaymentMethods(selectedBarberId, (methods) => {
       if (mounted) {
         setBarberPaymentMethods(methods);
-        setPaymentMethod((prev) => {
-          if (prev === "pix" && !methods.pix && methods.barbearia) return "cash";
-          if (prev === "cash" && !methods.barbearia && methods.pix) return "pix";
-          return prev;
-        });
       }
     });
 
@@ -307,6 +293,15 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
       unsubscribe();
     };
   }, [selectedBarberId, effectiveTenantId]);
+
+  useEffect(() => {
+    const pixAvailable = barberHasBank && barberPaymentMethods.pix;
+    setPaymentMethod((prev) => {
+      if (prev === "pix" && !pixAvailable && barberPaymentMethods.barbearia) return "cash";
+      if (prev === "cash" && !barberPaymentMethods.barbearia && pixAvailable) return "pix";
+      return prev;
+    });
+  }, [barberHasBank, barberPaymentMethods]);
 
   useEffect(() => {
     const initializeBooking = async () => {
@@ -958,7 +953,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     }
 
     // Validações de formas de pagamento habilitadas para este barbeiro
-    if (paymentMethod === 'pix' && !barberPaymentMethods.pix) {
+    if (paymentMethod === 'pix' && (!barberPaymentMethods.pix || !barberHasBank)) {
       if (barberPaymentMethods.barbearia) {
         setPaymentMethod('cash');
         toast.info("O barbeiro aceita apenas pagamento na barbearia no momento.");
@@ -967,7 +962,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
     }
 
     if (paymentMethod === 'cash' && !barberPaymentMethods.barbearia) {
-      if (barberPaymentMethods.pix) {
+      if (barberPaymentMethods.pix && barberHasBank) {
         setPaymentMethod('pix');
         toast.info("O barbeiro aceita apenas pagamento via Pix no momento.");
         return;
@@ -1994,7 +1989,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                 {/* Opções normais — só aparecem quando NÃO tem plano com usos disponíveis */}
                 {!hasActivePlanWithUses && (
                   <>
-                    {barberPaymentMethods.pix && (
+                    {barberPaymentMethods.pix && barberHasBank && (
                       <PaymentOption
                         value="pix"
                         selected={paymentMethod === 'pix'}
@@ -2014,7 +2009,7 @@ const ClienteAgendar = ({ forcedTenantId = null }: ClienteAgendarProps) => {
                       />
                     )}
 
-                    {!barberPaymentMethods.pix && !barberPaymentMethods.barbearia && (
+                    {(!barberPaymentMethods.pix || !barberHasBank) && !barberPaymentMethods.barbearia && (
                       <div className="rounded-xl border border-border p-4 text-center">
                         <p className="text-sm text-muted-foreground">
                           Nenhuma forma de pagamento disponível para este profissional.

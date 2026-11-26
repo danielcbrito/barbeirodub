@@ -1,6 +1,6 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { wooviFetch, WooviError } from './woovi-client.ts';
-import { chargeRoute } from './barber-account-policy.ts';
+import { chargeRoute, mainAccountChargeAllowed } from './barber-account-policy.ts';
 import { mpFetch, sellerToken } from './mercadopago-seller.ts';
 
 interface ChargeInput {
@@ -18,15 +18,27 @@ export async function createWooviCharge(admin: SupabaseClient<any>, input: Charg
   if (!Number.isSafeInteger(cents) || cents < 100) throw new Error('Valor mínimo para Pix: R$ 1,00');
   const { data: barber, error } = await admin.from('barbeiros').select('id, woovi_pix_key').eq('id', input.barberId).eq('ativo', true).maybeSingle();
   if (error) throw error;
-  // Conta própria do barbeiro (afiliada Woovi no CPF/CNPJ dele) tem prioridade.
-  const [{ data: ownAcc }, { data: cred }] = await Promise.all([
-    admin.from('barber_payment_accounts').select('status').eq('barbeiro_id', input.barberId).maybeSingle(),
+  if (!barber) throw new Error('Barbeiro não encontrado ou inativo; Pix indisponível');
+  // A cobrança usa somente a conta aprovada e a credencial do próprio barbeiro.
+  const [{ data: ownAcc }, { data: cred }, { data: mpCred }] = await Promise.all([
+    admin.from('barber_payment_accounts').select('status, provider').eq('barbeiro_id', input.barberId).maybeSingle(),
     admin.from('barber_payment_credentials').select('app_id').eq('barbeiro_id', input.barberId).maybeSingle(),
+    admin.from('barber_mp_credentials').select('barbeiro_id').eq('barbeiro_id', input.barberId).maybeSingle(),
   ]);
-  const mpToken = await sellerToken(admin, input.barberId);
-  if (mpToken) return createMercadoPagoCharge(admin, input, cents, mpToken);
-  const ownAppId = chargeRoute(ownAcc?.status, !!cred?.app_id) === 'own_account' ? cred!.app_id as string : undefined;
-  if (!ownAppId) throw new Error('Barbeiro ainda não criou a conta dele; Pix indisponível');
+  const route = chargeRoute(
+    ownAcc?.status,
+    ownAcc?.provider,
+    ownAcc?.provider === 'mercadopago' ? !!mpCred : !!cred?.app_id,
+  );
+  if (route === 'mercadopago') {
+    const mpToken = await sellerToken(admin, input.barberId);
+    if (!mpToken) throw new Error('Mercado Pago do barbeiro não está conectado; Pix indisponível');
+    return createMercadoPagoCharge(admin, input, cents, mpToken);
+  }
+  const mainAccount = mainAccountChargeAllowed(input.barberId, barber.woovi_pix_key);
+  if (route === 'unavailable' && !mainAccount) throw new Error('Barbeiro ainda não criou a conta dele; Pix indisponível');
+  // Sem AppID próprio somente para a conta principal preservada do Túlio.
+  const ownAppId = route === 'woovi' ? cred!.app_id as string : undefined;
   // Persist intent before asking the bank, so an early callback can be reconciled.
   const { error: intentError } = await admin.from('woovi_charges').upsert({
     correlation_id: input.correlationID, user_id: input.userId, barbeiro_id: input.barberId,
@@ -41,9 +53,7 @@ export async function createWooviCharge(admin: SupabaseClient<any>, input: Charg
     response = await wooviFetch<ChargeResponse>(`/api/v1/charge/${encodeURIComponent(input.correlationID)}`, { appId: ownAppId });
   } catch (error) {
     if (!(error instanceof WooviError) || error.status !== 404) throw error;
-    // Taxa bancária fixa cobrada pela Woovi em cada Pix (R$ 0,50).
-    // Descontada do split da subconta do barbeiro para que cada profissional
-    // pague a taxa do seu próprio Pix recebido e mantenha o caixa equilibrado.
+    // A cobrança é criada na conta própria do barbeiro, sem split de subconta.
     response = await wooviFetch<ChargeResponse>('/api/v1/charge', { method: 'POST', appId: ownAppId, body: { correlationID: input.correlationID, value: cents, comment: input.comment } });
   }
   const charge = response.charge;
