@@ -50,6 +50,9 @@ Deno.serve(async (req) => {
     const msg = e instanceof WooviError ? e.message : 'Falha ao falar com o banco';
     console.error('[barber-account-onboard]', action, e instanceof WooviError ? e.status : '', msg);
     if (action === 'sync') return jsonResponse({ status: 'pending', message: 'Conta ainda em análise na Woovi.' });
+    if (/parceri/i.test(msg)) {
+      return jsonResponse({ status: 'unavailable', message: 'A criação de contas ainda não foi liberada pelo banco. Tente novamente mais tarde.' });
+    }
     return errorResponse('BANK_ERROR', msg, 502);
   }
 });

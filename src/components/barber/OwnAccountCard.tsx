@@ -35,8 +35,9 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
       full_name: acc.full_name, tax_id: acc.tax_id, email: acc.email, phone: acc.phone, pix_key: acc.pix_key,
     }).eq("id", acc.id);
     if (saveErr) { setBusy(false); toast.error("Não foi possível salvar seus dados."); return; }
-    const { data, error } = await invokeAuthenticatedFunction<{ status: string }>("barber-account-onboard", { body: { action: "submit" } });
+    const { data, error } = await invokeAuthenticatedFunction<{ status: string; message?: string }>("barber-account-onboard", { body: { action: "submit" } });
     setBusy(false);
+    if (data?.status === "unavailable") { toast.error(data.message || "Criação de conta indisponível no momento."); return; }
     if (error || !data) { toast.error(error?.message || "Não foi possível criar sua conta."); return; }
     setAcc({ ...acc, status: data.status, status_message: "Confira seu e-mail e SMS para validar a conta." });
   };
