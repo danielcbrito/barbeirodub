@@ -16,6 +16,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
   const [acc, setAcc] = useState<Acc | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [choice, setChoice] = useState<"mp" | "woovi" | null>(null);
+  const [reselect, setReselect] = useState(false);
 
   useEffect(() => {
     const mp = new URLSearchParams(window.location.search).get("mp");
@@ -56,7 +57,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
   if (acc === undefined) return <div className="min-h-[var(--app-height,100dvh)] bg-background" />;
   if (acc === null || acc.status === "approved") return <>{children}</>;
 
-  const editable = acc.status === "draft" || acc.status === "rejected";
+  const editable = reselect || acc.status === "draft" || acc.status === "rejected";
   const set = (k: keyof Acc) => (e: React.ChangeEvent<HTMLInputElement>) => setAcc({ ...acc, [k]: e.target.value });
 
   const submit = async () => {
@@ -130,6 +131,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
           <>
             <p className="text-sm text-muted-foreground mt-6">Verificando automaticamente. Suas finanças abrem sozinhas assim que o banco aprovar.</p>
             <Button variant="outline" className="w-full h-[54px] rounded-full mt-4" disabled={busy} onClick={sync}>{busy ? "Verificando..." : "Verificar agora"}</Button>
+            <Button variant="ghost" className="w-full h-[54px] rounded-full mt-2" disabled={busy} onClick={() => { setReselect(true); setChoice(null); }}>Escolher outra forma de receber</Button>
           </>
         )}
       </div>
