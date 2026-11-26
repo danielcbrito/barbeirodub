@@ -15,6 +15,22 @@ const FIELDS = [["full_name", "Nome completo"], ["tax_id", "CNPJ da barbearia / 
 export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: string; onBack?: () => void; children: ReactNode }) {
   const [acc, setAcc] = useState<Acc | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [choice, setChoice] = useState<"mp" | "woovi" | null>(null);
+
+  useEffect(() => {
+    const mp = new URLSearchParams(window.location.search).get("mp");
+    if (!mp) return;
+    if (mp === "ok") toast.success("Mercado Pago conectado. Seus Pix já caem na sua conta.");
+    else if (mp === "erro") toast.error("Não foi possível conectar o Mercado Pago. Tente novamente.");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+
+  const connectMp = async () => {
+    setBusy(true);
+    const { data, error } = await invokeAuthenticatedFunction<{ url: string }>("mercadopago-oauth", { body: { action: "start", origin: window.location.origin } });
+    if (error || !data?.url) { setBusy(false); toast.error(error?.message || "Mercado Pago indisponível no momento."); return; }
+    window.location.href = data.url;
+  };
 
   useEffect(() => {
     let alive = true;
@@ -53,7 +69,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
     setBusy(false);
     if (data?.status === "unavailable") { toast.error(data.message || "Criação de conta indisponível no momento."); return; }
     if (error || !data) { toast.error(error?.message || "Não foi possível criar sua conta."); return; }
-    setAcc({ ...acc, status: data.status, status_message: "Confira seu e-mail e SMS para validar a conta." });
+    setAcc({ ...acc, status: data.status, status_message: `Abra o e-mail do banco em ${acc.email ?? "seu e-mail"} e toque em "Validar cadastro" para enviar os documentos. Suas finanças abrem sozinhas quando o banco aprovar.` });
   };
 
   const sync = async () => {
@@ -71,15 +87,36 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
             <ChevronLeft className="w-6 h-6" />
           </button>
         )}
-        <h1 className="text-2xl font-semibold mt-4">{editable ? "Crie sua conta" : "Conta em análise"}</h1>
+        <h1 className="text-2xl font-semibold mt-4">{editable ? (choice === "woovi" ? "Conta Barbearia DUB" : "Como você quer receber?") : "Conta em análise"}</h1>
         <p className="text-sm text-muted-foreground mt-2">
-          {editable ? "Sua conta fica no seu nome. Leva menos de um minuto."
+          {editable ? (choice === "woovi" ? "Preencha seus dados aqui. Depois o banco envia um e-mail para você terminar o cadastro."
+            : "O dinheiro dos seus clientes cai direto na sua conta, no seu nome.")
             : acc.status_message || "Assim que a validação terminar, suas finanças são liberadas aqui."}
         </p>
         {acc.status === "rejected" && <p className="text-sm text-destructive mt-2">Os dados foram recusados. Confira e envie novamente.</p>}
 
-        {editable ? (
+        {editable && choice !== "woovi" ? (
+          <div className="mt-8 space-y-3">
+            <div className="rounded-2xl border border-border p-5">
+              <p className="font-semibold">Conectar Mercado Pago</p>
+              <p className="text-sm text-muted-foreground mt-1">Recomendado. Funciona com CPF ou CNPJ, sem documentos. O cadastro leva apenas um minuto.</p>
+              <Button className="w-full h-[54px] rounded-full mt-4" disabled={busy} onClick={connectMp}>{busy ? "Abrindo..." : "Conectar Mercado Pago"}</Button>
+            </div>
+            <div className="rounded-2xl border border-border p-5">
+              <p className="font-semibold">Criar conta na Barbearia DUB</p>
+              <p className="text-sm text-muted-foreground mt-1">Taxa menor por Pix. Exige CNPJ/MEI e documentos, que o banco pede por e-mail.</p>
+              <Button variant="outline" className="w-full h-[54px] rounded-full mt-4" disabled={busy} onClick={() => setChoice("woovi")}>Criar conta</Button>
+            </div>
+          </div>
+        ) : editable ? (
           <div className="mt-6 space-y-4">
+            <div className="rounded-2xl bg-muted p-4 text-sm">
+              <p className="font-medium">Como funciona</p>
+              <p className="text-muted-foreground mt-1">1. Preencha seus dados abaixo.</p>
+              <p className="text-muted-foreground">2. Você recebe um e-mail do banco no seu Gmail.</p>
+              <p className="text-muted-foreground">3. Toque em "Validar cadastro" e envie: CCMEI (gov.br), comprovante de faturamento, foto do documento e os termos.</p>
+              <p className="text-muted-foreground">4. Quando o banco aprovar, suas finanças abrem sozinhas aqui.</p>
+            </div>
             {FIELDS.map(([k, l]) => (
               <div key={k} className="space-y-1.5">
                 <Label htmlFor={`own-${k}`}>{l}</Label>
@@ -87,6 +124,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
               </div>
             ))}
             <Button className="w-full h-[54px] rounded-full mt-2" disabled={busy} onClick={submit}>{busy ? "Criando..." : "Criar minha conta"}</Button>
+            <Button variant="ghost" className="w-full h-[54px] rounded-full" disabled={busy} onClick={() => setChoice(null)}>Voltar às opções</Button>
           </div>
         ) : (
           <>
