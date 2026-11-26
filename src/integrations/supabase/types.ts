@@ -7072,6 +7072,13 @@ export type Database = {
         Returns: Json
       }
       get_barber_app_context_fast: { Args: never; Returns: Json }
+      get_barber_booking_payment_accounts: {
+        Args: { p_barbeiro_id: string; p_tenant_id: string }
+        Returns: {
+          provider: string
+          status: string
+        }[]
+      }
       get_barber_boot_bundle: { Args: never; Returns: Json }
       get_barber_dashboard_fast: {
         Args: { p_barbeiro_id: string }
