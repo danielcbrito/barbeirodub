@@ -592,10 +592,13 @@ const Barbeiro = () => {
       if (resolvedTenantId) {
         const { data: tenantRow } = await supabase
           .from("tenants")
-          .select("is_test")
+          .select("is_test, nome")
           .eq("id", resolvedTenantId)
           .maybeSingle();
         isTestTenant = !!tenantRow?.is_test;
+        if (tenantRow?.nome) {
+          setTenantNome((prev) => prev || tenantRow.nome);
+        }
       }
 
       applyValidatedBarberContext(userId, appContext, isTestTenant);
@@ -934,7 +937,7 @@ const Barbeiro = () => {
                   <>
                     <Route index element={<GraceRedirect />} />
                     <Route path="financeiro" element={
-  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} tenantNome={tenantNome} onExit={() => navigate("/barbeiro")}>
     <BarberFinanceiro barberContext={barberContext} />
   </FinanceMaintenanceGate>
 } />
@@ -951,7 +954,7 @@ const Barbeiro = () => {
                     <Route path="servicos" element={<Navigate to="/barbeiro/config-barbearia?screen=servicos" replace />} />
                     <Route path="relatorios" element={<EstatisticasRelatorios barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} basePath="/barbeiro/perfil" />} />
                     <Route path="financeiro" element={
-  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} tenantNome={tenantNome} onExit={() => navigate("/barbeiro")}>
     <BarberFinanceiro barberContext={barberContext} />
   </FinanceMaintenanceGate>
 } />
@@ -970,7 +973,7 @@ const Barbeiro = () => {
                     <Route path="seguranca/*" element={<BarberSeguranca />} />
                     <Route path="perfil" element={<BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} />} />
                     <Route path="carteira" element={
-  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} tenantNome={tenantNome} onExit={() => navigate("/barbeiro")}>
     <CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" />
   </FinanceMaintenanceGate>
 } />
@@ -1052,7 +1055,7 @@ const Barbeiro = () => {
                     <>
                       <Route index element={<GraceRedirect />} />
                       <Route path="financeiro" element={
-  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} tenantNome={tenantNome} onExit={() => navigate("/barbeiro")}>
     <BarberFinanceiro barberContext={barberContext} />
   </FinanceMaintenanceGate>
 } />
@@ -1069,7 +1072,7 @@ const Barbeiro = () => {
                       <Route path="servicos" element={<BarberCortes barberContext={barberContext} />} />
                       <Route path="relatorios" element={<EstatisticasRelatorios barbeiroId={barberContext.barbeiroId} tenantId={barberContext.tenantId} basePath="/barbeiro/perfil" />} />
                       <Route path="financeiro" element={
-  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} tenantNome={tenantNome} onExit={() => navigate("/barbeiro")}>
     <BarberFinanceiro barberContext={barberContext} />
   </FinanceMaintenanceGate>
 } />
@@ -1088,7 +1091,7 @@ const Barbeiro = () => {
                       <Route path="seguranca/*" element={<BarberSeguranca />} />
                       <Route path="perfil" element={<div className="max-w-2xl mx-auto"><BarberMobileProfile barberContext={barberContext} isTenantAdmin={barberContext.isTenantAdmin} /></div>} />
                       <Route path="carteira" element={
-  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} onExit={() => navigate("/barbeiro")}>
+  <FinanceMaintenanceGate isTestTenant={!!barberContext?.isTestTenant} tenantNome={tenantNome} onExit={() => navigate("/barbeiro")}>
     <div className="max-w-2xl mx-auto"><CarteiraPage barbeiroId={barberContext.barbeiroId} barbeiroNome={barberContext.apelido} basePath="/barbeiro" /></div>
   </FinanceMaintenanceGate>
 } />

@@ -336,10 +336,10 @@ const TenantAdmin = () => {
     return () => {
       isCancelled = true;
       if (ch1) {
-        try { supabase.removeChannel(ch1); } catch {}
+        try { supabase.removeChannel(ch1); } catch { }
       }
       if (ch2) {
-        try { supabase.removeChannel(ch2); } catch {}
+        try { supabase.removeChannel(ch2); } catch { }
       }
     };
   }, [adminContext, playNotificationSound, sendBrowserNotification]);
@@ -580,15 +580,15 @@ const TenantAdmin = () => {
                   <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTestTenant, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="meus" /> : null} />
                   <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={tenantId || undefined} basePath={BASE} />} />
                   <Route path="financeiro" element={
-  <FinanceMaintenanceGate isTestTenant={isTestTenant} onExit={() => navigate(BASE)}>
-    <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
-  </FinanceMaintenanceGate>
-} />
+                    <FinanceMaintenanceGate isTestTenant={isTestTenant} tenantNome={tenantNome} onExit={() => navigate(BASE)}>
+                      <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
+                    </FinanceMaintenanceGate>
+                  } />
                   <Route path="carteira" element={
-  <FinanceMaintenanceGate isTestTenant={isTestTenant} onExit={() => navigate(BASE)}>
-    <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
-  </FinanceMaintenanceGate>
-} />
+                    <FinanceMaintenanceGate isTestTenant={isTestTenant} tenantNome={tenantNome} onExit={() => navigate(BASE)}>
+                      <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
+                    </FinanceMaintenanceGate>
+                  } />
                   <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} tenantId={tenantId} basePath="/tenant/admin/perfil" />} />
                   <Route path="servicos/*" element={tenantId ? <AdminServicos tenantId={tenantId} basePath={BASE} /> : null} />
                   <Route path="promocoes/preparando" element={<Navigate to={`${BASE}/promocoes`} replace />} />
@@ -668,8 +668,8 @@ const TenantAdmin = () => {
             isSubscriptionRoute
               ? "h-full"
               : (location.pathname.includes("/config-barbearia") || location.pathname.includes("/whatsapp") || location.pathname.includes("/instagram") || location.pathname.includes("/perfil") || location.pathname.includes("/relatorios") || location.pathname.includes("/carteira") || location.pathname.includes("/financeiro"))
-              ? "p-0 max-w-[1600px] mx-auto"
-              : "p-6 lg:p-8 max-w-[1600px] mx-auto"
+                ? "p-0 max-w-[1600px] mx-auto"
+                : "p-6 lg:p-8 max-w-[1600px] mx-auto"
           }>
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
@@ -681,10 +681,10 @@ const TenantAdmin = () => {
                 <Route path="meus-clientes" element={adminContext.barbeiroId ? <BarberClientes barberContext={{ barbeiroId: adminContext.barbeiroId, apelido: adminContext.apelido || "", userId: adminContext.userId, tenantId: tenantId || null, isTestTenant, isTenantAdmin: true, deletedAt: null, graceDaysLeft: 0, canManageTenantWideClientBlock: true }} basePath={BASE} forceViewMode="meus" /> : null} />
                 <Route path="avaliacoes" element={<AdminAvaliacoes tenantId={tenantId || undefined} basePath={BASE} />} />
                 <Route path="financeiro" element={
-  <FinanceMaintenanceGate isTestTenant={isTestTenant} onExit={() => navigate(BASE)}>
-    <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
-  </FinanceMaintenanceGate>
-} />
+                  <FinanceMaintenanceGate isTestTenant={isTestTenant} tenantNome={tenantNome} onExit={() => navigate(BASE)}>
+                    <AdminFinanceiro userId={adminContext.userId} userName={adminContext.apelido} barbeiroId={adminContext.barbeiroId} basePath={BASE} />
+                  </FinanceMaintenanceGate>
+                } />
                 <Route path="relatorios" element={<EstatisticasRelatorios isGlobal barbeiroId={adminContext.barbeiroId} tenantId={tenantId} basePath="/tenant/admin/perfil" />} />
                 <Route path="servicos/*" element={tenantId ? <AdminServicos tenantId={tenantId} basePath={BASE} /> : null} />
                 <Route path="promocoes/preparando" element={<Navigate to={`${BASE}/promocoes`} replace />} />

@@ -94,6 +94,7 @@ export interface AdminContext {
   userId: string;
   isAdmin: boolean;
   tenantId?: string | null;
+  tenantNome?: string | null;
   tenantBarberIds?: string[];
   isTestTenant?: boolean;
 }
@@ -302,13 +303,15 @@ const Admin = () => {
 
         // Verifica se o tenant é de teste (isento de manutenção)
         let isTestTenant = false;
+        let tenantNome: string | null = null;
         if (tenantId) {
           const { data: tenantRow } = await supabase
             .from("tenants")
-            .select("is_test")
+            .select("is_test, nome")
             .eq("id", tenantId)
             .maybeSingle();
           isTestTenant = !!tenantRow?.is_test;
+          tenantNome = tenantRow?.nome || null;
         }
 
         const ctx: AdminContext = {
@@ -317,6 +320,7 @@ const Admin = () => {
           userId: session.user.id,
           isAdmin: true,
           tenantId,
+          tenantNome,
           isTestTenant,
         };
 
@@ -540,7 +544,7 @@ const Admin = () => {
                 } />
                 <Route path="avaliacoes" element={<AdminAvaliacoes />} />
                 <Route path="financeiro" element={
-  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} onExit={() => navigate("/admin")}>
+  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} tenantNome={adminContext?.tenantNome || adminContext?.apelido} onExit={() => navigate("/admin")}>
     <AdminFinanceiro barbeiroId={adminContext?.barbeiroId || (adminContext?.tenantBarberIds && adminContext.tenantBarberIds.length > 0 ? adminContext.tenantBarberIds[0] : null)} userName={adminContext?.apelido || "Admin"} basePath="/admin" />
   </FinanceMaintenanceGate>
 } />
@@ -558,7 +562,7 @@ const Admin = () => {
                 <Route path="disparo" element={<AdminDisparo />} />
                 <Route path="perfil" element={<AdminMobileProfile />} />
                 <Route path="carteira" element={
-  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} onExit={() => navigate("/admin")}>
+  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} tenantNome={adminContext?.tenantNome || adminContext?.apelido} onExit={() => navigate("/admin")}>
     {(adminContext.barbeiroId || (adminContext.tenantBarberIds && adminContext.tenantBarberIds.length > 0)) ? (
       <CarteiraPage
         barbeiroId={adminContext.barbeiroId || adminContext.tenantBarberIds![0]}
@@ -682,7 +686,7 @@ const Admin = () => {
                 />
                 <Route path="avaliacoes" element={<AdminAvaliacoes />} />
                 <Route path="financeiro" element={
-  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} onExit={() => navigate("/admin")}>
+  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} tenantNome={adminContext?.tenantNome || adminContext?.apelido} onExit={() => navigate("/admin")}>
     <AdminFinanceiro barbeiroId={adminContext?.barbeiroId} userName={adminContext?.apelido || "Admin"} />
   </FinanceMaintenanceGate>
 } />
@@ -725,7 +729,7 @@ const Admin = () => {
                 <Route path="minhas-indicacoes" element={<AdminIndicacoes />} />
                 <Route path="perfil" element={<div className="max-w-2xl mx-auto"><AdminMobileProfile /></div>} />
                 <Route path="carteira" element={
-  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} onExit={() => navigate("/admin")}>
+  <FinanceMaintenanceGate isTestTenant={!!adminContext?.isTestTenant} tenantNome={adminContext?.tenantNome || adminContext?.apelido} onExit={() => navigate("/admin")}>
     {adminContext.barbeiroId ? (
       <div className="max-w-2xl mx-auto">
         <CarteiraPage barbeiroId={adminContext.barbeiroId} barbeiroNome={adminContext.apelido || "Admin"} basePath="/admin" />
