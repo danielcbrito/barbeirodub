@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import mercadoPagoLogo from "@/assets/banks/mercado-pago.png";
+import mpConnectArtwork from "@/assets/banks/mp-connect-artwork.png";
 
 type Acc = {
   id: string | null;
@@ -215,9 +216,9 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
             <h1 className="text-2xl font-bold tracking-tight">Conta em análise</h1>
           </div>
         ) : (
-          <h1 className="text-[30px] sm:text-[32px] font-extrabold tracking-[-0.03em] leading-[1.12] mt-3">
+          <h1 className="text-[32px] sm:text-[34px] font-extrabold tracking-[-0.03em] leading-[1.1] mt-3">
             <span className="block text-foreground">Como você quer</span>
-            <span className="block text-[#0B57D0] dark:text-[#4C9AFF]">receber?</span>
+            <span className="block text-[#0066FF] dark:text-[#3B82F6]">receber?</span>
           </h1>
         )}
 
@@ -235,67 +236,35 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
             transition={{ duration: 0.24, ease: "easeOut" }}
             className="mt-7 space-y-4"
           >
-            {/* Card 1: Mercado Pago (layout idêntico à referência visual) */}
+            {/* Card 1: Mercado Pago (layout 100% idêntico à referência visual) */}
             <div className="relative">
               {/* Badge Recomendado sobreposto à borda superior */}
-              <div className="absolute -top-3.5 left-4 z-20 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1366DF] text-white text-[12px] font-semibold shadow-[0_4px_12px_rgba(19,102,223,0.3)] select-none">
+              <div className="absolute -top-3.5 left-4 z-20 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0066FF] text-white text-[12px] font-bold shadow-[0_4px_12px_rgba(0,102,255,0.3)] select-none">
                 <Star className="w-3.5 h-3.5 fill-white text-white" />
                 <span>Recomendado</span>
               </div>
 
-              <div className="relative rounded-[24px] border border-[#1E73E8]/55 dark:border-[#3B82F6]/45 bg-white dark:bg-card p-5 pt-6 shadow-[0_12px_32px_rgba(19,102,223,0.08)] dark:shadow-none">
-                {/* Camada decorativa superior direita: ondas azuis suaves + celular inclinado */}
-                <div className="pointer-events-none absolute inset-0 rounded-[24px] overflow-hidden">
-                  <svg
-                    viewBox="0 0 220 180"
-                    className="absolute right-0 top-0 w-[62%] h-[78%] text-[#E5F2FF] dark:text-[#1E3A8A]/25"
-                    fill="none"
-                    preserveAspectRatio="none"
-                  >
-                    <path
-                      d="M40 0C55 48 92 65 130 92C162 115 190 142 220 155V0H40Z"
-                      fill="currentColor"
-                    />
-                    <path
-                      d="M92 0C104 42 136 58 170 84C192 101 208 118 220 130V0H92Z"
-                      fill="#CBE6FF"
-                      className="dark:opacity-20"
-                    />
-                    <path
-                      d="M148 0C158 34 182 54 220 78V0H148Z"
-                      fill="#90C9FE"
-                      className="dark:opacity-15"
-                    />
-                  </svg>
-
-                  {/* Mockup do smartphone conectado */}
-                  <div className="absolute right-3.5 top-2.5 w-[88px] h-[112px] rotate-[6deg] rounded-[18px] bg-[#0B224B] p-[4px] shadow-[0_12px_26px_rgba(8,38,94,0.28)]">
-                    <div className="w-full h-full rounded-[14px] bg-gradient-to-b from-[#0A47AD] to-[#083584] flex flex-col items-center justify-center text-center px-2 pb-2">
-                      <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center mb-1.5 shadow-xs">
-                        <Check className="w-4 h-4 text-[#0A47AD] stroke-[3]" />
-                      </div>
-                      <span className="text-[10.5px] font-semibold text-white leading-[1.15]">
-                        Conta
-                        <br />
-                        conectada
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Transição suave para a área do botão */}
-                  <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-white via-white/85 to-transparent dark:from-card dark:via-card/85" />
+              <div className="relative rounded-[28px] border-[1.5px] border-[#0066FF]/35 dark:border-[#3B82F6]/45 bg-white dark:bg-card p-5 pt-6 shadow-[0_12px_32px_rgba(0,102,255,0.08)] dark:shadow-none overflow-hidden">
+                {/* Ilustração oficial no canto superior direito: celular 3D inclinado com tela Conta conectada + ondas fluidas */}
+                <div className="pointer-events-none absolute top-0 right-0 w-[172px] sm:w-[195px] h-[168px] sm:h-[188px] overflow-hidden rounded-tr-[26px]">
+                  <img
+                    src={mpConnectArtwork}
+                    alt="Mercado Pago Conta Conectada"
+                    className="w-full h-full object-contain object-top-right select-none"
+                    draggable={false}
+                  />
                 </div>
 
                 {/* Conteúdo principal à esquerda */}
                 <div className="relative z-10">
-                  <div className="flex items-center gap-2 pr-[94px]">
+                  <div className="flex items-center gap-2 pr-[90px]">
                     <img
                       src={mercadoPagoLogo}
                       alt="Mercado Pago"
                       className="h-10 w-auto object-contain shrink-0 select-none"
                       draggable={false}
                     />
-                    <div className="leading-[0.94] tracking-[-0.03em] select-none">
+                    <div className="leading-[0.92] tracking-[-0.03em] select-none">
                       <span className="block text-[18px] font-extrabold text-[#12264A] dark:text-white">
                         mercado
                       </span>
@@ -305,16 +274,16 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
                     </div>
                   </div>
 
-                  <p className="mt-4 text-[18px] font-bold text-foreground tracking-tight leading-snug pr-[94px]">
+                  <p className="mt-4 text-[19px] font-bold text-foreground tracking-tight leading-snug pr-[85px]">
                     Conectar Mercado Pago
                   </p>
-                  <p className="mt-1.5 text-[13px] text-muted-foreground leading-[1.45] pr-[94px]">
+                  <p className="mt-1.5 text-[13px] text-muted-foreground leading-[1.45] pr-[85px]">
                     Receba seus pagamentos com a segurança e a confiabilidade do Mercado Pago.
                   </p>
 
                   <Button
                     type="button"
-                    className="w-full h-[52px] rounded-full mt-5 bg-[#095AD1] hover:bg-[#084EB8] text-white font-semibold text-[15.5px] shadow-[0_6px_18px_rgba(9,90,209,0.26)] active:scale-[0.985] transition-all cursor-pointer border-0 flex items-center justify-center gap-2"
+                    className="w-full h-[52px] rounded-full mt-5 bg-[#0066FF] hover:bg-[#005AE0] text-white font-semibold text-[15.5px] shadow-[0_6px_20px_rgba(0,102,255,0.28)] active:scale-[0.985] transition-all cursor-pointer border-0 flex items-center justify-center gap-2"
                     disabled={busy}
                     onClick={connectMp}
                   >
@@ -326,7 +295,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
             </div>
 
             {/* Card 2: Criar conta na Dub (com logo D oficial) */}
-            <div className="rounded-[24px] bg-white dark:bg-card border border-border/60 dark:border-white/10 p-5 shadow-[0_6px_22px_rgba(15,23,42,0.05)] dark:shadow-none">
+            <div className="rounded-[28px] bg-white dark:bg-card border border-border/70 dark:border-white/10 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:shadow-none">
               <div className="flex items-start gap-3.5">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-3 shrink-0 shadow-xs">
                   <img
