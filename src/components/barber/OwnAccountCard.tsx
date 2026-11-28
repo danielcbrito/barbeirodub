@@ -180,16 +180,17 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
         )}
 
         {editable && choice === "woovi" ? (
-          <div className="flex items-center gap-3 mt-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-2 shrink-0 shadow-xs">
-              <img
-                src="/auth-assets/dub_logo_d.png"
-                alt="Dub"
-                className="w-full h-full object-contain brightness-0 invert select-none"
-                draggable={false}
-              />
+          <div className="flex items-center gap-2.5 mt-2">
+            <img
+              src="/auth-assets/dub_logo_d.png"
+              alt="DUB"
+              className="h-7 w-auto object-contain dark:invert select-none shrink-0"
+              draggable={false}
+            />
+            <div className="flex items-baseline gap-1 select-none">
+              <span className="text-xl font-extrabold text-foreground tracking-tight">DUB</span>
+              <span className="text-lg font-medium text-muted-foreground tracking-normal">Agenda</span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight">Conta na Dub</h1>
           </div>
         ) : !editable ? (
           <div className="flex items-center gap-3 mt-2">
@@ -203,14 +204,12 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
                 />
               </div>
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-2 shrink-0 shadow-xs">
-                <img
-                  src="/auth-assets/dub_logo_d.png"
-                  alt="Dub"
-                  className="w-full h-full object-contain brightness-0 invert select-none"
-                  draggable={false}
-                />
-              </div>
+              <img
+                src="/auth-assets/dub_logo_d.png"
+                alt="DUB"
+                className="h-8 w-auto object-contain dark:invert select-none shrink-0"
+                draggable={false}
+              />
             )}
             <h1 className="text-xl font-bold tracking-tight">Conta em análise</h1>
           </div>
@@ -235,73 +234,86 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="mt-5 space-y-3.5"
           >
-            {/* Cartão 1: Mercado Pago (Recomendado, estrutura vertical limpa e elegante) */}
-            <div className="rounded-2xl border border-[#0066FF]/20 dark:border-[#3B82F6]/30 bg-white dark:bg-card p-5 shadow-[0_2px_12px_rgba(0,102,255,0.04)]">
-              {/* Topo do cartão: Logo oficial + Selo discreto */}
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <img
-                    src={mercadoPagoLogo}
-                    alt="Mercado Pago"
-                    className="h-7 w-auto object-contain select-none"
-                    draggable={false}
-                  />
-                  <div className="leading-none tracking-tight select-none">
-                    <span className="text-[15px] font-bold text-[#12264A] dark:text-white">mercado</span>
-                    <span className="text-[15px] font-bold text-[#00AEEF]"> pago</span>
+            {/* Cartão 1: Mercado Pago (Recomendado, brilho premium sutil e sem repetição) */}
+            <div className="relative rounded-2xl border border-[#0066FF]/25 dark:border-[#3B82F6]/35 bg-white dark:bg-card p-5 shadow-[0_4px_24px_rgba(0,102,255,0.07)] overflow-hidden">
+              {/* Efeito de luz sutil: reflexo suave dourado e halo azul com baixa opacidade */}
+              <div
+                className="pointer-events-none absolute -right-12 -top-12 w-44 h-44 rounded-full bg-gradient-to-br from-amber-400/[0.08] via-[#0066FF]/[0.05] to-transparent blur-2xl"
+                aria-hidden="true"
+              />
+              <div
+                className="pointer-events-none absolute -left-8 -bottom-8 w-36 h-36 rounded-full bg-[#0066FF]/[0.04] blur-xl"
+                aria-hidden="true"
+              />
+
+              <div className="relative z-10">
+                {/* Topo do cartão: Logo oficial + Selo sofisticado com estrela dourada */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={mercadoPagoLogo}
+                      alt="Mercado Pago"
+                      className="h-7 w-auto object-contain select-none"
+                      draggable={false}
+                    />
+                    <div className="leading-none tracking-tight select-none">
+                      <span className="text-[15px] font-bold text-[#12264A] dark:text-white">mercado</span>
+                      <span className="text-[15px] font-bold text-[#00AEEF]"> pago</span>
+                    </div>
                   </div>
+
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/90 dark:bg-card/90 border border-[#0066FF]/20 text-[#0066FF] dark:text-[#4C9AFF] text-[11px] font-semibold shadow-[0_1px_3px_rgba(0,102,255,0.06)] select-none">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <span>Recomendado</span>
+                  </span>
                 </div>
 
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] text-[11px] font-semibold border border-[#0066FF]/20 select-none">
-                  <Star className="w-3 h-3 fill-[#0066FF] text-[#0066FF]" />
-                  Recomendado
-                </span>
+                {/* Título refinado e descrição elegante */}
+                <h2 className="mt-3.5 text-[16px] sm:text-[17px] font-bold text-foreground tracking-tight leading-snug">
+                  Receba com segurança
+                </h2>
+                <p className="mt-1 text-[13px] text-muted-foreground leading-relaxed">
+                  Pagamentos via Pix rápidos e protegidos com a confiabilidade do Mercado Pago.
+                </p>
+
+                {/* Botão de ação principal */}
+                <Button
+                  type="button"
+                  className="w-full h-[46px] rounded-xl mt-4 bg-[#0066FF] hover:bg-[#0055D4] text-white font-medium text-[14px] shadow-xs active:scale-[0.99] transition-all cursor-pointer border-0 flex items-center justify-center gap-1.5"
+                  disabled={busy}
+                  onClick={connectMp}
+                >
+                  <span>{busy ? "Abrindo..." : "Conectar Mercado Pago"}</span>
+                  {!busy && <ArrowRight className="w-4 h-4 stroke-[2]" />}
+                </Button>
               </div>
-
-              {/* Título e descrição */}
-              <h2 className="mt-3.5 text-[16px] sm:text-[17px] font-bold text-foreground tracking-tight leading-snug">
-                Conectar Mercado Pago
-              </h2>
-              <p className="mt-1 text-[13px] text-muted-foreground leading-relaxed">
-                Receba seus pagamentos com a segurança e a confiabilidade do Mercado Pago.
-              </p>
-
-              {/* Botão de ação */}
-              <Button
-                type="button"
-                className="w-full h-[46px] rounded-xl mt-4 bg-[#0066FF] hover:bg-[#0055D4] text-white font-medium text-[14px] shadow-xs active:scale-[0.99] transition-all cursor-pointer border-0 flex items-center justify-center gap-1.5"
-                disabled={busy}
-                onClick={connectMp}
-              >
-                <span>{busy ? "Abrindo..." : "Conectar Mercado Pago"}</span>
-                {!busy && <ArrowRight className="w-4 h-4 stroke-[2]" />}
-              </Button>
             </div>
 
-            {/* Cartão 2: Criar conta na Dub (Identidade original e proporção equilibrada) */}
-            <div className="rounded-2xl border border-border/70 dark:border-white/10 bg-white dark:bg-card p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-              {/* Topo do cartão: Logo oficial Dub */}
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-1.5 shrink-0 shadow-xs">
-                  <img
-                    src="/auth-assets/dub_logo_d.png"
-                    alt="Dub"
-                    className="w-full h-full object-contain brightness-0 invert select-none"
-                    draggable={false}
-                  />
+            {/* Cartão 2: Crie sua conta Dub (Símbolo D original preto e tipografia DUB Agenda) */}
+            <div className="rounded-2xl border border-border/70 dark:border-white/10 bg-white dark:bg-card p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+              {/* Topo do cartão: Símbolo D original preto + Tipografia DUB Agenda */}
+              <div className="flex items-center gap-2">
+                <img
+                  src="/auth-assets/dub_logo_d.png"
+                  alt="DUB"
+                  className="h-6 w-auto object-contain dark:invert select-none shrink-0"
+                  draggable={false}
+                />
+                <div className="flex items-baseline gap-1 select-none">
+                  <span className="text-[16px] font-extrabold text-foreground tracking-tight">DUB</span>
+                  <span className="text-[14px] font-medium text-muted-foreground tracking-normal">Agenda</span>
                 </div>
-                <span className="text-[15px] font-bold text-foreground tracking-tight">Dub Agenda</span>
               </div>
 
-              {/* Título e descrição */}
+              {/* Título e descrição refinados */}
               <h2 className="mt-3.5 text-[16px] sm:text-[17px] font-bold text-foreground tracking-tight leading-snug">
-                Criar conta na Dub
+                Crie sua conta Dub
               </h2>
               <p className="mt-1 text-[13px] text-muted-foreground leading-relaxed">
-                Taxa menor por Pix. Exige CNPJ/MEI e documentos, que o banco pede por e-mail.
+                Taxas menores no Pix. Cadastro com CNPJ/MEI e documentos solicitados pelo banco.
               </p>
 
-              {/* Botão de ação */}
+              {/* Botão de ação secundário */}
               <Button
                 type="button"
                 variant="outline"
