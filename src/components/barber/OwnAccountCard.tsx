@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import mercadoPagoLogo from "@/assets/banks/mercado-pago.png";
-import mpConnectArtwork from "@/assets/banks/mp-connect-artwork.png";
 
 type Acc = {
   id: string | null;
@@ -166,10 +165,10 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
 
   return (
     <div
-      className="min-h-[var(--app-height,100dvh)] bg-gradient-to-b from-[#F2F6FC] via-[#F8FAFD] to-[#F4F6FA] dark:from-background dark:via-background dark:to-background text-foreground"
+      className="min-h-[var(--app-height,100dvh)] bg-[#F8FAFD] dark:bg-background text-foreground"
       style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 16px)" }}
     >
-      <div className="mx-auto w-full max-w-md px-5 pb-10">
+      <div className="mx-auto w-full max-w-md px-4 sm:px-5 pb-32">
         {onBack && (
           <button
             onClick={onBack}
@@ -181,8 +180,8 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
         )}
 
         {editable && choice === "woovi" ? (
-          <div className="flex items-center gap-3 mt-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-2.5 shrink-0 shadow-xs">
+          <div className="flex items-center gap-3 mt-2">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-2 shrink-0 shadow-xs">
               <img
                 src="/auth-assets/dub_logo_d.png"
                 alt="Dub"
@@ -190,12 +189,12 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
                 draggable={false}
               />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Conta na Dub</h1>
+            <h1 className="text-xl font-bold tracking-tight">Conta na Dub</h1>
           </div>
         ) : !editable ? (
-          <div className="flex items-center gap-3 mt-3">
+          <div className="flex items-center gap-3 mt-2">
             {acc.provider === "mercadopago" ? (
-              <div className="w-11 h-11 rounded-2xl bg-white border border-border/60 flex items-center justify-center p-1.5 shadow-xs shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-white border border-border/60 flex items-center justify-center p-1.5 shadow-xs shrink-0">
                 <img
                   src={mercadoPagoLogo}
                   alt="Mercado Pago"
@@ -204,7 +203,7 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
                 />
               </div>
             ) : (
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-2.5 shrink-0 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-2 shrink-0 shadow-xs">
                 <img
                   src="/auth-assets/dub_logo_d.png"
                   alt="Dub"
@@ -213,91 +212,77 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
                 />
               </div>
             )}
-            <h1 className="text-2xl font-bold tracking-tight">Conta em análise</h1>
+            <h1 className="text-xl font-bold tracking-tight">Conta em análise</h1>
           </div>
         ) : (
-          <h1 className="text-[32px] sm:text-[34px] font-extrabold tracking-[-0.03em] leading-[1.1] mt-3">
-            <span className="block text-foreground">Como você quer</span>
-            <span className="block text-[#0066FF] dark:text-[#3B82F6]">receber?</span>
+          <h1 className="text-[21px] sm:text-[23px] font-bold tracking-tight text-foreground mt-2">
+            Como você quer{" "}
+            <span className="text-[#0066FF] dark:text-[#3B82F6]">receber?</span>
           </h1>
         )}
 
-        <p className="text-[14px] text-muted-foreground mt-2.5 leading-[1.45]">
+        <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
           {editable ? (choice === "woovi" ? "Preencha seus dados aqui. Depois o banco envia um e-mail para você terminar o cadastro."
             : "O dinheiro dos seus clientes cai direto na sua conta, no seu nome. Escolha a melhor opção para você.")
             : acc.status_message || "Assim que a validação terminar, suas finanças são liberadas aqui."}
         </p>
-        {acc.status === "rejected" && <p className="text-sm text-destructive mt-2">Os dados foram recusados. Confira e envie novamente.</p>}
+        {acc.status === "rejected" && <p className="text-sm text-destructive mt-1.5">Os dados foram recusados. Confira e envie novamente.</p>}
 
         {editable && choice !== "woovi" ? (
           <motion.div
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24, ease: "easeOut" }}
-            className="mt-7 space-y-4"
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="mt-5 space-y-3.5"
           >
-            {/* Card 1: Mercado Pago (layout 100% idêntico à referência visual) */}
-            <div className="relative">
-              {/* Badge Recomendado sobreposto à borda superior */}
-              <div className="absolute -top-3.5 left-4 z-20 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0066FF] text-white text-[12px] font-bold shadow-[0_4px_12px_rgba(0,102,255,0.3)] select-none">
-                <Star className="w-3.5 h-3.5 fill-white text-white" />
-                <span>Recomendado</span>
-              </div>
-
-              <div className="relative rounded-[28px] border-[1.5px] border-[#0066FF]/35 dark:border-[#3B82F6]/45 bg-white dark:bg-card p-5 pt-6 shadow-[0_12px_32px_rgba(0,102,255,0.08)] dark:shadow-none overflow-hidden">
-                {/* Ilustração oficial no canto superior direito: celular 3D inclinado com tela Conta conectada + ondas fluidas */}
-                <div className="pointer-events-none absolute top-0 right-0 w-[172px] sm:w-[195px] h-[168px] sm:h-[188px] overflow-hidden rounded-tr-[26px]">
+            {/* Cartão 1: Mercado Pago (Recomendado, estrutura vertical limpa e elegante) */}
+            <div className="rounded-2xl border border-[#0066FF]/20 dark:border-[#3B82F6]/30 bg-white dark:bg-card p-5 shadow-[0_2px_12px_rgba(0,102,255,0.04)]">
+              {/* Topo do cartão: Logo oficial + Selo discreto */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
                   <img
-                    src={mpConnectArtwork}
-                    alt="Mercado Pago Conta Conectada"
-                    className="w-full h-full object-contain object-top-right select-none"
+                    src={mercadoPagoLogo}
+                    alt="Mercado Pago"
+                    className="h-7 w-auto object-contain select-none"
                     draggable={false}
                   />
-                </div>
-
-                {/* Conteúdo principal à esquerda */}
-                <div className="relative z-10">
-                  <div className="flex items-center gap-2 pr-[90px]">
-                    <img
-                      src={mercadoPagoLogo}
-                      alt="Mercado Pago"
-                      className="h-10 w-auto object-contain shrink-0 select-none"
-                      draggable={false}
-                    />
-                    <div className="leading-[0.92] tracking-[-0.03em] select-none">
-                      <span className="block text-[18px] font-extrabold text-[#12264A] dark:text-white">
-                        mercado
-                      </span>
-                      <span className="block text-[18px] font-extrabold text-[#00AEEF]">
-                        pago
-                      </span>
-                    </div>
+                  <div className="leading-none tracking-tight select-none">
+                    <span className="text-[15px] font-bold text-[#12264A] dark:text-white">mercado</span>
+                    <span className="text-[15px] font-bold text-[#00AEEF]"> pago</span>
                   </div>
-
-                  <p className="mt-4 text-[19px] font-bold text-foreground tracking-tight leading-snug pr-[85px]">
-                    Conectar Mercado Pago
-                  </p>
-                  <p className="mt-1.5 text-[13px] text-muted-foreground leading-[1.45] pr-[85px]">
-                    Receba seus pagamentos com a segurança e a confiabilidade do Mercado Pago.
-                  </p>
-
-                  <Button
-                    type="button"
-                    className="w-full h-[52px] rounded-full mt-5 bg-[#0066FF] hover:bg-[#005AE0] text-white font-semibold text-[15.5px] shadow-[0_6px_20px_rgba(0,102,255,0.28)] active:scale-[0.985] transition-all cursor-pointer border-0 flex items-center justify-center gap-2"
-                    disabled={busy}
-                    onClick={connectMp}
-                  >
-                    <span>{busy ? "Abrindo..." : "Conectar Mercado Pago"}</span>
-                    {!busy && <ArrowRight className="w-4 h-4 stroke-[2.2]" />}
-                  </Button>
                 </div>
+
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] text-[11px] font-semibold border border-[#0066FF]/20 select-none">
+                  <Star className="w-3 h-3 fill-[#0066FF] text-[#0066FF]" />
+                  Recomendado
+                </span>
               </div>
+
+              {/* Título e descrição */}
+              <h2 className="mt-3.5 text-[16px] sm:text-[17px] font-bold text-foreground tracking-tight leading-snug">
+                Conectar Mercado Pago
+              </h2>
+              <p className="mt-1 text-[13px] text-muted-foreground leading-relaxed">
+                Receba seus pagamentos com a segurança e a confiabilidade do Mercado Pago.
+              </p>
+
+              {/* Botão de ação */}
+              <Button
+                type="button"
+                className="w-full h-[46px] rounded-xl mt-4 bg-[#0066FF] hover:bg-[#0055D4] text-white font-medium text-[14px] shadow-xs active:scale-[0.99] transition-all cursor-pointer border-0 flex items-center justify-center gap-1.5"
+                disabled={busy}
+                onClick={connectMp}
+              >
+                <span>{busy ? "Abrindo..." : "Conectar Mercado Pago"}</span>
+                {!busy && <ArrowRight className="w-4 h-4 stroke-[2]" />}
+              </Button>
             </div>
 
-            {/* Card 2: Criar conta na Dub (com logo D oficial) */}
-            <div className="rounded-[28px] bg-white dark:bg-card border border-border/70 dark:border-white/10 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:shadow-none">
-              <div className="flex items-start gap-3.5">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-3 shrink-0 shadow-xs">
+            {/* Cartão 2: Criar conta na Dub (Identidade original e proporção equilibrada) */}
+            <div className="rounded-2xl border border-border/70 dark:border-white/10 bg-white dark:bg-card p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+              {/* Topo do cartão: Logo oficial Dub */}
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#E21D2E] to-[#C81422] flex items-center justify-center p-1.5 shrink-0 shadow-xs">
                   <img
                     src="/auth-assets/dub_logo_d.png"
                     alt="Dub"
@@ -305,20 +290,22 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
                     draggable={false}
                   />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[18px] font-bold text-foreground tracking-tight leading-tight">
-                    Criar conta na Dub
-                  </p>
-                  <p className="text-[13px] text-muted-foreground mt-1.5 leading-[1.45]">
-                    Taxa menor por Pix. Exige CNPJ/MEI e documentos, que o banco pede por e-mail.
-                  </p>
-                </div>
+                <span className="text-[15px] font-bold text-foreground tracking-tight">Dub Agenda</span>
               </div>
 
+              {/* Título e descrição */}
+              <h2 className="mt-3.5 text-[16px] sm:text-[17px] font-bold text-foreground tracking-tight leading-snug">
+                Criar conta na Dub
+              </h2>
+              <p className="mt-1 text-[13px] text-muted-foreground leading-relaxed">
+                Taxa menor por Pix. Exige CNPJ/MEI e documentos, que o banco pede por e-mail.
+              </p>
+
+              {/* Botão de ação */}
               <Button
                 type="button"
                 variant="outline"
-                className="w-full h-[50px] rounded-full mt-5 border border-border/80 dark:border-white/15 bg-white dark:bg-transparent hover:bg-secondary/50 text-foreground font-semibold text-[15px] active:scale-[0.985] transition-all cursor-pointer flex items-center justify-center gap-2"
+                className="w-full h-[46px] rounded-xl mt-4 border border-border/80 dark:border-white/15 bg-white dark:bg-transparent hover:bg-secondary/40 text-foreground font-medium text-[14px] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 disabled={busy}
                 onClick={() => setChoice("woovi")}
               >
