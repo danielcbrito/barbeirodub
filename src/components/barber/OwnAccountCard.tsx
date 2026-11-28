@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
+import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeAuthenticatedFunction } from "@/lib/invokeAuthenticatedFunction";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import mercadoPagoYellowLogo from "@/assets/banks/mercado-pago-yellow.png";
 
 type Acc = {
   id: string | null;
@@ -165,12 +167,55 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
     <div className="min-h-[var(--app-height,100dvh)] bg-background text-foreground" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 12px)" }}>
       <div className="mx-auto w-full max-w-md px-5 pb-10">
         {onBack && (
-          <button onClick={onBack} aria-label="Voltar" className="w-9 h-9 -ml-2 rounded-full flex items-center justify-center">
+          <button
+            onClick={onBack}
+            aria-label="Voltar"
+            className="w-9 h-9 -ml-2 rounded-full flex items-center justify-center hover:bg-secondary/70 active:scale-95 transition-all"
+          >
             <ChevronLeft className="w-6 h-6" />
           </button>
         )}
-        <h1 className="text-2xl font-semibold mt-4">{editable ? (choice === "woovi" ? "Conta Barbearia DUB" : "Como você quer receber?") : "Conta em análise"}</h1>
-        <p className="text-sm text-muted-foreground mt-2">
+
+        {editable && choice === "woovi" ? (
+          <div className="flex items-center gap-3 mt-4">
+            <div className="w-11 h-11 rounded-2xl bg-white dark:bg-white/10 border border-border/60 dark:border-white/10 flex items-center justify-center p-2 shrink-0 shadow-xs">
+              <img
+                src="/auth-assets/dub_logo_d.png"
+                alt="Barbearia DUB"
+                className="w-full h-full object-contain block dark:invert select-none"
+                draggable={false}
+              />
+            </div>
+            <h1 className="text-2xl font-semibold">Conta Barbearia DUB</h1>
+          </div>
+        ) : !editable ? (
+          <div className="flex items-center gap-3 mt-4">
+            {acc.provider === "mercadopago" ? (
+              <div className="w-11 h-11 rounded-2xl overflow-hidden bg-[#FFE700] ring-1 ring-[#FFE700] shadow-xs shrink-0">
+                <img
+                  src={mercadoPagoYellowLogo}
+                  alt="Mercado Pago"
+                  className="w-full h-full object-cover select-none"
+                  draggable={false}
+                />
+              </div>
+            ) : (
+              <div className="w-11 h-11 rounded-2xl bg-white dark:bg-white/10 border border-border/60 dark:border-white/10 flex items-center justify-center p-2 shrink-0 shadow-xs">
+                <img
+                  src="/auth-assets/dub_logo_d.png"
+                  alt="Barbearia DUB"
+                  className="w-full h-full object-contain block dark:invert select-none"
+                  draggable={false}
+                />
+              </div>
+            )}
+            <h1 className="text-2xl font-semibold">Conta em análise</h1>
+          </div>
+        ) : (
+          <h1 className="text-2xl font-semibold mt-4">Como você quer receber?</h1>
+        )}
+
+        <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
           {editable ? (choice === "woovi" ? "Preencha seus dados aqui. Depois o banco envia um e-mail para você terminar o cadastro."
             : "O dinheiro dos seus clientes cai direto na sua conta, no seu nome. Enquanto a conta não estiver ativa, seus clientes não verão a opção Pix.")
             : acc.status_message || "Assim que a validação terminar, suas finanças são liberadas aqui."}
@@ -178,18 +223,97 @@ export function OwnAccountGate({ barbeiroId, onBack, children }: { barbeiroId: s
         {acc.status === "rejected" && <p className="text-sm text-destructive mt-2">Os dados foram recusados. Confira e envie novamente.</p>}
 
         {editable && choice !== "woovi" ? (
-          <div className="mt-8 space-y-3">
-            <div className="rounded-2xl border border-border p-5">
-              <p className="font-semibold">Conectar Mercado Pago</p>
-              <p className="text-sm text-muted-foreground mt-1">Recomendado. Funciona com CPF ou CNPJ, sem documentos. O cadastro leva apenas um minuto.</p>
-              <Button className="w-full h-[54px] rounded-full mt-4" disabled={busy} onClick={connectMp}>{busy ? "Abrindo..." : "Conectar Mercado Pago"}</Button>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24, ease: "easeOut" }}
+            className="mt-7 space-y-4"
+          >
+            {/* Parte 1: Banner & Conexão Mercado Pago (Paleta oficial: Amarelo #FFE700, Azul #01BCFF/#009EE3/#090080 e Branco #FFFFFF) */}
+            <div className="rounded-[22px] overflow-hidden border border-[#FFE700] dark:border-[#FFE700]/45 bg-white dark:bg-card shadow-[0_12px_32px_rgba(0,158,227,0.10)]">
+              <div className="relative overflow-hidden bg-[#FFE700] px-5 py-4">
+                <div className="pointer-events-none absolute -right-8 -bottom-10 w-32 h-32 rounded-full bg-[#01BCFF]/20" />
+                <div className="pointer-events-none absolute -top-10 right-8 w-24 h-24 rounded-full bg-white/30" />
+
+                <div className="relative z-10 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-12 h-12 rounded-2xl overflow-hidden bg-[#FFE700] ring-2 ring-white shadow-sm shrink-0">
+                      <img
+                        src={mercadoPagoYellowLogo}
+                        alt="Mercado Pago"
+                        className="w-full h-full object-cover select-none"
+                        draggable={false}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[17px] font-extrabold text-[#090080] tracking-tight leading-tight">
+                        Mercado Pago
+                      </p>
+                      <p className="text-[12px] font-semibold text-[#090080]/80 mt-0.5 truncate">
+                        Pix direto na sua conta
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#090080] text-white shadow-xs tracking-tight shrink-0">
+                    Recomendado
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-[3px] w-full bg-gradient-to-r from-[#090080] via-[#009EE3] to-[#01BCFF]" />
+
+              <div className="p-5 pt-4">
+                <p className="text-[13.5px] text-muted-foreground leading-relaxed">
+                  Funciona com CPF ou CNPJ, sem documentos. O cadastro leva apenas um minuto.
+                </p>
+                <Button
+                  type="button"
+                  className="w-full h-[54px] rounded-full mt-4 bg-[#009EE3] hover:bg-[#0089C7] text-white font-bold text-[15px] shadow-[0_8px_22px_rgba(0,158,227,0.28)] active:scale-[0.985] transition-all cursor-pointer border-0"
+                  disabled={busy}
+                  onClick={connectMp}
+                >
+                  {busy ? "Abrindo..." : "Conectar Mercado Pago"}
+                </Button>
+              </div>
             </div>
-            <div className="rounded-2xl border border-border p-5">
-              <p className="font-semibold">Criar conta na Barbearia DUB</p>
-              <p className="text-sm text-muted-foreground mt-1">Taxa menor por Pix. Exige CNPJ/MEI e documentos, que o banco pede por e-mail.</p>
-              <Button variant="outline" className="w-full h-[54px] rounded-full mt-4" disabled={busy} onClick={() => setChoice("woovi")}>Criar conta</Button>
+
+            {/* Parte 2: Criar conta na Barbearia DUB com a logo oficial D */}
+            <div className="rounded-[22px] overflow-hidden border border-border/80 dark:border-white/10 bg-card shadow-[0_8px_24px_rgb(0,0,0,0.04)] dark:shadow-none">
+              <div className="bg-secondary/45 dark:bg-white/[0.04] px-5 py-3.5 border-b border-border/50 dark:border-white/[0.08] flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-white dark:bg-white/10 border border-border/60 dark:border-white/10 flex items-center justify-center p-2 shrink-0 shadow-xs">
+                  <img
+                    src="/auth-assets/dub_logo_d.png"
+                    alt="Barbearia DUB"
+                    className="w-full h-full object-contain block dark:invert select-none"
+                    draggable={false}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[15.5px] font-bold text-foreground tracking-tight leading-tight">
+                    Criar conta na Barbearia DUB
+                  </p>
+                  <p className="text-[12px] font-medium text-muted-foreground mt-0.5 truncate">
+                    Conta própria integrada
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-5 pt-4">
+                <p className="text-[13.5px] text-muted-foreground leading-relaxed">
+                  Taxa menor por Pix. Exige CNPJ/MEI e documentos, que o banco pede por e-mail.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-[54px] rounded-full mt-4 font-semibold text-[15px] border-border/80 hover:bg-secondary/60 active:scale-[0.985] transition-all cursor-pointer"
+                  disabled={busy}
+                  onClick={() => setChoice("woovi")}
+                >
+                  Criar conta
+                </Button>
+              </div>
             </div>
-          </div>
+          </motion.div>
         ) : editable ? (
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl bg-muted p-4 text-sm">
